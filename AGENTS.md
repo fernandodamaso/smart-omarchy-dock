@@ -6,6 +6,12 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 
 ## Development
 
+- The canonical source checkout is `/home/admin/Projects/smart-omarchy-dock`.
+- Installed Omarchy plugin checkouts are read-only deployment state; never edit
+  them directly. Push validated changes from the source checkout, then update
+  the installed plugin through `omarchy plugin update`.
+- Releases are cut from validated `main`. Imports from `upstream` are explicit
+  review work on a dedicated branch and must pass the complete validation gate.
 - Run the dock with `./scripts/run`.
 - Keep the standalone entry point at `shell.qml` and the Omarchy plugin entry point at `Overlay.qml`.
 - Keep shared host behavior in `DockHost.qml`; never start a second Quickshell process from the plugin.

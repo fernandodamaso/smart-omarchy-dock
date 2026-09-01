@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.0 - 2026-09-01
+
+### Added
+
+- Established SmartDock for Omarchy as an independently released GitHub fork
+  distributed from the SmartDock repository.
+- Assigned the public Omarchy plugin ID `io.github.fernandodamaso.smartdock`.
+- Preserved user configuration in `~/.config/smartdock/dock.json` across Git
+  migration and plugin updates.
+
 ## 1.1.1-custom.18 - 2026-09-01
 
 ### Added

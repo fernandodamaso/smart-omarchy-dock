@@ -44,8 +44,28 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 
 ## Install
 
-SmartDock for Omarchy is developed and installed from its own source tree.
-From the checkout, make sure Quickshell is installed and run:
+Install the Git-managed Omarchy plugin from the SmartDock fork:
+
+```bash
+omarchy plugin add https://github.com/fernandodamaso/smart-omarchy-dock.git --enable --yes
+```
+
+The normal update command is:
+
+```bash
+omarchy plugin update io.github.fernandodamaso.smartdock --yes
+```
+
+Updates pull the fork's default `main` branch and preserve
+`~/.config/smartdock/dock.json`. Installed plugin files are deployment state;
+do not edit them directly. Development belongs in a separate clone, such as
+`/home/admin/Projects/smart-omarchy-dock`, and changes reach an installed copy
+through Git push followed by `omarchy plugin update`.
+
+### Standalone installation
+
+Standalone use is a secondary mode. From a source checkout, make sure
+Quickshell is installed and run:
 
 ```bash
 ./install.sh
@@ -74,9 +94,9 @@ smartdock autostart disable
 
 ### Update or remove
 
-`smartdock update` refreshes an installed standalone copy from its local
-installer. To update from source, run `./install.sh` again from your own
-checkout.
+`smartdock update` only refreshes an installed standalone copy from its local
+source copy. It does not update the Omarchy plugin; use the Git-managed
+`omarchy plugin update` command above for that.
 
 ```bash
 smartdock update
@@ -91,10 +111,10 @@ Uninstalling preserves the configuration; remove it too with
 
 Omarchy users should run SmartDock inside the existing Omarchy shell rather
 than starting a second Quickshell process. The installed plugin ID is
-`admin.smartdock`:
+`io.github.fernandodamaso.smartdock`:
 
 ```bash
-omarchy plugin enable admin.smartdock
+omarchy plugin enable io.github.fernandodamaso.smartdock
 ```
 
 The plugin uses `~/.config/smartdock/dock.json`, shared with the standalone
@@ -103,13 +123,22 @@ will appear.
 
 ### Development
 
-Clone the repository and run directly from it:
+Development happens in the canonical source checkout or in your own clone,
+never in the installed Omarchy checkout:
 
 ```bash
+cd /home/admin/Projects/smart-omarchy-dock
 ./scripts/run
 ```
 
 Quickshell watches the QML files, so UI changes reload while developing.
+
+## Project history
+
+SmartDock for Omarchy is an extensively developed MIT-licensed fork of
+[nick-friedrich/hyprland-dock](https://github.com/nick-friedrich/hyprland-dock).
+The upstream Git history, MIT license, and original copyright notice are
+preserved in this repository.
 
 ## Configure
 
