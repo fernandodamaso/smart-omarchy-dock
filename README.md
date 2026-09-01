@@ -184,6 +184,7 @@ changes; choosing a hex value stores a fixed override.
   "autoHide": false,
   "clickAction": "focus-or-launch",
   "controlCommand": "omarchy-menu toggle apps",
+  "sortByWorkspace": false,
   "pinned": [
     "org.gnome.Nautilus",
     "com.mitchellh.ghostty",
@@ -216,6 +217,7 @@ changes; choosing a hex value stores a fixed override.
 | `autoHide` | Hide the dock until the pointer reaches its screen edge; can also be toggled from the right-click menu |
 | `clickAction` | `focus-or-launch` focuses an existing window; `launch` always starts a new instance |
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
+| `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
 The first dock icon is always the dock controls icon and is not part of

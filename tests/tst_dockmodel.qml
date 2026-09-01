@@ -329,6 +329,19 @@ TestCase {
     compare(DockModel.workspaceBadgeText([{ title: "Unknown" }], handles), "")
   }
 
+  function test_prefersIpcWorkspaceOverStaleObjectRelationship() {
+    var window = { title: "Ghostty" }
+    var staleHandles = [
+      {
+        wayland: window,
+        workspace: { id: 1, name: "1" },
+        lastIpcObject: { workspace: { id: 2, name: "2" } }
+      }
+    ]
+
+    compare(DockModel.workspaceBadgeText([window], staleHandles), "2")
+  }
+
   function test_distinguishesFakeFullscreenFromClientFullscreen() {
     compare(DockModel.isFakeFullscreen({ fullscreen: 1, fullscreenClient: 0 }), true)
     compare(DockModel.isFakeFullscreen({ fullscreen: 1, fullscreenClient: 1 }), false)
@@ -496,5 +509,59 @@ TestCase {
     compare(items[0].desktopId, "com.example.unknown")
     compare(items[0].pinned, false)
     compare(items[0].toplevels[0], window)
+  }
+
+  function test_sortsOpenAppsByWorkspaceWhenSortByWorkspaceEnabled() {
+    var pinned = ["org.gnome.Nautilus", "com.google.Chrome", "com.mitchellh.ghostty"]
+    var entries = [
+      { id: "org.gnome.Nautilus", startupClass: "org.gnome.Nautilus" },
+      { id: "com.google.Chrome", startupClass: "google-chrome" },
+      { id: "com.mitchellh.ghostty", startupClass: "com.mitchellh.ghostty" }
+    ]
+    var nautilusWindow = { appId: "org.gnome.Nautilus", title: "Files" }
+    var chromeWindow = { appId: "google-chrome", title: "Chrome" }
+    var ghosttyWindow = { appId: "com.mitchellh.ghostty", title: "Ghostty" }
+    var firefoxWindow = { appId: "firefox", title: "Firefox" }
+
+    var handles = [
+      { wayland: nautilusWindow, lastIpcObject: { workspace: { id: 2 } } },
+      { wayland: chromeWindow, lastIpcObject: { workspace: { id: 1 } } },
+      { wayland: ghosttyWindow, lastIpcObject: { workspace: { id: 3 } } },
+      { wayland: firefoxWindow, lastIpcObject: { workspace: { id: 2 } } }
+    ]
+
+    var items = DockModel.buildVisibleItems(
+      pinned, [nautilusWindow, chromeWindow, ghosttyWindow, firefoxWindow],
+      entries, handles, true)
+
+    compare(items.length, 4)
+    compare(items[0].desktopId, "com.google.Chrome")
+    compare(items[1].desktopId, "org.gnome.Nautilus")
+    compare(items[2].desktopId, "firefox")
+    compare(items[3].desktopId, "com.mitchellh.ghostty")
+  }
+
+  function test_keepsClosedPinnedAppsFirstWhenSortingByWorkspace() {
+    var pinned = ["org.gnome.Nautilus", "com.google.Chrome", "com.mitchellh.ghostty"]
+    var entries = [
+      { id: "org.gnome.Nautilus", startupClass: "org.gnome.Nautilus" },
+      { id: "com.google.Chrome", startupClass: "google-chrome" },
+      { id: "com.mitchellh.ghostty", startupClass: "com.mitchellh.ghostty" }
+    ]
+    var chromeWindow = { appId: "google-chrome", title: "Chrome" }
+    var ghosttyWindow = { appId: "com.mitchellh.ghostty", title: "Ghostty" }
+
+    var handles = [
+      { wayland: chromeWindow, lastIpcObject: { workspace: { id: 2 } } },
+      { wayland: ghosttyWindow, lastIpcObject: { workspace: { id: 1 } } }
+    ]
+
+    var items = DockModel.buildVisibleItems(
+      pinned, [chromeWindow, ghosttyWindow], entries, handles, true)
+
+    compare(items.length, 3)
+    compare(items[0].desktopId, "org.gnome.Nautilus")
+    compare(items[1].desktopId, "com.mitchellh.ghostty")
+    compare(items[2].desktopId, "com.google.Chrome")
   }
 }

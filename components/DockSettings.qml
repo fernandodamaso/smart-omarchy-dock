@@ -794,6 +794,15 @@ PanelWindow {
                 foreground: Color.menu.text
                 onClicked: root.commit("reserveSpace", !checked)
               }
+
+              Toggle {
+                width: parent.width
+                label: "Sort by workspace"
+                description: "Group open apps by workspace; closed pinned apps stay first"
+                checked: root.current("sortByWorkspace")
+                foreground: Color.menu.text
+                onClicked: root.commit("sortByWorkspace", !checked)
+              }
             }
           }
 

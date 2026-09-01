@@ -31,7 +31,8 @@ function settingsDefaults() {
     reserveSpace: true,
     autoHide: false,
     clickAction: "focus-or-launch",
-    controlCommand: "omarchy-menu toggle apps"
+    controlCommand: "omarchy-menu toggle apps",
+    sortByWorkspace: false
   }
 }
 
@@ -152,6 +153,7 @@ function normalizeSetting(key, value) {
   case "fullLength":
   case "reserveSpace":
   case "autoHide":
+  case "sortByWorkspace":
     return typeof value === "boolean" ? value : defaults[key]
   case "clickAction":
     return ["focus-or-launch", "launch"].indexOf(value) >= 0
@@ -383,12 +385,15 @@ function fullscreenOwner(toplevels, handles, focusedWorkspaceId, activeToplevel)
     if (!handle || !handle.wayland || windows.indexOf(handle.wayland) < 0)
       continue
 
-    var handleWorkspaceId = handle.workspace ? Number(handle.workspace.id) : -1
-    var info = handle.lastIpcObject || ({})
+    // Quickshell's object-level workspace relationship can be stale; prefer
+    // the authoritative IPC record carried by lastIpcObject.
+    var ipc = handle.lastIpcObject || ({})
+    var handleWorkspace = ipc.workspace || handle.workspace || ({})
+    var handleWorkspaceId = Number(handleWorkspace.id)
     if (handleWorkspaceId !== workspaceId) continue
     if (handle.wayland === activeToplevel)
       activeOnFocusedWorkspace = true
-    if (!owner && isFullscreenWithBars(info))
+    if (!owner && isFullscreenWithBars(ipc))
       owner = handle.wayland
   }
   return owner && activeOnFocusedWorkspace ? activeToplevel : owner
@@ -428,7 +433,10 @@ function workspaceBadgeText(toplevels, handles) {
       var handle = hyprHandles[j]
       if (!handle || handle.wayland !== window) continue
 
-      var workspace = handle.workspace || ({})
+      // Quickshell's object-level workspace relationship can be stale; prefer
+      // the authoritative IPC record carried by lastIpcObject.
+      var ipc = handle.lastIpcObject || ({})
+      var workspace = ipc.workspace || handle.workspace || ({})
       var workspaceId = Number(workspace.id)
       var workspaceName = String(workspace.name || "")
       if (workspaceName.indexOf("special:") === 0
@@ -544,16 +552,49 @@ function entryMatchesAppId(desktopId, entry, appId) {
     && wanted.replace(/[^a-z0-9]/g, "").indexOf(generatedId) >= 0
 }
 
-function buildVisibleItems(pinnedIds, toplevels, entries) {
+function itemWorkspaceId(item, handles) {
+  if (!item || !item.toplevels || item.toplevels.length === 0)
+    return Infinity
+
+  var values = Array.isArray(item.toplevels)
+    ? item.toplevels : item.toplevels.values
+  var ids = []
+
+  for (var i = 0; i < values.length; ++i) {
+    var window = values[i]
+    if (!window) continue
+    for (var j = 0; j < handles.length; ++j) {
+      var handle = handles[j]
+      if (!handle || handle.wayland !== window) continue
+
+      // Quickshell's object-level workspace relationship can be stale; prefer
+      // the authoritative IPC record carried by lastIpcObject.
+      var ipc = handle.lastIpcObject || ({})
+      var workspace = ipc.workspace || handle.workspace || ({})
+      var id = Number(workspace.id)
+      if (Number.isInteger(id) && id > 0 && ids.indexOf(id) < 0)
+        ids.push(id)
+      break
+    }
+  }
+
+  if (ids.length === 0) return Infinity
+  ids.sort(function(a, b) { return a - b })
+  return ids[0]
+}
+
+function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspace) {
   var items = []
   var runningByKey = {}
+  var nextOriginalIndex = 0
 
   for (var i = 0; i < pinnedIds.length; ++i) {
     var pinnedId = pinnedIds[i]
     var pinnedItem = {
       desktopId: pinnedId,
       pinned: true,
-      toplevels: []
+      toplevels: [],
+      originalIndex: nextOriginalIndex++
     }
     items.push(pinnedItem)
   }
@@ -585,12 +626,35 @@ function buildVisibleItems(pinnedIds, toplevels, entries) {
       runningItem = {
         desktopId: desktopId,
         pinned: false,
-        toplevels: []
+        toplevels: [],
+        originalIndex: nextOriginalIndex++
       }
       runningByKey[key] = runningItem
       items.push(runningItem)
     }
     runningItem.toplevels.push(toplevel)
+  }
+
+  if (sortByWorkspace) {
+    items.sort(function(a, b) {
+      // Closed pinned apps stay at the front in their configured order.
+      var aClosedPinned = a.pinned && a.toplevels.length === 0
+      var bClosedPinned = b.pinned && b.toplevels.length === 0
+      if (aClosedPinned && !bClosedPinned) return -1
+      if (!aClosedPinned && bClosedPinned) return 1
+
+      // Everything else is ordered by the lowest workspace id it occupies.
+      var aWorkspace = itemWorkspaceId(a, handles)
+      var bWorkspace = itemWorkspaceId(b, handles)
+      if (aWorkspace !== bWorkspace) return aWorkspace - bWorkspace
+
+      // Pinned items precede unpinned items on the same workspace.
+      if (a.pinned && !b.pinned) return -1
+      if (!a.pinned && b.pinned) return 1
+
+      // Preserve the original construction order for a stable layout.
+      return a.originalIndex - b.originalIndex
+    })
   }
 
   return items

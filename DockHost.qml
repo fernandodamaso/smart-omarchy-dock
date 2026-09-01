@@ -35,6 +35,7 @@ Item {
     autoHide: false,
     clickAction: "focus-or-launch",
     controlCommand: "omarchy-menu toggle apps",
+    sortByWorkspace: false,
     pinned: [
       "org.gnome.Nautilus",
       "com.mitchellh.ghostty",

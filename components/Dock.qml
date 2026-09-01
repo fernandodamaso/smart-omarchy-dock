@@ -129,6 +129,8 @@ PanelWindow {
   readonly property bool vertical: position === "left" || position === "right"
   readonly property bool fullLength: DockModel.normalizeSetting(
     "fullLength", effectiveSetting("fullLength"))
+  readonly property bool sortByWorkspace: DockModel.normalizeSetting(
+    "sortByWorkspace", effectiveSetting("sortByWorkspace"))
   readonly property var pinned: settings.pinned || []
   readonly property var applications: DesktopEntries.applications.values || []
   readonly property var toplevels: ToplevelManager.toplevels.values || []
@@ -143,7 +145,8 @@ PanelWindow {
     toplevels, hyprToplevels, focusedWorkspaceId, activeToplevel,
     fullscreenStateRevision)
   readonly property bool fullscreenModeActive: fullscreenOwnerToplevel !== null
-  readonly property var visibleItems: DockModel.buildVisibleItems(pinned, toplevels, applications)
+  readonly property var visibleItems: DockModel.buildVisibleItems(
+    pinned, toplevels, applications, hyprToplevels, sortByWorkspace)
   readonly property var visibleWorkspaceIds: DockModel.visibleWorkspaceIds(
     hyprWorkspaces, focusedWorkspaceId)
   readonly property int itemSize: iconSize + 14
