@@ -21,6 +21,7 @@ PopupWindow {
   signal openNewWindow()
   signal addApplication()
   signal removeFromDock()
+  signal hideFromDock()
   signal toggleAutoHide()
 
   readonly property string minimizedWorkspace: "special:smartdock-minimized"
@@ -419,6 +420,24 @@ PopupWindow {
             }
 
             DockMenuAction {
+              visible: !root.controlItem
+              iconName: "eye-off"
+              text: "Hide from Dock"
+              keyboardActive: !!root && itemIndex === root.activeMenuIndex
+              readonly property int itemIndex: {
+                if (!root) return -1
+                var items = root.currentFocusableItems()
+                for (var i = 0; i < items.length; ++i)
+                  if (items[i] === this) return i
+                return -1
+              }
+              onTriggered: {
+                root.dismiss()
+                root.hideFromDock()
+              }
+            }
+
+            DockMenuAction {
               visible: root.controlItem
               iconName: DockModel.dockControlIcon("launcher", root.autoHide)
               text: "Open App Launcher"
@@ -571,6 +590,23 @@ PopupWindow {
                 onTriggered: {
                   root.dismiss()
                   root.openNewWindow()
+                }
+              }
+
+              DockMenuAction {
+                iconName: "eye-off"
+                text: "Hide from Dock"
+                keyboardActive: !!root && itemIndex === root.activeMenuIndex
+                readonly property int itemIndex: {
+                  if (!root) return -1
+                  var items = root.currentFocusableItems()
+                  for (var i = 0; i < items.length; ++i)
+                    if (items[i] === this) return i
+                  return -1
+                }
+                onTriggered: {
+                  root.dismiss()
+                  root.hideFromDock()
                 }
               }
 

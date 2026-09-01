@@ -35,6 +35,7 @@ Item {
   signal dragFinished()
   signal addApplicationRequested()
   signal removeRequested(string desktopId)
+  signal hideRequested(string desktopId)
   signal autoHideToggled(bool enabled)
   signal contextMenuVisibilityChanged(bool visible)
 
@@ -322,6 +323,7 @@ Item {
     onOpenNewWindow: root.launch()
     onAddApplication: root.addApplicationRequested()
     onRemoveFromDock: root.removeRequested(root.desktopId)
+    onHideFromDock: root.hideRequested(root.desktopId)
     onToggleAutoHide: root.autoHideToggled(!root.autoHide)
   }
 }

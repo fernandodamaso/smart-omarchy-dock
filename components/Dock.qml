@@ -20,6 +20,7 @@ PanelWindow {
   signal reorderRequested(int from, int to)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
+  signal hideRequested(string desktopId)
   signal autoHideRequested(bool enabled)
   signal settingChanged(string key, var value)
   signal settingsPatchRequested(var patch)
@@ -478,6 +479,7 @@ PanelWindow {
             onDragMoved: mainPosition => root.updateDragTarget(mainPosition)
             onDragFinished: root.finishDrag()
             onRemoveRequested: desktopId => root.unpinRequested(desktopId)
+            onHideRequested: desktopId => root.hideRequested(desktopId)
             onContextMenuVisibilityChanged: visible => {
               root.openMenuCount = Math.max(0,
                 root.openMenuCount + (visible ? 1 : -1))

@@ -95,6 +95,11 @@ Item {
     savePinned(pinned)
   }
 
+  function hideApplication(desktopId) {
+    var hiddenApplications = DockModel.addHiddenApplication(settings.hiddenApplications, desktopId)
+    saveSetting("hiddenApplications", hiddenApplications)
+  }
+
   function savePinned(pinned) {
     saveSetting("pinned", pinned)
   }
@@ -253,6 +258,7 @@ Item {
         onReorderRequested: (from, to) => root.reorderPinned(from, to)
         onPinRequested: desktopId => root.pinApplication(desktopId)
         onUnpinRequested: desktopId => root.unpinApplication(desktopId)
+        onHideRequested: desktopId => root.hideApplication(desktopId)
         onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
         onSettingChanged: (key, value) => root.saveSetting(key, value)
         onSettingsPatchRequested: patch => root.saveSettings(patch)

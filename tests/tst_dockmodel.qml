@@ -119,6 +119,27 @@ TestCase {
       removed, "missing")), JSON.stringify(removed))
   }
 
+  function test_persistsHiddenApplicationInSettingsPatch() {
+    var settings = {
+      pinned: ["org.gnome.Nautilus", "com.google.Chrome"],
+      hiddenApplications: ["org.example.Editor"],
+      clickAction: "launch"
+    }
+    var updated = DockModel.mergeSettings(settings, {
+      hiddenApplications: DockModel.addHiddenApplication(
+        settings.hiddenApplications, " com.google.Chrome ")
+    })
+
+    compare(JSON.stringify(updated.hiddenApplications), JSON.stringify([
+      "org.example.Editor", "com.google.Chrome"
+    ]))
+    compare(JSON.stringify(updated.pinned), JSON.stringify(settings.pinned))
+    compare(updated.clickAction, settings.clickAction)
+    compare(JSON.stringify(settings.hiddenApplications), JSON.stringify([
+      "org.example.Editor"
+    ]))
+  }
+
   function test_normalizesOptionalSurfaceOverrides() {
     compare(DockModel.normalizeSetting("backgroundColorEnabled", true), true)
     compare(DockModel.normalizeSetting("backgroundColorEnabled", "true"), false)
