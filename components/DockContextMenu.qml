@@ -172,14 +172,6 @@ PopupWindow {
       address, target, Hyprland.usingLua))
   }
 
-  function activateToplevel(toplevel) {
-    if (!toplevel) return
-    if (isToplevelMinimized(toplevel))
-      restoreToplevel(toplevel)
-    else
-      toplevel.activate()
-  }
-
   function dispatchRequest(request) {
     if (request) Hyprland.dispatch(request)
   }
@@ -589,24 +581,6 @@ PopupWindow {
             Column {
               width: parent.width / 2
               visible: root.selectedToplevel !== null
-
-              DockMenuAction {
-                iconName: "focus"
-                text: "Focus"
-                enabled: root.selectedToplevel !== null
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: {
-                  root.activateToplevel(root.selectedToplevel)
-                  root.dismiss()
-                }
-              }
 
               DockMenuAction {
                 iconName: "arrow-right-left"
