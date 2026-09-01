@@ -594,6 +594,7 @@ PopupWindow {
               }
 
               DockMenuAction {
+                visible: !root.controlItem
                 iconName: "eye-off"
                 text: "Hide from Dock"
                 keyboardActive: !!root && itemIndex === root.activeMenuIndex

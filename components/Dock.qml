@@ -17,7 +17,7 @@ PanelWindow {
   required property var workspaceWindowCounts
   required property bool workspaceCountsReady
   required property int workspaceCountsRevision
-  signal reorderRequested(int from, int to)
+  signal reorderRequested(string sourceDesktopId, string targetDesktopId)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
   signal hideRequested(string desktopId)
@@ -216,6 +216,7 @@ PanelWindow {
   }
 
   function reorderOffset(index) {
+    if (dragSource < 0 || dragTarget < 0) return 0
     if (dragSource < dragTarget && index > dragSource && index <= dragTarget)
       return -itemSize
     if (dragSource > dragTarget && index >= dragTarget && index < dragSource)
@@ -223,18 +224,43 @@ PanelWindow {
     return 0
   }
 
+  function visiblePinnedTargetIndex(position) {
+    var candidateIndex = Math.floor(position / itemSize)
+    var nearestIndex = -1
+    var nearestDistance = Infinity
+
+    for (var i = 0; i < visibleItems.length; ++i) {
+      if (!visibleItems[i] || !visibleItems[i].pinned) continue
+
+      var distance = Math.abs(i - candidateIndex)
+      if (distance < nearestDistance
+          || (distance === nearestDistance && i > nearestIndex)) {
+        nearestIndex = i
+        nearestDistance = distance
+      }
+    }
+
+    return nearestIndex
+  }
+
   function updateDragTarget(position) {
-    dragTarget = Math.max(0, Math.min(pinned.length - 1,
-      Math.floor(position / itemSize)))
+    dragTarget = visiblePinnedTargetIndex(position)
   }
 
   function finishDrag() {
     var from = dragSource
     var to = dragTarget
+    var sourceItem = from >= 0 && from < visibleItems.length
+      ? visibleItems[from] : null
+    var targetItem = to >= 0 && to < visibleItems.length
+      ? visibleItems[to] : null
     dragSource = -1
     dragTarget = -1
-    if (from >= 0 && to >= 0 && from !== to)
-      reorderRequested(from, to)
+    if (sourceItem && targetItem && sourceItem.pinned && targetItem.pinned
+        && from !== to) {
+      reorderRequested(String(sourceItem.desktopId),
+        String(targetItem.desktopId))
+    }
   }
 
   function updateAutoHideState() {

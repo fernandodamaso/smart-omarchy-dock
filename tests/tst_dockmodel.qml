@@ -119,6 +119,29 @@ TestCase {
       removed, "missing")), JSON.stringify(removed))
   }
 
+  function test_reordersPinnedApplicationsByVisibleIdentityWithHiddenEntries() {
+    var hiddenBefore = ["hidden-before", "source", "target"]
+    var hiddenBetween = ["source", "hidden-between", "target"]
+    var hiddenAfter = ["source", "target", "hidden-after"]
+
+    compare(JSON.stringify(DockModel.reorderPinnedById(
+      hiddenBefore, "source", "target")),
+      JSON.stringify(["hidden-before", "target", "source"]))
+    compare(JSON.stringify(DockModel.reorderPinnedById(
+      hiddenBetween, "source", "target")),
+      JSON.stringify(["hidden-between", "target", "source"]))
+    compare(JSON.stringify(DockModel.reorderPinnedById(
+      hiddenAfter, "source", "target")),
+      JSON.stringify(["target", "source", "hidden-after"]))
+
+    compare(JSON.stringify(hiddenBefore),
+      JSON.stringify(["hidden-before", "source", "target"]))
+    compare(JSON.stringify(hiddenBetween),
+      JSON.stringify(["source", "hidden-between", "target"]))
+    compare(JSON.stringify(hiddenAfter),
+      JSON.stringify(["source", "target", "hidden-after"]))
+  }
+
   function test_buildsHiddenApplicationSettingsRowsWithFallbacks() {
     var rows = DockModel.hiddenApplicationRows([
       " org.mozilla.Firefox ", "org.example.Missing", "ORG.MOZILLA.FIREFOX"

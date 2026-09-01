@@ -54,6 +54,31 @@ function removeHiddenApplication(ids, desktopId) {
   return remaining
 }
 
+function reorderPinnedById(pinnedIds, sourceDesktopId, targetDesktopId) {
+  if (!Array.isArray(pinnedIds)) return []
+
+  var sourceKey = normalizedId(sourceDesktopId).trim()
+  var targetKey = normalizedId(targetDesktopId).trim()
+  var sourceIndex = -1
+  var targetIndex = -1
+
+  if (!sourceKey || !targetKey || sourceKey === targetKey)
+    return pinnedIds.slice()
+
+  for (var i = 0; i < pinnedIds.length; ++i) {
+    var itemKey = normalizedId(pinnedIds[i]).trim()
+    if (itemKey === sourceKey && sourceIndex < 0) sourceIndex = i
+    if (itemKey === targetKey && targetIndex < 0) targetIndex = i
+  }
+
+  if (sourceIndex < 0 || targetIndex < 0) return pinnedIds.slice()
+
+  var reordered = pinnedIds.slice()
+  var moved = reordered.splice(sourceIndex, 1)[0]
+  reordered.splice(Math.min(targetIndex, reordered.length), 0, moved)
+  return reordered
+}
+
 function hiddenApplicationRows(ids, entries) {
   var normalized = normalizeApplicationIds(ids)
   var availableEntries = []

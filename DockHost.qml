@@ -66,14 +66,10 @@ Item {
     }
   }
 
-  function reorderPinned(from, to) {
-    if (from === to || from < 0 || to < 0
-        || from >= settings.pinned.length || to >= settings.pinned.length)
-      return
-
-    var pinned = settings.pinned.slice()
-    var moved = pinned.splice(from, 1)[0]
-    pinned.splice(to, 0, moved)
+  function reorderPinned(sourceDesktopId, targetDesktopId) {
+    var pinned = DockModel.reorderPinnedById(
+      settings.pinned, sourceDesktopId, targetDesktopId)
+    if (JSON.stringify(pinned) === JSON.stringify(settings.pinned)) return
 
     savePinned(pinned)
   }
@@ -255,7 +251,9 @@ Item {
         workspaceWindowCounts: root.workspaceWindowCounts
         workspaceCountsReady: root.workspaceCountsReady
         workspaceCountsRevision: root.workspaceCountsRevision
-        onReorderRequested: (from, to) => root.reorderPinned(from, to)
+        onReorderRequested: (sourceDesktopId, targetDesktopId) => {
+          root.reorderPinned(sourceDesktopId, targetDesktopId)
+        }
         onPinRequested: desktopId => root.pinApplication(desktopId)
         onUnpinRequested: desktopId => root.unpinApplication(desktopId)
         onHideRequested: desktopId => root.hideApplication(desktopId)
