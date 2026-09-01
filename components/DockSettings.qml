@@ -897,14 +897,18 @@ PanelWindow {
               Text {
                 anchors.left: launcherIcon.right
                 anchors.leftMargin: Style.spacing.md
+                anchors.right: launcherChevron.left
+                anchors.rightMargin: Style.spacing.md
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Advanced launcher settings"
                 color: Color.menu.text
                 font.family: Style.font.family
                 font.pixelSize: Style.font.body
+                elide: Text.ElideRight
               }
 
               DockLucideIcon {
+                id: launcherChevron
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "chevron-right"
