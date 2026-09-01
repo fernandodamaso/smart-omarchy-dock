@@ -406,6 +406,14 @@ function focusWorkspaceRequest(workspace, usingLua) {
   return "workspace " + id
 }
 
+function focusWindowRequest(address, usingLua) {
+  var target = normalizeWindowAddress(address)
+  if (!target) return ""
+  if (usingLua)
+    return 'hl.dsp.focus({ window = "address:' + target + '" })'
+  return "focuswindow address:" + target
+}
+
 function trashItemCount(output) {
   var listing = String(output || "").trim()
   if (!listing) return 0

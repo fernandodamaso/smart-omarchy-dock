@@ -172,6 +172,21 @@ PopupWindow {
       address, target, Hyprland.usingLua))
   }
 
+  function activateToplevel(toplevel) {
+    if (!toplevel) return
+    if (isToplevelMinimized(toplevel)) {
+      restoreToplevel(toplevel)
+      return
+    }
+
+    var request = DockModel.focusWindowRequest(
+      addressFor(toplevel), Hyprland.usingLua)
+    if (request)
+      dispatchRequest(request)
+    else
+      toplevel.activate()
+  }
+
   function dispatchRequest(request) {
     if (request) Hyprland.dispatch(request)
   }

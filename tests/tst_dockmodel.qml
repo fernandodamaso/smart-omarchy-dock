@@ -372,6 +372,14 @@ TestCase {
     compare(DockModel.focusWorkspaceRequest(11, false), "")
   }
 
+  function test_buildsWindowFocusRequests() {
+    compare(DockModel.focusWindowRequest("0xabc123", true),
+      'hl.dsp.focus({ window = "address:0xabc123" })')
+    compare(DockModel.focusWindowRequest("0xabc123", false),
+      "focuswindow address:0xabc123")
+    compare(DockModel.focusWindowRequest("invalid address", true), "")
+  }
+
   function test_parsesTrashListings() {
     compare(DockModel.trashItemCount(""), 0)
     compare(DockModel.trashItemCount("\n\n"), 0)
