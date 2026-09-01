@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import qs.Commons
 import qs.Ui
@@ -73,28 +72,13 @@ Item {
       }
     }
 
-    Image {
-      id: trashIconSource
-
+    DockLucideIcon {
       anchors.fill: parent
       anchors.margins: Math.max(2, root.iconSize * 0.08)
-      source: Qt.resolvedUrl("../assets/lucide/trash-2.svg")
-      sourceSize: Qt.size(width * Screen.devicePixelRatio,
-        height * Screen.devicePixelRatio)
-      fillMode: Image.PreserveAspectFit
-      asynchronous: true
-      visible: false
-      // Expose the hidden SVG as a texture for exact ColorOverlay recoloring.
-      layer.enabled: true
-    }
+      iconName: "trash-2"
+      tint: trashHover.hovered ? Color.accent : "#ffffff"
 
-    ColorOverlay {
-      anchors.fill: trashIconSource
-      source: trashIconSource
-      color: trashHover.hovered ? Color.accent : "#ffffff"
-      opacity: 1.0
-
-      Behavior on color { ColorAnimation { duration: 100 } }
+      Behavior on tint { ColorAnimation { duration: 100 } }
     }
   }
 
