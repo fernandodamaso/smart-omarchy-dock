@@ -102,7 +102,7 @@ Item {
             width: parent.width
             height: Math.max(2, root.iconSize * 0.055)
             radius: height / 2
-            color: mouse.hovered ? Color.accent : Color.foreground
+            color: Color.foreground
           }
 
           Rectangle {
@@ -111,7 +111,7 @@ Item {
             width: Math.max(6, root.iconSize * 0.18)
             height: width
             radius: width / 2
-            color: mouse.hovered ? Color.accent : Color.foreground
+            color: Color.foreground
             border.width: Math.max(1, root.iconSize * 0.04)
             border.color: Color.menu.background
           }

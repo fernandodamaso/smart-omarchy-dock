@@ -13,11 +13,11 @@ grep -Eq 'DockLucideIcon\s*\{' "$trash_qml" \
   || { echo "Dock Trash must render through DockLucideIcon" >&2; exit 1; }
 grep -Eq 'iconName:\s*"trash-2"' "$trash_qml" \
   || { echo "Dock Trash icon must be trash-2" >&2; exit 1; }
-grep -Eq 'tint:\s*trashHover\.hovered \? Color\.accent : "#ffffff"' "$trash_qml" \
-  || { echo "Trash idle glyph must use opaque white" >&2; exit 1; }
-if grep -Eq 'trashStateKnown \? 0\.94 : 0\.58|colorizationColor: trashHover\.hovered \? Color\.accent : Color\.foreground' "$trash_qml"; then
-  echo "Trash glyph still dims or inherits the gray foreground token" >&2
+grep -Eq 'tint:\s*"#ffffff"' "$trash_qml" \
+  || { echo "Trash glyph must remain opaque white" >&2; exit 1; }
+if grep -Eq 'tint:.*trashHover\.hovered|trashStateKnown \? 0\.94 : 0\.58|colorizationColor:.*trashHover\.hovered' "$trash_qml"; then
+  echo "Trash glyph still changes color or opacity on hover" >&2
   exit 1
 fi
 
-echo "Trash idle glyph styling is opaque white"
+echo "Trash glyph remains opaque white on hover"

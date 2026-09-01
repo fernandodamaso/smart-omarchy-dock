@@ -76,9 +76,7 @@ Item {
       anchors.fill: parent
       anchors.margins: Math.max(2, root.iconSize * 0.08)
       iconName: "trash-2"
-      tint: trashHover.hovered ? Color.accent : "#ffffff"
-
-      Behavior on tint { ColorAnimation { duration: 100 } }
+      tint: "#ffffff"
     }
   }
 
