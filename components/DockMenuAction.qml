@@ -11,17 +11,20 @@ BorderSurface {
   property string iconText: ""
   property string iconFont: Style.font.family
   property real iconSize: Style.font.icon
+  property bool keyboardActive: false
+  property bool isDockMenuAction: true
   signal triggered()
 
   readonly property bool hasIcon: root.iconName !== "" || root.iconText !== ""
+  readonly property bool highlighted: hover.hovered || root.keyboardActive
 
   implicitWidth: Style.space(168)
   implicitHeight: Style.spacing.popupRowHeight
   radius: Style.cornerRadius
-  color: hover.hovered && enabled
+  color: root.highlighted && enabled
     ? Style.hoverFillFor(Color.menu.text, Color.accent)
     : "transparent"
-  borderSpec: hover.hovered && enabled
+  borderSpec: root.highlighted && enabled
     ? Border.controlSpec("hover-cursor", Color.menu.text, Color.accent)
     : Border.none()
   opacity: enabled ? 1 : 0.42
@@ -56,7 +59,7 @@ BorderSurface {
       visible: root.iconName !== ""
       anchors.fill: lucideSource
       source: lucideSource
-      color: hover.hovered && root.enabled ? Color.accent : Color.menu.text
+      color: root.highlighted && root.enabled ? Color.accent : Color.menu.text
       opacity: 1.0
 
       Behavior on color { ColorAnimation { duration: 100 } }
@@ -66,7 +69,7 @@ BorderSurface {
       visible: root.iconName === "" && root.iconText !== ""
       anchors.fill: parent
       text: root.iconText
-      color: hover.hovered && root.enabled ? Color.accent : Color.menu.text
+      color: root.highlighted && root.enabled ? Color.accent : Color.menu.text
       font.family: root.iconFont
       font.pixelSize: root.iconSize
       horizontalAlignment: Text.AlignHCenter
@@ -83,7 +86,7 @@ BorderSurface {
       rightMargin: Style.spacing.controlPaddingX
     }
     text: root.text
-    color: Color.menu.text
+    color: root.highlighted && root.enabled ? Color.accent : Color.menu.text
     font.family: Style.font.family
     font.pixelSize: Style.font.body
     elide: Text.ElideRight

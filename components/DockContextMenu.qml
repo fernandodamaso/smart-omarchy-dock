@@ -49,6 +49,8 @@ PopupWindow {
     page = "windows"
     selectedToplevel = null
     visible = true
+    resetActiveMenuIndex()
+    if (menuSurface) menuSurface.forceActiveFocus()
   }
 
   function dismiss() {
@@ -224,6 +226,51 @@ PopupWindow {
     return title || String(selectedToplevel.appId || "Window")
   }
 
+  property int activeMenuIndex: -1
+
+  function currentPageColumn() {
+    if (root.page === "windows") return windowsPage
+    if (root.page === "actions") return actionsPage
+    if (root.page === "workspaces") return workspacesPage
+    return null
+  }
+
+  function currentFocusableItems() {
+    var col = currentPageColumn()
+    var items = []
+    if (!col) return items
+    for (var i = 0; i < col.children.length; ++i) {
+      var child = col.children[i]
+      if (child && child.isDockMenuAction && child.enabled && child.visible)
+        items.push(child)
+    }
+    return items
+  }
+
+  function resetActiveMenuIndex() {
+    var items = currentFocusableItems()
+    root.activeMenuIndex = items.length > 0 ? 0 : -1
+  }
+
+  function moveActiveMenuIndex(delta) {
+    var items = currentFocusableItems()
+    if (items.length === 0) {
+      root.activeMenuIndex = -1
+      return
+    }
+    var next = root.activeMenuIndex + delta
+    next = Math.max(0, Math.min(items.length - 1, next))
+    root.activeMenuIndex = next
+  }
+
+  function activateCurrentMenuItem() {
+    var items = currentFocusableItems()
+    if (root.activeMenuIndex >= 0 && root.activeMenuIndex < items.length)
+      items[root.activeMenuIndex].triggered()
+  }
+
+  onPageChanged: resetActiveMenuIndex()
+
   implicitWidth: 200
   implicitHeight: Math.min(520, menuPages.implicitHeight + 12)
   color: "transparent"
@@ -264,11 +311,36 @@ PopupWindow {
   }
 
   BorderSurface {
+    id: menuSurface
+
     anchors.fill: parent
+    focus: true
     radius: Style.cornerRadius
     color: Color.menu.background
     borderSpec: Border.surfaceSpec(
       "menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+
+    Keys.onPressed: function(event) {
+      if (event.key === Qt.Key_Down) {
+        moveActiveMenuIndex(1)
+        event.accepted = true
+      } else if (event.key === Qt.Key_Up) {
+        moveActiveMenuIndex(-1)
+        event.accepted = true
+      } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+                 || event.key === Qt.Key_Space) {
+        activateCurrentMenuItem()
+        event.accepted = true
+      } else if (event.key === Qt.Key_Escape) {
+        if (root.page !== "windows") {
+          root.page = "windows"
+          event.accepted = true
+        } else {
+          root.dismiss()
+          event.accepted = true
+        }
+      }
+    }
 
     Flickable {
       anchors.fill: parent
@@ -284,6 +356,8 @@ PopupWindow {
         width: parent.width
 
         Column {
+          id: windowsPage
+
           visible: root.page === "windows"
           width: parent.width
 
@@ -303,6 +377,14 @@ PopupWindow {
             visible: !root.controlItem && root.runningToplevels.length === 0
             enabled: false
             text: "No open windows"
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
           }
 
           Repeater {
@@ -314,6 +396,13 @@ PopupWindow {
 
               readonly property string statusLabel: root
                 ? root.windowStatusLabel(modelData) : ""
+              readonly property int itemIndex: {
+                if (!root) return -1
+                var items = root.currentFocusableItems()
+                for (var i = 0; i < items.length; ++i)
+                  if (items[i] === this) return i
+                return -1
+              }
 
               iconName: "app-window"
               text: (modelData && modelData.activated ? "● " : "")
@@ -321,6 +410,7 @@ PopupWindow {
                 + (statusLabel !== "" ? " " : "")
                 + (String(modelData && modelData.title || "").trim()
                   || "Window " + (index + 1))
+              keyboardActive: !!root && itemIndex === root.activeMenuIndex
               onTriggered: if (root) root.selectWindow(modelData)
             }
           }
@@ -342,6 +432,14 @@ PopupWindow {
             visible: !root.controlItem
             iconName: "plus"
             text: "Open New Window"
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: {
               root.dismiss()
               root.openNewWindow()
@@ -352,6 +450,14 @@ PopupWindow {
             visible: root.controlItem
             iconName: DockModel.dockControlIcon("launcher", root.autoHide)
             text: "Open App Launcher"
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: {
               root.dismiss()
               Qt.callLater(() => root.openLauncher())
@@ -362,6 +468,14 @@ PopupWindow {
             visible: root.controlItem
             iconName: DockModel.dockControlIcon("settings", root.autoHide)
             text: "Dock Settings…"
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: {
               root.dismiss()
               Qt.callLater(() => root.openSettings())
@@ -372,6 +486,14 @@ PopupWindow {
             visible: root.controlItem
             iconName: DockModel.dockControlIcon("add", root.autoHide)
             text: "Add Application"
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: {
               root.dismiss()
               root.addApplication()
@@ -382,6 +504,14 @@ PopupWindow {
             visible: !root.controlItem && root.pinnedItem
             iconName: "minus"
             text: "Remove from Dock"
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: {
               root.dismiss()
               root.removeFromDock()
@@ -392,6 +522,14 @@ PopupWindow {
             visible: root.controlItem
             iconName: DockModel.dockControlIcon("auto-hide", root.autoHide)
             text: root.autoHide ? "Disable Auto-Hide" : "Enable Auto-Hide"
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: {
               root.toggleAutoHide()
               root.dismiss()
@@ -400,12 +538,22 @@ PopupWindow {
         }
 
         Column {
+          id: actionsPage
+
           visible: root.page === "actions"
           width: parent.width
 
           DockMenuAction {
             iconName: "chevron-left"
             text: "Back to Windows"
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: root.page = "windows"
           }
 
@@ -427,6 +575,14 @@ PopupWindow {
             iconName: "focus"
             text: "Focus"
             enabled: root.selectedToplevel !== null
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: {
               root.activateToplevel(root.selectedToplevel)
               root.dismiss()
@@ -437,6 +593,14 @@ PopupWindow {
             iconName: "arrow-right-left"
             text: "Move to Workspace…"
             enabled: root.selectedAddress() !== ""
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: root.page = "workspaces"
           }
 
@@ -445,6 +609,14 @@ PopupWindow {
             text: root.selectedFakeFullscreen
               ? "Restore Size" : "Fullscreen (Keep Bars)"
             enabled: root.selectedAddress() !== ""
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: root.toggleSelectedFakeFullscreen()
           }
 
@@ -452,6 +624,14 @@ PopupWindow {
             iconName: root.selectedMinimized ? "maximize-2" : "minus"
             text: root.selectedMinimized ? "Restore Window" : "Minimize"
             enabled: root.selectedAddress() !== ""
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: {
               if (root.selectedMinimized)
                 root.restoreToplevel(root.selectedToplevel)
@@ -465,6 +645,14 @@ PopupWindow {
             iconName: root.selectedFloating ? "square" : "move"
             text: root.selectedFloating ? "Tile Window" : "Float Window"
             enabled: root.selectedAddress() !== ""
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: root.toggleSelectedFloating()
           }
 
@@ -472,6 +660,14 @@ PopupWindow {
             iconName: root.selectedPinned ? "pin-off" : "pin"
             text: root.selectedPinned ? "Unpin from Workspaces" : "Pin to All Workspaces"
             enabled: root.selectedAddress() !== ""
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: root.toggleSelectedPinned()
           }
 
@@ -491,6 +687,14 @@ PopupWindow {
             iconName: "x"
             text: "Close Window"
             enabled: root.selectedToplevel !== null
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: {
               root.selectedToplevel.close()
               root.dismiss()
@@ -499,12 +703,22 @@ PopupWindow {
         }
 
         Column {
+          id: workspacesPage
+
           visible: root.page === "workspaces"
           width: parent.width
 
           DockMenuAction {
             iconName: "chevron-left"
             text: "Back to Actions"
+            keyboardActive: !!root && itemIndex === root.activeMenuIndex
+            readonly property int itemIndex: {
+              if (!root) return -1
+              var items = root.currentFocusableItems()
+              for (var i = 0; i < items.length; ++i)
+                if (items[i] === this) return i
+              return -1
+            }
             onTriggered: root.page = "actions"
           }
 
@@ -527,10 +741,19 @@ PopupWindow {
               required property int index
 
               readonly property int workspaceNumber: index + 1
+              readonly property int itemIndex: {
+                if (!root) return -1
+                var items = root.currentFocusableItems()
+                for (var i = 0; i < items.length; ++i)
+                  if (items[i] === this) return i
+                return -1
+              }
+
               iconName: "layout-grid"
               text: "Workspace " + workspaceNumber
                 + (root.selectedWorkspaceId === workspaceNumber ? "  ✓" : "")
               enabled: root.selectedWorkspaceId !== workspaceNumber
+              keyboardActive: !!root && itemIndex === root.activeMenuIndex
               onTriggered: root.moveSelectedToWorkspace(workspaceNumber)
             }
           }
