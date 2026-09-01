@@ -56,7 +56,13 @@ function removeHiddenApplication(ids, desktopId) {
 
 function hiddenApplicationRows(ids, entries) {
   var normalized = normalizeApplicationIds(ids)
-  var availableEntries = Array.isArray(entries) ? entries : []
+  var availableEntries = []
+  if (Array.isArray(entries)) {
+    availableEntries = entries
+  } else if (entries && typeof entries.length === "number") {
+    for (var entryIndex = 0; entryIndex < entries.length; ++entryIndex)
+      availableEntries.push(entries[entryIndex])
+  }
   var rows = []
 
   for (var i = 0; i < normalized.length; ++i) {

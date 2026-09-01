@@ -134,6 +134,18 @@ TestCase {
     compare(JSON.stringify(DockModel.hiddenApplicationRows([], [])), "[]")
   }
 
+  function test_readsHiddenApplicationEntriesFromArrayLikeQObjectLists() {
+    var entries = {
+      0: { id: "org.mozilla.Firefox", name: "Firefox", icon: "firefox" },
+      length: 1
+    }
+
+    compare(JSON.stringify(DockModel.hiddenApplicationRows(
+      ["org.mozilla.Firefox"], entries)), JSON.stringify([
+        { id: "org.mozilla.Firefox", name: "Firefox", icon: "firefox" }
+      ]))
+  }
+
   function test_persistsHiddenApplicationInSettingsPatch() {
     var settings = {
       pinned: ["org.gnome.Nautilus", "com.google.Chrome"],
