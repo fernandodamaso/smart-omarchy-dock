@@ -268,6 +268,102 @@ TestCase {
     compare(DockModel.visibleWorkspaceIds(null, -99).join(","), "1,2")
   }
 
+  function test_countsWorkspaceWindowsFromIpcHandles() {
+    var handles = [
+      {
+        workspace: { id: 1 },
+        lastIpcObject: { workspace: { id: 2 } }
+      },
+      {
+        workspace: { id: 1 },
+        lastIpcObject: { workspace: { id: 2 } }
+      },
+      {
+        workspace: { id: 2 },
+        lastIpcObject: { workspace: { id: 1 } }
+      },
+      {
+        lastIpcObject: { workspace: { id: 1, name: "special:smartdock-minimized" } }
+      }
+    ]
+
+    compare(DockModel.workspaceWindowCount(2, handles), 2)
+    compare(DockModel.workspaceWindowCount(1, handles), 1)
+    compare(DockModel.workspaceWindowCount(3, handles), 0)
+  }
+
+  function test_prefersWorkspaceIpcWindowCounts() {
+    var workspaces = [
+      { id: 1, lastIpcObject: { windows: 1 }, toplevels: { values: [{}, {}, {}, {}] } },
+      { id: 2, lastIpcObject: { windows: 2 }, toplevels: { values: [] } }
+    ]
+
+    compare(DockModel.workspaceWindowCount(1, [], workspaces), 1)
+    compare(DockModel.workspaceWindowCount(2, [], workspaces), 2)
+    compare(DockModel.workspaceOccupied(workspaces[0], []), true)
+    compare(DockModel.workspaceOccupied(workspaces[1], []), true)
+  }
+
+  function test_prefersHyprctlWorkspaceWindowCounts() {
+    var counts = DockModel.parseWorkspaceWindowCounts(
+      '[{"id":1,"windows":1},{"id":2,"windows":2}]')
+    compare(counts["1"], 1)
+    compare(counts["2"], 2)
+    compare(DockModel.workspaceWindowCount(1, [], [], counts, true), 1)
+    compare(DockModel.workspaceWindowCount(2, [], [], counts, true), 2)
+    compare(DockModel.workspaceWindowCount(1,
+      [], [{ id: 1, lastIpcObject: { windows: 99 } }], counts, true), 1)
+    compare(DockModel.workspaceWindowCount(9, [], [], counts, true), 0)
+  }
+
+  function test_refreshesWorkspaceStateForWindowEvents() {
+    verify(DockModel.shouldRefreshWorkspaceState("movewindow"))
+    verify(DockModel.shouldRefreshWorkspaceState("openwindow"))
+    verify(DockModel.shouldRefreshWorkspaceState("focusedmon"))
+    verify(!DockModel.shouldRefreshWorkspaceState("urgent"))
+  }
+
+  function test_resolvesFocusedWorkspaceFromMonitorIpc() {
+    var monitors = [
+      {
+        focused: false,
+        activeWorkspace: { id: 2 },
+        lastIpcObject: {
+          focused: false,
+          activeWorkspace: { id: 1, name: "" }
+        }
+      },
+      {
+        focused: false,
+        activeWorkspace: { id: 1 },
+        lastIpcObject: {
+          focused: true,
+          activeWorkspace: { id: 2, name: "" }
+        }
+      }
+    ]
+
+    compare(DockModel.focusedWorkspaceIdFromMonitors(monitors, { id: 1 }), 2)
+    compare(DockModel.focusedWorkspaceIdFromMonitors(monitors, null), 2)
+  }
+
+  function test_prefersIpcWorkspaceOccupancyForVisibility() {
+    var workspaces = [
+      { id: 2, lastIpcObject: { windows: 2 }, toplevels: { values: [] } },
+      { id: 3, lastIpcObject: { windows: 0 }, toplevels: { values: [{ title: "Stale" }] } }
+    ]
+    var handles = [
+      { lastIpcObject: { workspace: { id: 2 } } },
+      { lastIpcObject: { workspace: { id: 2 } } }
+    ]
+
+    compare(DockModel.visibleWorkspaceIds(workspaces, 4, handles).join(","), "1,2,4")
+    compare(DockModel.visibleWorkspaceIds(workspaces, 4).join(","), "1,2,4")
+    compare(DockModel.visibleWorkspaceIds(
+      [{ id: 3, toplevels: { values: [{ title: "Stale" }] } }], 4).join(","),
+      "1,2,3,4")
+  }
+
   function test_buildsWorkspaceFocusRequests() {
     compare(DockModel.focusWorkspaceRequest(4, true),
       'hl.dsp.focus({ workspace = "4" })')

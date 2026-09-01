@@ -255,14 +255,125 @@ function workspaceGridPosition(position, parentWidth, parentHeight,
   }
 }
 
-function workspaceOccupied(workspace) {
+function ipcWorkspaceFromHandle(handle) {
+  var ipc = handle && handle.lastIpcObject ? handle.lastIpcObject : null
+  return ipc && ipc.workspace ? ipc.workspace : null
+}
+
+function workspaceFromHandle(handle) {
+  // Quickshell's object-level workspace relationship can be stale; prefer
+  // the authoritative IPC record carried by lastIpcObject.
+  return ipcWorkspaceFromHandle(handle)
+    || (handle && handle.workspace) || ({})
+}
+
+function workspaceIpcWindowCount(workspace) {
+  if (!workspace) return -1
+  var ipc = workspace.lastIpcObject || ({})
+  var count = Number(ipc.windows)
+  if (Number.isInteger(count) && count >= 0) return count
+  return -1
+}
+
+function isCountableWorkspaceHandle(handle) {
+  var workspace = ipcWorkspaceFromHandle(handle)
+  if (!workspace) return false
+  var workspaceId = Number(workspace.id)
+  var workspaceName = String(workspace.name || "")
+  if (workspaceName.indexOf("special:") === 0) return false
+  if (Number.isInteger(workspaceId) && workspaceId < 0) return false
+  return Number.isInteger(workspaceId) && workspaceId > 0
+}
+
+function parseWorkspaceWindowCounts(output) {
+  var counts = {}
+  try {
+    var values = JSON.parse(String(output || "[]"))
+    for (var i = 0; i < values.length; ++i) {
+      var workspace = values[i]
+      var id = Number(workspace ? workspace.id : NaN)
+      if (!Number.isInteger(id) || id < 1) continue
+      counts[String(id)] = Math.max(0, Number(workspace.windows) || 0)
+    }
+  } catch (error) {
+    return null
+  }
+  return counts
+}
+
+function workspaceWindowCount(workspaceId, handles, workspaces, counts, countsReady) {
+  var target = Number(workspaceId)
+  if (!Number.isInteger(target) || target < 1) return 0
+
+  if (countsReady && counts) {
+    var mapped = counts[String(target)]
+    if (mapped !== undefined) {
+      var fromMap = Number(mapped)
+      if (Number.isInteger(fromMap) && fromMap >= 0) return fromMap
+    }
+    return 0
+  }
+
+  var workspaceValues = workspaces || []
+  for (var w = 0; w < workspaceValues.length; ++w) {
+    var workspace = workspaceValues[w]
+    if (Number(workspace ? workspace.id : -1) !== target) continue
+    var fromWorkspace = workspaceIpcWindowCount(workspace)
+    if (fromWorkspace >= 0) return fromWorkspace
+    break
+  }
+
+  var count = 0
+  var values = handles || []
+  for (var i = 0; i < values.length; ++i) {
+    var handle = values[i]
+    if (!handle || !isCountableWorkspaceHandle(handle)) continue
+    if (Number(ipcWorkspaceFromHandle(handle).id) === target) count++
+  }
+  return count
+}
+
+function workspaceOccupied(workspace, handles, counts, countsReady) {
+  var id = Number(workspace ? workspace.id : -1)
+  if (countsReady && Number.isInteger(id) && id > 0) {
+    if (counts && counts[String(id)] !== undefined)
+      return Number(counts[String(id)]) > 0
+    return false
+  }
+
+  var fromWorkspace = workspaceIpcWindowCount(workspace)
+  if (fromWorkspace >= 0) return fromWorkspace > 0
+
+  if (handles && Number.isInteger(id) && id > 0)
+    return workspaceWindowCount(id, handles) > 0
+
   if (!workspace || !workspace.toplevels) return false
   var toplevels = Array.isArray(workspace.toplevels)
     ? workspace.toplevels : workspace.toplevels.values
   return Boolean(toplevels && toplevels.length > 0)
 }
 
-function visibleWorkspaceIds(workspaces, focusedWorkspaceId) {
+function focusedWorkspaceIdFromMonitors(monitors, focusedWorkspace) {
+  var values = monitors || []
+  var hasMonitorIpc = false
+
+  for (var i = 0; i < values.length; ++i) {
+    var ipc = values[i].lastIpcObject || ({})
+    if (!ipc.activeWorkspace) continue
+    hasMonitorIpc = true
+    if (ipc.focused === true) {
+      var id = Number(ipc.activeWorkspace.id)
+      if (Number.isInteger(id) && id > 0) return id
+    }
+  }
+
+  if (hasMonitorIpc) return -1
+
+  var fallback = focusedWorkspace ? Number(focusedWorkspace.id) : -1
+  return Number.isInteger(fallback) && fallback > 0 ? fallback : -1
+}
+
+function visibleWorkspaceIds(workspaces, focusedWorkspaceId, handles, counts, countsReady) {
   var ids = [1, 2]
   var values = workspaces || []
   var focused = Number(focusedWorkspaceId)
@@ -271,7 +382,8 @@ function visibleWorkspaceIds(workspaces, focusedWorkspaceId) {
     var workspace = values[i]
     var id = Number(workspace ? workspace.id : -1)
     if (!Number.isInteger(id) || id < 1 || id > 10) continue
-    if (id === 1 || id === 2 || id === focused || workspaceOccupied(workspace)) {
+    if (id === 1 || id === 2 || id === focused
+        || workspaceOccupied(workspace, handles, counts, countsReady)) {
       if (ids.indexOf(id) < 0) ids.push(id)
     }
   }
@@ -445,6 +557,24 @@ function shouldRefreshFullscreenPresentation(eventName) {
     "closewindow",
     "movewindow",
     "movewindowv2"
+  ].indexOf(String(eventName || "")) >= 0
+}
+
+function shouldRefreshWorkspaceState(eventName) {
+  return [
+    "openwindow",
+    "closewindow",
+    "movewindow",
+    "movewindowv2",
+    "workspace",
+    "workspacev2",
+    "createworkspace",
+    "createworkspacev2",
+    "destroyworkspace",
+    "destroyworkspacev2",
+    "focusedmon",
+    "activewindow",
+    "activewindowv2"
   ].indexOf(String(eventName || "")) >= 0
 }
 

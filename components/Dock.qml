@@ -14,6 +14,9 @@ PanelWindow {
   required property var settings
   required property int trashItemCount
   required property bool trashStateKnown
+  required property var workspaceWindowCounts
+  required property bool workspaceCountsReady
+  required property int workspaceCountsRevision
   signal reorderRequested(int from, int to)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
@@ -29,6 +32,7 @@ PanelWindow {
   property int openMenuCount: 0
   property bool autoHideRevealed: false
   property int fullscreenStateRevision: 0
+  property int workspaceStateRevision: 0
   property var settingPreviews: ({})
 
   readonly property int iconSize: DockModel.normalizeSetting(
@@ -139,8 +143,13 @@ PanelWindow {
     ? Hyprland.toplevels.values || [] : []
   readonly property var hyprWorkspaces: Hyprland.workspaces
     ? Hyprland.workspaces.values || [] : []
-  readonly property int focusedWorkspaceId: Hyprland.focusedWorkspace
-    ? Hyprland.focusedWorkspace.id : -1
+  readonly property var hyprMonitors: Hyprland.monitors
+    ? Hyprland.monitors.values || [] : []
+  readonly property int focusedWorkspaceId: {
+    var revision = workspaceStateRevision + workspaceCountsRevision
+    return DockModel.focusedWorkspaceIdFromMonitors(
+      hyprMonitors, Hyprland.focusedWorkspace)
+  }
   readonly property var activeToplevel: ToplevelManager.activeToplevel
   readonly property var fullscreenOwnerToplevel: DockModel.fullscreenOwner(
     toplevels, hyprToplevels, focusedWorkspaceId, activeToplevel,
@@ -148,8 +157,12 @@ PanelWindow {
   readonly property bool fullscreenModeActive: fullscreenOwnerToplevel !== null
   readonly property var visibleItems: DockModel.buildVisibleItems(
     pinned, toplevels, applications, hyprToplevels, sortByWorkspace)
-  readonly property var visibleWorkspaceIds: DockModel.visibleWorkspaceIds(
-    hyprWorkspaces, focusedWorkspaceId)
+  readonly property var visibleWorkspaceIds: {
+    var revision = workspaceStateRevision + workspaceCountsRevision
+    return DockModel.visibleWorkspaceIds(
+      hyprWorkspaces, focusedWorkspaceId, hyprToplevels,
+      workspaceWindowCounts, workspaceCountsReady)
+  }
   readonly property int itemSize: iconSize + 14
   readonly property int reservedSize: iconSize + 24 + edgeMargin
   readonly property int mainPadding: 10
@@ -241,15 +254,53 @@ PanelWindow {
     onTriggered: root.fullscreenStateRevision++
   }
 
+  Timer {
+    id: workspaceStateRefreshTimer
+
+    interval: 80
+    repeat: false
+    onTriggered: root.workspaceStateRevision++
+  }
+
   Connections {
     target: Hyprland
 
     function onRawEvent(event) {
-      if (DockModel.shouldRefreshFullscreenPresentation(
-            event ? event.name : "")) {
+      var name = event ? event.name : ""
+      if (DockModel.shouldRefreshFullscreenPresentation(name)) {
         Hyprland.refreshToplevels()
         fullscreenStateRefreshTimer.restart()
       }
+      if (DockModel.shouldRefreshWorkspaceState(name)) {
+        Hyprland.refreshMonitors()
+        Hyprland.refreshWorkspaces()
+        Hyprland.refreshToplevels()
+        workspaceStateRefreshTimer.restart()
+      }
+    }
+  }
+
+  Connections {
+    target: Hyprland.workspaces
+
+    function onValuesChanged() {
+      workspaceStateRefreshTimer.restart()
+    }
+  }
+
+  Connections {
+    target: Hyprland.toplevels
+
+    function onValuesChanged() {
+      workspaceStateRefreshTimer.restart()
+    }
+  }
+
+  Connections {
+    target: Hyprland.monitors
+
+    function onValuesChanged() {
+      workspaceStateRefreshTimer.restart()
     }
   }
 
@@ -258,6 +309,8 @@ PanelWindow {
 
     function onActiveToplevelChanged() {
       fullscreenStateRefreshTimer.restart()
+      Hyprland.refreshMonitors()
+      workspaceStateRefreshTimer.restart()
     }
   }
 
@@ -494,6 +547,10 @@ PanelWindow {
           : (parent.height - height) / 2
         workspaceIds: root.visibleWorkspaceIds
         workspaces: root.hyprWorkspaces
+        hyprToplevels: root.hyprToplevels
+        workspaceWindowCounts: root.workspaceWindowCounts
+        workspaceCountsReady: root.workspaceCountsReady
+        workspaceStateRevision: root.workspaceStateRevision + root.workspaceCountsRevision
         focusedWorkspaceId: root.focusedWorkspaceId
         vertical: root.vertical
         slotSize: root.itemSize

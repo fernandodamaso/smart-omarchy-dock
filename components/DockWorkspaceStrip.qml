@@ -10,6 +10,10 @@ Item {
 
   required property var workspaceIds
   required property var workspaces
+  required property var hyprToplevels
+  required property var workspaceWindowCounts
+  required property bool workspaceCountsReady
+  required property int workspaceStateRevision
   required property int focusedWorkspaceId
   required property bool vertical
   required property int slotSize
@@ -24,13 +28,6 @@ Item {
         return values[i]
     }
     return null
-  }
-
-  function windowCount(workspace) {
-    if (!workspace || !workspace.toplevels) return 0
-    var values = Array.isArray(workspace.toplevels)
-      ? workspace.toplevels : workspace.toplevels.values
-    return values ? values.length : 0
   }
 
   width: vertical ? slotSize + 6 : workspaceGrid.implicitWidth + 8
@@ -56,8 +53,13 @@ Item {
 
         required property int modelData
         readonly property var workspace: root.workspaceForId(modelData)
-        readonly property int count: root.windowCount(workspace)
-        readonly property bool occupied: DockModel.workspaceOccupied(workspace)
+        readonly property int count: {
+          var revision = root.workspaceStateRevision
+          return DockModel.workspaceWindowCount(
+            modelData, root.hyprToplevels, root.workspaces,
+            root.workspaceWindowCounts, root.workspaceCountsReady)
+        }
+        readonly property bool occupied: count > 0
         readonly property bool focused: root.focusedWorkspaceId === modelData
 
         width: 30

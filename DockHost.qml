@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import "components"
 import "components/DockModel.js" as DockModel
@@ -13,6 +14,10 @@ Item {
 
   property int trashItemCount: 0
   property bool trashStateKnown: false
+  property var workspaceWindowCounts: ({})
+  property bool workspaceCountsReady: false
+  property int workspaceCountsRevision: 0
+  property bool workspaceCountsRefreshPending: false
 
   property var settings: ({
     iconSize: 42,
@@ -107,6 +112,16 @@ Item {
     if (!trashListProcess.running) trashListProcess.running = true
   }
 
+  function refreshWorkspaceCounts() {
+    if (workspaceCountsProcess.running) {
+      root.workspaceCountsRefreshPending = true
+      return
+    }
+    root.workspaceCountsRefreshPending = false
+    Hyprland.refreshMonitors()
+    workspaceCountsProcess.running = true
+  }
+
   function openTrash() {
     Quickshell.execDetached(["gio", "open", "trash:///"])
   }
@@ -115,13 +130,65 @@ Item {
     if (!trashEmptyProcess.running) trashEmptyProcess.running = true
   }
 
-  Component.onCompleted: refreshTrash()
+  Component.onCompleted: {
+    refreshTrash()
+    refreshWorkspaceCounts()
+  }
 
   Timer {
     interval: 3000
     repeat: true
     running: true
     onTriggered: root.refreshTrash()
+  }
+
+  Timer {
+    id: workspaceCountsRefreshTimer
+
+    interval: 100
+    repeat: false
+    onTriggered: root.refreshWorkspaceCounts()
+  }
+
+  Connections {
+    target: Hyprland
+
+    function onRawEvent(event) {
+      if (DockModel.shouldRefreshWorkspaceState(event ? event.name : ""))
+        workspaceCountsRefreshTimer.restart()
+    }
+  }
+
+  Connections {
+    target: Hyprland.toplevels
+
+    function onValuesChanged() {
+      workspaceCountsRefreshTimer.restart()
+    }
+  }
+
+  Process {
+    id: workspaceCountsProcess
+
+    command: ["hyprctl", "workspaces", "-j"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var counts = DockModel.parseWorkspaceWindowCounts(text)
+        if (counts) {
+          root.workspaceWindowCounts = counts
+          root.workspaceCountsReady = true
+          root.workspaceCountsRevision++
+        }
+      }
+    }
+    onExited: function(exitCode) {
+      if (exitCode !== 0)
+        console.warn("Dock: could not read workspace counts (hyprctl exited "
+          + exitCode + ")")
+      if (root.workspaceCountsRefreshPending)
+        Qt.callLater(root.refreshWorkspaceCounts)
+    }
   }
 
   Process {
@@ -176,6 +243,9 @@ Item {
         settings: root.settings
         trashItemCount: root.trashItemCount
         trashStateKnown: root.trashStateKnown
+        workspaceWindowCounts: root.workspaceWindowCounts
+        workspaceCountsReady: root.workspaceCountsReady
+        workspaceCountsRevision: root.workspaceCountsRevision
         onReorderRequested: (from, to) => root.reorderPinned(from, to)
         onPinRequested: desktopId => root.pinApplication(desktopId)
         onUnpinRequested: desktopId => root.unpinApplication(desktopId)
