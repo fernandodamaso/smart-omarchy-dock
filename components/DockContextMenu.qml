@@ -225,12 +225,7 @@ PopupWindow {
   }
 
   implicitWidth: 200
-  implicitHeight: page === "windows"
-    ? controlItem
-      ? 72 + 4 * 38
-      : Math.min(520, 72 + Math.max(1, runningToplevels.length) * 38
-        + (pinnedItem ? 2 : 1) * 38)
-    : page === "actions" ? 388 : 470
+  implicitHeight: Math.min(520, menuPages.implicitHeight + 12)
   color: "transparent"
   grabFocus: true
 
