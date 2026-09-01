@@ -4,9 +4,9 @@ set -euo pipefail
 data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 bin_home="${XDG_BIN_HOME:-$HOME/.local/bin}"
-app_dir="$data_home/hyprland-dock"
-config_dir="$config_home/hyprland-dock"
-desktop_file="$data_home/applications/hyprland-dock.desktop"
+app_dir="$data_home/smartdock"
+config_dir="$config_home/smartdock"
+desktop_file="$data_home/applications/smartdock.desktop"
 purge=false
 
 case "${1:-}" in
@@ -27,15 +27,15 @@ if command -v qs >/dev/null 2>&1; then
   qs kill -p "$app_dir" --any-display >/dev/null 2>&1 || true
 fi
 
-rm -f -- "$config_home/autostart/hyprland-dock.desktop"
+rm -f -- "$config_home/autostart/smartdock.desktop"
 rm -f -- "$desktop_file"
-rm -f -- "$bin_home/hyprland-dock"
+rm -f -- "$bin_home/smartdock"
 rm -rf -- "$app_dir"
 
 if $purge; then
   rm -rf -- "$config_dir"
-  echo "Removed Hyprland Dock and its configuration."
+  echo "Removed SmartDock for Omarchy and its configuration."
 else
-  echo "Removed Hyprland Dock. Configuration preserved at:"
+  echo "Removed SmartDock for Omarchy. Configuration preserved at:"
   echo "  $config_dir/dock.json"
 fi

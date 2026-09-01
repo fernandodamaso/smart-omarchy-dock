@@ -2,42 +2,150 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Wayland
+import qs.Commons
+import qs.Ui
+import "DockModel.js" as DockModel
 
 PanelWindow {
   id: root
 
   required property var settings
+  required property int trashItemCount
+  required property bool trashStateKnown
   signal reorderRequested(int from, int to)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
   signal autoHideRequested(bool enabled)
+  signal settingChanged(string key, var value)
+  signal resetSettingsRequested()
+  signal openTrashRequested()
+  signal emptyTrashRequested()
 
   property int dragSource: -1
   property int dragTarget: -1
   property int openMenuCount: 0
   property bool autoHideRevealed: false
+  property int fullscreenStateRevision: 0
+  property var settingPreviews: ({})
 
-  readonly property int iconSize: settings.iconSize || 52
-  readonly property real magnification: settings.magnification || 1.65
-  readonly property real magnificationRadius: settings.magnificationRadius || 110
+  readonly property int iconSize: DockModel.normalizeSetting(
+    "iconSize", effectiveSetting("iconSize"))
+  readonly property real magnification: DockModel.normalizeSetting(
+    "magnification", effectiveSetting("magnification"))
+  readonly property real magnificationRadius: DockModel.normalizeSetting(
+    "magnificationRadius", effectiveSetting("magnificationRadius"))
+  readonly property bool hoverGlowEnabled: DockModel.normalizeSetting(
+    "hoverGlowEnabled", effectiveSetting("hoverGlowEnabled"))
+  readonly property real hoverGlowOpacity: DockModel.normalizeSetting(
+    "hoverGlowOpacity", effectiveSetting("hoverGlowOpacity"))
+  readonly property real hoverGlowRadius: DockModel.normalizeSetting(
+    "hoverGlowRadius", effectiveSetting("hoverGlowRadius"))
   readonly property int edgeMargin: settings.margin === undefined ? 10 : settings.margin
-  readonly property real backgroundOpacity: {
-    var value = Number(settings.backgroundOpacity)
-    return settings.backgroundOpacity === undefined || isNaN(value)
-      ? 0.88
-      : Math.max(0, Math.min(1, value))
+  // Names exposed by Dock Settings. Values are live bindings to Omarchy's
+  // Color singleton so symbolic overrides follow a theme change immediately.
+  readonly property var themeColorTokens: ({
+    "background": Color.background,
+    "foreground": Color.foreground,
+    "accent": Color.accent,
+    "muted": Color.muted,
+    "urgent": Color.urgent,
+    "bar.background": Color.bar.background,
+    "bar.text": Color.bar.text,
+    "bar.active": Color.bar.active,
+    "popups.background": Color.popups.background,
+    "popups.text": Color.popups.text,
+    "popups.border": Color.popups.border,
+    "tooltip.background": Color.tooltip.background,
+    "tooltip.text": Color.tooltip.text,
+    "tooltip.border": Color.tooltip.border,
+    "menu.background": Color.menu.background,
+    "menu.text": Color.menu.text,
+    "menu.border": Color.menu.border,
+    "menu.selected-background": Color.menu.selectedBackground,
+    "menu.selected-text": Color.menu.selectedText,
+    "menu.selected-border": Color.menu.selectedBorder,
+    "notifications.background": Color.notifications.background,
+    "notifications.text": Color.notifications.text,
+    "notifications.border": Color.notifications.border,
+    "notifications.countdown": Color.notifications.countdown
+  })
+  readonly property bool backgroundColorEnabled: DockModel.normalizeSetting(
+    "backgroundColorEnabled", effectiveSetting("backgroundColorEnabled"))
+  readonly property string backgroundColorOverride: DockModel.normalizeSetting(
+    "backgroundColor", effectiveSetting("backgroundColor"))
+  readonly property color dockBackgroundBaseColor: DockModel.effectiveColor(
+    backgroundColorEnabled, backgroundColorOverride, Color.menu.background,
+    themeColorTokens)
+  readonly property real backgroundOpacity: DockModel.normalizeSetting(
+    "backgroundOpacity", effectiveSetting("backgroundOpacity"))
+  readonly property color dockBackgroundColor: Qt.rgba(
+    dockBackgroundBaseColor.r,
+    dockBackgroundBaseColor.g,
+    dockBackgroundBaseColor.b,
+    DockModel.surfaceOpacity(dockBackgroundBaseColor.a, backgroundOpacity))
+  readonly property bool borderColorEnabled: DockModel.normalizeSetting(
+    "borderColorEnabled", effectiveSetting("borderColorEnabled"))
+  readonly property string borderColorOverride: DockModel.normalizeSetting(
+    "borderColor", effectiveSetting("borderColor"))
+  readonly property bool borderWidthEnabled: DockModel.normalizeSetting(
+    "borderWidthEnabled", effectiveSetting("borderWidthEnabled"))
+  readonly property var themeDockBorderSpec: Border.surfaceSpec(
+    "menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+  readonly property real themeBorderWidth: Math.max(
+    Border.top(themeDockBorderSpec), Border.right(themeDockBorderSpec),
+    Border.bottom(themeDockBorderSpec), Border.left(themeDockBorderSpec))
+  readonly property real borderWidth: DockModel.effectiveBorderWidth(
+    borderWidthEnabled, effectiveSetting("borderWidth"), themeBorderWidth)
+  readonly property color dockBorderColor: DockModel.effectiveColor(
+    borderColorEnabled, borderColorOverride, Color.menu.border,
+    themeColorTokens)
+  readonly property var dockBorderSpec: {
+    var spec = {
+      color: themeDockBorderSpec.color,
+      widths: themeDockBorderSpec.widths,
+      gradient: themeDockBorderSpec.gradient
+    }
+    if (root.borderColorEnabled && root.borderColorOverride !== "") {
+      spec.color = root.dockBorderColor
+      spec.gradient = { colors: [], angle: 0, enabled: false }
+    }
+    if (root.borderWidthEnabled)
+      spec.widths = Border.flat(spec.color, root.borderWidth).widths
+    return spec
   }
-  readonly property bool reserveSpace: settings.reserveSpace === undefined ? true : settings.reserveSpace
-  readonly property bool autoHide: settings.autoHide === undefined ? false : settings.autoHide
-  readonly property string clickAction: settings.clickAction || "focus-or-launch"
-  readonly property string requestedPosition: settings.position || "bottom"
-  readonly property string position: ["top", "bottom", "left", "right"].indexOf(requestedPosition) >= 0
-    ? requestedPosition
-    : "bottom"
+  readonly property bool autoHide: DockModel.normalizeSetting(
+    "autoHide", effectiveSetting("autoHide"))
+  readonly property bool reserveSpace: DockModel.shouldReserveSpace(
+    DockModel.normalizeSetting("reserveSpace", effectiveSetting("reserveSpace")),
+    autoHide)
+  readonly property string clickAction: DockModel.normalizeSetting(
+    "clickAction", effectiveSetting("clickAction"))
+  readonly property string controlCommand: DockModel.normalizeSetting(
+    "controlCommand", effectiveSetting("controlCommand"))
+  readonly property string position: DockModel.normalizeSetting(
+    "position", effectiveSetting("position"))
   readonly property bool vertical: position === "left" || position === "right"
-  readonly property bool fullLength: settings.fullLength === undefined ? false : settings.fullLength
+  readonly property bool fullLength: DockModel.normalizeSetting(
+    "fullLength", effectiveSetting("fullLength"))
   readonly property var pinned: settings.pinned || []
+  readonly property var applications: DesktopEntries.applications.values || []
+  readonly property var toplevels: ToplevelManager.toplevels.values || []
+  readonly property var hyprToplevels: Hyprland.toplevels
+    ? Hyprland.toplevels.values || [] : []
+  readonly property var hyprWorkspaces: Hyprland.workspaces
+    ? Hyprland.workspaces.values || [] : []
+  readonly property int focusedWorkspaceId: Hyprland.focusedWorkspace
+    ? Hyprland.focusedWorkspace.id : -1
+  readonly property var activeToplevel: ToplevelManager.activeToplevel
+  readonly property var fullscreenOwnerToplevel: DockModel.fullscreenOwner(
+    toplevels, hyprToplevels, focusedWorkspaceId, activeToplevel,
+    fullscreenStateRevision)
+  readonly property bool fullscreenModeActive: fullscreenOwnerToplevel !== null
+  readonly property var visibleItems: DockModel.buildVisibleItems(pinned, toplevels, applications)
+  readonly property var visibleWorkspaceIds: DockModel.visibleWorkspaceIds(
+    hyprWorkspaces, focusedWorkspaceId)
   readonly property int itemSize: iconSize + 14
   readonly property int reservedSize: iconSize + 24 + edgeMargin
   readonly property int mainPadding: 10
@@ -45,14 +153,44 @@ PanelWindow {
   readonly property int crossExtent: vertical
     ? Math.ceil(iconSize * magnification + 80) + edgeMargin
     : Math.ceil(iconSize * magnification + 48) + edgeMargin
+  readonly property int appMainExtent: visibleItems.length * itemSize
+  readonly property int workspaceMainExtent: vertical
+    ? Math.max(0, visibleWorkspaceIds.length * 32 + 6)
+    : Math.max(0, visibleWorkspaceIds.length * 32 + 6)
+  readonly property int trailingMainExtent: 12 + itemSize + 12 + workspaceMainExtent
+  readonly property int compactMainExtent: mainPadding * 2 + itemSize
+    + appMainExtent + trailingMainExtent
   readonly property bool keepAutoHideOpen: windowPointer.hovered
-    || appPicker.visible || openMenuCount > 0 || dragSource >= 0
+    || appPicker.visible || dockSettings.visible || openMenuCount > 0 || dragSource >= 0
   readonly property bool dockShown: !autoHide || autoHideRevealed
   readonly property real pointerPosition: !pointer.hovered
     ? -10000
     : vertical
-      ? pointer.point.position.y - dockLayout.y
-      : pointer.point.position.x - dockLayout.x
+      ? pointer.point.position.y
+      : pointer.point.position.x
+
+  function effectiveSetting(key) {
+    return settingPreviews[key] !== undefined ? settingPreviews[key] : settings[key]
+  }
+
+  function previewSetting(key, value) {
+    var previews = DockModel.mergeSettings(settingPreviews, ({}))
+    previews[key] = value
+    settingPreviews = previews
+  }
+
+  function clearSettingPreview(key) {
+    if (settingPreviews[key] === undefined) return
+    var previews = {}
+    for (var previewKey in settingPreviews) {
+      if (previewKey !== key) previews[previewKey] = settingPreviews[previewKey]
+    }
+    settingPreviews = previews
+  }
+
+  function clearSettingPreviews() {
+    settingPreviews = ({})
+  }
 
   function reorderOffset(index) {
     if (dragSource < dragTarget && index > dragSource && index <= dragTarget)
@@ -63,7 +201,8 @@ PanelWindow {
   }
 
   function updateDragTarget(position) {
-    dragTarget = Math.max(0, Math.min(pinned.length - 1, Math.floor(position / itemSize)))
+    dragTarget = Math.max(0, Math.min(pinned.length - 1,
+      Math.floor(position / itemSize)))
   }
 
   function finishDrag() {
@@ -90,6 +229,34 @@ PanelWindow {
   onAutoHideChanged: updateAutoHideState()
   onKeepAutoHideOpenChanged: updateAutoHideState()
 
+  Timer {
+    id: fullscreenStateRefreshTimer
+
+    interval: 80
+    repeat: false
+    onTriggered: root.fullscreenStateRevision++
+  }
+
+  Connections {
+    target: Hyprland
+
+    function onRawEvent(event) {
+      if (DockModel.shouldRefreshFullscreenPresentation(
+            event ? event.name : "")) {
+        Hyprland.refreshToplevels()
+        fullscreenStateRefreshTimer.restart()
+      }
+    }
+  }
+
+  Connections {
+    target: ToplevelManager
+
+    function onActiveToplevelChanged() {
+      fullscreenStateRefreshTimer.restart()
+    }
+  }
+
   anchors {
     top: position === "top" || (vertical && fullLength)
     bottom: position === "bottom" || (vertical && fullLength)
@@ -98,14 +265,14 @@ PanelWindow {
   }
   implicitWidth: vertical
     ? crossExtent
-    : fullLength ? 0 : dockLayout.implicitWidth + mainPadding * 2
+    : fullLength ? 0 : compactMainExtent
   implicitHeight: vertical
-    ? fullLength ? 0 : dockLayout.implicitHeight + mainPadding * 2
+    ? fullLength ? 0 : compactMainExtent
     : crossExtent
   color: "transparent"
-  exclusionMode: reserveSpace && !autoHide ? ExclusionMode.Normal : ExclusionMode.Ignore
-  WlrLayershell.exclusiveZone: reserveSpace && !autoHide ? reservedSize : 0
-  WlrLayershell.namespace: "hyprland-dock"
+  exclusionMode: reserveSpace ? ExclusionMode.Normal : ExclusionMode.Ignore
+  WlrLayershell.exclusiveZone: reserveSpace ? reservedSize : 0
+  WlrLayershell.namespace: "smartdock"
   WlrLayershell.layer: WlrLayer.Top
   WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
   mask: Region {
@@ -135,7 +302,7 @@ PanelWindow {
     height: root.vertical ? parent.height : root.revealThickness
   }
 
-  Rectangle {
+  BorderSurface {
     id: dockBackground
 
     x: root.vertical
@@ -146,10 +313,9 @@ PanelWindow {
       : root.position === "top" ? root.edgeMargin : parent.height - height - root.edgeMargin
     width: root.vertical ? root.iconSize + 24 : parent.width
     height: root.vertical ? parent.height : root.iconSize + 24
-    radius: 20
-    color: Qt.rgba(0.08, 0.09, 0.11, root.backgroundOpacity)
-    border.width: 1
-    border.color: Qt.rgba(1, 1, 1, 0.18)
+    radius: Style.cornerRadius
+    color: root.dockBackgroundColor
+    borderSpec: root.dockBorderSpec
     transform: Translate {
       x: !root.autoHide || root.dockShown
         ? 0
@@ -166,63 +332,173 @@ PanelWindow {
       Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
     }
 
-    Rectangle {
-      anchors.fill: parent
-      anchors.margins: 1
-      radius: parent.radius - 1
-      color: "transparent"
-      border.width: 1
-      border.color: Qt.rgba(0, 0, 0, 0.28)
-    }
-
-    Grid {
+    Item {
       id: dockLayout
 
-      // Offset the layout toward the screen edge so the icon itself, rather
-      // than the icon-plus-indicator slot, is centered in the background.
-      x: root.vertical
-        ? root.position === "left" ? 6 : parent.width - implicitWidth - 6
-        : (parent.width - implicitWidth) / 2
-      y: root.vertical
-        ? (parent.height - implicitHeight) / 2
-        : root.position === "top" ? 6 : parent.height - implicitHeight - 6
+      anchors.fill: parent
 
-      // Keep one spare cell so a settings reload cannot transiently reduce the
-      // grid capacity before the repeater updates its delegates.
-      columns: root.vertical ? 1 : Math.max(1, root.pinned.length + 1)
-      rows: root.vertical ? Math.max(1, root.pinned.length + 1) : 1
+      readonly property real leadingEnd: root.mainPadding + root.itemSize
+      readonly property real trailingStart: (root.vertical ? height : width)
+        - root.mainPadding - root.trailingMainExtent
+      readonly property real centeredAppStart: ((root.vertical ? height : width)
+        - root.appMainExtent) / 2
+      readonly property real appStart: root.fullLength
+        ? Math.max(leadingEnd, Math.min(centeredAppStart,
+            Math.max(leadingEnd, trailingStart - root.appMainExtent)))
+        : leadingEnd
 
-      Repeater {
-        model: root.pinned
+      DockControlItem {
+        id: controlItem
 
-        DockItem {
-          required property string modelData
-          required property int index
+        x: root.vertical ? (parent.width - width) / 2 : root.mainPadding
+        y: root.vertical ? root.mainPadding : (parent.height - height) / 2
+        controlCommand: root.controlCommand
+        slotSize: root.itemSize
+        iconSize: root.iconSize
+        magnification: root.magnification
+        magnificationRadius: root.magnificationRadius
+        hoverGlowEnabled: root.hoverGlowEnabled
+        hoverGlowOpacity: root.hoverGlowOpacity
+        hoverGlowRadius: root.hoverGlowRadius
+        pointerPosition: root.pointerPosition
+        autoHide: root.autoHide
+        position: root.position
+        vertical: root.vertical
+        onSettingsRequested: dockSettings.open()
+        onAddApplicationRequested: appPicker.open()
+        onAutoHideToggled: enabled => root.autoHideRequested(enabled)
+        onContextMenuVisibilityChanged: visible => {
+          root.openMenuCount = Math.max(0, root.openMenuCount + (visible ? 1 : -1))
+        }
+      }
 
-          desktopId: modelData
-          itemIndex: index
-          slotSize: root.itemSize
-          iconSize: root.iconSize
-          magnification: root.magnification
-          magnificationRadius: root.magnificationRadius
-          pointerPosition: root.pointerPosition
-          clickAction: root.clickAction
-          autoHide: root.autoHide
-          position: root.position
-          vertical: root.vertical
-          reorderOffset: root.reorderOffset(index)
-          onDragStarted: itemIndex => {
-            root.dragSource = itemIndex
-            root.dragTarget = itemIndex
+      Grid {
+        id: appGrid
+
+        x: root.vertical ? (parent.width - width) / 2 : parent.appStart
+        y: root.vertical ? parent.appStart : (parent.height - height) / 2
+        columns: root.vertical ? 1 : Math.max(1, root.visibleItems.length)
+        rows: root.vertical ? Math.max(1, root.visibleItems.length) : 1
+
+        Repeater {
+          model: root.visibleItems
+
+          DockItem {
+            required property var modelData
+            required property int index
+
+            desktopId: modelData.desktopId
+            pinnedItem: modelData.pinned
+            runningToplevels: modelData.toplevels
+            hyprToplevels: root.hyprToplevels
+            fullscreenModeActive: root.fullscreenModeActive
+            fullscreenEmphasized:
+              modelData.toplevels.indexOf(root.fullscreenOwnerToplevel) >= 0
+            itemIndex: index
+            slotSize: root.itemSize
+            iconSize: root.iconSize
+            magnification: root.magnification
+            magnificationRadius: root.magnificationRadius
+            hoverGlowEnabled: root.hoverGlowEnabled
+            hoverGlowOpacity: root.hoverGlowOpacity
+            hoverGlowRadius: root.hoverGlowRadius
+            pointerPosition: root.pointerPosition
+              - (root.vertical ? appGrid.y : appGrid.x)
+            clickAction: root.clickAction
+            autoHide: root.autoHide
+            position: root.position
+            vertical: root.vertical
+            reorderOffset: root.reorderOffset(index)
+            onDragStarted: itemIndex => {
+              root.dragSource = itemIndex
+              root.dragTarget = itemIndex
+            }
+            onDragMoved: mainPosition => root.updateDragTarget(mainPosition)
+            onDragFinished: root.finishDrag()
+            onRemoveRequested: desktopId => root.unpinRequested(desktopId)
+            onContextMenuVisibilityChanged: visible => {
+              root.openMenuCount = Math.max(0,
+                root.openMenuCount + (visible ? 1 : -1))
+            }
           }
-          onDragMoved: mainPosition => root.updateDragTarget(mainPosition)
-          onDragFinished: root.finishDrag()
-          onAddApplicationRequested: appPicker.open()
-          onRemoveRequested: desktopId => root.unpinRequested(desktopId)
-          onAutoHideToggled: enabled => root.autoHideRequested(enabled)
-          onContextMenuVisibilityChanged: visible => {
-            root.openMenuCount = Math.max(0, root.openMenuCount + (visible ? 1 : -1))
-          }
+        }
+      }
+
+      DockSeparator {
+        id: appTrashSeparator
+
+        x: root.vertical ? (parent.width - width) / 2 : parent.trailingStart
+        y: root.vertical ? parent.trailingStart : (parent.height - height) / 2
+        vertical: root.vertical
+        slotSize: root.itemSize
+        iconSize: root.iconSize
+      }
+
+      DockTrashItem {
+        id: trashItem
+
+        x: root.vertical
+          ? (parent.width - width) / 2
+          : parent.trailingStart + appTrashSeparator.width
+        y: root.vertical
+          ? parent.trailingStart + appTrashSeparator.height
+          : (parent.height - height) / 2
+        trashItemCount: root.trashItemCount
+        trashStateKnown: root.trashStateKnown
+        slotSize: root.itemSize
+        iconSize: root.iconSize
+        magnification: root.magnification
+        magnificationRadius: root.magnificationRadius
+        hoverGlowEnabled: root.hoverGlowEnabled
+        hoverGlowOpacity: root.hoverGlowOpacity
+        hoverGlowRadius: root.hoverGlowRadius
+        pointerPosition: root.pointerPosition
+        position: root.position
+        vertical: root.vertical
+        onOpenRequested: root.openTrashRequested()
+        onEmptyRequested: root.emptyTrashRequested()
+        onContextMenuVisibilityChanged: visible => {
+          root.openMenuCount = Math.max(0,
+            root.openMenuCount + (visible ? 1 : -1))
+        }
+      }
+
+      DockSeparator {
+        id: trashWorkspaceSeparator
+
+        x: root.vertical
+          ? (parent.width - width) / 2
+          : parent.trailingStart + appTrashSeparator.width + trashItem.width
+        y: root.vertical
+          ? parent.trailingStart + appTrashSeparator.height + trashItem.height
+          : (parent.height - height) / 2
+        vertical: root.vertical
+        slotSize: root.itemSize
+        iconSize: root.iconSize
+      }
+
+      DockWorkspaceStrip {
+        id: workspaceStrip
+
+        x: root.vertical
+          ? (parent.width - width) / 2
+          : parent.trailingStart + appTrashSeparator.width + trashItem.width
+            + trashWorkspaceSeparator.width
+        y: root.vertical
+          ? parent.trailingStart + appTrashSeparator.height + trashItem.height
+            + trashWorkspaceSeparator.height
+          : (parent.height - height) / 2
+        workspaceIds: root.visibleWorkspaceIds
+        workspaces: root.hyprWorkspaces
+        focusedWorkspaceId: root.focusedWorkspaceId
+        vertical: root.vertical
+        slotSize: root.itemSize
+        iconSize: root.iconSize
+        position: root.position
+        onWorkspaceRequested: workspaceId => {
+          var request = DockModel.focusWorkspaceRequest(
+            workspaceId, Hyprland.usingLua)
+          if (request) Hyprland.dispatch(request)
         }
       }
     }
@@ -239,6 +515,24 @@ PanelWindow {
     position: root.position
     pinned: root.pinned
     onApplicationSelected: desktopId => root.pinRequested(desktopId)
+  }
+
+  DockSettings {
+    id: dockSettings
+
+    anchorItem: controlItem
+    position: root.position
+    settings: root.settings
+    onVisibleChanged: if (!visible) root.clearSettingPreviews()
+    onSettingPreviewed: (key, value) => root.previewSetting(key, value)
+    onSettingCommitted: (key, value) => {
+      root.settingChanged(key, value)
+      root.clearSettingPreview(key)
+    }
+    onResetRequested: {
+      root.clearSettingPreviews()
+      root.resetSettingsRequested()
+    }
   }
 
   HoverHandler {

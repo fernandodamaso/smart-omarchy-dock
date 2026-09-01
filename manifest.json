@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.nick-friedrich.hyprland-dock",
-  "name": "Hyprland Dock",
-  "version": "1.1.1",
-  "author": "Nick Friedrich",
+  "id": "admin.smartdock",
+  "name": "SmartDock for Omarchy",
+  "version": "1.1.1-custom.18",
+  "author": "SmartDock for Omarchy contributors",
   "license": "MIT",
-  "description": "A configurable macOS-inspired application dock for Hyprland.",
+  "description": "A theme-aware application, window, and workspace dock for Omarchy and Hyprland.",
   "kinds": [
     "overlay"
   ],

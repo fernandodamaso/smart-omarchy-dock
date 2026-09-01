@@ -3,7 +3,7 @@ import Quickshell
 
 ShellRoot {
   DockHost {
-    configPath: Quickshell.env("HYPRLAND_DOCK_CONFIG")
+    configPath: Quickshell.env("SMARTDOCK_CONFIG")
       || Quickshell.shellDir + "/config/dock.json"
   }
 }

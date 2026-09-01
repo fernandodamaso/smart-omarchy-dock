@@ -1,23 +1,35 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
-import Quickshell.Wayland
 import Quickshell.Widgets
+import qs.Commons
+import qs.Ui
+import "DockModel.js" as DockModel
 
 Item {
   id: root
 
   required property string desktopId
+  required property bool pinnedItem
+  required property var runningToplevels
+  required property var hyprToplevels
+  required property bool fullscreenModeActive
+  required property bool fullscreenEmphasized
   required property int itemIndex
   required property int slotSize
   required property int iconSize
   required property real magnification
   required property real magnificationRadius
+  required property bool hoverGlowEnabled
+  required property real hoverGlowOpacity
+  required property real hoverGlowRadius
   required property real pointerPosition
   required property string clickAction
   required property bool autoHide
   required property string position
   required property bool vertical
   property real reorderOffset: 0
+  property int lastActivatedToplevel: -1
   signal dragStarted(int itemIndex)
   signal dragMoved(real mainPosition)
   signal dragFinished()
@@ -33,11 +45,15 @@ Item {
     var modelRevision = applications.length
     return DesktopEntries.byId(desktopId)
   }
-  readonly property var toplevels: ToplevelManager.toplevels.values || []
-  readonly property var runningToplevel: {
-    var modelRevision = toplevels.length
-    return findRunningToplevel()
-  }
+  readonly property var runningToplevel: runningToplevels.length > 0
+    ? runningToplevels[0]
+    : null
+  readonly property int runningCount: runningToplevels.length
+  readonly property string workspaceBadge: DockModel.workspaceBadgeText(
+    runningToplevels, hyprToplevels)
+  readonly property int minimizedCount: contextMenu.minimizedCount
+  readonly property int visibleWindowCount: contextMenu.visibleWindowCount
+  readonly property bool allWindowsMinimized: runningCount > 0 && visibleWindowCount === 0
   readonly property real dragOffset: dragHandler.active
     ? vertical ? dragHandler.activeTranslation.y : dragHandler.activeTranslation.x
     : 0
@@ -47,53 +63,11 @@ Item {
   readonly property real influence: pointerPosition < -1000
     ? 0
     : Math.exp(-(distance * distance) / (magnificationRadius * magnificationRadius))
-  readonly property real iconScale: 1 + (magnification - 1) * influence
-
-  function normalizedId(value) {
-    return String(value || "").toLowerCase().replace(/\.desktop$/, "")
-  }
-
-  function webAppId() {
-    if (!entry || !entry.command) return ""
-
-    for (var i = 0; i < entry.command.length; ++i) {
-      var match = String(entry.command[i]).match(/https?:\/\/[^?#\s]+/i)
-      if (!match) continue
-
-      var url = match[0].replace(/^https?:\/\//i, "").replace(/\/$/, "")
-      try {
-        url = decodeURIComponent(url)
-      } catch (error) {
-        // Keep the encoded URL; it can still match the generated app ID.
-      }
-      return url.toLowerCase().replace(/[^a-z0-9]/g, "")
-    }
-    return ""
-  }
-
-  function matchesEntry(toplevel) {
-    if (!toplevel) return false
-    var appId = normalizedId(toplevel.appId)
-    if (!appId) return false
-
-    var ids = [desktopId]
-    if (entry) ids.push(entry.id, entry.startupClass)
-    for (var i = 0; i < ids.length; ++i) {
-      var id = normalizedId(ids[i])
-      if (id && appId === id) return true
-    }
-
-    var generatedWebAppId = webAppId()
-    return generatedWebAppId.length >= 6
-      && appId.replace(/[^a-z0-9]/g, "").indexOf(generatedWebAppId) >= 0
-  }
-
-  function findRunningToplevel() {
-    for (var i = 0; i < toplevels.length; ++i) {
-      if (matchesEntry(toplevels[i])) return toplevels[i]
-    }
-    return null
-  }
+  readonly property var fullscreenPresentation:
+    DockModel.fullscreenIconPresentation(
+      fullscreenModeActive, fullscreenEmphasized, mouse.hovered)
+  readonly property real iconScale: fullscreenPresentation.scale
+    * (1 + (magnification - 1) * influence)
 
   function launch() {
     if (entry)
@@ -103,8 +77,10 @@ Item {
   }
 
   function activateOrLaunch() {
-    if (clickAction === "focus-or-launch" && runningToplevel) {
-      runningToplevel.activate()
+    if (clickAction === "focus-or-launch" && runningCount > 0) {
+      lastActivatedToplevel = DockModel.nextToplevelIndex(
+        lastActivatedToplevel, runningCount)
+      contextMenu.activateToplevel(runningToplevels[lastActivatedToplevel])
       return
     }
     launch()
@@ -114,6 +90,8 @@ Item {
     if (runningToplevel)
       runningToplevel.close()
   }
+
+  onRunningToplevelsChanged: lastActivatedToplevel = -1
 
   width: vertical ? slotSize + 6 : slotSize
   height: vertical ? slotSize : slotSize + 6
@@ -130,14 +108,11 @@ Item {
   Item {
     id: iconContainer
 
-    x: root.vertical
-      ? root.position === "left" ? 6 : root.width - root.iconSize - 6
-      : (root.width - root.iconSize) / 2
-    y: root.vertical
-      ? (root.height - root.iconSize) / 2
-      : root.position === "top" ? 6 : root.height - root.iconSize - 6
+    x: (root.width - root.iconSize) / 2
+    y: (root.height - root.iconSize) / 2
     width: root.iconSize
     height: root.iconSize
+    opacity: root.fullscreenPresentation.opacity
     transformOrigin: root.position === "top"
       ? Item.Top
       : root.position === "left"
@@ -149,21 +124,37 @@ Item {
       NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
     }
 
-    Rectangle {
-      anchors.fill: parent
-      anchors.margins: -4
-      radius: 14
-      color: mouse.hovered ? Qt.rgba(1, 1, 1, 0.10) : "transparent"
+    Behavior on opacity {
+      NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+    }
 
-      Behavior on color { ColorAnimation { duration: 100 } }
+    RectangularShadow {
+      id: hoverGlow
+
+      anchors.fill: parent
+      radius: Math.min(width, height) * 0.34
+      blur: Math.max(8, root.iconSize * root.hoverGlowRadius / 100)
+      spread: Math.max(1, root.iconSize * 0.06)
+      offset: Qt.vector2d(0, 0)
+      color: Color.accent
+      opacity: root.hoverGlowEnabled && mouse.hovered
+        ? root.hoverGlowOpacity : 0
+      z: -1
+
+      Behavior on opacity {
+        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+      }
     }
 
     IconImage {
       anchors.fill: parent
+      opacity: root.allWindowsMinimized ? 0.56 : 1.0
       source: root.entry && root.entry.icon
         ? Quickshell.iconPath(root.entry.icon, true)
         : Quickshell.iconPath("application-x-executable", true)
       asynchronous: true
+
+      Behavior on opacity { NumberAnimation { duration: 140 } }
     }
 
     Rectangle {
@@ -180,39 +171,107 @@ Item {
         : root.position === "bottom"
           ? iconContainer.height + 2
           : (iconContainer.height - height) / 2
-      color: root.runningToplevel ? "#f5f5f5" : "transparent"
+      color: root.visibleWindowCount > 0 ? Color.foreground : "transparent"
+    }
+
+    Rectangle {
+      id: windowCountBadge
+
+      visible: root.runningCount > 1
+      width: Math.max(16, windowCountText.implicitWidth + 8)
+      height: 16
+      radius: Math.min(height / 2, Style.cornerRadius)
+      x: iconContainer.width - width + 5
+      y: -5
+      color: Color.urgent
+      border.width: Style.normalBorderWidth
+      border.color: Color.background
+      z: 3
+
+      Text {
+        id: windowCountText
+
+        anchors.centerIn: parent
+        text: root.runningCount > 99 ? "99+" : String(root.runningCount)
+        color: Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+      }
+    }
+
+    Rectangle {
+      id: minimizedCountBadge
+
+      visible: root.minimizedCount > 0
+      width: Math.max(22, minimizedCountText.implicitWidth + 8)
+      height: 16
+      radius: Math.min(height / 2, Style.cornerRadius)
+      x: -5
+      y: -5
+      color: Color.muted
+      border.width: Style.normalBorderWidth
+      border.color: Color.background
+      z: 3
+
+      Text {
+        id: minimizedCountText
+
+        anchors.centerIn: parent
+        text: "m" + (root.minimizedCount > 99 ? "99+" : String(root.minimizedCount))
+        color: Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+      }
+    }
+
+    Rectangle {
+      id: workspaceBadge
+
+      visible: root.workspaceBadge !== ""
+      width: Math.max(16, workspaceBadgeText.implicitWidth + 8)
+      height: 16
+      radius: Math.min(height / 2, Style.cornerRadius)
+      x: -5
+      y: iconContainer.height - height + 5
+      // Workspace badges need to remain legible over arbitrary application
+      // icons. Use the theme's opaque accent role instead of the menu
+      // selected-background tint, which is intentionally very subtle.
+      color: Color.accent
+      border.width: 0
+      z: 3
+
+      Text {
+        id: workspaceBadgeText
+
+        anchors.centerIn: parent
+        text: root.workspaceBadge
+        color: "#ffffff"
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+      }
     }
   }
 
-  Rectangle {
-    id: tooltip
-
+  PanelToolTip {
     visible: mouse.hovered && !contextMenu.visible
-    x: root.position === "left"
-      ? iconContainer.x + iconContainer.width + 12
-      : root.position === "right"
-        ? iconContainer.x - width - 12
-        : (root.width - width) / 2
-    y: root.position === "top"
-      ? iconContainer.y + iconContainer.height + 12
-      : root.position === "bottom"
-        ? iconContainer.y - height - 12
-        : (root.height - height) / 2
-    width: tooltipText.implicitWidth + 18
-    height: tooltipText.implicitHeight + 10
-    radius: 8
-    color: Qt.rgba(0.08, 0.09, 0.11, 0.96)
-    border.width: 1
-    border.color: Qt.rgba(1, 1, 1, 0.16)
-    z: 10
+    text: root.tooltipLabel()
+    fontFamily: Style.font.family
+    fontSize: Style.font.body
+  }
 
-    Text {
-      id: tooltipText
-      anchors.centerIn: parent
-      text: root.entry ? root.entry.name : root.desktopId
-      color: "#f5f5f5"
-      font.pixelSize: 13
+  function tooltipLabel() {
+    var name = root.entry ? root.entry.name : root.desktopId
+    if (root.minimizedCount > 0) {
+      var word = root.runningCount === 1 ? "window" : "windows"
+      return name + " (" + root.runningCount + " " + word
+        + ", " + root.minimizedCount + " minimized)"
     }
+    if (root.runningCount > 1)
+      return name + " (" + root.runningCount + " windows)"
+    return name
   }
 
   HoverHandler {
@@ -233,6 +292,7 @@ Item {
   DragHandler {
     id: dragHandler
 
+    enabled: root.pinnedItem
     target: null
     acceptedButtons: Qt.LeftButton
     xAxis.enabled: !root.vertical
@@ -255,11 +315,11 @@ Item {
 
     anchorItem: root
     position: root.position
-    canClose: root.runningToplevel !== null
     autoHide: root.autoHide
+    pinnedItem: root.pinnedItem
+    runningToplevels: root.runningToplevels
     onVisibleChanged: root.contextMenuVisibilityChanged(visible)
     onOpenNewWindow: root.launch()
-    onCloseWindow: root.closeRunning()
     onAddApplication: root.addApplicationRequested()
     onRemoveFromDock: root.removeRequested(root.desktopId)
     onToggleAutoHide: root.autoHideToggled(!root.autoHide)

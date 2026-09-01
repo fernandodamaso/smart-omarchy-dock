@@ -1,26 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/hyprland-dock"
+app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/smartdock"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
-config_file="$config_home/hyprland-dock/dock.json"
-autostart_file="$config_home/autostart/hyprland-dock.desktop"
+config_file="$config_home/smartdock/dock.json"
+autostart_file="$config_home/autostart/smartdock.desktop"
 launcher_path="$(cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")"
+
+# Standalone launches need the same `qs.*` import mapping that the Omarchy
+# shell provides to hosted plugins. Keep the alias in the user's cache and
+# leave the packaged Omarchy files untouched.
+ensure_omarchy_qml_imports() {
+  local omarchy_shell="${OMARCHY_PATH:-/usr/share/omarchy}/shell"
+  [[ -d "$omarchy_shell/Commons" && -d "$omarchy_shell/Ui" ]] || return 0
+
+  local import_root="${XDG_CACHE_HOME:-$HOME/.cache}/smartdock/qml-imports"
+  install -d "$import_root"
+  if [[ ! -e "$import_root/qs" ]]; then
+    ln -s "$omarchy_shell" "$import_root/qs"
+  fi
+  export QML2_IMPORT_PATH="$import_root${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
+}
+
+ensure_omarchy_qml_imports
 
 print_help() {
   cat <<'EOF'
-Hyprland Dock - a macOS-inspired application dock for Hyprland
+SmartDock for Omarchy - a theme-aware application, window, and workspace dock
 
 Usage:
-  hyprland-dock [QUICKSHELL OPTIONS]
-  hyprland-dock <COMMAND> [OPTION]
+  smartdock [QUICKSHELL OPTIONS]
+  smartdock <COMMAND> [OPTION]
 
 Commands:
   help                         Show this help
   autostart enable             Start the dock when the desktop session starts
   autostart disable            Disable automatic startup
   autostart status             Show whether automatic startup is enabled
-  update                       Download and install the latest version
+  update                       Refresh the installed copy from its local source
   restart                      Restart the dock in the background
   stop                         Stop the running dock
   uninstall [--purge]          Uninstall; --purge also removes configuration
@@ -36,8 +53,8 @@ enable_autostart() {
   cat >"$autostart_file" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Hyprland Dock
-Comment=macOS-inspired application dock for Hyprland
+Name=SmartDock for Omarchy
+Comment=Theme-aware application, window, and workspace dock for Omarchy
 Exec="$launcher_path" --daemonize
 OnlyShowIn=Hyprland;
 X-GNOME-Autostart-enabled=true
@@ -64,14 +81,14 @@ autostart() {
       ;;
     help|--help|-h)
       cat <<'EOF'
-Usage: hyprland-dock autostart <enable|disable|status>
+Usage: smartdock autostart <enable|disable|status>
 
-Manage the XDG autostart entry for Hyprland Dock.
+Manage the XDG autostart entry for SmartDock for Omarchy.
 EOF
       ;;
     *)
       echo "Unknown autostart action: $1" >&2
-      echo "Usage: hyprland-dock autostart <enable|disable|status>" >&2
+      echo "Usage: smartdock autostart <enable|disable|status>" >&2
       exit 2
       ;;
   esac
@@ -87,18 +104,17 @@ case "${1:-}" in
     exit
     ;;
   update|--update)
-    # Run the installer already on disk instead of executing content
-    # downloaded from the network. install.sh fetches the application
-    # tarball and unpacks it without executing anything from it.
+    # Refresh the standalone copy from the installer already on disk. Remote
+    # source control belongs to the user's own SmartDock repository.
     if [[ ! -f "$app_dir/install.sh" ]]; then
-      echo "hyprland-dock: installer not found at $app_dir/install.sh" >&2
-      echo "Reinstall from https://github.com/nick-friedrich/hyprland-dock" >&2
+      echo "smartdock: installer not found at $app_dir/install.sh" >&2
+      echo "Run install.sh from your SmartDock source tree." >&2
       exit 1
     fi
     if [[ -f "$autostart_file" ]]; then
-      HYPRLAND_DOCK_FORCE_DOWNLOAD=1 bash "$app_dir/install.sh"
+      bash "$app_dir/install.sh"
     else
-      HYPRLAND_DOCK_FORCE_DOWNLOAD=1 bash "$app_dir/install.sh" --no-autostart
+      bash "$app_dir/install.sh" --no-autostart
     fi
     exit
     ;;
@@ -109,7 +125,7 @@ case "${1:-}" in
   restart|--restart)
     qs kill -p "$app_dir" --any-display >/dev/null 2>&1 || true
     shift
-    exec env HYPRLAND_DOCK_CONFIG="$config_file" qs -n -d -p "$app_dir" "$@"
+    exec env SMARTDOCK_CONFIG="$config_file" qs -n -d -p "$app_dir" "$@"
     ;;
   uninstall|--uninstall)
     shift
@@ -118,8 +134,8 @@ case "${1:-}" in
 esac
 
 if [[ ! -f "$app_dir/shell.qml" ]]; then
-  echo "hyprland-dock: application files not found; run the installer again" >&2
+  echo "smartdock: application files not found; run the installer again" >&2
   exit 1
 fi
 
-exec env HYPRLAND_DOCK_CONFIG="$config_file" qs -n -p "$app_dir" "$@"
+exec env SMARTDOCK_CONFIG="$config_file" qs -n -p "$app_dir" "$@"

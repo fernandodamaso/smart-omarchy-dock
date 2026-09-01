@@ -6,5 +6,5 @@ DockHost {
   property var shell: null
   property var manifest: null
 
-  configPath: Quickshell.env("HOME") + "/.config/hyprland-dock/dock.json"
+  configPath: Quickshell.env("HOME") + "/.config/smartdock/dock.json"
 }

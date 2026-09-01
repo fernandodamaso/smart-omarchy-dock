@@ -3,6 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Widgets
+import qs.Commons
+import qs.Ui
 
 PopupWindow {
   id: root
@@ -108,14 +110,14 @@ PopupWindow {
     }
   }
 
-  Rectangle {
+  BorderSurface {
     anchors.fill: parent
-    radius: 14
-    color: Qt.rgba(0.08, 0.09, 0.11, 0.98)
-    border.width: 1
-    border.color: Qt.rgba(1, 1, 1, 0.18)
+    radius: Style.cornerRadius
+    color: Color.menu.background
+    borderSpec: Border.surfaceSpec(
+      "menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
 
-    Rectangle {
+    BorderSurface {
       id: searchField
 
       anchors {
@@ -125,12 +127,13 @@ PopupWindow {
         margins: 12
       }
       height: 42
-      radius: 9
-      color: Qt.rgba(1, 1, 1, 0.08)
-      border.width: 1
-      border.color: searchInput.activeFocus
-        ? Qt.rgba(1, 1, 1, 0.34)
-        : Qt.rgba(1, 1, 1, 0.12)
+      radius: Style.cornerRadius
+      color: searchInput.activeFocus
+        ? Style.focusFillFor(Color.menu.text, Color.accent)
+        : Style.normalFillFor(Color.menu.text, Color.accent)
+      borderSpec: Border.controlSpec(
+        searchInput.activeFocus ? "focus" : "normal",
+        Color.menu.text, Color.accent)
 
       Text {
         anchors {
@@ -140,8 +143,9 @@ PopupWindow {
         }
         visible: !searchInput.text
         text: "Search applications..."
-        color: Qt.rgba(1, 1, 1, 0.46)
-        font.pixelSize: 14
+        color: Util.alpha(Color.menu.text, 0.46)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.title
       }
 
       TextInput {
@@ -153,10 +157,11 @@ PopupWindow {
           rightMargin: 12
         }
         verticalAlignment: TextInput.AlignVCenter
-        color: "#f5f5f5"
-        selectionColor: Qt.rgba(1, 1, 1, 0.25)
-        selectedTextColor: "#ffffff"
-        font.pixelSize: 14
+        color: Color.menu.text
+        selectionColor: Util.alpha(Color.menu.text, 0.25)
+        selectedTextColor: Color.menu.text
+        font.family: Style.font.family
+        font.pixelSize: Style.font.title
         clip: true
 
         Keys.onPressed: event => {
@@ -196,7 +201,7 @@ PopupWindow {
       spacing: 2
       model: root.filteredApplications
 
-      delegate: Rectangle {
+      delegate: BorderSurface {
         id: applicationRow
 
         required property var modelData
@@ -204,10 +209,13 @@ PopupWindow {
 
         width: applicationList.width
         height: 52
-        radius: 9
+        radius: Style.cornerRadius
         color: applicationList.currentIndex === index
-          ? Qt.rgba(1, 1, 1, 0.10)
+          ? Color.menu.selectedBackground
           : "transparent"
+        borderSpec: applicationList.currentIndex === index
+          ? Border.controlSpec("selected", Color.menu.text, Color.accent)
+          : Border.none()
 
         IconImage {
           anchors {
@@ -235,16 +243,18 @@ PopupWindow {
           Text {
             width: parent.width
             text: applicationRow.modelData.name || applicationRow.modelData.id
-            color: "#f5f5f5"
-            font.pixelSize: 14
+            color: Color.menu.text
+            font.family: Style.font.family
+            font.pixelSize: Style.font.title
             elide: Text.ElideRight
           }
 
           Text {
             width: parent.width
             text: applicationRow.modelData.id
-            color: Qt.rgba(1, 1, 1, 0.48)
-            font.pixelSize: 11
+            color: Util.alpha(Color.menu.text, 0.48)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
             elide: Text.ElideRight
           }
         }
@@ -267,8 +277,9 @@ PopupWindow {
         anchors.centerIn: parent
         visible: applicationList.count === 0
         text: "No matching applications"
-        color: Qt.rgba(1, 1, 1, 0.52)
-        font.pixelSize: 13
+        color: Util.alpha(Color.menu.text, 0.52)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.body
       }
     }
   }

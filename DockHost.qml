@@ -4,23 +4,37 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "components"
+import "components/DockModel.js" as DockModel
 
 Item {
   id: root
 
   required property string configPath
 
+  property int trashItemCount: 0
+  property bool trashStateKnown: false
+
   property var settings: ({
     iconSize: 42,
     magnification: 1.2,
     magnificationRadius: 95,
+    hoverGlowEnabled: true,
+    hoverGlowOpacity: 0.72,
+    hoverGlowRadius: 28,
     margin: 10,
     backgroundOpacity: 0.88,
+    backgroundColorEnabled: false,
+    backgroundColor: "",
+    borderColorEnabled: false,
+    borderColor: "",
+    borderWidthEnabled: false,
+    borderWidth: 2,
     position: "bottom",
     fullLength: false,
     reserveSpace: true,
     autoHide: false,
     clickAction: "focus-or-launch",
+    controlCommand: "omarchy-menu toggle apps",
     pinned: [
       "org.gnome.Nautilus",
       "com.mitchellh.ghostty",
@@ -76,13 +90,65 @@ Item {
   }
 
   function saveSetting(key, value) {
-    var updated = {}
-    for (var setting in settings)
-      updated[setting] = settings[setting]
-    updated[key] = value
+    var patch = {}
+    patch[key] = value
+    saveSettings(patch)
+  }
+
+  function saveSettings(patch) {
+    var updated = DockModel.mergeSettings(settings, patch)
 
     settings = updated
     configFile.setText(JSON.stringify(updated, null, 2) + "\n")
+  }
+
+  function refreshTrash() {
+    if (!trashListProcess.running) trashListProcess.running = true
+  }
+
+  function openTrash() {
+    Quickshell.execDetached(["gio", "open", "trash:///"])
+  }
+
+  function emptyTrash() {
+    if (!trashEmptyProcess.running) trashEmptyProcess.running = true
+  }
+
+  Component.onCompleted: refreshTrash()
+
+  Timer {
+    interval: 3000
+    repeat: true
+    running: true
+    onTriggered: root.refreshTrash()
+  }
+
+  Process {
+    id: trashListProcess
+
+    command: ["gio", "trash", "--list"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.trashItemCount = DockModel.trashItemCount(text)
+        root.trashStateKnown = true
+      }
+    }
+    onExited: function(exitCode) {
+      if (exitCode !== 0)
+        console.warn("Dock: could not inspect Trash (gio exited " + exitCode + ")")
+    }
+  }
+
+  Process {
+    id: trashEmptyProcess
+
+    command: ["gio", "trash", "--empty"]
+    onExited: function(exitCode) {
+      if (exitCode !== 0)
+        console.warn("Dock: could not empty Trash (gio exited " + exitCode + ")")
+      root.refreshTrash()
+    }
   }
 
   FileView {
@@ -107,10 +173,16 @@ Item {
         required property var modelData
         screen: modelData
         settings: root.settings
+        trashItemCount: root.trashItemCount
+        trashStateKnown: root.trashStateKnown
         onReorderRequested: (from, to) => root.reorderPinned(from, to)
         onPinRequested: desktopId => root.pinApplication(desktopId)
         onUnpinRequested: desktopId => root.unpinApplication(desktopId)
         onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
+        onSettingChanged: (key, value) => root.saveSetting(key, value)
+        onResetSettingsRequested: root.saveSettings(DockModel.resetSettingsPatch())
+        onOpenTrashRequested: root.openTrash()
+        onEmptyTrashRequested: root.emptyTrash()
       }
     }
   }
