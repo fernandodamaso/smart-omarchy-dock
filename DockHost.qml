@@ -181,6 +181,7 @@ Item {
         onUnpinRequested: desktopId => root.unpinApplication(desktopId)
         onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
         onSettingChanged: (key, value) => root.saveSetting(key, value)
+        onSettingsPatchRequested: patch => root.saveSettings(patch)
         onResetSettingsRequested: root.saveSettings(DockModel.resetSettingsPatch())
         onOpenTrashRequested: root.openTrash()
         onEmptyTrashRequested: root.emptyTrash()

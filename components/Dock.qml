@@ -19,6 +19,7 @@ PanelWindow {
   signal unpinRequested(string desktopId)
   signal autoHideRequested(bool enabled)
   signal settingChanged(string key, var value)
+  signal settingsPatchRequested(var patch)
   signal resetSettingsRequested()
   signal openTrashRequested()
   signal emptyTrashRequested()
@@ -531,6 +532,10 @@ PanelWindow {
     onSettingCommitted: (key, value) => {
       root.settingChanged(key, value)
       root.clearSettingPreview(key)
+    }
+    onSettingsPatchCommitted: patch => {
+      root.settingsPatchRequested(patch)
+      for (var key in patch) root.clearSettingPreview(key)
     }
     onResetRequested: {
       root.clearSettingPreviews()

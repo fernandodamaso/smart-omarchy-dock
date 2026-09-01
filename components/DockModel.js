@@ -122,6 +122,33 @@ function effectiveBorderWidth(enabled, override, themeWidth) {
   return steppedNumber(override, 0, 8, 1, 2, 0)
 }
 
+function surfaceColorMode(enabled, value) {
+  var normalized = String(value || "").trim()
+  if (!enabled || normalized === "") return "default"
+  return normalized.indexOf("@") === 0 ? "token" : "custom"
+}
+
+function surfaceColorPatch(enabledKey, valueKey, value) {
+  var validPair = (enabledKey === "backgroundColorEnabled"
+      && valueKey === "backgroundColor")
+    || (enabledKey === "borderColorEnabled"
+      && valueKey === "borderColor")
+  if (!validPair) return ({})
+
+  var raw = String(value === undefined || value === null ? "" : value).trim()
+  var patch = {}
+  if (raw === "") {
+    patch[enabledKey] = false
+    return patch
+  }
+
+  var normalized = normalizeSetting(valueKey, raw)
+  if (normalized === "") return ({})
+  patch[enabledKey] = true
+  patch[valueKey] = normalized
+  return patch
+}
+
 function normalizeSetting(key, value) {
   var defaults = settingsDefaults()
   switch (key) {

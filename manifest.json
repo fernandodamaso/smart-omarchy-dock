@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.fernandodamaso.smartdock",
   "name": "SmartDock for Omarchy",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": "SmartDock for Omarchy contributors",
   "license": "MIT",
   "description": "A theme-aware application, window, and workspace dock for Omarchy and Hyprland.",

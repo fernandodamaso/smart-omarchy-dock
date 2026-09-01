@@ -23,6 +23,7 @@ PanelWindow {
   property bool focusPrimed: false
   signal settingPreviewed(string key, var value)
   signal settingCommitted(string key, var value)
+  signal settingsPatchCommitted(var patch)
   signal resetRequested()
 
   readonly property var anchorWindow: anchorItem ? anchorItem.QsWindow.window : null
@@ -34,9 +35,11 @@ PanelWindow {
     ? height : popupScreen ? popupScreen.height : 760
   readonly property int panelWidth: Math.min(980,
     Math.max(320, panelScreenWidth - panelMargin * 2))
-  readonly property int panelHeight: Math.min(900,
+  readonly property int panelHeight: Math.min(820,
     Math.max(360, panelScreenHeight - panelMargin * 2))
   readonly property bool wideLayout: panelWidth >= 720
+  readonly property bool compactControls: panelWidth < 560
+  property bool advancedExpanded: false
   // The values are symbolic references to Omarchy's live Color singleton.
   // Persisting the reference (rather than a snapshot hex value) keeps a
   // selected preset synchronized when the active theme changes.
@@ -130,6 +133,11 @@ PanelWindow {
     settingCommitted(key, DockModel.normalizeSetting(key, value))
   }
 
+  function commitPatch(patch) {
+    if (!patch || Object.keys(patch).length === 0) return
+    settingsPatchCommitted(patch)
+  }
+
   function commitControlCommand() {
     var command = DockModel.normalizeSetting("controlCommand", commandInput.text)
     commandInput.text = command
@@ -173,6 +181,29 @@ PanelWindow {
     else if (key === "borderColor")
       borderColorInput.text = normalized
     if (normalized !== current(key)) settingCommitted(key, normalized)
+  }
+
+  function surfaceMode(enabledKey, valueKey) {
+    return DockModel.surfaceColorMode(current(enabledKey), current(valueKey))
+  }
+
+  function defaultTokenOptions(label, color) {
+    return [{ value: "", label: label, color: color }].concat(themeColorOptions)
+  }
+
+  function selectSurfaceColor(enabledKey, valueKey, value) {
+    commitPatch(DockModel.surfaceColorPatch(enabledKey, valueKey, value))
+  }
+
+  function enableCustomSurfaceColor(enabledKey, valueKey) {
+    var currentValue = current(valueKey)
+    if (String(currentValue).indexOf("#") === 0) {
+      selectSurfaceColor(enabledKey, valueKey, currentValue)
+      return
+    }
+
+    var resolved = colorForSetting(valueKey)
+    selectSurfaceColor(enabledKey, valueKey, DockModel.colorToHex(resolved))
   }
 
   function open() {
@@ -303,453 +334,421 @@ PanelWindow {
       id: panelHover
     }
 
-    Flickable {
-      id: scrollView
-
+    Item {
       anchors.fill: parent
-      anchors.margins: 16
-      contentWidth: width
-      contentHeight: contentColumn.implicitHeight
-      clip: true
-      boundsBehavior: Flickable.StopAtBounds
-      flickableDirection: Flickable.VerticalFlick
+      anchors.margins: Style.spacing.lg
 
-      QQC.ScrollBar.vertical: QQC.ScrollBar {
-        policy: scrollView.contentHeight > scrollView.height
-          ? QQC.ScrollBar.AsNeeded : QQC.ScrollBar.AlwaysOff
-      }
+      Item {
+        id: settingsHeader
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: Style.space(62)
 
-      Column {
-        id: contentColumn
+        Column {
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Style.spacing.xs
 
-        width: scrollView.width
-        spacing: 8
-
-        Item {
-          width: parent.width
-          height: 70
-
-          Column {
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 5
-
-            Text {
-              text: "Dock Settings"
-              color: Color.menu.text
-              font.family: Style.font.family
-              font.pixelSize: Style.font.display
-              font.bold: true
-            }
-
-            Text {
-              text: "✓  Changes apply immediately"
-              color: Color.accent
-              font.family: Style.font.family
-              font.pixelSize: Style.font.bodySmall
-            }
+          Text {
+            text: "Dock Settings"
+            color: Color.menu.text
+            font.family: Style.font.family
+            font.pixelSize: Style.font.display
+            font.bold: true
           }
 
-          Button {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            iconText: "󰅖"
-            tooltipText: "Close"
-            bordered: true
-            foreground: Color.menu.text
-            background: Color.menu.background
-            onClicked: root.close()
+          Text {
+            text: "✓  Changes apply immediately"
+            color: Color.accent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
           }
         }
 
         BorderSurface {
-          width: parent.width
-          height: appearanceContent.implicitHeight + 24
+          anchors.right: parent.right
+          anchors.top: parent.top
+          width: Style.spacing.controlHeight
+          height: width
           radius: Style.cornerRadius
-          color: Util.alpha(Color.menu.text, 0.035)
+          color: "transparent"
           borderSpec: Border.controlSpec("normal", Color.menu.text, Color.accent)
 
-          Column {
-            id: appearanceContent
+          DockLucideIcon {
+            anchors.centerIn: parent
+            iconName: "x"
+            iconSize: Style.space(18)
+            tint: Color.menu.text
+          }
 
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: 12
-            spacing: 5
+          TapHandler { onTapped: root.close() }
+        }
+      }
 
-            Text {
-              text: "󰏘  Appearance"
-              color: Color.menu.text
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              font.bold: true
+      Flickable {
+        id: settingsContent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: settingsHeader.bottom
+        anchors.bottom: settingsFooter.top
+        anchors.bottomMargin: Style.spacing.md
+        contentWidth: width
+        contentHeight: settingsColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+
+        QQC.ScrollBar.vertical: QQC.ScrollBar {
+          policy: settingsContent.contentHeight > settingsContent.height
+            ? QQC.ScrollBar.AsNeeded : QQC.ScrollBar.AlwaysOff
+        }
+
+        Column {
+          id: settingsColumn
+          width: settingsContent.width
+          spacing: Style.spacing.md
+
+          Flow {
+            width: parent.width
+            spacing: Style.spacing.md
+            flow: Flow.LeftToRight
+
+            DockSettingsSection {
+              id: iconsSection
+              width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+              height: root.wideLayout
+                ? Math.max(iconsSection.implicitHeight, hoverSection.implicitHeight)
+                : iconsSection.implicitHeight
+              title: "Icons"
+              iconName: "maximize-2"
+
+              DockSettingSlider {
+                width: parent.width
+                label: "Icon size"
+                value: root.current("iconSize")
+                minimum: 24
+                maximum: 96
+                step: 1
+                suffix: " px"
+                onPreviewed: value => root.preview("iconSize", value)
+                onCommitted: value => root.commit("iconSize", value)
+              }
+
+              DockSettingSlider {
+                width: parent.width
+                label: "Magnification"
+                value: root.current("magnification")
+                minimum: 1
+                maximum: 2
+                step: 0.05
+                decimals: 2
+                suffix: "x"
+                onPreviewed: value => root.preview("magnification", value)
+                onCommitted: value => root.commit("magnification", value)
+              }
+
+              DockSettingSlider {
+                width: parent.width
+                label: "Effect radius"
+                value: root.current("magnificationRadius")
+                minimum: 40
+                maximum: 240
+                step: 5
+                suffix: " px"
+                onPreviewed: value => root.preview("magnificationRadius", value)
+                onCommitted: value => root.commit("magnificationRadius", value)
+              }
+            }
+
+            DockSettingsSection {
+              id: hoverSection
+              width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+              height: root.wideLayout
+                ? Math.max(iconsSection.implicitHeight, hoverSection.implicitHeight)
+                : hoverSection.implicitHeight
+              title: "Hover effect"
+              description: "Accent glow behind icons under the pointer"
+              iconName: "sparkles"
+
+              headerAccessory: ToggleSwitch {
+                checked: root.current("hoverGlowEnabled")
+                foreground: Color.menu.text
+                accent: Color.accent
+                onToggled: root.commit("hoverGlowEnabled", !checked)
+              }
+
+              DockSettingSlider {
+                width: parent.width
+                enabled: root.current("hoverGlowEnabled")
+                opacity: enabled ? 1 : 0.45
+                label: "Glow intensity"
+                value: root.current("hoverGlowOpacity") * 100
+                minimum: 0
+                maximum: 100
+                step: 5
+                suffix: "%"
+                onPreviewed: value => root.preview("hoverGlowOpacity", value / 100)
+                onCommitted: value => root.commit("hoverGlowOpacity", value / 100)
+              }
+
+              DockSettingSlider {
+                width: parent.width
+                enabled: root.current("hoverGlowEnabled")
+                opacity: enabled ? 1 : 0.45
+                label: "Glow radius"
+                value: root.current("hoverGlowRadius")
+                minimum: 0
+                maximum: 100
+                step: 5
+                suffix: "%"
+                onPreviewed: value => root.preview("hoverGlowRadius", value)
+                onCommitted: value => root.commit("hoverGlowRadius", value)
+              }
+            }
+          }
+
+          DockSettingsSection {
+            width: parent.width
+            title: "Dock surface"
+            iconName: "palette"
+
+            DockSettingSlider {
+              width: parent.width
+              label: "Background opacity"
+              value: root.current("backgroundOpacity") * 100
+              minimum: 0
+              maximum: 100
+              step: 5
+              suffix: "%"
+              onPreviewed: value => root.preview("backgroundOpacity", value / 100)
+              onCommitted: value => root.commit("backgroundOpacity", value / 100)
             }
 
             Flow {
               width: parent.width
-              spacing: 8
+              spacing: Style.spacing.md
               flow: Flow.LeftToRight
 
-              Item {
-                width: root.wideLayout ? (parent.width - 8) / 2 : parent.width
-                height: appearancePrimary.implicitHeight
+              Column {
+                width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+                spacing: Style.spacing.sm
 
-                Column {
-                  id: appearancePrimary
+                Text {
+                  text: "Background"
+                  color: Color.menu.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                }
+
+                DockColorTokenDropdown {
                   width: parent.width
-                  spacing: 5
+                  showLabel: false
+                  enabled: root.surfaceMode("backgroundColorEnabled", "backgroundColor")
+                    !== "custom"
+                  opacity: enabled ? 1 : 0.45
+                  value: root.surfaceMode("backgroundColorEnabled", "backgroundColor")
+                    === "token" ? root.current("backgroundColor") : ""
+                  options: root.defaultTokenOptions("Theme default", Color.menu.background)
+                  fallbackColor: Color.menu.background
+                  foreground: Color.menu.text
+                  background: Color.menu.background
+                  popupBorder: Color.menu.border
+                  accent: Color.accent
+                  onChanged: value => root.selectSurfaceColor(
+                    "backgroundColorEnabled", "backgroundColor", value)
+                }
+
+                DockSettingsToggleRow {
+                  width: parent.width
+                  label: "Custom hex"
+                  checked: root.surfaceMode("backgroundColorEnabled", "backgroundColor")
+                    === "custom"
+                  onToggled: checked
+                    ? root.commitPatch({ backgroundColorEnabled: false })
+                    : root.enableCustomSurfaceColor(
+                      "backgroundColorEnabled", "backgroundColor")
+                }
+
+                Item {
+                  width: parent.width
+                  height: root.surfaceMode("backgroundColorEnabled", "backgroundColor")
+                    === "custom" ? Style.spacing.controlHeight : 0
+                  visible: height > 0
+
+                  TextField {
+                    id: backgroundColorInput
+                    anchors.left: parent.left
+                    anchors.right: backgroundColorSwatch.left
+                    anchors.rightMargin: Style.spacing.sm
+                    anchors.verticalCenter: parent.verticalCenter
+                    placeholderText: "#RRGGBB or #AARRGGBB"
+                    text: root.current("backgroundColor")
+                    foreground: Color.menu.text
+                    accent: Color.accent
+                    onEditingFinished: root.commitColor(
+                      "backgroundColor", backgroundColorInput)
+                  }
+
+                  DockColorSwatch {
+                    id: backgroundColorSwatch
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    value: root.current("backgroundColor")
+                    fallbackColor: Color.menu.background
+                    displayColor: root.colorForSetting("backgroundColor")
+                    onClicked: root.openColorPicker("backgroundColor")
+                  }
+                }
+              }
+
+              Column {
+                width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+                spacing: Style.spacing.sm
+
+                Text {
+                  text: "Border"
+                  color: Color.menu.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                }
+
+                DockColorTokenDropdown {
+                  width: parent.width
+                  showLabel: false
+                  enabled: root.surfaceMode("borderColorEnabled", "borderColor")
+                    !== "custom"
+                  opacity: enabled ? 1 : 0.45
+                  value: root.surfaceMode("borderColorEnabled", "borderColor")
+                    === "token" ? root.current("borderColor") : ""
+                  options: root.defaultTokenOptions("Theme default", Color.menu.border)
+                  fallbackColor: Color.menu.border
+                  foreground: Color.menu.text
+                  background: Color.menu.background
+                  popupBorder: Color.menu.border
+                  accent: Color.accent
+                  onChanged: value => root.selectSurfaceColor(
+                    "borderColorEnabled", "borderColor", value)
+                }
+
+                DockSettingsToggleRow {
+                  width: parent.width
+                  label: "Custom hex"
+                  checked: root.surfaceMode("borderColorEnabled", "borderColor")
+                    === "custom"
+                  onToggled: checked
+                    ? root.commitPatch({ borderColorEnabled: false })
+                    : root.enableCustomSurfaceColor("borderColorEnabled", "borderColor")
+                }
+
+                Item {
+                  width: parent.width
+                  height: root.surfaceMode("borderColorEnabled", "borderColor")
+                    === "custom" ? Style.spacing.controlHeight : 0
+                  visible: height > 0
+
+                  TextField {
+                    id: borderColorInput
+                    anchors.left: parent.left
+                    anchors.right: borderColorSwatch.left
+                    anchors.rightMargin: Style.spacing.sm
+                    anchors.verticalCenter: parent.verticalCenter
+                    placeholderText: "#RRGGBB or #AARRGGBB"
+                    text: root.current("borderColor")
+                    foreground: Color.menu.text
+                    accent: Color.accent
+                    onEditingFinished: root.commitColor(
+                      "borderColor", borderColorInput)
+                  }
+
+                  DockColorSwatch {
+                    id: borderColorSwatch
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    value: root.current("borderColor")
+                    fallbackColor: Color.menu.border
+                    displayColor: root.colorForSetting("borderColor")
+                    onClicked: root.openColorPicker("borderColor")
+                  }
+                }
+
+                Item {
+                  width: parent.width
+                  height: Style.spacing.controlHeight
+
+                  Text {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !root.current("borderWidthEnabled")
+                    text: "Width"
+                    color: Color.menu.text
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.body
+                  }
+
+                  Text {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !root.current("borderWidthEnabled")
+                    text: "Theme default"
+                    color: Util.alpha(Color.menu.text, 0.56)
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.body
+                  }
 
                   DockSettingSlider {
-                    width: parent.width
-                    label: "Icon size"
-                    value: root.current("iconSize")
-                    minimum: 24
-                    maximum: 96
+                    anchors.fill: parent
+                    visible: root.current("borderWidthEnabled")
+                    label: "Width"
+                    value: root.current("borderWidth")
+                    minimum: 0
+                    maximum: 8
                     step: 1
                     suffix: " px"
-                    onPreviewed: value => root.preview("iconSize", value)
-                    onCommitted: value => root.commit("iconSize", value)
-                  }
-
-                  DockSettingSlider {
-                    width: parent.width
-                    label: "Magnification"
-                    value: root.current("magnification")
-                    minimum: 1
-                    maximum: 2
-                    step: 0.05
-                    decimals: 2
-                    suffix: "x"
-                    onPreviewed: value => root.preview("magnification", value)
-                    onCommitted: value => root.commit("magnification", value)
-                  }
-
-                  Toggle {
-                    width: parent.width
-                    label: "Use custom background color"
-                    description: "Override Omarchy's menu background token"
-                    checked: root.current("backgroundColorEnabled")
-                    foreground: Color.menu.text
-                    onClicked: root.commit("backgroundColorEnabled", !checked)
-                  }
-
-                  Item {
-                    width: parent.width
-                    height: 38
-
-                    Text {
-                      anchors.left: parent.left
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: "Background hex"
-                      color: Color.menu.text
-                      font.family: Style.font.family
-                      font.pixelSize: Style.font.bodySmall
-                      opacity: backgroundColorInput.enabled ? 1 : 0.5
-                    }
-
-                    TextField {
-                      id: backgroundColorInput
-
-                      anchors.right: backgroundColorSwatch.left
-                      anchors.rightMargin: 6
-                      anchors.verticalCenter: parent.verticalCenter
-                      width: Math.min(190, parent.width * 0.5)
-                      placeholderText: "#RRGGBB or @token"
-                      text: root.current("backgroundColor")
-                      enabled: root.current("backgroundColorEnabled")
-                      foreground: Color.menu.text
-                      accent: Color.accent
-                      opacity: enabled ? 1 : 0.5
-                      onEditingFinished: root.commitColor(
-                        "backgroundColor", backgroundColorInput)
-                    }
-
-                    DockColorSwatch {
-                      id: backgroundColorSwatch
-
-                      anchors.right: parent.right
-                      anchors.verticalCenter: parent.verticalCenter
-                      value: root.current("backgroundColor")
-                      fallbackColor: Color.menu.background
-                      displayColor: root.colorForSetting("backgroundColor")
-                      enabled: root.current("backgroundColorEnabled")
-                      onClicked: root.openColorPicker("backgroundColor")
-                    }
-                  }
-
-                  Item {
-                    width: parent.width
-                    height: 38
-
-                    Text {
-                      anchors.left: parent.left
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: "Theme token"
-                      color: Color.menu.text
-                      font.family: Style.font.family
-                      font.pixelSize: Style.font.bodySmall
-                      opacity: backgroundColorTokenPicker.enabled ? 1 : 0.5
-                    }
-
-                    DockColorTokenDropdown {
-                      id: backgroundColorTokenPicker
-
-                      anchors.right: parent.right
-                      anchors.verticalCenter: parent.verticalCenter
-                      width: Math.min(250, parent.width * 0.58)
-                      showLabel: false
-                      value: root.current("backgroundColor")
-                      options: root.themeColorOptions
-                      fallbackColor: Color.menu.background
-                      foreground: Color.menu.text
-                      background: Color.menu.background
-                      popupBorder: Color.menu.border
-                      accent: Color.accent
-                      enabled: root.current("backgroundColorEnabled")
-                      opacity: enabled ? 1 : 0.5
-                      onChanged: value => root.commit("backgroundColor", value)
-                    }
+                    onPreviewed: value => root.preview("borderWidth", value)
+                    onCommitted: value => root.commit("borderWidth", value)
                   }
                 }
-              }
 
-              Item {
-                width: root.wideLayout ? (parent.width - 8) / 2 : parent.width
-                height: appearanceSecondary.implicitHeight
-
-                Column {
-                  id: appearanceSecondary
+                DockSettingsToggleRow {
                   width: parent.width
-                  spacing: 5
-
-                  DockSettingSlider {
-                    width: parent.width
-                    label: "Magnification radius"
-                    value: root.current("magnificationRadius")
-                    minimum: 40
-                    maximum: 240
-                    step: 5
-                    suffix: " px"
-                    onPreviewed: value => root.preview("magnificationRadius", value)
-                    onCommitted: value => root.commit("magnificationRadius", value)
-                  }
-
-                  DockSettingSlider {
-                    width: parent.width
-                    label: "Background opacity"
-                    value: root.current("backgroundOpacity") * 100
-                    minimum: 0
-                    maximum: 100
-                    step: 5
-                    suffix: "%"
-                    onPreviewed: value => root.preview("backgroundOpacity", value / 100)
-                    onCommitted: value => root.commit("backgroundOpacity", value / 100)
-                  }
-
-                  Toggle {
-                    width: parent.width
-                    label: "Hover glow"
-                    description: "Show an accent glow behind icons under the pointer"
-                    checked: root.current("hoverGlowEnabled")
-                    foreground: Color.menu.text
-                    onClicked: root.commit("hoverGlowEnabled", !checked)
-                  }
-
-                  DockSettingSlider {
-                    width: parent.width
-                    enabled: root.current("hoverGlowEnabled")
-                    opacity: enabled ? 1 : 0.5
-                    label: "Glow intensity"
-                    value: root.current("hoverGlowOpacity") * 100
-                    minimum: 0
-                    maximum: 100
-                    step: 5
-                    suffix: "%"
-                    onPreviewed: value => root.preview("hoverGlowOpacity", value / 100)
-                    onCommitted: value => root.commit("hoverGlowOpacity", value / 100)
-                  }
-
-                  DockSettingSlider {
-                    width: parent.width
-                    enabled: root.current("hoverGlowEnabled")
-                    opacity: enabled ? 1 : 0.5
-                    label: "Glow radius"
-                    value: root.current("hoverGlowRadius")
-                    minimum: 0
-                    maximum: 100
-                    step: 5
-                    suffix: "%"
-                    onPreviewed: value => root.preview("hoverGlowRadius", value)
-                    onCommitted: value => root.commit("hoverGlowRadius", value)
-                  }
-
-                  Toggle {
-                    width: parent.width
-                    label: "Use custom border color"
-                    description: "Override Omarchy's menu border token"
-                    checked: root.current("borderColorEnabled")
-                    foreground: Color.menu.text
-                    onClicked: root.commit("borderColorEnabled", !checked)
-                  }
-
-                  Item {
-                    width: parent.width
-                    height: 38
-
-                    Text {
-                      anchors.left: parent.left
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: "Border hex"
-                      color: Color.menu.text
-                      font.family: Style.font.family
-                      font.pixelSize: Style.font.bodySmall
-                      opacity: borderColorInput.enabled ? 1 : 0.5
-                    }
-
-                    TextField {
-                      id: borderColorInput
-
-                      anchors.right: borderColorSwatch.left
-                      anchors.rightMargin: 6
-                      anchors.verticalCenter: parent.verticalCenter
-                      width: Math.min(190, parent.width * 0.5)
-                      placeholderText: "#RRGGBB or @token"
-                      text: root.current("borderColor")
-                      enabled: root.current("borderColorEnabled")
-                      foreground: Color.menu.text
-                      accent: Color.accent
-                      opacity: enabled ? 1 : 0.5
-                      onEditingFinished: root.commitColor(
-                        "borderColor", borderColorInput)
-                    }
-
-                    DockColorSwatch {
-                      id: borderColorSwatch
-
-                      anchors.right: parent.right
-                      anchors.verticalCenter: parent.verticalCenter
-                      value: root.current("borderColor")
-                      fallbackColor: Color.menu.border
-                      displayColor: root.colorForSetting("borderColor")
-                      enabled: root.current("borderColorEnabled")
-                      onClicked: root.openColorPicker("borderColor")
-                    }
-                  }
-
-                  Item {
-                    width: parent.width
-                    height: 38
-
-                    Text {
-                      anchors.left: parent.left
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: "Theme token"
-                      color: Color.menu.text
-                      font.family: Style.font.family
-                      font.pixelSize: Style.font.bodySmall
-                      opacity: borderColorTokenPicker.enabled ? 1 : 0.5
-                    }
-
-                    DockColorTokenDropdown {
-                      id: borderColorTokenPicker
-
-                      anchors.right: parent.right
-                      anchors.verticalCenter: parent.verticalCenter
-                      width: Math.min(250, parent.width * 0.58)
-                      showLabel: false
-                      value: root.current("borderColor")
-                      options: root.themeColorOptions
-                      fallbackColor: Color.menu.border
-                      foreground: Color.menu.text
-                      background: Color.menu.background
-                      popupBorder: Color.menu.border
-                      accent: Color.accent
-                      enabled: root.current("borderColorEnabled")
-                      opacity: enabled ? 1 : 0.5
-                      onChanged: value => root.commit("borderColor", value)
-                    }
-                  }
-                }
-              }
-            }
-
-            Flow {
-              width: parent.width
-              spacing: 8
-              flow: Flow.LeftToRight
-
-              Toggle {
-                id: borderWidthToggle
-                width: root.wideLayout ? (parent.width - 8) / 2 : parent.width
-                label: "Use custom border width"
-                description: "Override the theme border thickness"
-                checked: root.current("borderWidthEnabled")
-                foreground: Color.menu.text
-                onClicked: root.commit("borderWidthEnabled", !checked)
-              }
-
-              Item {
-                width: root.wideLayout ? (parent.width - 8) / 2 : parent.width
-                height: borderWidthToggle.implicitHeight
-
-                DockSettingSlider {
-                  anchors.left: parent.left
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  enabled: root.current("borderWidthEnabled")
-                  opacity: enabled ? 1 : 0.5
-                  label: "Border width"
-                  value: root.current("borderWidth")
-                  minimum: 0
-                  maximum: 8
-                  step: 1
-                  suffix: " px"
-                  onPreviewed: value => root.preview("borderWidth", value)
-                  onCommitted: value => root.commit("borderWidth", value)
+                  label: "Custom width"
+                  checked: root.current("borderWidthEnabled")
+                  onToggled: root.commit("borderWidthEnabled", !checked)
                 }
               }
             }
           }
-        }
 
-        Flow {
-          width: parent.width
-          spacing: 8
-          flow: Flow.LeftToRight
+          Flow {
+            width: parent.width
+            spacing: Style.spacing.md
+            flow: Flow.LeftToRight
 
-          BorderSurface {
-            width: root.wideLayout ? (parent.width - 8) / 2 : parent.width
-            height: layoutContent.implicitHeight + 24
-            radius: Style.cornerRadius
-            color: Util.alpha(Color.menu.text, 0.035)
-            borderSpec: Border.controlSpec("normal", Color.menu.text, Color.accent)
-
-            Column {
-              id: layoutContent
-
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.top: parent.top
-              anchors.margins: 12
-              spacing: 5
-
-              Text {
-                text: "󰕰  Layout"
-                color: Color.menu.text
-                font.family: Style.font.family
-                font.pixelSize: Style.font.title
-                font.bold: true
-              }
+            DockSettingsSection {
+              id: layoutSection
+              width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+              height: root.wideLayout
+                ? Math.max(layoutSection.implicitHeight, behaviorSection.implicitHeight)
+                : layoutSection.implicitHeight
+              title: "Layout"
+              iconName: "panel-bottom"
 
               Item {
+                readonly property bool stacked: root.compactControls
                 width: parent.width
-                height: Math.max(positionLabel.implicitHeight, positionGroup.implicitHeight)
+                height: stacked
+                  ? positionLabel.implicitHeight + Style.spacing.sm
+                    + positionGroup.implicitHeight
+                  : Math.max(positionLabel.implicitHeight, positionGroup.implicitHeight)
 
                 Text {
                   id: positionLabel
                   anchors.left: parent.left
-                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.top: parent.stacked ? parent.top : undefined
+                  anchors.verticalCenter: parent.stacked ? undefined : parent.verticalCenter
                   text: "Position"
                   color: Color.menu.text
                   font.family: Style.font.family
@@ -758,8 +757,11 @@ PanelWindow {
 
                 ButtonGroup {
                   id: positionGroup
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.left: parent.stacked ? parent.left : undefined
+                  anchors.right: parent.stacked ? undefined : parent.right
+                  anchors.top: parent.stacked ? positionLabel.bottom : undefined
+                  anchors.topMargin: parent.stacked ? Style.spacing.sm : 0
+                  anchors.verticalCenter: parent.stacked ? undefined : parent.verticalCenter
                   spacing: 2
                   options: [
                     { value: "top", label: "Top" },
@@ -774,79 +776,63 @@ PanelWindow {
                 }
               }
 
-              Toggle {
+              DockSettingsToggleRow {
                 width: parent.width
                 label: "Full length"
-                description: "Extend the dock across the entire screen"
                 checked: root.current("fullLength")
-                foreground: Color.menu.text
-                onClicked: root.commit("fullLength", !checked)
+                onToggled: root.commit("fullLength", !checked)
               }
 
-              Toggle {
-                width: parent.width
-                label: "Reserve space"
-                description: "Keep windows from overlapping the dock while it is visible"
-                enabled: !root.current("autoHide")
-                opacity: enabled ? 1 : 0.5
-                checked: DockModel.shouldReserveSpace(
-                  root.current("reserveSpace"), root.current("autoHide"))
-                foreground: Color.menu.text
-                onClicked: root.commit("reserveSpace", !checked)
-              }
-
-              Toggle {
+              DockSettingsToggleRow {
                 width: parent.width
                 label: "Sort by workspace"
                 description: "Group open apps by workspace; closed pinned apps stay first"
                 checked: root.current("sortByWorkspace")
-                foreground: Color.menu.text
-                onClicked: root.commit("sortByWorkspace", !checked)
+                onToggled: root.commit("sortByWorkspace", !checked)
               }
             }
-          }
 
-          BorderSurface {
-            width: root.wideLayout ? (parent.width - 8) / 2 : parent.width
-            height: behaviorContent.implicitHeight + 24
-            radius: Style.cornerRadius
-            color: Util.alpha(Color.menu.text, 0.035)
-            borderSpec: Border.controlSpec("normal", Color.menu.text, Color.accent)
+            DockSettingsSection {
+              id: behaviorSection
+              width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+              height: root.wideLayout
+                ? Math.max(layoutSection.implicitHeight, behaviorSection.implicitHeight)
+                : behaviorSection.implicitHeight
+              title: "Behavior"
+              iconName: "mouse-pointer-click"
 
-            Column {
-              id: behaviorContent
-
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.top: parent.top
-              anchors.margins: 12
-              spacing: 5
-
-              Text {
-                text: "󰒓  Behavior"
-                color: Color.menu.text
-                font.family: Style.font.family
-                font.pixelSize: Style.font.title
-                font.bold: true
-              }
-
-              Toggle {
+              DockSettingsToggleRow {
                 width: parent.width
                 label: "Auto-hide"
-                description: "Hide the dock when it is not in use; hidden docks do not reserve space"
                 checked: root.current("autoHide")
-                foreground: Color.menu.text
-                onClicked: root.commit("autoHide", !checked)
+                onToggled: root.commit("autoHide", !checked)
+              }
+
+              DockSettingsToggleRow {
+                width: parent.width
+                label: "Reserve space"
+                description: root.current("autoHide")
+                  ? "Unavailable while Auto-hide is enabled" : ""
+                enabled: !root.current("autoHide")
+                opacity: enabled ? 1 : 0.45
+                checked: DockModel.shouldReserveSpace(
+                  root.current("reserveSpace"), root.current("autoHide"))
+                onToggled: root.commit("reserveSpace", !checked)
               }
 
               Item {
+                readonly property bool stacked: root.compactControls
                 width: parent.width
-                height: Math.max(clickLabel.implicitHeight, clickActionGroup.implicitHeight)
+                height: stacked
+                  ? clickLabel.implicitHeight + Style.spacing.sm
+                    + clickActionGroup.implicitHeight
+                  : Math.max(clickLabel.implicitHeight, clickActionGroup.implicitHeight)
 
                 Text {
                   id: clickLabel
                   anchors.left: parent.left
-                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.top: parent.stacked ? parent.top : undefined
+                  anchors.verticalCenter: parent.stacked ? undefined : parent.verticalCenter
                   text: "Click action"
                   color: Color.menu.text
                   font.family: Style.font.family
@@ -855,8 +841,11 @@ PanelWindow {
 
                 ButtonGroup {
                   id: clickActionGroup
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.left: parent.stacked ? parent.left : undefined
+                  anchors.right: parent.stacked ? undefined : parent.right
+                  anchors.top: parent.stacked ? clickLabel.bottom : undefined
+                  anchors.topMargin: parent.stacked ? Style.spacing.sm : 0
+                  anchors.verticalCenter: parent.stacked ? undefined : parent.verticalCenter
                   spacing: 2
                   options: [
                     { value: "focus-or-launch", label: "Focus or launch" },
@@ -874,66 +863,152 @@ PanelWindow {
 
         BorderSurface {
           width: parent.width
-          height: launcherContent.implicitHeight + 24
+          height: launcherDisclosureColumn.implicitHeight + Style.spacing.huge * 2
           radius: Style.cornerRadius
-          color: Util.alpha(Color.menu.text, 0.035)
+          color: Util.alpha(Color.accent, 0.025)
           borderSpec: Border.controlSpec("normal", Color.menu.text, Color.accent)
+          activeFocusOnTab: true
+
+          Keys.onReturnPressed: root.advancedExpanded = !root.advancedExpanded
+          Keys.onEnterPressed: root.advancedExpanded = !root.advancedExpanded
+          Keys.onSpacePressed: root.advancedExpanded = !root.advancedExpanded
 
           Column {
-            id: launcherContent
-
+            id: launcherDisclosureColumn
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 12
-            spacing: 5
+            anchors.margins: Style.spacing.huge
+            spacing: Style.spacing.sm
 
-            Text {
-              text: "󰑮  Launcher"
-              color: Color.menu.text
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              font.bold: true
-            }
-
-            Text {
-              text: "Control command"
-              color: Color.menu.text
-              font.family: Style.font.family
-              font.pixelSize: Style.font.body
-            }
-
-            Text {
-              text: "Command run when the first dock icon is clicked"
-              color: Util.alpha(Color.menu.text, 0.56)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-
-            TextField {
-              id: commandInput
-
+            Item {
               width: parent.width
-              placeholderText: "omarchy-menu toggle apps"
-              foreground: Color.menu.text
-              onEditingFinished: root.commitControlCommand()
-              Keys.onEscapePressed: {
-                text = root.current("controlCommand")
-                focus = false
+              height: Style.spacing.controlHeight
+
+              DockLucideIcon {
+                id: launcherIcon
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "terminal"
+                iconSize: Style.space(20)
+                tint: Color.accent
+              }
+
+              Text {
+                anchors.left: launcherIcon.right
+                anchors.leftMargin: Style.spacing.md
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Advanced launcher settings"
+                color: Color.menu.text
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+              }
+
+              DockLucideIcon {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "chevron-right"
+                iconSize: Style.space(18)
+                tint: Color.menu.text
+                rotation: root.advancedExpanded ? 90 : 0
+                Behavior on rotation { NumberAnimation { duration: 120 } }
+              }
+
+              TapHandler {
+                onTapped: root.advancedExpanded = !root.advancedExpanded
+              }
+            }
+
+            Column {
+              visible: root.advancedExpanded
+              width: parent.width
+              spacing: Style.spacing.xs
+
+              Text {
+                text: "Command run when Open App Launcher is selected"
+                color: Util.alpha(Color.menu.text, 0.56)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
+
+              TextField {
+                id: commandInput
+                width: parent.width
+                placeholderText: "omarchy-menu toggle apps"
+                foreground: Color.menu.text
+                onEditingFinished: root.commitControlCommand()
+                Keys.onEscapePressed: {
+                  text = root.current("controlCommand")
+                  focus = false
+                }
               }
             }
           }
         }
+      }
 
-        Button {
-          text: "Reset to defaults"
-          iconText: "󰑐"
-          foreground: Color.accent
-          leftAlign: true
-          onClicked: {
-            commandInput.text = DockModel.resetSettingsPatch().controlCommand
-            root.resetRequested()
+      Item {
+        id: settingsFooter
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: Style.space(52)
+
+        BorderSurface {
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(168)
+          height: Style.spacing.controlHeight
+          radius: Style.cornerRadius
+          color: "transparent"
+          borderSpec: Border.controlSpec("normal", Color.urgent, Color.urgent)
+
+          DockLucideIcon {
+            id: resetIcon
+            anchors.left: parent.left
+            anchors.leftMargin: Style.spacing.controlPaddingX
+            anchors.verticalCenter: parent.verticalCenter
+            iconName: "rotate-ccw"
+            iconSize: Style.space(18)
+            tint: Color.urgent
           }
+
+          Text {
+            anchors.left: resetIcon.right
+            anchors.leftMargin: Style.spacing.sm
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Reset to defaults"
+            color: Color.urgent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+          }
+
+          TapHandler {
+            onTapped: {
+              commandInput.text = DockModel.resetSettingsPatch().controlCommand
+              root.resetRequested()
+            }
+          }
+        }
+
+        BorderSurface {
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(112)
+          height: Style.spacing.controlHeight
+          radius: Style.cornerRadius
+          color: "transparent"
+          borderSpec: Border.controlSpec("normal", Color.menu.text, Color.accent)
+
+          Text {
+            anchors.centerIn: parent
+            text: "Close"
+            color: Color.menu.text
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+          }
+
+          TapHandler { onTapped: root.close() }
         }
       }
     }

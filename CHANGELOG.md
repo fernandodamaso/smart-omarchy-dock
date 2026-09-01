@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0 - 2026-09-01
+
+### Changed
+
+- Reorganized Dock Settings into icon-led Icons, Hover effect, Dock surface,
+  Layout, and Behavior cards matching the approved compact layout.
+- Added progressive Theme default, Omarchy token, custom hex, and custom border
+  width controls while preserving the existing JSON schema.
+- Added a collapsible launcher section and fixed Reset/Close footer.
+- Added theme-tinted Lucide section and action icons using Omarchy accent and
+  urgent tokens.
+
 ## 2.0.0 - 2026-09-01
 
 ### Added

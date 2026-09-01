@@ -101,6 +101,33 @@ TestCase {
     compare(DockModel.normalizeSetting("borderWidth", 3.4), 3)
   }
 
+  function test_buildsAtomicSurfaceOverridePatches() {
+    compare(DockModel.surfaceColorMode(false, "@accent"), "default")
+    compare(DockModel.surfaceColorMode(true, ""), "default")
+    compare(DockModel.surfaceColorMode(true, "@accent"), "token")
+    compare(DockModel.surfaceColorMode(true, "#aabbcc"), "custom")
+
+    compare(JSON.stringify(DockModel.surfaceColorPatch(
+      "backgroundColorEnabled", "backgroundColor", "")),
+      JSON.stringify({ backgroundColorEnabled: false }))
+    compare(JSON.stringify(DockModel.surfaceColorPatch(
+      "backgroundColorEnabled", "backgroundColor", "@Accent")),
+      JSON.stringify({
+        backgroundColorEnabled: true,
+        backgroundColor: "@accent"
+      }))
+    compare(JSON.stringify(DockModel.surfaceColorPatch(
+      "borderColorEnabled", "borderColor", "#AABBCC")),
+      JSON.stringify({
+        borderColorEnabled: true,
+        borderColor: "#aabbcc"
+      }))
+    compare(JSON.stringify(DockModel.surfaceColorPatch(
+      "borderColorEnabled", "borderColor", "not-a-color")), "{}")
+    compare(JSON.stringify(DockModel.surfaceColorPatch(
+      "autoHide", "borderColor", "@accent")), "{}")
+  }
+
   function test_formatsColorDialogValuesForExistingHexSettings() {
     compare(DockModel.colorToHex({ r: 1, g: 0.5, b: 0, a: 1 }), "#ff8000")
     compare(DockModel.colorToHex({ r: 1, g: 0, b: 0, a: 0.5 }), "#80ff0000")

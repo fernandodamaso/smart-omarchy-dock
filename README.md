@@ -146,21 +146,26 @@ Installed copies use `~/.config/smartdock/dock.json`. When running from the repo
 
 The same settings are available graphically: click or right-click the first
 sliders icon and choose **Dock Settings…**. Slider changes preview while dragging and
-are saved when released; switches and choices save immediately. The panel
-expands to a wide two-column layout on desktop screens so the full form is
-visible without vertical scrolling; narrow displays fall back to the
-scrollable layout. The centered panel leaves the dock's edge strip interactive,
-so moving over dock icons continues to preview magnification and hover glow while
-you adjust settings.
+are saved when released; switches and choices save immediately.
 
-Background and border override rows include clickable theme-aware swatches.
-They open a color dialog with alpha support; manual hex entry remains available
-and accepts the same `#RRGGBB` / `#AARRGGBB` values. Each row also includes a
-ready-to-choose list of Omarchy theme tokens (for example `@accent`,
-`@menu.background`, and `@popups.border`). The selector shows a live color
-square for every token, including the currently selected value. Selecting a
-token stores the symbolic reference, so its color follows future theme
-changes; choosing a hex value stores a fixed override.
+Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
+effects sit side by side, Dock surface exposes Theme default, Omarchy token,
+and custom hex modes without leaving disabled inputs visible, and Layout and
+Behavior share a compact row. Advanced launcher settings expand on demand;
+Reset and Close remain fixed at the bottom. On narrow screens the card grid
+stacks and the middle content area scrolls while the header and footer remain
+visible. The centered panel leaves the dock's edge strip interactive, so moving
+over dock icons continues to preview magnification and hover glow while you
+adjust settings.
+
+Background and border overrides use a progressive control: choose **Theme
+default**, pick an Omarchy token (for example `@accent`, `@menu.background`, or
+`@popups.border`), or enable **Custom hex** and use the clickable alpha-aware
+color swatch or manual `#RRGGBB` / `#AARRGGBB` entry. Token selections store the
+symbolic reference so the color follows future theme changes; custom hex values
+store a fixed override. The border width similarly switches between the theme
+width and a **Custom width** slider, preserving the stored width when the
+override is disabled.
 
 ```json
 {

@@ -23,8 +23,22 @@ if ! rg -n 'effectiveColor|effectiveBorderWidth' "$dock_qml" >/dev/null; then
   exit 1
 fi
 
-if ! rg -n 'Use custom background color|Use custom border color|Use custom border width' \
+for label in 'Dock surface' 'Background opacity' 'Theme default' \
+  'Custom hex' 'Custom width'; do
+  rg -n "$label" "$settings_qml" >/dev/null || {
+    printf 'Dock Settings is missing progressive surface control: %s\n' "$label" >&2
+    exit 1
+  }
+done
+
+if rg -n 'Use custom background color|Use custom border color|Use custom border width' \
     "$settings_qml" >/dev/null; then
-  printf 'Dock Settings must expose independent surface override controls\n' >&2
+  printf 'Dock Settings still exposes the old always-expanded override rows\n' >&2
+  exit 1
+fi
+
+if ! rg -n 'settingsPatchCommitted|settingsPatchRequested|saveSettings\(patch\)' \
+    "$settings_qml" "$dock_qml" "$plugin_root/DockHost.qml" >/dev/null; then
+  printf 'Surface selectors must persist default/token/custom changes atomically\n' >&2
   exit 1
 fi
