@@ -42,6 +42,7 @@ Item {
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
     groupWindows: true,
+    hiddenApplications: [],
     pinned: [
       "org.gnome.Nautilus",
       "com.mitchellh.ghostty",
@@ -57,6 +58,8 @@ Item {
       var parsed = JSON.parse(raw)
       if (!parsed.pinned || !Array.isArray(parsed.pinned))
         throw new Error("'pinned' must be an array")
+      parsed.hiddenApplications = DockModel.normalizeSetting(
+        "hiddenApplications", parsed.hiddenApplications)
       settings = parsed
     } catch (error) {
       console.warn("Dock: could not load " + configPath + ":", error)

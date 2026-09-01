@@ -85,6 +85,40 @@ TestCase {
       "launcher --toggle")
   }
 
+  function test_normalizesHiddenApplicationIds() {
+    compare(JSON.stringify(DockModel.normalizeApplicationIds()), "[]")
+    compare(JSON.stringify(DockModel.normalizeApplicationIds(null)), "[]")
+    compare(JSON.stringify(DockModel.normalizeApplicationIds("chrome")), "[]")
+    compare(JSON.stringify(DockModel.normalizeApplicationIds({ id: "chrome" })), "[]")
+    compare(JSON.stringify(DockModel.normalizeApplicationIds([
+      "  Firefox  ", "", "   ", "fireFOX", " Chrome ", "chrome",
+      "  org.example.Editor  "
+    ])), JSON.stringify(["Firefox", "Chrome", "org.example.Editor"]))
+    compare(JSON.stringify(DockModel.normalizeSetting(
+      "hiddenApplications", ["  ChatGPT ", "chatgpt", "  "])),
+      JSON.stringify(["ChatGPT"]))
+  }
+
+  function test_addsAndRemovesHiddenApplicationIdsWithoutMutatingInputs() {
+    var original = ["  Firefox ", "Chrome", "firefox"]
+    var added = DockModel.addHiddenApplication(original, "  CHROME  ")
+
+    compare(JSON.stringify(original), JSON.stringify(["  Firefox ", "Chrome", "firefox"]))
+    compare(JSON.stringify(added), JSON.stringify(["Firefox", "Chrome"]))
+
+    var extended = DockModel.addHiddenApplication(added, "  org.example.Editor  ")
+    compare(JSON.stringify(extended),
+      JSON.stringify(["Firefox", "Chrome", "org.example.Editor"]))
+    compare(JSON.stringify(added), JSON.stringify(["Firefox", "Chrome"]))
+
+    var removed = DockModel.removeHiddenApplication(extended, " fIrEfOx ")
+    compare(JSON.stringify(removed), JSON.stringify(["Chrome", "org.example.Editor"]))
+    compare(JSON.stringify(extended),
+      JSON.stringify(["Firefox", "Chrome", "org.example.Editor"]))
+    compare(JSON.stringify(DockModel.removeHiddenApplication(
+      removed, "missing")), JSON.stringify(removed))
+  }
+
   function test_normalizesOptionalSurfaceOverrides() {
     compare(DockModel.normalizeSetting("backgroundColorEnabled", true), true)
     compare(DockModel.normalizeSetting("backgroundColorEnabled", "true"), false)
@@ -230,6 +264,7 @@ TestCase {
     compare(reset.controlCommand, "omarchy-menu toggle apps")
     verify(reset.pinned === undefined)
     verify(reset.margin === undefined)
+    verify(reset.hiddenApplications === undefined)
   }
 
   function test_mergesSettingsWithoutDroppingPinnedOrUnknownKeys() {
@@ -618,6 +653,54 @@ TestCase {
     compare(items[2].toplevels.length, 2)
   }
 
+  function test_hidesPinnedApplicationsWithoutChangingPinnedOrder() {
+    var pinned = ["org.gnome.Nautilus", "com.google.Chrome", "com.mitchellh.ghostty"]
+    var entries = [
+      { id: "org.gnome.Nautilus", startupClass: "org.gnome.Nautilus" },
+      { id: "com.google.Chrome", startupClass: "google-chrome" },
+      { id: "com.mitchellh.ghostty", startupClass: "com.mitchellh.ghostty" }
+    ]
+    var windows = [
+      { appId: "org.gnome.Nautilus", title: "Files" },
+      { appId: "google-chrome", title: "Chrome" },
+      { appId: "com.mitchellh.ghostty", title: "Terminal" }
+    ]
+
+    var hidden = DockModel.addHiddenApplication([], " com.google.chrome ")
+    var visible = DockModel.buildVisibleItems(pinned, windows, entries,
+      [], false, hidden)
+
+    compare(JSON.stringify(pinned), JSON.stringify([
+      "org.gnome.Nautilus", "com.google.Chrome", "com.mitchellh.ghostty"
+    ]))
+    compare(JSON.stringify(visible.map(function(item) { return item.desktopId })),
+      JSON.stringify(["org.gnome.Nautilus", "com.mitchellh.ghostty"]))
+
+    var restored = DockModel.removeHiddenApplication(hidden, "COM.GOOGLE.CHROME")
+    var restoredItems = DockModel.buildVisibleItems(pinned, windows, entries,
+      [], false, restored)
+    compare(JSON.stringify(restoredItems.map(function(item) {
+      return item.desktopId
+    })), JSON.stringify(pinned))
+  }
+
+  function test_hidesGroupedUnpinnedApplications() {
+    var entries = [
+      { id: "org.example.Editor", startupClass: "org.example.Editor" },
+      { id: "org.example.Terminal", startupClass: "org.example.Terminal" }
+    ]
+    var editorOne = { appId: "org.example.Editor", title: "Editor one" }
+    var editorTwo = { appId: "org.example.Editor", title: "Editor two" }
+    var terminal = { appId: "org.example.Terminal", title: "Terminal" }
+
+    var items = DockModel.buildVisibleItems([], [editorOne, editorTwo, terminal],
+      entries, [], false, [" ORG.EXAMPLE.EDITOR "])
+
+    compare(items.length, 1)
+    compare(items[0].desktopId, "org.example.Terminal")
+    compare(items[0].toplevels.length, 1)
+  }
+
   function test_usesStartupClassToAssociateRunningWindowWithPinnedLauncher() {
     var pinned = ["chatgpt"]
     var entries = [
@@ -693,6 +776,15 @@ TestCase {
     compare(items[1].desktopId, "org.gnome.Nautilus")
     compare(items[2].desktopId, "firefox")
     compare(items[3].desktopId, "com.mitchellh.ghostty")
+
+    var hiddenItems = DockModel.buildVisibleItems(
+      pinned, [nautilusWindow, chromeWindow, ghosttyWindow, firefoxWindow],
+      entries, handles, true, [" FIREFOX "])
+    compare(JSON.stringify(hiddenItems.map(function(item) {
+      return item.desktopId
+    })), JSON.stringify([
+      "com.google.Chrome", "org.gnome.Nautilus", "com.mitchellh.ghostty"
+    ]))
   }
 
   function test_keepsClosedPinnedAppsFirstWhenSortingByWorkspace() {

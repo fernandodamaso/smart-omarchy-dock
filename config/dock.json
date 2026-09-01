@@ -21,6 +21,7 @@
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
+  "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",
     "com.google.Chrome",

@@ -4,6 +4,56 @@ function normalizedId(value) {
   return String(value || "").toLowerCase().replace(/\.desktop$/, "")
 }
 
+function normalizeApplicationIds(value) {
+  if (!Array.isArray(value)) return []
+
+  var normalized = []
+  for (var i = 0; i < value.length; ++i) {
+    var id = String(value[i] === undefined || value[i] === null
+      ? "" : value[i]).trim()
+    if (!id) continue
+
+    var key = id.toLowerCase()
+    var duplicate = false
+    for (var j = 0; j < normalized.length; ++j) {
+      if (normalized[j].toLowerCase() === key) {
+        duplicate = true
+        break
+      }
+    }
+    if (!duplicate) normalized.push(id)
+  }
+  return normalized
+}
+
+function addHiddenApplication(ids, desktopId) {
+  var normalized = normalizeApplicationIds(ids)
+  var id = String(desktopId === undefined || desktopId === null
+    ? "" : desktopId).trim()
+  if (!id) return normalized
+
+  var key = id.toLowerCase()
+  for (var i = 0; i < normalized.length; ++i) {
+    if (normalized[i].toLowerCase() === key) return normalized
+  }
+
+  normalized.push(id)
+  return normalized
+}
+
+function removeHiddenApplication(ids, desktopId) {
+  var normalized = normalizeApplicationIds(ids)
+  var id = String(desktopId === undefined || desktopId === null
+    ? "" : desktopId).trim().toLowerCase()
+  if (!id) return normalized
+
+  var remaining = []
+  for (var i = 0; i < normalized.length; ++i) {
+    if (normalized[i].toLowerCase() !== id) remaining.push(normalized[i])
+  }
+  return remaining
+}
+
 function controlCommand(settings) {
   var configured = settings && settings.controlCommand
   var command = String(configured === undefined || configured === null
@@ -189,6 +239,8 @@ function normalizeSetting(key, value) {
       ? value : defaults.clickAction
   case "controlCommand":
     return controlCommand({ controlCommand: value })
+  case "hiddenApplications":
+    return normalizeApplicationIds(value)
   default:
     return value
   }
@@ -751,7 +803,7 @@ function itemWorkspaceId(item, handles) {
 }
 
 function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspace,
-                           groupWindows) {
+                           groupWindows, hiddenApplicationIds) {
   var items = []
   var runningByKey = {}
   var nextOriginalIndex = 0
@@ -852,5 +904,19 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
     })
   }
 
-  return items
+  var hiddenIds = normalizeApplicationIds(hiddenApplicationIds)
+  var visibleItems = []
+  for (var itemIndex = 0; itemIndex < items.length; ++itemIndex) {
+    var itemKey = normalizedId(items[itemIndex].desktopId)
+    var hidden = false
+    for (var hiddenIndex = 0; hiddenIndex < hiddenIds.length; ++hiddenIndex) {
+      if (normalizedId(hiddenIds[hiddenIndex]) === itemKey) {
+        hidden = true
+        break
+      }
+    }
+    if (!hidden) visibleItems.push(items[itemIndex])
+  }
+
+  return visibleItems
 }

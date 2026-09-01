@@ -139,6 +139,8 @@ PanelWindow {
   readonly property bool groupWindows: DockModel.normalizeSetting(
     "groupWindows", effectiveSetting("groupWindows"))
   readonly property var pinned: settings.pinned || []
+  readonly property var hiddenApplications: DockModel.normalizeSetting(
+    "hiddenApplications", effectiveSetting("hiddenApplications"))
   readonly property var applications: DesktopEntries.applications.values || []
   readonly property var toplevels: ToplevelManager.toplevels.values || []
   readonly property var hyprToplevels: Hyprland.toplevels
@@ -158,7 +160,8 @@ PanelWindow {
     fullscreenStateRevision)
   readonly property bool fullscreenModeActive: fullscreenOwnerToplevel !== null
   readonly property var visibleItems: DockModel.buildVisibleItems(
-    pinned, toplevels, applications, hyprToplevels, sortByWorkspace, groupWindows)
+    pinned, toplevels, applications, hyprToplevels, sortByWorkspace,
+    groupWindows, hiddenApplications)
   readonly property var visibleWorkspaceIds: {
     var revision = workspaceStateRevision + workspaceCountsRevision
     return DockModel.visibleWorkspaceIds(
