@@ -32,7 +32,6 @@ PopupWindow {
     ? selectedHandle.lastIpcObject || ({})
     : ({})
   readonly property bool selectedFloating: selectedInfo.floating === true
-  readonly property bool selectedPinned: selectedInfo.pinned === true
   readonly property bool selectedMinimized: isToplevelMinimized(selectedToplevel)
   readonly property bool selectedFakeFullscreen:
     DockModel.isFakeFullscreen(selectedInfo)
@@ -196,16 +195,6 @@ PopupWindow {
   function toggleSelectedFloating() {
     dispatchRequest(DockModel.floatWindowRequest(
       selectedAddress(), "toggle", Hyprland.usingLua))
-    dismiss()
-  }
-
-  function toggleSelectedPinned() {
-    var address = selectedAddress()
-    if (!selectedPinned && !selectedFloating) {
-      dispatchRequest(DockModel.floatWindowRequest(
-        address, "enable", Hyprland.usingLua))
-    }
-    dispatchRequest(DockModel.pinWindowRequest(address, Hyprland.usingLua))
     dismiss()
   }
 
@@ -691,21 +680,6 @@ PopupWindow {
                   return -1
                 }
                 onTriggered: root.toggleSelectedFloating()
-              }
-
-              DockMenuAction {
-                iconName: root.selectedPinned ? "pin-off" : "pin"
-                text: root.selectedPinned ? "Unpin from Workspaces" : "Pin to All Workspaces"
-                enabled: root.selectedAddress() !== ""
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: root.toggleSelectedPinned()
               }
 
               Item {
