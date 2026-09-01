@@ -859,91 +859,91 @@ PanelWindow {
               }
             }
           }
-        }
 
-        BorderSurface {
-          width: parent.width
-          height: launcherDisclosureColumn.implicitHeight + Style.spacing.huge * 2
-          radius: Style.cornerRadius
-          color: Util.alpha(Color.accent, 0.025)
-          borderSpec: Border.controlSpec("normal", Color.menu.text, Color.accent)
-          activeFocusOnTab: true
+          BorderSurface {
+            width: parent.width
+            height: launcherDisclosureColumn.implicitHeight + Style.spacing.huge * 2
+            radius: Style.cornerRadius
+            color: Util.alpha(Color.accent, 0.025)
+            borderSpec: Border.controlSpec("normal", Color.menu.text, Color.accent)
+            activeFocusOnTab: true
 
-          Keys.onReturnPressed: root.advancedExpanded = !root.advancedExpanded
-          Keys.onEnterPressed: root.advancedExpanded = !root.advancedExpanded
-          Keys.onSpacePressed: root.advancedExpanded = !root.advancedExpanded
-
-          Column {
-            id: launcherDisclosureColumn
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: Style.spacing.huge
-            spacing: Style.spacing.sm
-
-            Item {
-              width: parent.width
-              height: Style.spacing.controlHeight
-
-              DockLucideIcon {
-                id: launcherIcon
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "terminal"
-                iconSize: Style.space(20)
-                tint: Color.accent
-              }
-
-              Text {
-                anchors.left: launcherIcon.right
-                anchors.leftMargin: Style.spacing.md
-                anchors.right: launcherChevron.left
-                anchors.rightMargin: Style.spacing.md
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Advanced launcher settings"
-                color: Color.menu.text
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                elide: Text.ElideRight
-              }
-
-              DockLucideIcon {
-                id: launcherChevron
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "chevron-right"
-                iconSize: Style.space(18)
-                tint: Color.menu.text
-                rotation: root.advancedExpanded ? 90 : 0
-                Behavior on rotation { NumberAnimation { duration: 120 } }
-              }
-
-              TapHandler {
-                onTapped: root.advancedExpanded = !root.advancedExpanded
-              }
-            }
+            Keys.onReturnPressed: root.advancedExpanded = !root.advancedExpanded
+            Keys.onEnterPressed: root.advancedExpanded = !root.advancedExpanded
+            Keys.onSpacePressed: root.advancedExpanded = !root.advancedExpanded
 
             Column {
-              visible: root.advancedExpanded
-              width: parent.width
-              spacing: Style.spacing.xs
+              id: launcherDisclosureColumn
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.margins: Style.spacing.huge
+              spacing: Style.spacing.sm
 
-              Text {
-                text: "Command run when Open App Launcher is selected"
-                color: Util.alpha(Color.menu.text, 0.56)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
+              Item {
+                width: parent.width
+                height: Style.spacing.controlHeight
+
+                DockLucideIcon {
+                  id: launcherIcon
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  iconName: "terminal"
+                  iconSize: Style.space(20)
+                  tint: Color.accent
+                }
+
+                Text {
+                  anchors.left: launcherIcon.right
+                  anchors.leftMargin: Style.spacing.md
+                  anchors.right: launcherChevron.left
+                  anchors.rightMargin: Style.spacing.md
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "Advanced launcher settings"
+                  color: Color.menu.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  elide: Text.ElideRight
+                }
+
+                DockLucideIcon {
+                  id: launcherChevron
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  iconName: "chevron-right"
+                  iconSize: Style.space(18)
+                  tint: Color.menu.text
+                  rotation: root.advancedExpanded ? 90 : 0
+                  Behavior on rotation { NumberAnimation { duration: 120 } }
+                }
+
+                TapHandler {
+                  onTapped: root.advancedExpanded = !root.advancedExpanded
+                }
               }
 
-              TextField {
-                id: commandInput
+              Column {
+                visible: root.advancedExpanded
                 width: parent.width
-                placeholderText: "omarchy-menu toggle apps"
-                foreground: Color.menu.text
-                onEditingFinished: root.commitControlCommand()
-                Keys.onEscapePressed: {
-                  text = root.current("controlCommand")
-                  focus = false
+                spacing: Style.spacing.xs
+
+                Text {
+                  text: "Command run when Open App Launcher is selected"
+                  color: Util.alpha(Color.menu.text, 0.56)
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                }
+
+                TextField {
+                  id: commandInput
+                  width: parent.width
+                  placeholderText: "omarchy-menu toggle apps"
+                  foreground: Color.menu.text
+                  onEditingFinished: root.commitControlCommand()
+                  Keys.onEscapePressed: {
+                    text = root.current("controlCommand")
+                    focus = false
+                  }
                 }
               }
             }
