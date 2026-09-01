@@ -739,7 +739,7 @@ TestCase {
 
     var hidden = DockModel.addHiddenApplication([], " com.google.chrome ")
     var visible = DockModel.buildVisibleItems(pinned, windows, entries,
-      [], false, hidden)
+      [], false, true, hidden)
 
     compare(JSON.stringify(pinned), JSON.stringify([
       "org.gnome.Nautilus", "com.google.Chrome", "com.mitchellh.ghostty"
@@ -749,7 +749,7 @@ TestCase {
 
     var restored = DockModel.removeHiddenApplication(hidden, "COM.GOOGLE.CHROME")
     var restoredItems = DockModel.buildVisibleItems(pinned, windows, entries,
-      [], false, restored)
+      [], false, true, restored)
     compare(JSON.stringify(restoredItems.map(function(item) {
       return item.desktopId
     })), JSON.stringify(pinned))
@@ -765,7 +765,7 @@ TestCase {
     var terminal = { appId: "org.example.Terminal", title: "Terminal" }
 
     var items = DockModel.buildVisibleItems([], [editorOne, editorTwo, terminal],
-      entries, [], false, [" ORG.EXAMPLE.EDITOR "])
+      entries, [], false, true, [" ORG.EXAMPLE.EDITOR "])
 
     compare(items.length, 1)
     compare(items[0].desktopId, "org.example.Terminal")
@@ -850,7 +850,7 @@ TestCase {
 
     var hiddenItems = DockModel.buildVisibleItems(
       pinned, [nautilusWindow, chromeWindow, ghosttyWindow, firefoxWindow],
-      entries, handles, true, [" FIREFOX "])
+      entries, handles, true, true, [" FIREFOX "])
     compare(JSON.stringify(hiddenItems.map(function(item) {
       return item.desktopId
     })), JSON.stringify([
