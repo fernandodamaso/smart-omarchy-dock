@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Implement only in `/home/admin/.config/omarchy/plugins/admin.smartdock`; never modify `/usr/share/omarchy`.
+- Implement only in `/home/admin/Projects/smart-omarchy-dock`; never modify `/usr/share/omarchy`.
 - Preserve the existing JSON schema and all current keys. Do not add a persisted key for disclosure state or visual layout state.
 - Never overwrite `/home/admin/.config/smartdock/dock.json`; edits affect bundled defaults and UI code only.
 - Preserve unknown JSON keys, `pinned`, `margin`, and stored override values when an override is disabled.
@@ -23,8 +23,8 @@
 - Use locally bundled Lucide SVGs and tint them through QML; no runtime network dependency.
 - Wide layout target: 980 px panel width, no vertical scrolling on the current desktop. Narrow layouts may scroll inside the content area while header and footer remain fixed.
 - Reset continues to restore the existing displayed defaults and must not modify unrelated keys.
-- Bump the plugin version from `1.1.1-custom.18` to `1.1.1-custom.19`.
-- The installed plugin directory is not Git-backed. Do not initialize Git there. Each task ends with a test checkpoint instead of a commit; if implementation is later moved into a Git-backed clone, use the checkpoint boundaries as commits.
+- Bump the plugin version from `2.0.0` to `2.1.0`.
+- All implementation happens in `/home/admin/Projects/smart-omarchy-dock`; the installed plugin is read-only deployment state and receives changes only through Git push followed by `omarchy plugin update`. Each task ends with a test checkpoint instead of a commit.
 
 ---
 
@@ -55,7 +55,7 @@
 - `tests/check_surface_overrides.sh` — assert default/token/custom controls and patch wiring instead of the removed “Use custom…” rows.
 - `assets/lucide/ATTRIBUTIONS.md` — list the newly bundled icons.
 - `README.md` — document the redesigned UI and progressive surface controls.
-- `CHANGELOG.md` — add the `1.1.1-custom.19` entry.
+- `CHANGELOG.md` — add the `2.1.0` entry.
 - `manifest.json` — bump the plugin version.
 
 **Leave unchanged**
@@ -69,11 +69,11 @@
 
 **Files:**
 
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockModel.js:124-182`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/tests/tst_dockmodel.qml:54-111`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockSettings.qml:24-26,125-176`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/Dock.qml:17-24,520-536`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/DockHost.qml:92-103,168-186`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/components/DockModel.js:124-182`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/tests/tst_dockmodel.qml:54-111`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/components/DockSettings.qml:24-26,125-176`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/components/Dock.qml:17-24,520-536`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/DockHost.qml:92-103,168-186`
 
 **Interfaces:**
 
@@ -121,7 +121,7 @@ function test_buildsAtomicSurfaceOverridePatches() {
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import .
 ```
 
@@ -221,7 +221,7 @@ fi
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 bash tests/check_surface_overrides.sh
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import .
 ```
@@ -234,12 +234,12 @@ Expected: both commands exit 0.
 
 **Files:**
 
-- Create: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockLucideIcon.qml`
-- Create: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockSettingsSection.qml`
-- Create: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockSettingsToggleRow.qml`
+- Create: `/home/admin/Projects/smart-omarchy-dock/components/DockLucideIcon.qml`
+- Create: `/home/admin/Projects/smart-omarchy-dock/components/DockSettingsSection.qml`
+- Create: `/home/admin/Projects/smart-omarchy-dock/components/DockSettingsToggleRow.qml`
 - Create: seven SVG files listed in File Structure
-- Create: `/home/admin/.config/omarchy/plugins/admin.smartdock/tests/check_settings_visual_system.sh`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/assets/lucide/ATTRIBUTIONS.md`
+- Create: `/home/admin/Projects/smart-omarchy-dock/tests/check_settings_visual_system.sh`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/assets/lucide/ATTRIBUTIONS.md`
 
 **Interfaces:**
 
@@ -290,7 +290,7 @@ printf 'Dock Settings visual primitives and Lucide assets are present\n'
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 bash tests/check_settings_visual_system.sh
 ```
 
@@ -301,7 +301,7 @@ Expected: failure naming the first missing component.
 Fetch the canonical source files into the existing local Lucide directory:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 for icon in sparkles palette panel-bottom mouse-pointer-click terminal rotate-ccw chevron-right; do
   curl -fsSL "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/$icon.svg" \
     -o "assets/lucide/$icon.svg"
@@ -535,7 +535,7 @@ Item {
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 bash tests/check_settings_visual_system.sh
 /usr/lib/qt6/bin/qmllint \
   -I /usr/share/omarchy/shell \
@@ -553,8 +553,8 @@ Expected: the shell check exits 0; `qmllint` exits 0 with only the repository’
 
 **Files:**
 
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockSettings.qml:28-39,287-363,919-928`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/tests/check_settings_layout.sh`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/components/DockSettings.qml:28-39,287-363,919-928`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/tests/check_settings_layout.sh`
 
 **Interfaces:**
 
@@ -585,7 +585,7 @@ grep -Eq 'property bool compactControls' "$settings_qml" \
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 bash tests/check_settings_layout.sh
 ```
 
@@ -704,7 +704,7 @@ Move all setting cards into `settingsColumn`. The footer buttons are added in Ta
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 bash tests/check_settings_layout.sh
 bash tests/check_settings_popup_focus.sh
 ```
@@ -717,8 +717,8 @@ Expected: both tests exit 0. The popup-focus test confirms the structural rewrit
 
 **Files:**
 
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockSettings.qml:365-435,720-864`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/tests/check_settings_layout.sh`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/components/DockSettings.qml:365-435,720-864`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/tests/check_settings_layout.sh`
 
 **Interfaces:**
 
@@ -1023,7 +1023,7 @@ edge for Layout without introducing fixed pixel heights.
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 bash tests/check_settings_layout.sh
 bash tests/check_reserve_space_visibility.sh
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import .
@@ -1037,9 +1037,9 @@ Expected: all commands exit 0.
 
 **Files:**
 
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockSettings.qml:43-176,428-718`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/tests/check_surface_overrides.sh`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/tests/check_color_picker.sh`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/components/DockSettings.qml:43-176,428-718`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/tests/check_surface_overrides.sh`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/tests/check_color_picker.sh`
 
 **Interfaces:**
 
@@ -1341,7 +1341,7 @@ onAccepted: root.commitColorValue(settingKey, selectedColor)
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 bash tests/check_surface_overrides.sh
 bash tests/check_color_picker.sh
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import .
@@ -1355,8 +1355,8 @@ Expected: all commands exit 0.
 
 **Files:**
 
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockSettings.qml:178-193,866-928`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/tests/check_settings_layout.sh`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/components/DockSettings.qml:178-193,866-928`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/tests/check_settings_layout.sh`
 
 **Interfaces:**
 
@@ -1550,7 +1550,7 @@ BorderSurface {
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 bash tests/check_settings_layout.sh
 bash tests/check_settings_popup_focus.sh
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import .
@@ -1564,15 +1564,15 @@ Expected: all commands exit 0.
 
 **Files:**
 
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/components/DockSettings.qml`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/README.md:141-161`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/CHANGELOG.md:1-38`
-- Modify: `/home/admin/.config/omarchy/plugins/admin.smartdock/manifest.json:5`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/components/DockSettings.qml`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/README.md:141-161`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/CHANGELOG.md:1-38`
+- Modify: `/home/admin/Projects/smart-omarchy-dock/manifest.json:5`
 
 **Interfaces:**
 
 - Consumes: all components and signals from Tasks 1-6.
-- Produces: release `1.1.1-custom.19` with documented wide/narrow layouts and verified runtime behavior.
+- Produces: release `2.1.0` with documented wide/narrow layouts and verified runtime behavior.
 
 - [ ] **Step 1: Complete responsive width and height bindings**
 
@@ -1634,10 +1634,10 @@ stacks and the middle content area scrolls while the header and footer remain
 visible.
 ```
 
-Add a `1.1.1-custom.19 - 2026-09-01` entry at the top of `CHANGELOG.md`:
+Add a `2.1.0 - 2026-09-01` entry at the top of `CHANGELOG.md`:
 
 ```markdown
-## 1.1.1-custom.19 - 2026-09-01
+## 2.1.0 - 2026-09-01
 
 ### Changed
 
@@ -1653,7 +1653,7 @@ Add a `1.1.1-custom.19 - 2026-09-01` entry at the top of `CHANGELOG.md`:
 Set `manifest.json` version to:
 
 ```json
-"version": "1.1.1-custom.19"
+"version": "2.1.0"
 ```
 
 - [ ] **Step 4: Run the full automated suite**
@@ -1661,7 +1661,7 @@ Set `manifest.json` version to:
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import .
 for test in tests/*.sh; do bash "$test"; done
 bash -n install.sh uninstall.sh scripts/smartdock scripts/run
@@ -1685,7 +1685,7 @@ Expected:
 Run:
 
 ```bash
-cd /home/admin/.config/omarchy/plugins/admin.smartdock
+cd /home/admin/Projects/smart-omarchy-dock
 set +e
 timeout 8s ./scripts/run --no-color > /tmp/smartdock-settings-redesign.log 2>&1
 smoke_status=$?
