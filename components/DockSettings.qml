@@ -803,6 +803,14 @@ PanelWindow {
 
               DockSettingsToggleRow {
                 width: parent.width
+                label: "Group windows"
+                description: "Show one icon per app; turn off for a separate icon per window"
+                checked: root.current("groupWindows")
+                onToggled: root.commit("groupWindows", !checked)
+              }
+
+              DockSettingsToggleRow {
+                width: parent.width
                 label: "Auto-hide"
                 checked: root.current("autoHide")
                 onToggled: root.commit("autoHide", !checked)

@@ -190,6 +190,7 @@ override is disabled.
   "clickAction": "focus-or-launch",
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
+  "groupWindows": true,
   "pinned": [
     "org.gnome.Nautilus",
     "com.mitchellh.ghostty",
@@ -223,6 +224,7 @@ override is disabled.
 | `clickAction` | `focus-or-launch` focuses an existing window; `launch` always starts a new instance |
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
+| `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
 The first dock icon is always the dock controls icon and is not part of

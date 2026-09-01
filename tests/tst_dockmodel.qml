@@ -564,6 +564,29 @@ TestCase {
     compare(DockModel.nextToplevelIndex(0, 0), -1)
   }
 
+  function test_splitsUngroupedWindowsIntoSeparateDockItems() {
+    var pinned = ["com.google.Chrome"]
+    var entries = [
+      { id: "com.google.Chrome", startupClass: "google-chrome" },
+      { id: "org.wezfurlong.wezterm", startupClass: "org.wezfurlong.wezterm" }
+    ]
+    var chromeOne = { appId: "google-chrome", title: "Inbox" }
+    var chromeTwo = { appId: "google-chrome", title: "Docs" }
+    var terminal = { appId: "org.wezfurlong.wezterm", title: "Shell" }
+
+    var items = DockModel.buildVisibleItems(
+      pinned, [chromeOne, chromeTwo, terminal], entries, [], false, false)
+
+    compare(items.length, 3)
+    compare(items[0].desktopId, "com.google.Chrome")
+    compare(items[0].pinned, true)
+    compare(items[0].toplevels[0], chromeOne)
+    compare(items[1].toplevels[0], chromeTwo)
+    compare(items[2].toplevels[0], terminal)
+    compare(items[1].toplevels.length, 1)
+    compare(items[2].toplevels.length, 1)
+  }
+
   function test_keepsPinnedOrderAndAppendsGroupedRunningApps() {
     var pinned = ["org.gnome.Nautilus", "com.google.Chrome"]
     var entries = [

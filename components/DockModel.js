@@ -32,7 +32,8 @@ function settingsDefaults() {
     autoHide: false,
     clickAction: "focus-or-launch",
     controlCommand: "omarchy-menu toggle apps",
-    sortByWorkspace: false
+    sortByWorkspace: false,
+    groupWindows: true
   }
 }
 
@@ -181,6 +182,7 @@ function normalizeSetting(key, value) {
   case "reserveSpace":
   case "autoHide":
   case "sortByWorkspace":
+  case "groupWindows":
     return typeof value === "boolean" ? value : defaults[key]
   case "clickAction":
     return ["focus-or-launch", "launch"].indexOf(value) >= 0
@@ -740,10 +742,12 @@ function itemWorkspaceId(item, handles) {
   return ids[0]
 }
 
-function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspace) {
+function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspace,
+                           groupWindows) {
   var items = []
   var runningByKey = {}
   var nextOriginalIndex = 0
+  var mergeWindows = groupWindows !== false
 
   for (var i = 0; i < pinnedIds.length; ++i) {
     var pinnedId = pinnedIds[i]
@@ -760,23 +764,49 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
     var toplevel = toplevels[topIndex]
     var matchedPinned = false
 
-    for (var pinnedIndex = 0; pinnedIndex < items.length; ++pinnedIndex) {
-      var item = items[pinnedIndex]
-      var pinnedEntry = entryForDesktopId(item.desktopId, entries)
-      if (!entryMatchesAppId(item.desktopId, pinnedEntry, toplevel.appId))
-        continue
+    if (mergeWindows) {
+      for (var pinnedIndex = 0; pinnedIndex < items.length; ++pinnedIndex) {
+        var item = items[pinnedIndex]
+        var pinnedEntry = entryForDesktopId(item.desktopId, entries)
+        if (!entryMatchesAppId(item.desktopId, pinnedEntry, toplevel.appId))
+          continue
 
-      item.toplevels.push(toplevel)
-      matchedPinned = true
-      break
+        item.toplevels.push(toplevel)
+        matchedPinned = true
+        break
+      }
+
+      if (matchedPinned) continue
     }
-
-    if (matchedPinned) continue
 
     var runningEntry = entryForAppId(toplevel.appId, entries)
     var desktopId = runningEntry && runningEntry.id
       ? runningEntry.id
       : String(toplevel.appId || "unknown-application")
+
+    if (!mergeWindows) {
+      var attachedPinned = false
+      for (var pinIndex = 0; pinIndex < items.length; ++pinIndex) {
+        var pinnedItem = items[pinIndex]
+        if (pinnedItem.toplevels.length > 0) continue
+        var pinnedEntry = entryForDesktopId(pinnedItem.desktopId, entries)
+        if (!entryMatchesAppId(pinnedItem.desktopId, pinnedEntry, toplevel.appId))
+          continue
+        pinnedItem.toplevels.push(toplevel)
+        attachedPinned = true
+        break
+      }
+      if (attachedPinned) continue
+
+      items.push({
+        desktopId: desktopId,
+        pinned: false,
+        toplevels: [toplevel],
+        originalIndex: nextOriginalIndex++
+      })
+      continue
+    }
+
     var key = normalizedId(desktopId)
     var runningItem = runningByKey[key]
     if (!runningItem) {
