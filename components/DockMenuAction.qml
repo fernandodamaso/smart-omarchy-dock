@@ -13,6 +13,7 @@ BorderSurface {
   property real iconSize: Style.font.icon
   property bool keyboardActive: false
   property bool isDockMenuAction: true
+  property bool autoTriggerOnHover: false
   signal triggered()
 
   readonly property bool hasIcon: root.iconName !== "" || root.iconText !== ""
@@ -96,6 +97,11 @@ BorderSurface {
     id: hover
     enabled: root.enabled
     cursorShape: Qt.PointingHandCursor
+
+    onHoveredChanged: {
+      if (hovered && root.autoTriggerOnHover && root.enabled)
+        root.triggered()
+    }
   }
 
   TapHandler {

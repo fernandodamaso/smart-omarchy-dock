@@ -411,6 +411,7 @@ PopupWindow {
                 + (String(modelData && modelData.title || "").trim()
                   || "Window " + (index + 1))
               keyboardActive: !!root && itemIndex === root.activeMenuIndex
+              autoTriggerOnHover: true
               onTriggered: if (root) root.selectWindow(modelData)
             }
           }
