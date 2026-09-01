@@ -608,20 +608,6 @@ PopupWindow {
               width: parent.width / 2
               visible: root.selectedToplevel !== null
 
-              Text {
-                width: parent.width - 24
-                height: 32
-                leftPadding: 12
-                rightPadding: 12
-                verticalAlignment: Text.AlignVCenter
-                text: root.selectedTitle()
-                color: Color.menu.text
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                font.bold: true
-                elide: Text.ElideRight
-              }
-
               DockMenuAction {
                 iconName: "focus"
                 text: "Focus"

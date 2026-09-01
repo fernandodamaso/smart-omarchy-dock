@@ -495,7 +495,7 @@ function windowStatusLabel(state) {
   if (!workspace) return ""
   if (workspace.indexOf("name:") === 0)
     workspace = workspace.slice(5)
-  return "[workspace " + workspace + "]"
+  return "[" + workspace + "]"
 }
 
 function floatWindowRequest(address, action, usingLua) {

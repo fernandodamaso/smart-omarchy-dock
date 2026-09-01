@@ -323,10 +323,10 @@ TestCase {
       "[minimized]")
     compare(
       DockModel.windowStatusLabel({ minimized: false, workspace: "3" }),
-      "[workspace 3]")
+      "[3]")
     compare(
       DockModel.windowStatusLabel({ minimized: false, workspace: "name:writing" }),
-      "[workspace writing]")
+      "[writing]")
     compare(DockModel.windowStatusLabel({ minimized: false }), "")
   }
 
