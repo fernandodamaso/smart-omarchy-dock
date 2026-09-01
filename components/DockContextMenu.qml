@@ -31,7 +31,6 @@ PopupWindow {
   readonly property var selectedInfo: selectedHandle
     ? selectedHandle.lastIpcObject || ({})
     : ({})
-  readonly property bool selectedFloating: selectedInfo.floating === true
   readonly property bool selectedMinimized: isToplevelMinimized(selectedToplevel)
   readonly property bool selectedFakeFullscreen:
     DockModel.isFakeFullscreen(selectedInfo)
@@ -189,12 +188,6 @@ PopupWindow {
     clearMinimizedOrigin(selectedAddress())
     dispatchRequest(DockModel.moveWindowRequest(
       selectedAddress(), workspace, Hyprland.usingLua))
-    dismiss()
-  }
-
-  function toggleSelectedFloating() {
-    dispatchRequest(DockModel.floatWindowRequest(
-      selectedAddress(), "toggle", Hyprland.usingLua))
     dismiss()
   }
 
@@ -665,21 +658,6 @@ PopupWindow {
                     root.minimizeToplevel(root.selectedToplevel)
                   root.dismiss()
                 }
-              }
-
-              DockMenuAction {
-                iconName: root.selectedFloating ? "square" : "move"
-                text: root.selectedFloating ? "Tile Window" : "Float Window"
-                enabled: root.selectedAddress() !== ""
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: root.toggleSelectedFloating()
               }
 
               Item {
