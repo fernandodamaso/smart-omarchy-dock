@@ -119,6 +119,21 @@ TestCase {
       removed, "missing")), JSON.stringify(removed))
   }
 
+  function test_buildsHiddenApplicationSettingsRowsWithFallbacks() {
+    var rows = DockModel.hiddenApplicationRows([
+      " org.mozilla.Firefox ", "org.example.Missing", "ORG.MOZILLA.FIREFOX"
+    ], [
+      { id: "org.mozilla.Firefox.desktop", name: "Firefox", icon: "firefox" }
+    ])
+
+    compare(JSON.stringify(rows), JSON.stringify([
+      { id: "org.mozilla.Firefox", name: "Firefox", icon: "firefox" },
+      { id: "org.example.Missing", name: "org.example.Missing",
+        icon: "application-x-executable" }
+    ]))
+    compare(JSON.stringify(DockModel.hiddenApplicationRows([], [])), "[]")
+  }
+
   function test_persistsHiddenApplicationInSettingsPatch() {
     var settings = {
       pinned: ["org.gnome.Nautilus", "com.google.Chrome"],

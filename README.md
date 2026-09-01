@@ -24,6 +24,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Per-window right-click management for workspace moves, fullscreen-with-bars,
   Hyprland-style minimize/restore, floating, workspace pinning, focus, and close
 - Drag-to-reorder with persistent pinned-app order
+- Context-menu hiding with persistent restoration controls in Dock Settings
 - Right-click actions to launch, close, pin, or unpin applications
 - Fuzzy application search for adding dock items
 - Configurable dock background transparency
@@ -191,6 +192,7 @@ override is disabled.
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
+  "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",
     "com.mitchellh.ghostty",
@@ -225,6 +227,7 @@ override is disabled.
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
+| `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
 The first dock icon is always the dock controls icon and is not part of
@@ -252,6 +255,17 @@ find /usr/share/applications ~/.local/share/applications \
   -type f -name '*.desktop' 2>/dev/null \
   | sed 's#.*/##; s/\.desktop$//' | sort -u
 ```
+
+Right-click any application in the dock and choose **Hide from Dock** to hide
+the whole application while leaving its windows running and its pinned
+membership unchanged. The canonical desktop-entry ID is stored in
+`hiddenApplications`, so the choice persists across restarts and live config
+reloads. Open **Dock Settings** to review hidden applications: each row's
+**Show** action restores that application, and **Show All** clears the list.
+Restoring an application returns it to its existing pinned position; it does
+not pin or unpin anything. **Reset to defaults** resets the general dock
+settings but intentionally preserves `hiddenApplications`; use **Show All** or
+set the option to `[]` when you also want to reset hidden applications.
 
 The configuration file is watched and updates automatically. Drag a dock icon to another slot to reorder it; the new `pinned` order is written back to this file. Reserved space follows visibility: while auto-hide is off, the `reserveSpace` option decides whether tiled windows keep a clear dock-sized area; while auto-hide is on, the hidden dock never reserves space.
 

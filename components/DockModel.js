@@ -54,6 +54,26 @@ function removeHiddenApplication(ids, desktopId) {
   return remaining
 }
 
+function hiddenApplicationRows(ids, entries) {
+  var normalized = normalizeApplicationIds(ids)
+  var availableEntries = Array.isArray(entries) ? entries : []
+  var rows = []
+
+  for (var i = 0; i < normalized.length; ++i) {
+    var id = normalized[i]
+    var entry = entryForDesktopId(id, availableEntries)
+    var name = entry && String(entry.name || "").trim()
+    var icon = entry && String(entry.icon || "").trim()
+    rows.push({
+      id: id,
+      name: name || id,
+      icon: icon || "application-x-executable"
+    })
+  }
+
+  return rows
+}
+
 function controlCommand(settings) {
   var configured = settings && settings.controlCommand
   var command = String(configured === undefined || configured === null

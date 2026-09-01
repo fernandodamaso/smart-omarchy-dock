@@ -95,6 +95,9 @@ PanelWindow {
     { value: "@notifications.border", label: "Omarchy · Notification border", color: Color.notifications.border },
     { value: "@notifications.countdown", label: "Omarchy · Notification countdown", color: Color.notifications.countdown }
   ]
+  readonly property var applicationEntries: DesktopEntries.applications.values || []
+  readonly property var hiddenApplicationRows: DockModel.hiddenApplicationRows(
+    current("hiddenApplications"), applicationEntries)
   readonly property point panelOrigin: DockModel.centeredPopupAnchor(
     position,
     panelScreenWidth,
@@ -864,6 +867,59 @@ PanelWindow {
                   background: Color.menu.background
                   onChanged: value => root.commit("clickAction", value)
                 }
+              }
+            }
+          }
+
+          DockSettingsSection {
+            id: hiddenApplicationsSection
+            width: parent.width
+            title: "Hidden Applications"
+            description: "Applications hidden from the dock remain running"
+            iconName: "eye-off"
+
+            headerAccessory: Button {
+              visible: root.hiddenApplicationRows.length > 0
+              text: "Show All"
+              focusable: true
+              bordered: true
+              foreground: Color.menu.text
+              background: "transparent"
+              accent: Color.accent
+              onClicked: root.commitPatch({ hiddenApplications: [] })
+            }
+
+            Text {
+              width: parent.width
+              visible: root.hiddenApplicationRows.length === 0
+              text: "No hidden applications"
+              color: Util.alpha(Color.menu.text, 0.52)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+            }
+
+            ListView {
+              id: hiddenApplicationsList
+
+              width: parent.width
+              height: visible ? count * (Style.space(56) + spacing) - spacing : 0
+              visible: count > 0
+              model: root.hiddenApplicationRows
+              interactive: false
+              spacing: Style.spacing.xs
+              clip: false
+
+              delegate: DockHiddenApplicationRow {
+                required property var modelData
+
+                width: hiddenApplicationsList.width
+                desktopId: modelData.id
+                applicationName: modelData.name
+                applicationIcon: modelData.icon
+                onShowRequested: root.commitPatch({
+                  hiddenApplications: DockModel.removeHiddenApplication(
+                    root.current("hiddenApplications"), desktopId)
+                })
               }
             }
           }
