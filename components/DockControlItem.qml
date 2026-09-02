@@ -11,6 +11,7 @@ Item {
   id: root
 
   required property string controlCommand
+  required property var windowActions
   required property int slotSize
   required property int iconSize
   required property real magnification
@@ -150,6 +151,7 @@ Item {
     autoHide: root.autoHide
     pinnedItem: false
     runningToplevels: []
+    windowActions: root.windowActions
     controlItem: true
     onVisibleChanged: root.contextMenuVisibilityChanged(visible)
     onOpenLauncher: {

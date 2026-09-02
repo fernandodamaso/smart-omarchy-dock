@@ -12,6 +12,7 @@ Item {
   required property string desktopId
   required property bool pinnedItem
   required property var runningToplevels
+  required property var windowActions
   required property var hyprToplevels
   required property bool fullscreenModeActive
   required property bool fullscreenEmphasized
@@ -81,7 +82,8 @@ Item {
     if (clickAction === "focus-or-launch" && runningCount > 0) {
       lastActivatedToplevel = DockModel.nextToplevelIndex(
         lastActivatedToplevel, runningCount)
-      contextMenu.activateToplevel(runningToplevels[lastActivatedToplevel])
+      root.windowActions.activateToplevel(
+        runningToplevels[lastActivatedToplevel])
       return
     }
     launch()
@@ -89,7 +91,7 @@ Item {
 
   function closeRunning() {
     if (runningToplevel)
-      runningToplevel.close()
+      root.windowActions.closeToplevel(runningToplevel)
   }
 
   onRunningToplevelsChanged: lastActivatedToplevel = -1
@@ -319,6 +321,7 @@ Item {
     autoHide: root.autoHide
     pinnedItem: root.pinnedItem
     runningToplevels: root.runningToplevels
+    windowActions: root.windowActions
     onVisibleChanged: root.contextMenuVisibilityChanged(visible)
     onOpenNewWindow: root.launch()
     onAddApplication: root.addApplicationRequested()
