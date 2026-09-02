@@ -14,7 +14,12 @@ Item {
   required property var runningToplevels
   required property var windowActions
   required property var hyprToplevels
+  required property var badgeTracker
   required property string attentionBadge
+  required property bool attentionBadgesEnabled
+  required property bool urgentWindowAnimationEnabled
+  required property bool primaryBadgeOwner
+  required property bool dockShown
   required property bool fullscreenModeActive
   required property bool fullscreenEmphasized
   required property int itemIndex
@@ -30,6 +35,7 @@ Item {
   required property bool autoHide
   required property string position
   required property bool vertical
+  property bool previewInteractionActive: false
   property real reorderOffset: 0
   property int lastActivatedToplevel: -1
   signal dragStarted(int itemIndex)
@@ -71,6 +77,15 @@ Item {
       fullscreenModeActive, fullscreenEmphasized, mouse.hovered)
   readonly property real iconScale: fullscreenPresentation.scale
     * (1 + (magnification - 1) * influence)
+  readonly property var urgentBadgeState: badgeTracker
+    ? badgeTracker.urgentStateFor(desktopId, primaryBadgeOwner)
+    : ({ windowUrgent: false, primaryOwner: primaryBadgeOwner,
+         windowUrgentRevision: 0 })
+  readonly property bool windowUrgent: urgentBadgeState.windowUrgent === true
+  readonly property int windowUrgentRevision:
+    Number(urgentBadgeState.windowUrgentRevision || 0)
+  readonly property bool urgentMotionSuppressed: mouse.hovered
+    || dragHandler.active || contextMenu.visible || previewInteractionActive
 
   function launch() {
     if (entry)
@@ -95,7 +110,47 @@ Item {
       root.windowActions.closeToplevel(runningToplevel)
   }
 
+  function primeUrgentMotion() {
+    if (!badgeTracker || !primaryBadgeOwner) return
+    badgeTracker.ensureUrgentState(desktopId)
+    var state = badgeTracker.urgentStateFor(desktopId, true)
+    badgeTracker.primeUrgentMotion(
+      desktopId, Number(state.windowUrgentRevision || 0))
+  }
+
+  function requestUrgentMotion() {
+    if (!badgeTracker || !primaryBadgeOwner) return
+    if (urgentMotionSuppressed) attentionMotion.stop()
+    var play = badgeTracker.requestUrgentMotion(desktopId, {
+      revision: windowUrgentRevision,
+      windowUrgent: windowUrgent,
+      primaryOwner: true,
+      badgesEnabled: attentionBadgesEnabled,
+      animationEnabled: urgentWindowAnimationEnabled,
+      dockShown: dockShown,
+      interactionActive: urgentMotionSuppressed,
+      now: Date.now()
+    })
+    if (play && !urgentMotionSuppressed) attentionMotion.play()
+  }
+
+  Component.onCompleted: primeUrgentMotion()
   onRunningToplevelsChanged: lastActivatedToplevel = -1
+  onWindowUrgentRevisionChanged: requestUrgentMotion()
+  onWindowUrgentChanged: requestUrgentMotion()
+  onDockShownChanged: requestUrgentMotion()
+  onUrgentMotionSuppressedChanged: {
+    if (urgentMotionSuppressed) attentionMotion.stop()
+    requestUrgentMotion()
+  }
+  onUrgentWindowAnimationEnabledChanged: {
+    if (!urgentWindowAnimationEnabled) attentionMotion.stop()
+    requestUrgentMotion()
+  }
+  onAttentionBadgesEnabledChanged: {
+    if (!attentionBadgesEnabled) attentionMotion.stop()
+    requestUrgentMotion()
+  }
 
   width: vertical ? slotSize + 6 : slotSize
   height: vertical ? slotSize : slotSize + 6
@@ -107,6 +162,11 @@ Item {
 
   Behavior on reorderOffset {
     NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+  }
+
+  DockAttentionMotion {
+    id: attentionMotion
+    position: root.position
   }
 
   Item {
@@ -132,35 +192,133 @@ Item {
       NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
     }
 
-    RectangularShadow {
-      id: hoverGlow
+    Item {
+      id: motionContent
 
       anchors.fill: parent
-      radius: Math.min(width, height) * 0.34
-      blur: Math.max(8, root.iconSize * root.hoverGlowRadius / 100)
-      spread: Math.max(1, root.iconSize * 0.06)
-      offset: Qt.vector2d(0, 0)
-      color: Color.accent
-      opacity: root.hoverGlowEnabled && mouse.hovered
-        ? root.hoverGlowOpacity : 0
-      z: -1
+      transform: Translate {
+        x: attentionMotion.xOffset
+        y: attentionMotion.yOffset
+      }
 
-      Behavior on opacity {
-        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+      RectangularShadow {
+        id: hoverGlow
+
+        anchors.fill: parent
+        radius: Math.min(width, height) * 0.34
+        blur: Math.max(8, root.iconSize * root.hoverGlowRadius / 100)
+        spread: Math.max(1, root.iconSize * 0.06)
+        offset: Qt.vector2d(0, 0)
+        color: Color.accent
+        opacity: root.hoverGlowEnabled && mouse.hovered
+          ? root.hoverGlowOpacity : 0
+        z: -1
+
+        Behavior on opacity {
+          NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+        }
+      }
+
+      IconImage {
+        anchors.fill: parent
+        opacity: root.allWindowsMinimized ? 0.56 : 1.0
+        source: root.entry && root.entry.icon
+          ? Quickshell.iconPath(root.entry.icon, true)
+          : Quickshell.iconPath("application-x-executable", true)
+        asynchronous: true
+
+        Behavior on opacity { NumberAnimation { duration: 140 } }
+      }
+
+      Rectangle {
+        id: windowCountBadge
+
+        visible: root.runningCount > 1
+        width: Math.max(16, windowCountText.implicitWidth + 8)
+        height: 16
+        radius: Math.min(height / 2, Style.cornerRadius)
+        x: iconContainer.width - width + 5
+        y: -5
+        color: Color.urgent
+        border.width: Style.normalBorderWidth
+        border.color: Color.background
+        z: 3
+
+        Text {
+          id: windowCountText
+
+          anchors.centerIn: parent
+          text: root.runningCount > 99 ? "99+" : String(root.runningCount)
+          color: Color.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+        }
+      }
+
+      DockApplicationBadge {
+        severity: root.attentionBadge
+        x: iconContainer.width - width + 3
+        y: root.runningCount > 1 ? 13 : -3
+      }
+
+      Rectangle {
+        id: minimizedCountBadge
+
+        visible: root.minimizedCount > 0
+        width: Math.max(22, minimizedCountText.implicitWidth + 8)
+        height: 16
+        radius: Math.min(height / 2, Style.cornerRadius)
+        x: -5
+        y: -5
+        color: Color.muted
+        border.width: Style.normalBorderWidth
+        border.color: Color.background
+        z: 3
+
+        Text {
+          id: minimizedCountText
+
+          anchors.centerIn: parent
+          text: "m" + (root.minimizedCount > 99 ? "99+" : String(root.minimizedCount))
+          color: Color.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
+      }
+
+      Rectangle {
+        id: workspaceBadge
+
+        visible: root.workspaceBadge !== ""
+        width: Math.max(16, workspaceBadgeText.implicitWidth + 8)
+        height: 16
+        radius: Math.min(height / 2, Style.cornerRadius)
+        x: -5
+        y: iconContainer.height - height + 5
+        // Workspace badges need to remain legible over arbitrary application
+        // icons. Use the theme's opaque accent role instead of the menu
+        // selected-background tint, which is intentionally very subtle.
+        color: Color.accent
+        border.width: 0
+        z: 3
+
+        Text {
+          id: workspaceBadgeText
+
+          anchors.centerIn: parent
+          text: root.workspaceBadge
+          color: "#ffffff"
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
       }
     }
 
-    IconImage {
-      anchors.fill: parent
-      opacity: root.allWindowsMinimized ? 0.56 : 1.0
-      source: root.entry && root.entry.icon
-        ? Quickshell.iconPath(root.entry.icon, true)
-        : Quickshell.iconPath("application-x-executable", true)
-      asynchronous: true
-
-      Behavior on opacity { NumberAnimation { duration: 140 } }
-    }
-
+    // Keep the persistent running/focus indicator anchored to the dock slot;
+    // only the application artwork/badges receive the transient nudge offset.
     Rectangle {
       width: 4
       height: 4
@@ -176,92 +334,6 @@ Item {
           ? iconContainer.height + 2
           : (iconContainer.height - height) / 2
       color: root.visibleWindowCount > 0 ? Color.foreground : "transparent"
-    }
-
-    Rectangle {
-      id: windowCountBadge
-
-      visible: root.runningCount > 1
-      width: Math.max(16, windowCountText.implicitWidth + 8)
-      height: 16
-      radius: Math.min(height / 2, Style.cornerRadius)
-      x: iconContainer.width - width + 5
-      y: -5
-      color: Color.urgent
-      border.width: Style.normalBorderWidth
-      border.color: Color.background
-      z: 3
-
-      Text {
-        id: windowCountText
-
-        anchors.centerIn: parent
-        text: root.runningCount > 99 ? "99+" : String(root.runningCount)
-        color: Color.foreground
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
-      }
-    }
-
-    DockApplicationBadge {
-      severity: root.attentionBadge
-      x: iconContainer.width - width + 3
-      y: root.runningCount > 1 ? 13 : -3
-    }
-
-    Rectangle {
-      id: minimizedCountBadge
-
-      visible: root.minimizedCount > 0
-      width: Math.max(22, minimizedCountText.implicitWidth + 8)
-      height: 16
-      radius: Math.min(height / 2, Style.cornerRadius)
-      x: -5
-      y: -5
-      color: Color.muted
-      border.width: Style.normalBorderWidth
-      border.color: Color.background
-      z: 3
-
-      Text {
-        id: minimizedCountText
-
-        anchors.centerIn: parent
-        text: "m" + (root.minimizedCount > 99 ? "99+" : String(root.minimizedCount))
-        color: Color.foreground
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        font.bold: true
-      }
-    }
-
-    Rectangle {
-      id: workspaceBadge
-
-      visible: root.workspaceBadge !== ""
-      width: Math.max(16, workspaceBadgeText.implicitWidth + 8)
-      height: 16
-      radius: Math.min(height / 2, Style.cornerRadius)
-      x: -5
-      y: iconContainer.height - height + 5
-      // Workspace badges need to remain legible over arbitrary application
-      // icons. Use the theme's opaque accent role instead of the menu
-      // selected-background tint, which is intentionally very subtle.
-      color: Color.accent
-      border.width: 0
-      z: 3
-
-      Text {
-        id: workspaceBadgeText
-
-        anchors.centerIn: parent
-        text: root.workspaceBadge
-        color: "#ffffff"
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-        font.bold: true
-      }
     }
   }
 
