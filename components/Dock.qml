@@ -127,8 +127,12 @@ PanelWindow {
   readonly property bool reserveSpace: DockModel.shouldReserveSpace(
     DockModel.normalizeSetting("reserveSpace", effectiveSetting("reserveSpace")),
     autoHide)
-  readonly property string clickAction: DockModel.normalizeSetting(
-    "clickAction", effectiveSetting("clickAction"))
+  readonly property var applicationActions: DockModel.normalizeApplicationActionConfig({
+    clickAction: effectiveSetting("clickAction"),
+    middleClickAction: effectiveSetting("middleClickAction"),
+    shiftClickAction: effectiveSetting("shiftClickAction"),
+    scrollAction: effectiveSetting("scrollAction")
+  })
   readonly property string controlCommand: DockModel.normalizeSetting(
     "controlCommand", effectiveSetting("controlCommand"))
   readonly property string position: DockModel.normalizeSetting(
@@ -496,7 +500,7 @@ PanelWindow {
             hoverGlowRadius: root.hoverGlowRadius
             pointerPosition: root.pointerPosition
               - (root.vertical ? appGrid.y : appGrid.x)
-            clickAction: root.clickAction
+            applicationActions: root.applicationActions
             autoHide: root.autoHide
             position: root.position
             vertical: root.vertical
@@ -551,8 +555,7 @@ PanelWindow {
         onOpenRequested: root.openTrashRequested()
         onEmptyRequested: root.emptyTrashRequested()
         onContextMenuVisibilityChanged: visible => {
-          root.openMenuCount = Math.max(0,
-            root.openMenuCount + (visible ? 1 : -1))
+          root.openMenuCount = Math.max(0, root.openMenuCount + (visible ? 1 : -1))
         }
       }
 
