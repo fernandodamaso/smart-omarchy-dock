@@ -112,6 +112,102 @@ function controlCommand(settings) {
   return command || "omarchy-menu toggle apps"
 }
 
+function applicationActionValues() {
+  return [
+    "none",
+    "focus",
+    "cycle-windows",
+    "minimize-restore",
+    "launch",
+    "previews",
+    "close",
+    "focus-or-launch"
+  ]
+}
+
+function applicationActionOptions() {
+  return [
+    { value: "none", label: "No action" },
+    { value: "focus", label: "Focus" },
+    { value: "cycle-windows", label: "Cycle windows" },
+    { value: "minimize-restore", label: "Minimize / restore" },
+    { value: "launch", label: "Launch" },
+    { value: "previews", label: "Show previews" },
+    { value: "close", label: "Close" },
+    { value: "focus-or-launch", label: "Focus or launch" }
+  ]
+}
+
+function normalizeApplicationActionConfig(settings) {
+  var source = settings || ({})
+  return {
+    clickAction: normalizeSetting("clickAction", source.clickAction),
+    middleClickAction: normalizeSetting(
+      "middleClickAction", source.middleClickAction),
+    shiftClickAction: normalizeSetting("shiftClickAction", source.shiftClickAction),
+    scrollAction: normalizeSetting("scrollAction", source.scrollAction)
+  }
+}
+
+function resolveApplicationPointerAction(config, input, modifiers) {
+  var actionConfig = normalizeApplicationActionConfig(config)
+  var kind = String(input || "")
+  var keys = modifiers || ({})
+  var shift = keys.shift === true
+  var control = keys.control === true
+  var alt = keys.alt === true
+  var meta = keys.meta === true
+
+  if (kind === "right") return "context-menu"
+  if (control || alt || meta) return "none"
+
+  if (kind === "left")
+    return shift ? actionConfig.shiftClickAction : actionConfig.clickAction
+  if (kind === "middle")
+    return shift ? "none" : actionConfig.middleClickAction
+  if (kind === "scroll")
+    return shift ? "none" : actionConfig.scrollAction
+  return "none"
+}
+
+function applicationActionCanRun(action, runningCount) {
+  var value = String(action === undefined || action === null ? "" : action).trim()
+  if (applicationActionValues().indexOf(value) < 0 || value === "none")
+    return false
+  if (value === "launch" || value === "focus-or-launch") return true
+  return Number(runningCount) > 0
+}
+
+function minimizeRestoreMode(states) {
+  var counts = windowStateCounts(states || [])
+  if (counts.total === 0) return "none"
+  return counts.visible > 0 ? "minimize" : "restore"
+}
+
+function accumulateWheelSteps(remainder, horizontalDelta, verticalDelta) {
+  // Horizontal delta is intentionally ignored. Keep vertical delta direction as
+  // delivered by Qt so compositor/OS natural-scroll configuration is preserved.
+  var carried = Number(remainder)
+  var vertical = Number(verticalDelta)
+  if (!isFinite(carried)) carried = 0
+  if (!isFinite(vertical)) vertical = 0
+
+  var total = carried + vertical
+  var steps = total < 0
+    ? Math.ceil(total / 120)
+    : Math.floor(total / 120)
+  return {
+    steps: steps,
+    remainder: total - steps * 120
+  }
+}
+
+function wheelStepDirection(steps) {
+  var value = Number(steps)
+  if (!isFinite(value) || value === 0) return 0
+  return value > 0 ? 1 : -1
+}
+
 function settingsDefaults() {
   return {
     iconSize: 42,
@@ -132,6 +228,9 @@ function settingsDefaults() {
     reserveSpace: true,
     autoHide: false,
     clickAction: "focus-or-launch",
+    middleClickAction: "none",
+    shiftClickAction: "none",
+    scrollAction: "none",
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
     groupWindows: true
@@ -286,8 +385,12 @@ function normalizeSetting(key, value) {
   case "groupWindows":
     return typeof value === "boolean" ? value : defaults[key]
   case "clickAction":
-    return ["focus-or-launch", "launch"].indexOf(value) >= 0
-      ? value : defaults.clickAction
+  case "middleClickAction":
+  case "shiftClickAction":
+  case "scrollAction": {
+    var action = String(value === undefined || value === null ? "" : value).trim()
+    return applicationActionValues().indexOf(action) >= 0 ? action : defaults[key]
+  }
   case "controlCommand":
     return controlCommand({ controlCommand: value })
   case "hiddenApplications":
