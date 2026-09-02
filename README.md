@@ -14,6 +14,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Focuses an existing application on another workspace
 - Running-application indicators
 - Dot-first application attention badges from live SNI/Hyprland state and available Omarchy notifications
+- One-shot reduced-motion urgent-window nudge driven only by newly urgent Hyprland window addresses
 - Optional authoritative application-provided launcher badge counts with dot fallback
 - First-position sliders control for the app launcher, Dock Settings, adding
   applications, and auto-hide
@@ -179,12 +180,13 @@ are saved when released; switches and choices save immediately.
 Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
 effects sit side by side, Dock surface exposes Theme default, Omarchy token,
 and custom hex modes without leaving disabled inputs visible, and Layout and
-Behavior share a compact row. Advanced launcher settings expand on demand;
-Reset and Close remain fixed at the bottom. On narrow screens the card grid
-stacks and the middle content area scrolls while the header and footer remain
-visible. The centered panel leaves the dock's edge strip interactive, so moving
-over dock icons continues to preview magnification and hover glow while you
-adjust settings.
+Behavior share a compact row. **Application Badges** contains the persistent
+attention-badge switch and the separate urgent-window motion switch. Advanced
+launcher settings expand on demand; Reset and Close remain fixed at the bottom.
+On narrow screens the card grid stacks and the middle content area scrolls while
+the header and footer remain visible. The centered panel leaves the dock's edge
+strip interactive, so moving over dock icons continues to preview magnification
+and hover glow while you adjust settings.
 
 Background and border overrides use a progressive control: choose **Theme
 default**, pick an Omarchy token (for example `@accent`, `@menu.background`, or
@@ -220,6 +222,7 @@ override is disabled.
   "sortByWorkspace": false,
   "groupWindows": true,
   "attentionBadgesEnabled": true,
+  "urgentWindowAnimationEnabled": true,
   "launcherBadgeMode": "automatic",
   "hiddenApplications": [],
   "pinned": [
@@ -257,6 +260,7 @@ override is disabled.
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
 | `attentionBadgesEnabled` | Show application attention badges. FDM-809 dot severity remains the fallback; in automatic mode an authoritative positive visible launcher count may replace that dot. |
+| `urgentWindowAnimationEnabled` | When `true`, newly urgent Hyprland windows may nudge the owning application icon once. Motion is effective only while `attentionBadgesEnabled` is also enabled; disabling it leaves the static urgent badge intact. |
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
@@ -271,6 +275,21 @@ explicitly configured aliases are accepted, but substring/fuzzy matching is
 not. Grouped applications render one badge; ungrouped applications assign the
 badge to the first visible item for that app. Hidden applications do not render
 a badge.
+
+FDM-814 motion is narrower than badge state: only a previously absent Hyprland
+urgent **window address** entering an application's urgent-address set creates a
+motion revision. Duplicate urgency while that address remains urgent does not
+restart motion, and ordinary notifications, SNI attention, FDM-811 numeric
+counts, titles, notification bodies, terminal/editor output, sender data, and
+window content never create a motion revision. The nudge is one bounded
+`0 -> 5 -> 0 -> 3 -> 0` px sequence over about 520 ms with OutCubic easing and
+a three-second per-application cooldown. Hover, drag, context menus, and preview
+interaction suppress motion without clearing the badge. Auto-hidden docks do
+not reveal for urgency; one eligible revision may wait for the next normal
+reveal while the app remains urgent. Hidden/restored applications and startup
+prime at the current revision so stale urgency is not replayed. See
+[`docs/attention-badges.md`](docs/attention-badges.md) for ownership and motion
+semantics.
 
 When the optional launcher provider is available and `launcherBadgeMode` is
 `automatic`, a positive count with `count-visible=true` takes precedence over
