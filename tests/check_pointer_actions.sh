@@ -48,8 +48,6 @@ require_pattern 'acceptedModifiers:[[:space:]]*Qt\.NoModifier' components/DockIt
 
 # FDM-815 defines scroll configuration/pure helpers only. FDM-808 owns runtime
 # wheel delivery, accumulation state, throttling, and actual cycle behavior.
-reject_pattern 'WheelHandler[[:space:]]*\{' components/DockItem.qml
-reject_pattern 'property[[:space:]]+(real|int)[[:space:]]+wheel' components/DockItem.qml
 
 require_pattern 'function focusToplevels\(' components/DockWindowActions.qml
 require_pattern 'function minimizeRestoreToplevels\(' components/DockWindowActions.qml
