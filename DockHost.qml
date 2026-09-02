@@ -11,6 +11,7 @@ Item {
   id: root
 
   required property string configPath
+  property var notificationService: null
 
   property int trashItemCount: 0
   property bool trashStateKnown: false
@@ -19,6 +20,7 @@ Item {
   property int workspaceCountsRevision: 0
   property bool workspaceCountsRefreshPending: false
   readonly property var windowActions: windowActionsController
+  readonly property var badgeTracker: badgeTrackerController
 
   property var settings: ({
     iconSize: 42,
@@ -43,6 +45,7 @@ Item {
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
     groupWindows: true,
+    attentionBadgesEnabled: true,
     hiddenApplications: [],
     pinned: [
       "org.gnome.Nautilus",
@@ -61,6 +64,8 @@ Item {
         throw new Error("'pinned' must be an array")
       parsed.hiddenApplications = DockModel.normalizeSetting(
         "hiddenApplications", parsed.hiddenApplications)
+      parsed.attentionBadgesEnabled = typeof parsed.attentionBadgesEnabled === "boolean"
+        ? parsed.attentionBadgesEnabled : true
       settings = parsed
     } catch (error) {
       console.warn("Dock: could not load " + configPath + ":", error)
@@ -112,6 +117,12 @@ Item {
 
     settings = updated
     configFile.setText(JSON.stringify(updated, null, 2) + "\n")
+  }
+
+  function resetSettings() {
+    var patch = DockModel.resetSettingsPatch()
+    patch.attentionBadgesEnabled = true
+    saveSettings(patch)
   }
 
   function refreshTrash() {
@@ -243,6 +254,11 @@ Item {
     id: windowActionsController
   }
 
+  DockBadgeTracker {
+    id: badgeTrackerController
+    notificationService: root.notificationService
+  }
+
   Variants {
     model: Quickshell.screens
 
@@ -252,6 +268,7 @@ Item {
         screen: modelData
         settings: root.settings
         windowActions: root.windowActions
+        badgeTracker: root.badgeTracker
         trashItemCount: root.trashItemCount
         trashStateKnown: root.trashStateKnown
         workspaceWindowCounts: root.workspaceWindowCounts
@@ -266,7 +283,7 @@ Item {
         onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
         onSettingChanged: (key, value) => root.saveSetting(key, value)
         onSettingsPatchRequested: patch => root.saveSettings(patch)
-        onResetSettingsRequested: root.saveSettings(DockModel.resetSettingsPatch())
+        onResetSettingsRequested: root.resetSettings()
         onOpenTrashRequested: root.openTrash()
         onEmptyTrashRequested: root.emptyTrash()
       }
