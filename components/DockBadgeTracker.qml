@@ -11,19 +11,14 @@ import "DockBadgeModel.js" as BadgeModel
 Item {
   id: root
 
-  // Omarchy injects this service through Overlay.qml. Standalone mode leaves
-  // it null; the SNI and Hyprland sources remain fully functional.
   property var notificationService: null
-  // FDM-811 injects one provider-neutral count service per DockHost. When the
-  // service or native provider is unavailable, authoritative count state is
-  // empty and the FDM-809 dot-first behavior remains unchanged.
   property var launcherBadgeService: null
   property string launcherBadgeMode: BadgeModel.BADGE_COUNT_MODE_AUTOMATIC
-  // Aliases are deliberately explicit. Badge identity never uses substring,
-  // punctuation-stripping, web-app URL, or other fuzzy matching.
   property var identityAliases: ({})
   property int revision: 0
   property double focusStartedAt: 0
+  property var urgentStates: ({})
+  property var urgentMotionStates: ({})
 
   readonly property var applications: DesktopEntries.applications.values || []
   readonly property var trayItems: SystemTray.items.values || []
@@ -34,19 +29,13 @@ Item {
   width: 0
   height: 0
 
-  // PersistentProperties survives QML reloads inside this process. There is
-  // intentionally no disk-backed file model or other persistence for
-  // attention state.
   PersistentProperties {
     id: persisted
-
     reloadableId: "smartdock-attention-badges"
     property var localNotifications: ({})
   }
 
-  function bumpRevision() {
-    revision++
-  }
+  function bumpRevision() { revision++ }
 
   function replaceLocalNotifications(next) {
     if (JSON.stringify(next) === JSON.stringify(persisted.localNotifications))
@@ -60,7 +49,6 @@ Item {
     var service = notificationService
     var model = service && service.popupModel ? service.popupModel : null
     if (!model || typeof model.get !== "function") return
-
     var next = persisted.localNotifications || ({})
     var now = Date.now()
     for (var i = 0; i < Number(model.count || 0); ++i) {
@@ -69,10 +57,6 @@ Item {
       next = BadgeModel.upsertNotification(
         next, row, NotificationUrgency.Critical, now)
     }
-    // A notification may arrive while its application is already focused.
-    // Start a fresh dwell only when local state actually changed, so the new
-    // attention clears after ~800ms of continuous focus instead of lingering
-    // until the next focus transition. Popup dismissal itself is not a read.
     if (replaceLocalNotifications(next)) restartFocusDwell()
   }
 
@@ -93,24 +77,102 @@ Item {
   }
 
   function hyprUrgentFor(desktopId, entry) {
+    return urgentAddressesFor(desktopId, entry).length > 0
+  }
+
+  function urgentAddressesFor(desktopId, entry) {
+    var addresses = []
     for (var i = 0; i < hyprToplevels.length; ++i) {
       var handle = hyprToplevels[i]
       if (!handle || handle.urgent !== true) continue
       var ipc = handle.lastIpcObject || ({})
       var wayland = handle.wayland || null
-      if (BadgeModel.strictIdentityMatches(desktopId, entry, [
+      if (!BadgeModel.strictIdentityMatches(desktopId, entry, [
           wayland ? wayland.appId : "",
           ipc.class,
           ipc.initialClass
-        ], identityAliases)) return true
+        ], identityAliases)) continue
+      var address = String(ipc.address || "").trim().toLowerCase()
+      if (address && addresses.indexOf(address) < 0) addresses.push(address)
     }
-    return false
+    return addresses
+  }
+
+  function ensureUrgentState(desktopId) {
+    var key = BadgeModel.normalizeIdentity(desktopId)
+    if (!key || urgentStates[key]) return
+    var entry = BadgeModel.entryForDesktopId(desktopId, applications)
+    var next = BadgeModel.copyRecords(urgentStates)
+    next[key] = BadgeModel.reduceWindowUrgencyState(
+      null, urgentAddressesFor(desktopId, entry), false, true)
+    urgentStates = next
+    bumpRevision()
+  }
+
+  function reconcileUrgentStates() {
+    var identities = {}
+    for (var i = 0; i < applications.length; ++i) {
+      var entry = applications[i]
+      var key = BadgeModel.normalizeIdentity(entry ? entry.id : "")
+      if (key) identities[key] = entry.id
+    }
+    for (var existingKey in urgentStates) {
+      if (identities[existingKey] === undefined) identities[existingKey] = existingKey
+    }
+
+    var next = {}
+    for (var key in identities) {
+      var desktopId = identities[key]
+      var entryForId = BadgeModel.entryForDesktopId(desktopId, applications)
+      var previous = urgentStates[key]
+      next[key] = BadgeModel.reduceWindowUrgencyState(
+        previous,
+        urgentAddressesFor(desktopId, entryForId),
+        false,
+        !previous)
+    }
+    if (JSON.stringify(next) === JSON.stringify(urgentStates)) return
+    urgentStates = next
+    bumpRevision()
+  }
+
+  function urgentStateFor(desktopId, primaryOwner) {
+    var stateRevision = revision
+    var key = BadgeModel.normalizeIdentity(desktopId)
+    var state = urgentStates[key]
+    if (!state) {
+      var entry = BadgeModel.entryForDesktopId(desktopId, applications)
+      state = BadgeModel.reduceWindowUrgencyState(
+        null, urgentAddressesFor(desktopId, entry), primaryOwner, true)
+    }
+    return {
+      windowUrgent: state.windowUrgent === true,
+      primaryOwner: primaryOwner === true,
+      windowUrgentRevision: Number(state.windowUrgentRevision || 0)
+    }
+  }
+
+  function primeUrgentMotion(desktopId, urgentRevision) {
+    var key = BadgeModel.normalizeIdentity(desktopId)
+    if (!key) return
+    var next = BadgeModel.copyRecords(urgentMotionStates)
+    next[key] = BadgeModel.primeUrgentMotionState(
+      urgentMotionStates[key], urgentRevision)
+    urgentMotionStates = next
+  }
+
+  function requestUrgentMotion(desktopId, input) {
+    var key = BadgeModel.normalizeIdentity(desktopId)
+    if (!key) return false
+    var reduced = BadgeModel.reduceUrgentMotion(urgentMotionStates[key], input)
+    var next = BadgeModel.copyRecords(urgentMotionStates)
+    next[key] = reduced.state
+    urgentMotionStates = next
+    return reduced.play === true
   }
 
   function launcherCountFor(desktopId) {
     var service = launcherBadgeService
-    // Read revision explicitly so callers react to partial provider updates
-    // even when the service reuses the same counts object identity.
     var providerRevision = service ? Number(service.revision || 0) : 0
     var counts = service && service.counts ? service.counts : ({})
     return BadgeModel.launcherCountState(
@@ -120,21 +182,13 @@ Item {
   function badgeFor(desktopId) {
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     var local = BadgeModel.localSeverity(
-      persisted.localNotifications,
-      desktopId,
-      entry,
-      identityAliases,
-      Date.now(),
-      BadgeModel.LOCAL_ATTENTION_TTL_MS)
+      persisted.localNotifications, desktopId, entry, identityAliases,
+      Date.now(), BadgeModel.LOCAL_ATTENTION_TTL_MS)
     var severity = BadgeModel.badgeSeverity(
       sniNeedsAttentionFor(desktopId, entry),
-      hyprUrgentFor(desktopId, entry),
-      local)
+      hyprUrgentFor(desktopId, entry), local)
     return BadgeModel.applicationBadgeToken(
-      true,
-      launcherBadgeMode,
-      launcherCountFor(desktopId),
-      severity)
+      true, launcherBadgeMode, launcherCountFor(desktopId), severity)
   }
 
   function focusedEntry() {
@@ -157,8 +211,6 @@ Item {
         focusStartedAt, Date.now(), BadgeModel.FOCUS_DWELL_MS)) return
     var entry = focusedEntry()
     if (!entry) return
-    // This is deliberately local-attention-only. Application-provided counts
-    // are authoritative provider state and focus must never clear them.
     replaceLocalNotifications(BadgeModel.clearMatchingNotifications(
       persisted.localNotifications, entry.id, entry, identityAliases))
   }
@@ -166,6 +218,7 @@ Item {
   Component.onCompleted: {
     captureNotifications()
     pruneExpiredLocal()
+    reconcileUrgentStates()
     restartFocusDwell()
   }
 
@@ -173,13 +226,13 @@ Item {
   onLauncherBadgeServiceChanged: bumpRevision()
   onLauncherBadgeModeChanged: bumpRevision()
   onApplicationsChanged: {
+    reconcileUrgentStates()
     bumpRevision()
     restartFocusDwell()
   }
 
   Timer {
     id: focusDwell
-
     interval: BadgeModel.FOCUS_DWELL_MS
     repeat: false
     onTriggered: root.clearFocusedLocal()
@@ -194,7 +247,6 @@ Item {
 
   Connections {
     target: ToplevelManager
-
     function onActiveToplevelChanged() {
       root.bumpRevision()
       root.restartFocusDwell()
@@ -203,17 +255,12 @@ Item {
 
   Connections {
     target: Hyprland
-
     function onRawEvent(event) {
       var name = String(event ? event.name : "")
-      if ([
-          "urgent",
-          "activewindow",
-          "activewindowv2",
-          "openwindow",
-          "closewindow"
-        ].indexOf(name) < 0) return
+      if (["urgent", "activewindow", "activewindowv2", "openwindow", "closewindow"]
+          .indexOf(name) < 0) return
       Hyprland.refreshToplevels()
+      Qt.callLater(root.reconcileUrgentStates)
       root.bumpRevision()
     }
   }
@@ -221,8 +268,8 @@ Item {
   Connections {
     target: Hyprland.toplevels
     ignoreUnknownSignals: true
-
     function onValuesChanged() {
+      root.reconcileUrgentStates()
       root.bumpRevision()
     }
   }
@@ -230,17 +277,13 @@ Item {
   Connections {
     target: SystemTray.items
     ignoreUnknownSignals: true
-
-    function onValuesChanged() {
-      root.bumpRevision()
-    }
+    function onValuesChanged() { root.bumpRevision() }
   }
 
   Connections {
     target: root.notificationService && root.notificationService.popupModel
       ? root.notificationService.popupModel : null
     ignoreUnknownSignals: true
-
     function onCountChanged() { root.captureNotifications() }
     function onDataChanged() { root.captureNotifications() }
     function onRowsInserted() { root.captureNotifications() }
@@ -249,7 +292,6 @@ Item {
   Connections {
     target: root.launcherBadgeService
     ignoreUnknownSignals: true
-
     function onRevisionChanged() { root.bumpRevision() }
     function onAvailableChanged() { root.bumpRevision() }
     function onCountsChanged() { root.bumpRevision() }
@@ -257,18 +299,14 @@ Item {
 
   Repeater {
     model: root.trayItems
-
     delegate: Item {
       required property var modelData
-
       visible: false
       width: 0
       height: 0
-
       Connections {
         target: modelData
         ignoreUnknownSignals: true
-
         function onStatusChanged() { root.bumpRevision() }
         function onIdChanged() { root.bumpRevision() }
         function onTitleChanged() { root.bumpRevision() }
@@ -279,21 +317,26 @@ Item {
 
   Repeater {
     model: root.hyprToplevels
-
     delegate: Item {
       required property var modelData
-
       visible: false
       width: 0
       height: 0
-
       Connections {
         target: modelData
         ignoreUnknownSignals: true
-
-        function onUrgentChanged() { root.bumpRevision() }
-        function onLastIpcObjectChanged() { root.bumpRevision() }
-        function onWaylandHandleChanged() { root.bumpRevision() }
+        function onUrgentChanged() {
+          root.reconcileUrgentStates()
+          root.bumpRevision()
+        }
+        function onLastIpcObjectChanged() {
+          root.reconcileUrgentStates()
+          root.bumpRevision()
+        }
+        function onWaylandHandleChanged() {
+          root.reconcileUrgentStates()
+          root.bumpRevision()
+        }
       }
     }
   }
