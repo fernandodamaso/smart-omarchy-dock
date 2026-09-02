@@ -136,7 +136,6 @@ Item {
       return
     }
     root.workspaceCountsRefreshPending = false
-    Hyprland.refreshMonitors()
     workspaceCountsProcess.running = true
   }
 
