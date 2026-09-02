@@ -25,7 +25,7 @@ Item {
   required property real hoverGlowOpacity
   required property real hoverGlowRadius
   required property real pointerPosition
-  required property string clickAction
+  required property var applicationActions
   required property bool autoHide
   required property string position
   required property bool vertical
@@ -78,20 +78,49 @@ Item {
       Quickshell.execDetached(["gtk-launch", desktopId + ".desktop"])
   }
 
-  function activateOrLaunch() {
-    if (clickAction === "focus-or-launch" && runningCount > 0) {
-      lastActivatedToplevel = DockModel.nextToplevelIndex(
-        lastActivatedToplevel, runningCount)
-      root.windowActions.activateToplevel(
-        runningToplevels[lastActivatedToplevel])
-      return
+  function dispatchApplicationAction(action) {
+    if (!DockModel.applicationActionCanRun(action, runningCount)) return false
+
+    switch (action) {
+    case "focus":
+      return root.windowActions.focusToplevels(root.runningToplevels)
+    case "cycle-windows":
+      // FDM-808 owns the actual cycle implementation. This hook lets that
+      // successor branch reuse this canonical dispatcher without FDM-815
+      // introducing cycle state or runtime wheel behavior.
+      return root.windowActions
+        && typeof root.windowActions.cycleToplevels === "function"
+        ? root.windowActions.cycleToplevels(root.runningToplevels)
+        : false
+    case "minimize-restore":
+      return root.windowActions.minimizeRestoreToplevels(root.runningToplevels)
+    case "launch":
+      root.launch()
+      return true
+    case "previews":
+      return root.windowActions.showToplevelPreviews(
+        root.desktopId, root.runningToplevels)
+    case "close":
+      return root.windowActions.closeToplevels(root.runningToplevels)
+    case "focus-or-launch":
+      if (root.runningCount > 0) {
+        // Preserve the pre-FDM-815 left-click behavior exactly: repeated
+        // clicks walk the group in model order and activate the next window.
+        root.lastActivatedToplevel = DockModel.nextToplevelIndex(
+          root.lastActivatedToplevel, root.runningCount)
+        return root.windowActions.activateToplevel(
+          root.runningToplevels[root.lastActivatedToplevel])
+      }
+      root.launch()
+      return true
+    default:
+      return false
     }
-    launch()
   }
 
-  function closeRunning() {
-    if (runningToplevel)
-      root.windowActions.closeToplevel(runningToplevel)
+  function dispatchPointerAction(input, modifiers) {
+    return dispatchApplicationAction(DockModel.resolveApplicationPointerAction(
+      applicationActions, input, modifiers))
   }
 
   onRunningToplevelsChanged: lastActivatedToplevel = -1
@@ -284,11 +313,26 @@ Item {
 
   TapHandler {
     acceptedButtons: Qt.LeftButton
-    onTapped: root.activateOrLaunch()
+    acceptedModifiers: Qt.NoModifier
+    onTapped: root.dispatchPointerAction("left", {})
+  }
+
+  TapHandler {
+    acceptedButtons: Qt.LeftButton
+    acceptedModifiers: Qt.ShiftModifier
+    onTapped: root.dispatchPointerAction("left", { shift: true })
+  }
+
+  TapHandler {
+    acceptedButtons: Qt.MiddleButton
+    acceptedModifiers: Qt.NoModifier
+    onTapped: root.dispatchPointerAction("middle", {})
   }
 
   TapHandler {
     acceptedButtons: Qt.RightButton
+    // Right click owns the context menu regardless of keyboard modifiers.
+    acceptedModifiers: Qt.KeyboardModifierMask
     onTapped: contextMenu.open()
   }
 
@@ -298,6 +342,7 @@ Item {
     enabled: root.pinnedItem
     target: null
     acceptedButtons: Qt.LeftButton
+    acceptedModifiers: Qt.NoModifier
     xAxis.enabled: !root.vertical
     yAxis.enabled: root.vertical
     onActiveChanged: {
