@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockWindowModel.js" as DockWindowModel
 
 PanelWindow {
   id: root
@@ -18,6 +19,7 @@ PanelWindow {
   required property var workspaceWindowCounts
   required property bool workspaceCountsReady
   required property int workspaceCountsRevision
+  required property int scopeRevision
   signal reorderRequested(string sourceDesktopId, string targetDesktopId)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
@@ -33,8 +35,6 @@ PanelWindow {
   property int dragTarget: -1
   property int openMenuCount: 0
   property bool autoHideRevealed: false
-  property int fullscreenStateRevision: 0
-  property int workspaceStateRevision: 0
   property var settingPreviews: ({})
 
   readonly property int iconSize: DockModel.normalizeSetting(
@@ -144,6 +144,11 @@ PanelWindow {
     "sortByWorkspace", effectiveSetting("sortByWorkspace"))
   readonly property bool groupWindows: DockModel.normalizeSetting(
     "groupWindows", effectiveSetting("groupWindows"))
+  readonly property string windowScope: DockWindowModel.normalizeWindowScope(
+    effectiveSetting("windowScope"))
+  readonly property bool showUrgentOutsideScope:
+    DockWindowModel.normalizeShowUrgentOutsideScope(
+      effectiveSetting("showUrgentOutsideScope"))
   readonly property var pinned: settings.pinned || []
   readonly property var hiddenApplications: DockModel.normalizeSetting(
     "hiddenApplications", effectiveSetting("hiddenApplications"))
@@ -155,21 +160,43 @@ PanelWindow {
     ? Hyprland.workspaces.values || [] : []
   readonly property var hyprMonitors: Hyprland.monitors
     ? Hyprland.monitors.values || [] : []
+  readonly property var dockHyprMonitor: {
+    var revision = scopeRevision
+    return Hyprland.monitorFor(screen)
+  }
+  readonly property string focusedScopeWorkspace: {
+    var revision = scopeRevision
+    return DockWindowModel.focusedWorkspaceIdentity(
+      hyprMonitors, Hyprland.focusedWorkspace)
+  }
+  readonly property var windowScopeContext: {
+    var revision = scopeRevision
+    return DockWindowModel.windowScopeContext(
+      windowScope, focusedScopeWorkspace, dockHyprMonitor,
+      showUrgentOutsideScope)
+  }
+  readonly property var filteredToplevels: {
+    var revision = scopeRevision
+    return DockWindowModel.filterToplevelsByScope(
+      toplevels, hyprToplevels,
+      windowActions ? windowActions.minimizedOriginsSnapshot : ({}),
+      windowScopeContext)
+  }
   readonly property int focusedWorkspaceId: {
-    var revision = workspaceStateRevision + workspaceCountsRevision
+    var revision = scopeRevision + workspaceCountsRevision
     return DockModel.focusedWorkspaceIdFromMonitors(
       hyprMonitors, Hyprland.focusedWorkspace)
   }
   readonly property var activeToplevel: ToplevelManager.activeToplevel
   readonly property var fullscreenOwnerToplevel: DockModel.fullscreenOwner(
     toplevels, hyprToplevels, focusedWorkspaceId, activeToplevel,
-    fullscreenStateRevision)
+    scopeRevision)
   readonly property bool fullscreenModeActive: fullscreenOwnerToplevel !== null
   readonly property var visibleItems: DockModel.buildVisibleItems(
-    pinned, toplevels, applications, hyprToplevels, sortByWorkspace,
+    pinned, filteredToplevels, applications, hyprToplevels, sortByWorkspace,
     groupWindows, hiddenApplications)
   readonly property var visibleWorkspaceIds: {
-    var revision = workspaceStateRevision + workspaceCountsRevision
+    var revision = scopeRevision + workspaceCountsRevision
     return DockModel.visibleWorkspaceIds(
       hyprWorkspaces, focusedWorkspaceId, hyprToplevels,
       workspaceWindowCounts, workspaceCountsReady)
@@ -282,74 +309,6 @@ PanelWindow {
 
   onAutoHideChanged: updateAutoHideState()
   onKeepAutoHideOpenChanged: updateAutoHideState()
-
-  Timer {
-    id: fullscreenStateRefreshTimer
-
-    interval: 80
-    repeat: false
-    onTriggered: root.fullscreenStateRevision++
-  }
-
-  Timer {
-    id: workspaceStateRefreshTimer
-
-    interval: 80
-    repeat: false
-    onTriggered: root.workspaceStateRevision++
-  }
-
-  Connections {
-    target: Hyprland
-
-    function onRawEvent(event) {
-      var name = event ? event.name : ""
-      if (DockModel.shouldRefreshFullscreenPresentation(name)) {
-        Hyprland.refreshToplevels()
-        fullscreenStateRefreshTimer.restart()
-      }
-      if (DockModel.shouldRefreshWorkspaceState(name)) {
-        Hyprland.refreshMonitors()
-        Hyprland.refreshWorkspaces()
-        Hyprland.refreshToplevels()
-        workspaceStateRefreshTimer.restart()
-      }
-    }
-  }
-
-  Connections {
-    target: Hyprland.workspaces
-
-    function onValuesChanged() {
-      workspaceStateRefreshTimer.restart()
-    }
-  }
-
-  Connections {
-    target: Hyprland.toplevels
-
-    function onValuesChanged() {
-      workspaceStateRefreshTimer.restart()
-    }
-  }
-
-  Connections {
-    target: Hyprland.monitors
-
-    function onValuesChanged() {
-      workspaceStateRefreshTimer.restart()
-    }
-  }
-
-  Connections {
-    target: ToplevelManager
-
-    function onActiveToplevelChanged() {
-      fullscreenStateRefreshTimer.restart()
-      Hyprland.refreshMonitors()
-      workspaceStateRefreshTimer.restart()
-    }
-  }
 
   anchors {
     top: position === "top" || (vertical && fullLength)
@@ -589,7 +548,7 @@ PanelWindow {
         hyprToplevels: root.hyprToplevels
         workspaceWindowCounts: root.workspaceWindowCounts
         workspaceCountsReady: root.workspaceCountsReady
-        workspaceStateRevision: root.workspaceStateRevision + root.workspaceCountsRevision
+        workspaceStateRevision: root.scopeRevision + root.workspaceCountsRevision
         focusedWorkspaceId: root.focusedWorkspaceId
         vertical: root.vertical
         slotSize: root.itemSize
