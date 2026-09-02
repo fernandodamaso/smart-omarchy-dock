@@ -14,6 +14,7 @@ Item {
   required property var runningToplevels
   required property var windowActions
   required property var hyprToplevels
+  required property string attentionBadge
   required property bool fullscreenModeActive
   required property bool fullscreenEmphasized
   required property int itemIndex
@@ -201,6 +202,22 @@ Item {
         font.pixelSize: Style.font.bodySmall
         font.bold: true
       }
+    }
+
+    Rectangle {
+      id: attentionDot
+
+      visible: root.attentionBadge === "attention"
+        || root.attentionBadge === "urgent"
+      width: 10
+      height: 10
+      radius: width / 2
+      x: iconContainer.width - width + 3
+      y: root.runningCount > 1 ? 13 : -3
+      color: root.attentionBadge === "urgent" ? Color.urgent : Color.accent
+      border.width: Style.normalBorderWidth
+      border.color: Color.background
+      z: 4
     }
 
     Rectangle {
