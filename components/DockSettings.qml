@@ -814,6 +814,14 @@ PanelWindow {
 
               DockSettingsToggleRow {
                 width: parent.width
+                label: "Attention badges"
+                description: "Show dot-first application attention and urgency indicators"
+                checked: root.current("attentionBadgesEnabled") !== false
+                onToggled: root.commit("attentionBadgesEnabled", !checked)
+              }
+
+              DockSettingsToggleRow {
+                width: parent.width
                 label: "Auto-hide"
                 checked: root.current("autoHide")
                 onToggled: root.commit("autoHide", !checked)
