@@ -1,7 +1,8 @@
 # SmartDock for Omarchy
 
-> Local Omarchy variant: pinned applications remain first, while grouped
-> running applications from every workspace are appended automatically.
+> Local Omarchy variant: pinned applications remain first, while eligible
+> running applications are appended automatically according to the configured
+> window scope.
 
 A theme-aware application, window, and workspace dock for Omarchy and Hyprland, built with Quickshell and Qt/QML.
 
@@ -13,6 +14,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Freedesktop application icons and launching
 - Configurable application-icon left, middle, Shift+left, and scroll actions
 - Grouped-window wheel cycling with high-resolution vertical-delta accumulation
+- Per-workspace and per-monitor running-window scopes with optional true-Hyprland urgent exceptions
 - Focuses an existing application on another workspace
 - Running-application indicators
 - First-position sliders control for the app launcher, Dock Settings, adding
@@ -154,13 +156,14 @@ are saved when released; switches and choices save immediately.
 Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
 effects sit side by side, Dock surface exposes Theme default, Omarchy token,
 and custom hex modes without leaving disabled inputs visible, and Layout and
-Behavior share a compact row. Behavior includes four application action
-selectors for Left click, Middle click, Shift+left, and Scroll. Advanced
-launcher settings expand on demand; Reset and Close remain fixed at the bottom.
-On narrow screens the card grid stacks and the middle content area scrolls
-while the header and footer remain visible. The centered panel leaves the
-dock's edge strip interactive, so moving over dock icons continues to preview
-magnification and hover glow while you adjust settings.
+Behavior share a compact row. Behavior includes the window-scope selector, its
+urgent-exception toggle, and four application action selectors for Left click,
+Middle click, Shift+left, and Scroll. Advanced launcher settings expand on
+demand; Reset and Close remain fixed at the bottom. On narrow screens the card
+grid stacks and the middle content area scrolls while the header and footer
+remain visible. The centered panel leaves the dock's edge strip interactive, so
+moving over dock icons continues to preview magnification and hover glow while
+you adjust settings.
 
 Background and border overrides use a progressive control: choose **Theme
 default**, pick an Omarchy token (for example `@accent`, `@menu.background`, or
@@ -198,6 +201,8 @@ override is disabled.
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
+  "windowScope": "all",
+  "showUrgentOutsideScope": true,
   "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",
@@ -236,6 +241,8 @@ override is disabled.
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
+| `windowScope` | Running-window visibility: `all`, `workspace`, `monitor`, or `workspace-monitor`; missing or invalid values normalize to `all` |
+| `showUrgentOutsideScope` | When `true`, a true Hyprland-urgent window may appear outside the selected scope; missing or non-boolean values normalize to `true` |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
@@ -282,10 +289,51 @@ The current action semantics are:
   clicks focus/cycle a running group in dock order, while a closed pinned
   application launches.
 
-Existing configuration files need no migration. If the three new keys are
-absent, they normalize to `none`; an absent or invalid legacy `clickAction`
-normalizes to `focus-or-launch`. Invalid values for the three new keys also
-normalize to `none`.
+Existing configuration files need no migration. If the three new action keys
+are absent, they normalize to `none`; an absent or invalid legacy `clickAction`
+normalizes to `focus-or-launch`. Invalid values for the three new action keys
+also normalize to `none`. FDM-812 is also compatibility-safe: missing or
+invalid `windowScope` becomes `all`, and missing/non-boolean
+`showUrgentOutsideScope` becomes `true`.
+
+### Window scope filtering
+
+`windowScope` is applied to individual Wayland toplevels before SmartDock groups
+windows, applies `sortByWorkspace`, or removes explicitly hidden applications:
+
+- `all`: preserve the pre-FDM-812 behavior and show running windows from every
+  workspace and monitor.
+- `workspace`: show windows on the workspace active on Hyprland's focused
+  monitor.
+- `monitor`: each Dock instance shows windows on the Hyprland monitor resolved
+  from that Dock's `PanelWindow.screen`.
+- `workspace-monitor`: require both the focused-monitor workspace and that
+  Dock's monitor.
+
+Closed pinned launchers always remain visible even if all of their running
+windows are elsewhere. Grouped and ungrouped items receive only the filtered
+windows. `sortByWorkspace` does not change scope eligibility; it only orders the
+windows/items that survived filtering. Explicit **Hide from Dock** is applied
+after composition and therefore wins even over an urgent exception.
+
+When `showUrgentOutsideScope` is enabled and scope is not `all`, only
+Hyprland's actual window `urgent` state creates an exception. Notification/SNI
+attention or other badge state does not. The exception is per-window: if one
+out-of-scope member of an application is urgent, only that member is admitted;
+its non-urgent out-of-scope siblings are not pulled into the group.
+
+Special workspaces keep their Hyprland identity for workspace matching. A
+SmartDock-minimized window uses the shared host-owned minimized-origin snapshot
+for its workspace/monitor location when the origin is known. If the origin is
+unknown, or a newly mapped/moved window temporarily lacks authoritative
+Hyprland location data, the relevant scope dimension fails open until the next
+shared host refresh instead of transiently hiding the window. Stale minimized
+origin addresses are pruned as Wayland/Hyprland lifetime catches up.
+
+Scope refresh is host-owned and debounced once for all monitor Docks. Hyprland
+open/close/move/workspace/focused-monitor/urgent/fullscreen/hotplug events
+refresh the shared monitor/workspace/toplevel context; there is no per-Dock
+scope polling path.
 
 ### Grouped-window wheel cycling
 
