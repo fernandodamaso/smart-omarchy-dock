@@ -76,6 +76,10 @@ require_pattern 'captureFrame\(\)' components/DockWindowPreviewTile.qml
 require_pattern 'onStopped:[[:space:]]*root\.captureStopped[[:space:]]*=[[:space:]]*true' components/DockWindowPreviewTile.qml
 require_pattern 'Preview unavailable' components/DockWindowPreviewTile.qml
 require_pattern 'Accessible\.name:' components/DockWindowPreviewTile.qml
+require_pattern 'DockLucideIcon[[:space:]]*\{' components/DockWindowPreviewTile.qml
+require_pattern 'iconName:[[:space:]]*"x"' components/DockWindowPreviewTile.qml
+require_pattern 'tint:[[:space:]]*closeMouse\.containsMouse[[:space:]]*\?[[:space:]]*Color\.menu\.selectedText[[:space:]]*:[[:space:]]*Color\.menu\.text' components/DockWindowPreviewTile.qml
+reject_pattern '^[[:space:]]*name:[[:space:]]*"x"' components/DockWindowPreviewTile.qml
 require_pattern 'activateToplevel\(' components/DockWindowPreview.qml
 require_pattern 'closeToplevel\(' components/DockWindowPreview.qml
 
