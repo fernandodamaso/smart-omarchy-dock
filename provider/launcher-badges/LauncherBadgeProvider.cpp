@@ -1,6 +1,7 @@
 #include "LauncherBadgeProvider.h"
 
 #include <QDBusConnection>
+#include <QDBusMessage>
 #include <QDebug>
 #include <QDir>
 #include <QFileInfo>
