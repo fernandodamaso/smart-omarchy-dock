@@ -1,0 +1,22 @@
+{
+  "updates": [
+    {
+      "uri": "application://com.discordapp.Discord.desktop",
+      "sender": ":1.10",
+      "count": 4,
+      "visible": true
+    },
+    {
+      "uri": "application://com.discordapp.Discord.desktop",
+      "sender": ":1.20",
+      "visible": true
+    }
+  ],
+  "disconnects": [":1.10"],
+  "expected": {
+    "com.discordapp.discord": {
+      "visible": true,
+      "sender": ":1.20"
+    }
+  }
+}

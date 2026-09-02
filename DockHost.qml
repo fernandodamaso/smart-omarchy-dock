@@ -12,6 +12,7 @@ Item {
 
   required property string configPath
   property var notificationService: null
+  property var launcherBadgeService: null
 
   property int trashItemCount: 0
   property bool trashStateKnown: false
@@ -46,6 +47,7 @@ Item {
     sortByWorkspace: false,
     groupWindows: true,
     attentionBadgesEnabled: true,
+    launcherBadgeMode: "automatic",
     hiddenApplications: [],
     pinned: [
       "org.gnome.Nautilus",
@@ -66,6 +68,8 @@ Item {
         "hiddenApplications", parsed.hiddenApplications)
       parsed.attentionBadgesEnabled = typeof parsed.attentionBadgesEnabled === "boolean"
         ? parsed.attentionBadgesEnabled : true
+      parsed.launcherBadgeMode = parsed.launcherBadgeMode === "dots-only"
+        ? "dots-only" : "automatic"
       settings = parsed
     } catch (error) {
       console.warn("Dock: could not load " + configPath + ":", error)
@@ -122,6 +126,7 @@ Item {
   function resetSettings() {
     var patch = DockModel.resetSettingsPatch()
     patch.attentionBadgesEnabled = true
+    patch.launcherBadgeMode = "automatic"
     saveSettings(patch)
   }
 
@@ -257,6 +262,9 @@ Item {
   DockBadgeTracker {
     id: badgeTrackerController
     notificationService: root.notificationService
+    launcherBadgeService: root.launcherBadgeService
+    launcherBadgeMode: root.settings.launcherBadgeMode === "dots-only"
+      ? "dots-only" : "automatic"
   }
 
   Variants {

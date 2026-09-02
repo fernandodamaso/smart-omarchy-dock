@@ -1,12 +1,56 @@
 var BADGE_NONE = "none"
 var BADGE_ATTENTION = "attention"
 var BADGE_URGENT = "urgent"
+var BADGE_COUNT_MODE_AUTOMATIC = "automatic"
+var BADGE_COUNT_MODE_DOTS_ONLY = "dots-only"
 var LOCAL_ATTENTION_TTL_MS = 24 * 60 * 60 * 1000
 var FOCUS_DWELL_MS = 800
 
 function normalizeIdentity(value) {
   return String(value === undefined || value === null ? "" : value)
     .trim().toLowerCase().replace(/\.desktop$/, "")
+}
+
+function normalizeLauncherIdentity(value) {
+  var raw = String(value === undefined || value === null ? "" : value).trim()
+  raw = raw.replace(/^application:\/\//i, "")
+  try {
+    raw = decodeURIComponent(raw)
+  } catch (_) {
+    return ""
+  }
+  if (!raw || raw === "." || raw === ".."
+      || raw.indexOf("://") >= 0
+      || raw.indexOf("/") >= 0
+      || raw.indexOf("\\") >= 0) return ""
+  return normalizeIdentity(raw)
+}
+
+function canonicalLauncherDesktopId(value) {
+  var raw = String(value === undefined || value === null ? "" : value).trim()
+  if (/^application:\/\//i.test(raw)) return normalizeLauncherIdentity(raw)
+  try {
+    raw = decodeURIComponent(raw)
+  } catch (_) {
+    return ""
+  }
+  if (!raw || raw === "." || raw === ".."
+      || raw.indexOf("://") >= 0
+      || raw.indexOf("/") >= 0
+      || raw.indexOf("\\") >= 0) return ""
+  return raw.toLowerCase()
+}
+
+function normalizeLauncherBadgeMode(value) {
+  return value === BADGE_COUNT_MODE_DOTS_ONLY
+    ? BADGE_COUNT_MODE_DOTS_ONLY : BADGE_COUNT_MODE_AUTOMATIC
+}
+
+function normalizeLauncherCount(value) {
+  if (typeof value === "boolean" || value === "") return null
+  var count = Number(value)
+  if (!isFinite(count)) return null
+  return Math.max(0, Math.floor(count))
 }
 
 function appendIdentity(target, value) {
@@ -176,6 +220,79 @@ function badgeSeverity(sniNeedsAttention, hyprUrgent, localAttention) {
     hyprUrgent ? BADGE_URGENT : BADGE_NONE,
     localAttention || BADGE_NONE
   ])
+}
+
+function launcherCountState(records, desktopId, providerAvailable) {
+  var none = { authoritative: false, count: 0, visible: false }
+  if (!providerAvailable) return none
+
+  // A canonical desktop-entry ID can legitimately end in `.desktop` (its
+  // storage filename then ends in `.desktop.desktop`). Prefer the exact ID and
+  // only then try storage-filename normalization, avoiding one suffix too many.
+  var candidates = []
+  var canonical = canonicalLauncherDesktopId(desktopId)
+  if (canonical) candidates.push(canonical)
+  var storageId = normalizeLauncherIdentity(desktopId)
+  if (storageId && candidates.indexOf(storageId) < 0) candidates.push(storageId)
+
+  for (var i = 0; i < candidates.length; ++i) {
+    var record = records && records[candidates[i]]
+    if (!record || typeof record !== "object") continue
+    var count = normalizeLauncherCount(record.count)
+    if (count === null) continue
+    return {
+      authoritative: true,
+      count: count,
+      visible: record.visible === true
+    }
+  }
+  return none
+}
+
+function applicationBadgePresentation(enabled, mode, countState, severity) {
+  var safeSeverity = severityRank(severity) > 0 ? severity : BADGE_NONE
+  var none = {
+    kind: "none",
+    count: 0,
+    countVisible: false,
+    severity: BADGE_NONE,
+    text: ""
+  }
+  if (!enabled) return none
+
+  var state = countState || ({})
+  var count = normalizeLauncherCount(state.count)
+  if (normalizeLauncherBadgeMode(mode) === BADGE_COUNT_MODE_AUTOMATIC
+      && state.authoritative === true && state.visible === true
+      && count !== null && count > 0) {
+    return {
+      kind: "count",
+      count: count,
+      countVisible: true,
+      severity: safeSeverity,
+      text: count > 99 ? "99+" : String(count)
+    }
+  }
+
+  if (safeSeverity !== BADGE_NONE) {
+    return {
+      kind: "dot",
+      count: 0,
+      countVisible: false,
+      severity: safeSeverity,
+      text: ""
+    }
+  }
+  return none
+}
+
+function applicationBadgeToken(enabled, mode, countState, severity) {
+  var presentation = applicationBadgePresentation(
+    enabled, mode, countState, severity)
+  if (presentation.kind === "count") {
+    return "count:" + String(presentation.count) + ":" + presentation.severity
+  }
+  return presentation.severity
 }
 
 function shouldClearFocused(focusedSince, now, dwellMs) {

@@ -14,6 +14,11 @@ Item {
   // Omarchy injects this service through Overlay.qml. Standalone mode leaves
   // it null; the SNI and Hyprland sources remain fully functional.
   property var notificationService: null
+  // FDM-811 injects one provider-neutral count service per DockHost. When the
+  // service or native provider is unavailable, authoritative count state is
+  // empty and the FDM-809 dot-first behavior remains unchanged.
+  property var launcherBadgeService: null
+  property string launcherBadgeMode: BadgeModel.BADGE_COUNT_MODE_AUTOMATIC
   // Aliases are deliberately explicit. Badge identity never uses substring,
   // punctuation-stripping, web-app URL, or other fuzzy matching.
   property var identityAliases: ({})
@@ -102,6 +107,16 @@ Item {
     return false
   }
 
+  function launcherCountFor(desktopId) {
+    var service = launcherBadgeService
+    // Read revision explicitly so callers react to partial provider updates
+    // even when the service reuses the same counts object identity.
+    var providerRevision = service ? Number(service.revision || 0) : 0
+    var counts = service && service.counts ? service.counts : ({})
+    return BadgeModel.launcherCountState(
+      counts, desktopId, !!(service && service.available))
+  }
+
   function badgeFor(desktopId) {
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     var local = BadgeModel.localSeverity(
@@ -111,10 +126,15 @@ Item {
       identityAliases,
       Date.now(),
       BadgeModel.LOCAL_ATTENTION_TTL_MS)
-    return BadgeModel.badgeSeverity(
+    var severity = BadgeModel.badgeSeverity(
       sniNeedsAttentionFor(desktopId, entry),
       hyprUrgentFor(desktopId, entry),
       local)
+    return BadgeModel.applicationBadgeToken(
+      true,
+      launcherBadgeMode,
+      launcherCountFor(desktopId),
+      severity)
   }
 
   function focusedEntry() {
@@ -137,6 +157,8 @@ Item {
         focusStartedAt, Date.now(), BadgeModel.FOCUS_DWELL_MS)) return
     var entry = focusedEntry()
     if (!entry) return
+    // This is deliberately local-attention-only. Application-provided counts
+    // are authoritative provider state and focus must never clear them.
     replaceLocalNotifications(BadgeModel.clearMatchingNotifications(
       persisted.localNotifications, entry.id, entry, identityAliases))
   }
@@ -148,6 +170,8 @@ Item {
   }
 
   onNotificationServiceChanged: Qt.callLater(captureNotifications)
+  onLauncherBadgeServiceChanged: bumpRevision()
+  onLauncherBadgeModeChanged: bumpRevision()
   onApplicationsChanged: {
     bumpRevision()
     restartFocusDwell()
@@ -220,6 +244,15 @@ Item {
     function onCountChanged() { root.captureNotifications() }
     function onDataChanged() { root.captureNotifications() }
     function onRowsInserted() { root.captureNotifications() }
+  }
+
+  Connections {
+    target: root.launcherBadgeService
+    ignoreUnknownSignals: true
+
+    function onRevisionChanged() { root.bumpRevision() }
+    function onAvailableChanged() { root.bumpRevision() }
+    function onCountsChanged() { root.bumpRevision() }
   }
 
   Repeater {

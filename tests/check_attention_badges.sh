@@ -83,18 +83,13 @@ grep -Fq 'attentionBadgesEnabled: true' DockHost.qml \
   || fail 'host fallback must enable attention badges'
 grep -Fq 'DockApplicationBadge {' components/DockItem.qml \
   || fail 'DockItem.qml must use the reusable application badge'
-grep -Fq 'severity === "urgent" ? Color.urgent : Color.accent' "$badge" \
-  || fail 'urgent/accent dot rendering missing'
+grep -Fq 'color: urgent ? Color.urgent : Color.accent' "$badge" \
+  || fail 'urgent/accent badge rendering missing'
+grep -Fq 'attention || urgent' "$badge" \
+  || fail 'FDM-809 dot fallback must remain visible for attention/urgent state'
 
-if grep -Eq '(^|[^A-Za-z])(Text|Label)[[:space:]]*\{' "$badge"; then
-  fail 'FDM-809 badge must remain dot-only with no numeric/text content'
-fi
 if grep -Eq '(Animation|Behavior)[[:space:]]' "$badge"; then
-  fail 'attention badge motion belongs to FDM-814, not FDM-809'
-fi
-if grep -Eiq 'unread(Count|Total|Number)|notification(Count|Total)' \
-    "$model" "$tracker" "$badge"; then
-  fail 'numeric unread counts belong to FDM-811, not FDM-809'
+  fail 'application badge motion belongs to FDM-814, not FDM-809/FDM-811'
 fi
 
 printf 'check_attention_badges: PASS\n'

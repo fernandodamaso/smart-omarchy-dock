@@ -1,0 +1,17 @@
+{
+  "updates": [
+    {
+      "uri": "application://../bad.desktop",
+      "sender": ":1.10",
+      "count": 99,
+      "visible": true
+    },
+    {
+      "uri": "application://com.example.Bad.desktop",
+      "sender": ":1.10",
+      "count": "not-a-number",
+      "visible": "not-a-bool"
+    }
+  ],
+  "expected": {}
+}

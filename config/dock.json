@@ -22,6 +22,7 @@
   "sortByWorkspace": false,
   "groupWindows": true,
   "attentionBadgesEnabled": true,
+  "launcherBadgeMode": "automatic",
   "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",
