@@ -18,6 +18,10 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 - Keep window lifecycle actions and SmartDock-minimized origins in the single
   `DockWindowActions` instance owned by `DockHost.qml`; per-screen docks and
   context menus must consume that shared controller rather than duplicate it.
+- Keep mouse-wheel cycling grouped-only. `DockItem.qml` may own transient wheel
+  accumulation/delivery state, but live-member selection, active-member origin,
+  minimized restore, focus, and stale-window handling must stay in the shared
+  host-owned `DockWindowActions` / `DockWindowModel` path.
 - Put reusable visual components in `components/`.
 - Keep user-facing defaults in `config/dock.json` and mirror fallback defaults in `shell.qml`.
 - Installed user settings live outside the application at `~/.config/smartdock/dock.json`; updates must never overwrite them.
@@ -32,7 +36,10 @@ Before committing changes:
 
 ```bash
 timeout 6s ./scripts/run --no-color
-bash -n install.sh uninstall.sh scripts/smartdock scripts/run tests/check_window_actions.sh
+bash -n install.sh uninstall.sh scripts/smartdock scripts/run tests/check_window_actions.sh tests/check_pointer_actions.sh tests/check_window_cycling.sh
+bash tests/check_window_actions.sh
+bash tests/check_pointer_actions.sh
+bash tests/check_window_cycling.sh
 qmltestrunner -input tests -import components
 omarchy plugin validate .
 /usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" \
@@ -41,6 +48,12 @@ omarchy plugin validate .
   components/DockWindowActions.qml shell.qml
 git diff --check
 ```
+
+For FDM-808 specifically, manual Omarchy/Hyprland validation must cover a
+normal mouse wheel, high-resolution and natural-scroll input, grouped windows
+across workspaces, minimized-member restore/focus, rapid member closure,
+single-window pass-through, and two-monitor behavior. Do not infer these
+runtime results from pure-model or structural checks.
 
 A portal warning about an application ID already being registered can occur when another Quickshell process is running; it is not a dock failure.
 

@@ -12,6 +12,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Smooth pointer-distance magnification
 - Freedesktop application icons and launching
 - Configurable application-icon left, middle, Shift+left, and scroll actions
+- Grouped-window wheel cycling with high-resolution vertical-delta accumulation
 - Focuses an existing application on another workspace
 - Running-application indicators
 - First-position sliders control for the app launcher, Dock Settings, adding
@@ -231,7 +232,7 @@ override is disabled.
 | `clickAction` | Action for an unmodified Left click; defaults to legacy-compatible `focus-or-launch` |
 | `middleClickAction` | Action for an unmodified Middle click; defaults to `none` |
 | `shiftClickAction` | Action for Shift+left; defaults to `none` |
-| `scrollAction` | Action reserved for vertical scroll delivery; defaults to `none`; FDM-808 owns the runtime wheel handler |
+| `scrollAction` | Canonical vertical-scroll action; FDM-808 delivers `cycle-windows` only for icons representing at least two grouped live windows; defaults to `none` |
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
@@ -252,18 +253,22 @@ Input precedence is intentionally strict:
 - Middle click with no modifier uses `middleClickAction`.
 - Shift+middle is reserved and performs no action.
 - Ctrl, Alt, Meta, and mixed modifier combinations perform no application action.
-- `scrollAction` is the canonical vertical-scroll action, while horizontal
-  scroll is ignored by the pure wheel helper. FDM-808 owns runtime
-  `WheelHandler` delivery, high-resolution delta state, throttling, natural
-  scroll testing, and the concrete `cycle-windows` implementation.
+- `scrollAction` remains the canonical vertical-scroll preference. FDM-808
+  delivers the `cycle-windows` value only when the icon represents two or more
+  grouped live windows. Horizontal-dominant wheel input is ignored and left
+  unconsumed.
 
 The current action semantics are:
 
 - `none`: no action.
 - `focus`: restore and activate the active member of a running group, falling
   back to its first live member; closed pinned applications do nothing.
-- `cycle-windows`: canonical action reserved for FDM-808. It safely does
-  nothing until that shared controller hook is supplied.
+- `cycle-windows`: vertical wheel input cycles forward/backward through two or
+  more live grouped windows from the actual active member and wraps at both
+  ends. Stale members are filtered immediately before selection. A minimized
+  target is restored through the existing SmartDock origin store and then
+  focused through the same host-owned controller. Other pointer inputs do not
+  gain new cycling behavior.
 - `minimize-restore`: all-or-nothing grouped behavior. If any member is visible,
   all visible members are minimized through the host-owned window controller;
   if all are minimized, all are restored through the same recorded-origin
@@ -281,6 +286,21 @@ Existing configuration files need no migration. If the three new keys are
 absent, they normalize to `none`; an absent or invalid legacy `clickAction`
 normalizes to `focus-or-launch`. Invalid values for the three new keys also
 normalize to `none`.
+
+### Grouped-window wheel cycling
+
+When `scrollAction` is `cycle-windows`, a `WheelHandler` is active only for a
+grouped icon with at least two running windows. The handler keeps Qt's delivered
+vertical sign unchanged so compositor/OS natural-scroll behavior is not
+manually inverted. A vertical delta must dominate the horizontal delta before
+it participates in cycling; horizontal or tied gestures pass through.
+
+High-resolution wheel deltas accumulate against the canonical 120-unit logical
+step from the pointer-action model. Partial residuals are retained for up to
+220 ms and reset after a longer pause or backwards timestamp. A partial delta
+is not consumed. Once a logical step selects and successfully requests another
+live group member, that wheel event is consumed. Single-window and ungrouped
+icons never consume wheel input for this feature.
 
 The first dock icon is always the dock controls icon and is not part of
 `pinned`. Clicking it opens the controls menu; **Open App Launcher** runs

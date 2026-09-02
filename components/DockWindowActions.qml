@@ -13,6 +13,7 @@ Item {
   // FDM-810 can attach one preview implementation here. Until then the
   // previews action is a safe no-op and does not create a second controller.
   property var previewController: null
+  readonly property var activeToplevel: ToplevelManager.activeToplevel
 
   function currentToplevels() {
     return ToplevelManager.toplevels
@@ -163,7 +164,7 @@ Item {
 
   function activeMember(toplevels) {
     return DockWindowModel.activeGroupMember(
-      toplevels, ToplevelManager.activeToplevel, currentToplevels())
+      toplevels, root.activeToplevel, currentToplevels())
   }
 
   function dispatchRequest(request) {
@@ -230,16 +231,39 @@ Item {
     return false
   }
 
-  function closeToplevel(toplevel) {
-    if (!isAlive(toplevel) || typeof toplevel.close !== "function")
-      return false
-    toplevel.close()
-    return true
-  }
-
   function focusToplevels(toplevels) {
     var member = activeMember(toplevels)
     return member ? activateToplevel(member) : false
+  }
+
+  function cycleToplevels(toplevels, direction, activeToplevel) {
+    var members = liveMembers(toplevels)
+    if (members.length < 2) return false
+
+    var active = activeToplevel === undefined
+      ? root.activeToplevel : activeToplevel
+    var target = DockWindowModel.cycleGroupMember(
+      members, active, currentToplevels(), direction)
+    if (!target) return false
+
+    var address = addressFor(target)
+    if (!address) return false
+
+    if (isMinimized(target)) {
+      if (!restoreToplevel(target)) return false
+
+      // Restore and focus are dispatched back-to-back so wheel cycling does
+      // not leave a restored member behind the window that was active before.
+      var focusRequest = DockModel.focusWindowRequest(address, Hyprland.usingLua)
+      if (dispatchRequest(focusRequest)) return true
+      if (typeof target.activate === "function") {
+        target.activate()
+        return true
+      }
+      return true
+    }
+
+    return activateToplevel(target)
   }
 
   function minimizeRestoreToplevels(toplevels) {
@@ -267,6 +291,13 @@ Item {
     for (var i = 0; i < members.length; ++i)
       requested = closeToplevel(members[i]) || requested
     return requested
+  }
+
+  function closeToplevel(toplevel) {
+    if (!isAlive(toplevel) || typeof toplevel.close !== "function")
+      return false
+    toplevel.close()
+    return true
   }
 
   function showToplevelPreviews(desktopId, toplevels) {
