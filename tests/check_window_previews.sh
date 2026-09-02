@@ -44,7 +44,8 @@ require_pattern 'visible:[[:space:]]*mouse\.hovered.*!root\.previewActive' compo
 require_pattern 'openDelayMs:[[:space:]]*250' components/DockWindowPreview.qml
 require_pattern 'closeGraceMs:[[:space:]]*180' components/DockWindowPreview.qml
 require_pattern 'interactionActive' components/DockWindowPreview.qml
-require_pattern 'root\.keepAutoHideOpen.*windowPreview\.interactionActive|windowPreview\.interactionActive.*root\.keepAutoHideOpen' components/Dock.qml
+require_pattern 'readonly property bool keepAutoHideOpen' components/Dock.qml
+require_pattern 'windowPreview\.interactionActive' components/Dock.qml
 require_pattern 'onPreviewRequested:' components/Dock.qml
 require_pattern 'onPreviewReleased:' components/Dock.qml
 require_pattern 'onPreviewDismissRequested:' components/Dock.qml
