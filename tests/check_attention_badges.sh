@@ -38,14 +38,20 @@ if grep -Fq 'NotificationServer' "$tracker" Overlay.qml DockHost.qml; then
   fail 'SmartDock must not create a competing notification server'
 fi
 
-grep -Fq 'property bool ready: false' "$tracker" \
-  || fail 'tracker must gate badge reads until startup settles'
-grep -Fq 'if (!ready) return "none"' "$tracker" \
-  || fail 'badgeFor must avoid startup source subscriptions before ready'
-grep -Fq 'Qt.callLater(function() {' "$tracker" \
-  || fail 'tracker readiness must be deferred by one event-loop turn'
-grep -Fq 'root.ready = true' "$tracker" \
-  || fail 'tracker must enable badge reads after deferred startup'
+badge_for_body="$(sed -n '/function badgeFor(desktopId)/,/^  }/p' "$tracker")"
+if grep -Fq 'revision' <<<"$badge_for_body"; then
+  fail 'badgeFor must not read tracker revision from inside the DockItem binding'
+fi
+grep -Fq 'property int badgeStateRevision: 0' components/Dock.qml \
+  || fail 'Dock.qml must own the external badge revision dependency'
+grep -Fq 'target: root.badgeTracker' components/Dock.qml \
+  || fail 'Dock.qml must observe shared tracker revisions'
+grep -Fq 'function onRevisionChanged()' components/Dock.qml \
+  || fail 'Dock.qml must handle tracker revision changes'
+grep -Fq 'root.badgeStateRevision++' components/Dock.qml \
+  || fail 'tracker revision changes must invalidate dock badge bindings'
+grep -Fq 'var badgeRevision = badgeStateRevision' components/Dock.qml \
+  || fail 'attentionBadgeFor must depend on Dock-owned badge revision state'
 
 grep -Fq 'firstPartyServiceFor("omarchy.notifications")' Overlay.qml \
   || fail 'preferred optional Omarchy notification service wiring missing'
