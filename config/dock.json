@@ -22,6 +22,7 @@
   "sortByWorkspace": false,
   "groupWindows": true,
   "attentionBadgesEnabled": true,
+  "urgentWindowAnimationEnabled": true,
   "launcherBadgeMode": "automatic",
   "hiddenApplications": [],
   "pinned": [
