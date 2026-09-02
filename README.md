@@ -13,6 +13,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Freedesktop application icons and launching
 - Focuses an existing application on another workspace
 - Running-application indicators
+- Dot-first application attention badges from live SNI/Hyprland state and available Omarchy notifications
 - First-position sliders control for the app launcher, Dock Settings, adding
   applications, and auto-hide
 - Bundled Lucide SVG artwork for the Trash icon and dock context-menu actions
@@ -192,6 +193,7 @@ override is disabled.
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
+  "attentionBadgesEnabled": true,
   "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",
@@ -227,8 +229,24 @@ override is disabled.
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
+| `attentionBadgesEnabled` | Show dot-only application attention badges. Ordinary attention uses the accent color; Hyprland urgency and critical local notifications use the urgent color. No unread number is inferred. |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
+
+Attention badges deliberately represent **attention state**, not unread counts.
+SmartDock reduces three sources when they are available: StatusNotifierItem
+`NeedsAttention`, Hyprland's live urgent state/events, and the Omarchy
+notification service. Identity matching is exact after case-folding and an
+optional `.desktop` suffix removal; desktop-entry ID, application ID,
+`startupClass`, display name, and explicitly configured aliases are accepted,
+but substring/fuzzy matching is not. Grouped applications render one dot;
+ungrouped applications assign the dot to the first visible item for that app.
+Hidden applications keep local attention in memory until restored. Dismissing a
+notification popup does not mark it read. Local notification attention expires
+after 24 hours and clears only after the matched application remains focused for
+about 800 ms. Live SNI state is never cleared by SmartDock. Standalone mode, or
+an Omarchy host without the notification service, simply omits that local source
+while SNI and Hyprland sources continue to work.
 
 The first dock icon is always the dock controls icon and is not part of
 `pinned`. Clicking it opens the controls menu; **Open App Launcher** runs
