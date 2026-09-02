@@ -204,20 +204,10 @@ Item {
       }
     }
 
-    Rectangle {
-      id: attentionDot
-
-      visible: root.attentionBadge === "attention"
-        || root.attentionBadge === "urgent"
-      width: 10
-      height: 10
-      radius: width / 2
+    DockApplicationBadge {
+      severity: root.attentionBadge
       x: iconContainer.width - width + 3
       y: root.runningCount > 1 ? 13 : -3
-      color: root.attentionBadge === "urgent" ? Color.urgent : Color.accent
-      border.width: Style.normalBorderWidth
-      border.color: Color.background
-      z: 4
     }
 
     Rectangle {
