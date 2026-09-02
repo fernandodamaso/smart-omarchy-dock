@@ -57,9 +57,9 @@ require_pattern 'property var previewController' components/DockWindowActions.qm
 
 [[ -f components/DockActionDropdown.qml ]] \
   || fail "components/DockActionDropdown.qml does not exist"
-selector_count="$(grep -Ec '^[[:space:]]*DockActionDropdown[[:space:]]*\{' components/DockSettings.qml || true)"
+selector_count="$(grep -Ec '^[[:space:]]*options:[[:space:]]*DockModel\.applicationActionOptions\(\)' components/DockSettings.qml || true)"
 [[ "$selector_count" -eq 4 ]] \
-  || fail "Dock Settings must expose exactly four application action selectors (found $selector_count)"
+  || fail "Dock Settings must expose exactly four application action selectors backed by applicationActionOptions (found $selector_count)"
 require_pattern 'applicationActionOptions\(\)' components/DockSettings.qml
 require_pattern 'label:[[:space:]]*"Left click"' components/DockSettings.qml
 require_pattern 'label:[[:space:]]*"Middle click"' components/DockSettings.qml
