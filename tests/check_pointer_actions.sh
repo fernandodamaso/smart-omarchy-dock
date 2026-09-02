@@ -28,6 +28,7 @@ for key in clickAction middleClickAction shiftClickAction scrollAction; do
   require_pattern "${key}:" DockHost.qml
   require_pattern "${key}:" components/DockModel.js
   require_pattern "${key}" README.md
+  require_pattern "root\.current\(\"${key}\"\)" components/DockSettings.qml
 done
 
 require_pattern 'normalizeApplicationActionConfig' components/Dock.qml
@@ -55,6 +56,18 @@ require_pattern 'function minimizeRestoreToplevels\(' components/DockWindowActio
 require_pattern 'function closeToplevels\(' components/DockWindowActions.qml
 require_pattern 'function showToplevelPreviews\(' components/DockWindowActions.qml
 require_pattern 'property var previewController' components/DockWindowActions.qml
+
+[[ -f components/DockActionDropdown.qml ]] \
+  || fail "components/DockActionDropdown.qml does not exist"
+selector_count="$(grep -Ec '^[[:space:]]*DockActionDropdown[[:space:]]*\{' components/DockSettings.qml || true)"
+[[ "$selector_count" -eq 4 ]] \
+  || fail "Dock Settings must expose exactly four application action selectors (found $selector_count)"
+require_pattern 'applicationActionOptions\(\)' components/DockSettings.qml
+require_pattern 'label:[[:space:]]*"Left click"' components/DockSettings.qml
+require_pattern 'label:[[:space:]]*"Middle click"' components/DockSettings.qml
+require_pattern 'label:[[:space:]]*"Shift \+ left click"' components/DockSettings.qml
+require_pattern 'label:[[:space:]]*"Scroll"' components/DockSettings.qml
+reject_pattern 'id:[[:space:]]*clickActionGroup' components/DockSettings.qml
 
 # FDM-819 ownership remains singular.
 host_instances="$(grep -Ec '^[[:space:]]*DockWindowActions[[:space:]]*\{' DockHost.qml || true)"
