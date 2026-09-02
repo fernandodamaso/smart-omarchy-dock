@@ -2,6 +2,7 @@
 
 #include <QDBusConnection>
 #include <QDebug>
+#include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
