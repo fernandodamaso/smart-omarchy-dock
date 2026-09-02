@@ -21,6 +21,7 @@
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
+  "attentionBadgesEnabled": true,
   "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",
