@@ -18,6 +18,10 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 - Keep window lifecycle actions and SmartDock-minimized origins in the single
   `DockWindowActions` instance owned by `DockHost.qml`; per-screen docks and
   context menus must consume that shared controller rather than duplicate it.
+- Keep grouped hover-preview lifecycle per screen in the single
+  `DockWindowPreview` instance owned by each `Dock.qml`. `DockItem.qml` only
+  requests/releases that popup; preview focus/restore/close must still delegate
+  to the host-owned `DockWindowActions` controller.
 - Keep mouse-wheel cycling grouped-only. `DockItem.qml` may own transient wheel
   accumulation/delivery state, but live-member selection, active-member origin,
   minimized restore, focus, and stale-window handling must stay in the shared
@@ -36,16 +40,18 @@ Before committing changes:
 
 ```bash
 timeout 6s ./scripts/run --no-color
-bash -n install.sh uninstall.sh scripts/smartdock scripts/run tests/check_window_actions.sh tests/check_pointer_actions.sh tests/check_window_cycling.sh
+bash -n install.sh uninstall.sh scripts/smartdock scripts/run tests/check_window_actions.sh tests/check_pointer_actions.sh tests/check_window_cycling.sh tests/check_window_previews.sh
 bash tests/check_window_actions.sh
 bash tests/check_pointer_actions.sh
 bash tests/check_window_cycling.sh
+bash tests/check_window_previews.sh
 qmltestrunner -input tests -import components
 omarchy plugin validate .
 /usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" \
   Overlay.qml DockHost.qml components/Dock.qml components/DockItem.qml \
   components/DockContextMenu.qml components/DockControlItem.qml \
-  components/DockWindowActions.qml shell.qml
+  components/DockWindowActions.qml components/DockWindowPreview.qml \
+  components/DockWindowPreviewTile.qml shell.qml
 git diff --check
 ```
 
@@ -54,6 +60,17 @@ normal mouse wheel, high-resolution and natural-scroll input, grouped windows
 across workspaces, minimized-member restore/focus, rapid member closure,
 single-window pass-through, and two-monitor behavior. Do not infer these
 runtime results from pure-model or structural checks.
+
+For FDM-810 specifically, local Omarchy/Hyprland validation must cover bottom,
+left, right, and top dock positions; auto-hide on and off; groups with exactly
+two windows and many windows; minimized, cross-workspace, and cross-monitor
+members under the active FDM-812 scope; hidden applications; direct movement
+between grouped icons; rapid close during capture; unavailable/protected
+captures; monitor removal and reconnect; tooltip, context-menu, and drag
+conflicts; and at least 50 open/close cycles while observing shell RSS and logs.
+Confirm that still captures are released when hidden, close requests keep the
+popup open until compositor removal is observed, and the popup never steals
+keyboard focus. Repository-only checks do not substitute for this runtime gate.
 
 A portal warning about an application ID already being registered can occur when another Quickshell process is running; it is not a dock failure.
 
