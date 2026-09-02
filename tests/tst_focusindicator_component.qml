@@ -25,7 +25,9 @@ TestCase {
       focused: false
     })
     verify(indicator)
-    compare(indicator.visible, true)
+    // TestCase is a non-visual parent, so assert the component's geometry
+    // contract rather than effective scene visibility.
+    compare(indicator.indicatorGeometry.visible, true)
     compare(indicator.width, 4)
     compare(indicator.height, 4)
     compare(indicator.markerColor, indicator.runningColor)
@@ -37,7 +39,7 @@ TestCase {
       focused: true
     })
     verify(indicator)
-    compare(indicator.visible, true)
+    compare(indicator.indicatorGeometry.visible, true)
     compare(indicator.width, 12)
     compare(indicator.height, 4)
     compare(indicator.markerColor, indicator.focusedColor)
