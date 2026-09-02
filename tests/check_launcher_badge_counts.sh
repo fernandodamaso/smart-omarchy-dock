@@ -79,6 +79,8 @@ fi
 
 grep -Fq 'com.canonical.Unity.LauncherEntry' "$provider" \
   || fail 'Unity LauncherEntry typed provider missing'
+grep -Fq '#include <QDBusMessage>' "$provider" \
+  || fail 'provider must directly include QDBusMessage for message().service()'
 grep -Fq 'QDBusServiceWatcher' provider/launcher-badges/LauncherBadgeProvider.h \
   || fail 'sender disconnect reconciliation missing'
 grep -Fq 'QSaveFile' "$provider" \
