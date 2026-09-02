@@ -31,16 +31,16 @@ TestCase {
   }
 
   function test_normalizesScopeSettingsCompatibly() {
-    compare(DockModel.normalizeSetting("windowScope", undefined), "all")
-    compare(DockModel.normalizeSetting("windowScope", "invalid"), "all")
-    compare(DockModel.normalizeSetting("windowScope", "all"), "all")
-    compare(DockModel.normalizeSetting("windowScope", "workspace"), "workspace")
-    compare(DockModel.normalizeSetting("windowScope", "monitor"), "monitor")
-    compare(DockModel.normalizeSetting("windowScope", "workspace-monitor"),
+    compare(DockWindowModel.normalizeWindowScope(undefined), "all")
+    compare(DockWindowModel.normalizeWindowScope("invalid"), "all")
+    compare(DockWindowModel.normalizeWindowScope("all"), "all")
+    compare(DockWindowModel.normalizeWindowScope("workspace"), "workspace")
+    compare(DockWindowModel.normalizeWindowScope("monitor"), "monitor")
+    compare(DockWindowModel.normalizeWindowScope("workspace-monitor"),
       "workspace-monitor")
-    compare(DockModel.normalizeSetting("showUrgentOutsideScope", undefined), true)
-    compare(DockModel.normalizeSetting("showUrgentOutsideScope", false), false)
-    compare(DockModel.normalizeSetting("showUrgentOutsideScope", "false"), true)
+    compare(DockWindowModel.normalizeShowUrgentOutsideScope(undefined), true)
+    compare(DockWindowModel.normalizeShowUrgentOutsideScope(false), false)
+    compare(DockWindowModel.normalizeShowUrgentOutsideScope("false"), true)
   }
 
   function test_buildsWorkspaceAndMonitorContextIncludingSpecialWorkspaces() {
