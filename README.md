@@ -11,6 +11,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 
 - Smooth pointer-distance magnification
 - Freedesktop application icons and launching
+- Configurable application-icon left, middle, Shift+left, and scroll actions
 - Focuses an existing application on another workspace
 - Running-application indicators
 - First-position sliders control for the app launcher, Dock Settings, adding
@@ -152,12 +153,13 @@ are saved when released; switches and choices save immediately.
 Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
 effects sit side by side, Dock surface exposes Theme default, Omarchy token,
 and custom hex modes without leaving disabled inputs visible, and Layout and
-Behavior share a compact row. Advanced launcher settings expand on demand;
-Reset and Close remain fixed at the bottom. On narrow screens the card grid
-stacks and the middle content area scrolls while the header and footer remain
-visible. The centered panel leaves the dock's edge strip interactive, so moving
-over dock icons continues to preview magnification and hover glow while you
-adjust settings.
+Behavior share a compact row. Behavior includes four application action
+selectors for Left click, Middle click, Shift+left, and Scroll. Advanced
+launcher settings expand on demand; Reset and Close remain fixed at the bottom.
+On narrow screens the card grid stacks and the middle content area scrolls
+while the header and footer remain visible. The centered panel leaves the
+dock's edge strip interactive, so moving over dock icons continues to preview
+magnification and hover glow while you adjust settings.
 
 Background and border overrides use a progressive control: choose **Theme
 default**, pick an Omarchy token (for example `@accent`, `@menu.background`, or
@@ -189,6 +191,9 @@ override is disabled.
   "reserveSpace": true,
   "autoHide": false,
   "clickAction": "focus-or-launch",
+  "middleClickAction": "none",
+  "shiftClickAction": "none",
+  "scrollAction": "none",
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
@@ -223,12 +228,59 @@ override is disabled.
 | `fullLength` | Fill the screen width, or height for a vertical dock |
 | `reserveSpace` | When `true` and `autoHide` is `false`, tiled windows stop beside the visible dock; hidden auto-hide docks do not reserve space |
 | `autoHide` | Hide the dock until the pointer reaches its screen edge; can also be toggled from the right-click menu |
-| `clickAction` | `focus-or-launch` focuses an existing window; `launch` always starts a new instance |
+| `clickAction` | Action for an unmodified Left click; defaults to legacy-compatible `focus-or-launch` |
+| `middleClickAction` | Action for an unmodified Middle click; defaults to `none` |
+| `shiftClickAction` | Action for Shift+left; defaults to `none` |
+| `scrollAction` | Action reserved for vertical scroll delivery; defaults to `none`; FDM-808 owns the runtime wheel handler |
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
+
+### Application pointer actions
+
+The four action keys accept the same vocabulary: `none`, `focus`,
+`cycle-windows`, `minimize-restore`, `launch`, `previews`, `close`, and
+`focus-or-launch`.
+
+Input precedence is intentionally strict:
+
+- Right click always opens the existing application context menu.
+- Left click with no modifier uses `clickAction`.
+- Shift+left uses `shiftClickAction`.
+- Middle click with no modifier uses `middleClickAction`.
+- Shift+middle is reserved and performs no action.
+- Ctrl, Alt, Meta, and mixed modifier combinations perform no application action.
+- `scrollAction` is the canonical vertical-scroll action, while horizontal
+  scroll is ignored by the pure wheel helper. FDM-808 owns runtime
+  `WheelHandler` delivery, high-resolution delta state, throttling, natural
+  scroll testing, and the concrete `cycle-windows` implementation.
+
+The current action semantics are:
+
+- `none`: no action.
+- `focus`: restore and activate the active member of a running group, falling
+  back to its first live member; closed pinned applications do nothing.
+- `cycle-windows`: canonical action reserved for FDM-808. It safely does
+  nothing until that shared controller hook is supplied.
+- `minimize-restore`: all-or-nothing grouped behavior. If any member is visible,
+  all visible members are minimized through the host-owned window controller;
+  if all are minimized, all are restored through the same recorded-origin
+  state.
+- `launch`: execute the desktop entry even when the application is already
+  running; single-instance applications may still reuse their existing process.
+- `previews`: calls the shared preview-controller hook when one is available;
+  it safely does nothing until FDM-810 supplies that controller.
+- `close`: request graceful closure of every live grouped member.
+- `focus-or-launch`: preserves the legacy Left click behavior exactly: repeated
+  clicks focus/cycle a running group in dock order, while a closed pinned
+  application launches.
+
+Existing configuration files need no migration. If the three new keys are
+absent, they normalize to `none`; an absent or invalid legacy `clickAction`
+normalizes to `focus-or-launch`. Invalid values for the three new keys also
+normalize to `none`.
 
 The first dock icon is always the dock controls icon and is not part of
 `pinned`. Clicking it opens the controls menu; **Open App Launcher** runs
