@@ -4,8 +4,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Wayland
 import "components"
 import "components/DockModel.js" as DockModel
+import "components/DockWindowModel.js" as DockWindowModel
 
 Item {
   id: root
@@ -18,6 +20,7 @@ Item {
   property bool workspaceCountsReady: false
   property int workspaceCountsRevision: 0
   property bool workspaceCountsRefreshPending: false
+  property int scopeRevision: 0
   readonly property var windowActions: windowActionsController
 
   property var settings: ({
@@ -46,6 +49,8 @@ Item {
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
     groupWindows: true,
+    windowScope: "all",
+    showUrgentOutsideScope: true,
     hiddenApplications: [],
     pinned: [
       "org.gnome.Nautilus",
@@ -64,6 +69,10 @@ Item {
         throw new Error("'pinned' must be an array")
       parsed.hiddenApplications = DockModel.normalizeSetting(
         "hiddenApplications", parsed.hiddenApplications)
+      parsed.windowScope = DockWindowModel.normalizeWindowScope(parsed.windowScope)
+      parsed.showUrgentOutsideScope =
+        DockWindowModel.normalizeShowUrgentOutsideScope(
+          parsed.showUrgentOutsideScope)
       settings = parsed
     } catch (error) {
       console.warn("Dock: could not load " + configPath + ":", error)
@@ -142,6 +151,7 @@ Item {
   Component.onCompleted: {
     refreshTrash()
     refreshWorkspaceCounts()
+    scopeRefreshTimer.restart()
   }
 
   Timer {
@@ -159,12 +169,36 @@ Item {
     onTriggered: root.refreshWorkspaceCounts()
   }
 
+  Timer {
+    id: scopeRefreshTimer
+
+    interval: 80
+    repeat: false
+    onTriggered: {
+      Hyprland.refreshMonitors()
+      Hyprland.refreshWorkspaces()
+      Hyprland.refreshToplevels()
+      root.scopeRevision++
+    }
+  }
+
   Connections {
     target: Hyprland
 
     function onRawEvent(event) {
-      if (DockModel.shouldRefreshWorkspaceState(event ? event.name : ""))
+      var name = event ? event.name : ""
+      if (DockModel.shouldRefreshWorkspaceState(name))
         workspaceCountsRefreshTimer.restart()
+      if (DockWindowModel.shouldRefreshWindowScope(name))
+        scopeRefreshTimer.restart()
+    }
+  }
+
+  Connections {
+    target: ToplevelManager.toplevels
+
+    function onValuesChanged() {
+      scopeRefreshTimer.restart()
     }
   }
 
@@ -260,6 +294,7 @@ Item {
         workspaceWindowCounts: root.workspaceWindowCounts
         workspaceCountsReady: root.workspaceCountsReady
         workspaceCountsRevision: root.workspaceCountsRevision
+        scopeRevision: root.scopeRevision
         onReorderRequested: (sourceDesktopId, targetDesktopId) => {
           root.reorderPinned(sourceDesktopId, targetDesktopId)
         }
@@ -269,7 +304,8 @@ Item {
         onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
         onSettingChanged: (key, value) => root.saveSetting(key, value)
         onSettingsPatchRequested: patch => root.saveSettings(patch)
-        onResetSettingsRequested: root.saveSettings(DockModel.resetSettingsPatch())
+        onResetSettingsRequested: root.saveSettings(DockModel.mergeSettings(
+          DockModel.resetSettingsPatch(), DockWindowModel.scopeSettingsDefaults()))
         onOpenTrashRequested: root.openTrash()
         onEmptyTrashRequested: root.emptyTrash()
       }
