@@ -244,6 +244,34 @@ PopupWindow {
       contentHeight: root.orientationHorizontal ? height : tileFlow.height
       interactive: contentWidth > width || contentHeight > height
 
+      WheelHandler {
+        target: null
+        onWheel: event => {
+          var primary = Math.abs(event.angleDelta.y) >= Math.abs(event.angleDelta.x)
+            ? event.angleDelta.y : event.angleDelta.x
+          if (primary === 0) {
+            event.accepted = false
+            return
+          }
+
+          if (root.orientationHorizontal
+              && previewViewport.contentWidth > previewViewport.width) {
+            var maxX = previewViewport.contentWidth - previewViewport.width
+            previewViewport.contentX = Math.max(
+              0, Math.min(maxX, previewViewport.contentX - primary))
+            event.accepted = true
+          } else if (!root.orientationHorizontal
+                     && previewViewport.contentHeight > previewViewport.height) {
+            var maxY = previewViewport.contentHeight - previewViewport.height
+            previewViewport.contentY = Math.max(
+              0, Math.min(maxY, previewViewport.contentY - primary))
+            event.accepted = true
+          } else {
+            event.accepted = false
+          }
+        }
+      }
+
       Item {
         id: tileFlow
 
