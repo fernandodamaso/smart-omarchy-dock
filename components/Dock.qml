@@ -7,12 +7,14 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockBadgeModel.js" as BadgeModel
 
 PanelWindow {
   id: root
 
   required property var settings
   required property var windowActions
+  required property var badgeTracker
   required property int trashItemCount
   required property bool trashStateKnown
   required property var workspaceWindowCounts
@@ -140,6 +142,9 @@ PanelWindow {
     "sortByWorkspace", effectiveSetting("sortByWorkspace"))
   readonly property bool groupWindows: DockModel.normalizeSetting(
     "groupWindows", effectiveSetting("groupWindows"))
+  readonly property bool attentionBadgesEnabled:
+    typeof effectiveSetting("attentionBadgesEnabled") === "boolean"
+      ? effectiveSetting("attentionBadgesEnabled") : true
   readonly property var pinned: settings.pinned || []
   readonly property var hiddenApplications: DockModel.normalizeSetting(
     "hiddenApplications", effectiveSetting("hiddenApplications"))
@@ -195,6 +200,12 @@ PanelWindow {
 
   function effectiveSetting(key) {
     return settingPreviews[key] !== undefined ? settingPreviews[key] : settings[key]
+  }
+
+  function attentionBadgeFor(item, index) {
+    if (!attentionBadgesEnabled || !badgeTracker || !item) return "none"
+    if (!BadgeModel.isPrimaryVisibleItem(visibleItems, index)) return "none"
+    return badgeTracker.badgeFor(item.desktopId)
   }
 
   function previewSetting(key, value) {
@@ -483,6 +494,7 @@ PanelWindow {
             runningToplevels: modelData.toplevels
             windowActions: root.windowActions
             hyprToplevels: root.hyprToplevels
+            attentionBadge: root.attentionBadgeFor(modelData, index)
             fullscreenModeActive: root.fullscreenModeActive
             fullscreenEmphasized:
               modelData.toplevels.indexOf(root.fullscreenOwnerToplevel) >= 0
