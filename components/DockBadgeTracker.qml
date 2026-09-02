@@ -30,7 +30,8 @@ Item {
   height: 0
 
   // PersistentProperties survives QML reloads inside this process. There is
-  // intentionally no FileView or other disk persistence for attention state.
+  // intentionally no disk-backed file model or other persistence for
+  // attention state.
   PersistentProperties {
     id: persisted
 
