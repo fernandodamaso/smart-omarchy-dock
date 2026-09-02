@@ -63,7 +63,11 @@ Item {
       next = BadgeModel.upsertNotification(
         next, row, NotificationUrgency.Critical, now)
     }
-    replaceLocalNotifications(next)
+    // A notification may arrive while its application is already focused.
+    // Start a fresh dwell only when local state actually changed, so the new
+    // attention clears after ~800ms of continuous focus instead of lingering
+    // until the next focus transition. Popup dismissal itself is not a read.
+    if (replaceLocalNotifications(next)) restartFocusDwell()
   }
 
   function pruneExpiredLocal() {
@@ -258,7 +262,7 @@ Item {
 
         function onUrgentChanged() { root.bumpRevision() }
         function onLastIpcObjectChanged() { root.bumpRevision() }
-        function onWaylandChanged() { root.bumpRevision() }
+        function onWaylandHandleChanged() { root.bumpRevision() }
       }
     }
   }
