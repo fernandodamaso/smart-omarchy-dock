@@ -58,6 +58,9 @@ require_pattern 'groupedPreviewMembers' components/DockWindowPreview.qml
 require_pattern 'previewViewport' components/DockWindowPreview.qml
 require_pattern 'previewAnchorOffset' components/DockWindowPreview.qml
 require_pattern 'Flickable[[:space:]]*\{' components/DockWindowPreview.qml
+require_pattern 'WheelHandler[[:space:]]*\{' components/DockWindowPreview.qml
+require_pattern 'previewViewport\.contentX' components/DockWindowPreview.qml
+require_pattern 'previewViewport\.contentY' components/DockWindowPreview.qml
 require_pattern 'orientationHorizontal' components/DockWindowPreview.qml
 require_pattern 'onVisibleItemsChanged:' components/DockWindowPreview.qml
 require_pattern 'target:[[:space:]]*root\.anchorScreen' components/DockWindowPreview.qml
