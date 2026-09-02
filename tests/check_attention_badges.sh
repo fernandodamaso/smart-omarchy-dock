@@ -11,11 +11,13 @@ fail() {
 
 model=components/DockBadgeModel.js
 tracker=components/DockBadgeTracker.qml
+badge=components/DockApplicationBadge.qml
 qml_test=tests/tst_badgemodel.qml
 node_test=tests/test_badge_model.mjs
 
 [[ -f "$model" ]] || fail 'DockBadgeModel.js missing'
 [[ -f "$tracker" ]] || fail 'DockBadgeTracker.qml missing'
+[[ -f "$badge" ]] || fail 'DockApplicationBadge.qml missing'
 [[ -f "$qml_test" ]] || fail 'QML badge model test missing'
 [[ -f "$node_test" ]] || fail 'Node badge model test missing'
 
@@ -36,8 +38,8 @@ if grep -Fq 'NotificationServer' "$tracker" Overlay.qml DockHost.qml; then
   fail 'SmartDock must not create a competing notification server'
 fi
 
-grep -Fq 'serviceFor("omarchy.notifications")' Overlay.qml \
-  || fail 'optional Omarchy notification service wiring missing'
+grep -Fq 'firstPartyServiceFor("omarchy.notifications")' Overlay.qml \
+  || fail 'preferred optional Omarchy notification service wiring missing'
 grep -Fq 'Status.NeedsAttention' "$tracker" \
   || fail 'SNI NeedsAttention source missing'
 grep -Fq 'NotificationUrgency.Critical' "$tracker" \
@@ -64,11 +66,19 @@ grep -Fq '"attentionBadgesEnabled": true' config/dock.json \
   || fail 'config default must enable attention badges'
 grep -Fq 'attentionBadgesEnabled: true' DockHost.qml \
   || fail 'host fallback must enable attention badges'
-grep -Fq 'root.attentionBadge === "urgent" ? Color.urgent : Color.accent' components/DockItem.qml \
+grep -Fq 'DockApplicationBadge {' components/DockItem.qml \
+  || fail 'DockItem.qml must use the reusable application badge'
+grep -Fq 'severity === "urgent" ? Color.urgent : Color.accent' "$badge" \
   || fail 'urgent/accent dot rendering missing'
 
+if grep -Eq '(^|[^A-Za-z])(Text|Label)[[:space:]]*\{' "$badge"; then
+  fail 'FDM-809 badge must remain dot-only with no numeric/text content'
+fi
+if grep -Eq '(Animation|Behavior)[[:space:]]' "$badge"; then
+  fail 'attention badge motion belongs to FDM-814, not FDM-809'
+fi
 if grep -Eiq 'unread(Count|Total|Number)|notification(Count|Total)' \
-    "$model" "$tracker" components/DockItem.qml; then
+    "$model" "$tracker" "$badge"; then
   fail 'numeric unread counts belong to FDM-811, not FDM-809'
 fi
 
