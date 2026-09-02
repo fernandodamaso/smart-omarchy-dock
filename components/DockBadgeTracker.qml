@@ -19,7 +19,6 @@ Item {
   property var identityAliases: ({})
   property int revision: 0
   property double focusStartedAt: 0
-  property bool ready: false
 
   readonly property var applications: DesktopEntries.applications.values || []
   readonly property var trayItems: SystemTray.items.values || []
@@ -103,16 +102,6 @@ Item {
   }
 
   function badgeFor(desktopId) {
-    // Avoid subscribing dock delegates to startup mutations while the shared
-    // tracker is still hydrating PersistentProperties and source models. The
-    // ready flag flips on the next event-loop turn, after which normal
-    // revision-driven reactivity resumes without re-entering the delegate's
-    // attentionBadge binding during construction.
-    if (!ready) return "none"
-
-    // Reading revision makes callers reactive to child-object state changes
-    // that do not replace the SystemTray/Hyprland model arrays themselves.
-    var stateRevision = revision
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     var local = BadgeModel.localSeverity(
       persisted.localNotifications,
@@ -155,10 +144,6 @@ Item {
     captureNotifications()
     pruneExpiredLocal()
     restartFocusDwell()
-    Qt.callLater(function() {
-      root.ready = true
-      root.bumpRevision()
-    })
   }
 
   onNotificationServiceChanged: Qt.callLater(captureNotifications)
