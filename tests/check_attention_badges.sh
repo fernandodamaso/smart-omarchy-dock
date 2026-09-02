@@ -38,6 +38,15 @@ if grep -Fq 'NotificationServer' "$tracker" Overlay.qml DockHost.qml; then
   fail 'SmartDock must not create a competing notification server'
 fi
 
+grep -Fq 'property bool ready: false' "$tracker" \
+  || fail 'tracker must gate badge reads until startup settles'
+grep -Fq 'if (!ready) return "none"' "$tracker" \
+  || fail 'badgeFor must avoid startup source subscriptions before ready'
+grep -Fq 'Qt.callLater(function() {' "$tracker" \
+  || fail 'tracker readiness must be deferred by one event-loop turn'
+grep -Fq 'root.ready = true' "$tracker" \
+  || fail 'tracker must enable badge reads after deferred startup'
+
 grep -Fq 'firstPartyServiceFor("omarchy.notifications")' Overlay.qml \
   || fail 'preferred optional Omarchy notification service wiring missing'
 grep -Fq 'Status.NeedsAttention' "$tracker" \
