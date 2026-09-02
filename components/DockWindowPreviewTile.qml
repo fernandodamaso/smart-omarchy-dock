@@ -164,8 +164,8 @@ Item {
       anchors.centerIn: parent
       width: 16
       height: 16
-      name: "x"
-      color: closeMouse.containsMouse ? Color.menu.selectedText : Color.menu.text
+      iconName: "x"
+      tint: closeMouse.containsMouse ? Color.menu.selectedText : Color.menu.text
     }
 
     MouseArea {
