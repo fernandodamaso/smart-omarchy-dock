@@ -311,24 +311,9 @@ Item {
   }
 
   function pruneOrigins() {
-    var origins = minimizedOrigins
-    var addresses = Object.keys(origins)
-    if (addresses.length === 0) return
-
-    var handles = currentHandles()
-    var live = currentToplevels()
-    if (handles.length === 0 && live.length > 0) return
-
-    var retained = {}
-    for (var i = 0; i < handles.length; ++i) {
-      var handle = handles[i]
-      var address = DockModel.normalizeWindowAddress(handle ? handle.address : "")
-      if (!address || origins[address] === undefined) continue
-      if (!handle.wayland || live.indexOf(handle.wayland) < 0) continue
-      retained[address] = origins[address]
-    }
-
-    if (Object.keys(retained).length !== addresses.length)
+    var retained = DockWindowModel.pruneOriginSnapshot(
+      minimizedOrigins, currentHandles(), currentToplevels())
+    if (JSON.stringify(retained) !== JSON.stringify(minimizedOrigins))
       minimizedOrigins = copyOrigins(retained)
   }
 
