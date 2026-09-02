@@ -80,6 +80,7 @@ require_pattern 'DockLucideIcon[[:space:]]*\{' components/DockWindowPreviewTile.
 require_pattern 'iconName:[[:space:]]*"x"' components/DockWindowPreviewTile.qml
 require_pattern 'tint:[[:space:]]*closeMouse\.containsMouse[[:space:]]*\?[[:space:]]*Color\.menu\.selectedText[[:space:]]*:[[:space:]]*Color\.menu\.text' components/DockWindowPreviewTile.qml
 reject_pattern '^[[:space:]]*name:[[:space:]]*"x"' components/DockWindowPreviewTile.qml
+reject_pattern '^[[:space:]]*color:[[:space:]]*closeMouse\.containsMouse' components/DockWindowPreviewTile.qml
 require_pattern 'activateToplevel\(' components/DockWindowPreview.qml
 require_pattern 'closeToplevel\(' components/DockWindowPreview.qml
 
