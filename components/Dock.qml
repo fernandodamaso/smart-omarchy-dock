@@ -37,6 +37,7 @@ PanelWindow {
   property bool autoHideRevealed: false
   property int fullscreenStateRevision: 0
   property int workspaceStateRevision: 0
+  property int badgeStateRevision: 0
   property var settingPreviews: ({})
 
   readonly property int iconSize: DockModel.normalizeSetting(
@@ -203,6 +204,7 @@ PanelWindow {
   }
 
   function attentionBadgeFor(item, index) {
+    var badgeRevision = badgeStateRevision
     if (!attentionBadgesEnabled || !badgeTracker || !item) return "none"
     if (!BadgeModel.isPrimaryVisibleItem(visibleItems, index)) return "none"
     return badgeTracker.badgeFor(item.desktopId)
@@ -289,6 +291,14 @@ PanelWindow {
 
   onAutoHideChanged: updateAutoHideState()
   onKeepAutoHideOpenChanged: updateAutoHideState()
+
+  Connections {
+    target: root.badgeTracker
+
+    function onRevisionChanged() {
+      root.badgeStateRevision++
+    }
+  }
 
   Timer {
     id: fullscreenStateRefreshTimer
