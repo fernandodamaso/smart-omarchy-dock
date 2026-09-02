@@ -15,6 +15,7 @@ Item {
   required property bool captureEnabled
   property int previewWidth: 216
   property int previewHeight: 122
+  property bool captureStopped: false
   signal activateRequested(var toplevel)
   signal closeRequested(var toplevel)
 
@@ -69,22 +70,26 @@ Item {
       live: false
       paintCursor: false
       constraintSize: Qt.size(root.previewWidth, root.previewHeight)
-      width: hasContent ? Math.min(parent.width, Math.max(1, implicitWidth)) : 0
-      height: hasContent ? Math.min(parent.height, Math.max(1, implicitHeight)) : 0
-      visible: hasContent
+      width: hasContent && !root.captureStopped
+        ? Math.min(parent.width, Math.max(1, implicitWidth)) : 0
+      height: hasContent && !root.captureStopped
+        ? Math.min(parent.height, Math.max(1, implicitHeight)) : 0
+      visible: hasContent && !root.captureStopped
 
       onCaptureSourceChanged: {
+        root.captureStopped = false
         if (!captureSource || !root.captureEnabled) return
         Qt.callLater(() => {
           if (preview.captureSource && root.captureEnabled)
             preview.captureFrame()
         })
       }
+      onStopped: root.captureStopped = true
     }
 
     Item {
       anchors.fill: parent
-      visible: !preview.hasContent
+      visible: root.captureStopped || !preview.hasContent
 
       Text {
         anchors.centerIn: parent

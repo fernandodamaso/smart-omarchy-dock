@@ -298,6 +298,11 @@ PopupWindow {
   }
 
   Connections {
+    target: root.anchorScreen
+    function onDestroyed() { root.dismissImmediately() }
+  }
+
+  Connections {
     target: ToplevelManager.toplevels
     function onValuesChanged() { root.refreshFromVisibleItems() }
   }

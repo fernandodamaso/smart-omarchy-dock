@@ -60,7 +60,8 @@ require_pattern 'previewAnchorOffset' components/DockWindowPreview.qml
 require_pattern 'Flickable[[:space:]]*\{' components/DockWindowPreview.qml
 require_pattern 'orientationHorizontal' components/DockWindowPreview.qml
 require_pattern 'onVisibleItemsChanged:' components/DockWindowPreview.qml
-require_pattern 'onDestroyed' components/DockWindowPreview.qml
+require_pattern 'target:[[:space:]]*root\.anchorScreen' components/DockWindowPreview.qml
+require_pattern 'onDestroyed\(\).*dismissImmediately' components/DockWindowPreview.qml
 require_pattern 'Component\.onDestruction:' components/DockWindowPreview.qml
 
 require_pattern 'ScreencopyView[[:space:]]*\{' components/DockWindowPreviewTile.qml
@@ -69,6 +70,7 @@ require_pattern 'paintCursor:[[:space:]]*false' components/DockWindowPreviewTile
 require_pattern 'constraintSize:' components/DockWindowPreviewTile.qml
 require_pattern 'captureSource:[[:space:]]*root\.captureEnabled[[:space:]]*\?[[:space:]]*root\.toplevel[[:space:]]*:[[:space:]]*null' components/DockWindowPreviewTile.qml
 require_pattern 'captureFrame\(\)' components/DockWindowPreviewTile.qml
+require_pattern 'onStopped:[[:space:]]*root\.captureStopped[[:space:]]*=[[:space:]]*true' components/DockWindowPreviewTile.qml
 require_pattern 'Preview unavailable' components/DockWindowPreviewTile.qml
 require_pattern 'Accessible\.name:' components/DockWindowPreviewTile.qml
 require_pattern 'activateToplevel\(' components/DockWindowPreview.qml
