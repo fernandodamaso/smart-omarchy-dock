@@ -87,7 +87,7 @@ reject_pattern 'DockWindowActions[[:space:]]*\{' components/DockWindowPreviewTil
 reject_pattern 'property var minimizedOrigins' components/DockWindowPreview.qml
 reject_pattern 'property var minimizedOrigins' components/DockWindowPreviewTile.qml
 
-require_pattern 'window previews' README.md
+require_pattern 'hover previews' README.md
 require_pattern 'check_window_previews\.sh' AGENTS.md
 require_pattern '50 open/close cycles' AGENTS.md
 
