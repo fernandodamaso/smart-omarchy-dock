@@ -47,4 +47,11 @@ assert.match(docs, /auto-hidden dock does not reveal/i)
 assert.match(docs, /titles,[\s\S]*notification bodies,[\s\S]*output/i)
 assert.match(docs, /urgentWindowAnimationEnabled/)
 
+const readme = read("README.md")
+assert.match(readme, /"urgentWindowAnimationEnabled": true/)
+assert.match(readme, /\| `urgentWindowAnimationEnabled` \|/)
+assert.match(readme, /Application Badges/)
+assert.match(readme, /0 -> 5 -> 0 -> 3 -> 0/)
+assert.match(readme, /Auto-hidden docks do\s+not reveal for urgency/i)
+
 console.log("urgent window settings/docs tests: PASS")
