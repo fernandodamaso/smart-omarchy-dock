@@ -32,6 +32,10 @@ function decision(previous, overrides = {}) {
   })
 }
 
+function plainVector(position, distance) {
+  return { ...urgentMotionVector(position, distance) }
+}
+
 let urgency = reduceWindowUrgencyState(null, [], true, true)
 assert.equal(urgency.windowUrgentRevision, 0)
 assert.equal(urgency.windowUrgent, false)
@@ -170,10 +174,10 @@ assert.equal(primed.seenRevision, 8)
 assert.equal(primed.pendingRevision, 0)
 assert.equal(primed.lastPlayedAt, 1234)
 
-assert.deepEqual(urgentMotionVector("bottom", 5), { x: 0, y: -5 })
-assert.deepEqual(urgentMotionVector("top", 5), { x: 0, y: 5 })
-assert.deepEqual(urgentMotionVector("left", 5), { x: 5, y: 0 })
-assert.deepEqual(urgentMotionVector("right", 5), { x: -5, y: 0 })
-assert.deepEqual(urgentMotionVector("unknown", 3), { x: 0, y: -3 })
+assert.deepEqual(plainVector("bottom", 5), { x: 0, y: -5 })
+assert.deepEqual(plainVector("top", 5), { x: 0, y: 5 })
+assert.deepEqual(plainVector("left", 5), { x: 5, y: 0 })
+assert.deepEqual(plainVector("right", 5), { x: -5, y: 0 })
+assert.deepEqual(plainVector("unknown", 3), { x: 0, y: -3 })
 
 console.log("attention motion model tests: PASS")
