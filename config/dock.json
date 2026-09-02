@@ -24,6 +24,8 @@
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
+  "windowScope": "all",
+  "showUrgentOutsideScope": true,
   "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",

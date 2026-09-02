@@ -36,12 +36,16 @@ require_pattern '220' components/DockItem.qml
 require_pattern 'event\.accepted = cycled' components/DockItem.qml
 require_pattern 'root\.windowActions\.activeToplevel' components/DockItem.qml
 
-# FDM-819 ownership stays singular and per-item minimized-origin state stays forbidden.
+# FDM-819 ownership stays singular. Dock/DockItem may consume host-owned state,
+# but they must not own minimized-origin state or instantiate another controller.
 host_instances="$(grep -Ec '^[[:space:]]*DockWindowActions[[:space:]]*\{' DockHost.qml || true)"
 [[ "$host_instances" -eq 1 ]] \
   || fail "DockHost.qml must own exactly one DockWindowActions instance (found $host_instances)"
-reject_pattern 'minimizedOrigins' components/DockItem.qml
-reject_pattern 'minimizedOrigins' components/Dock.qml
+reject_pattern '^[[:space:]]*DockWindowActions[[:space:]]*\{' components/DockItem.qml
+reject_pattern '^[[:space:]]*DockWindowActions[[:space:]]*\{' components/Dock.qml
+reject_pattern 'property[[:space:]]+var[[:space:]]+minimizedOrigins([[:space:]]|:)' components/DockItem.qml
+reject_pattern 'property[[:space:]]+var[[:space:]]+minimizedOrigins([[:space:]]|:)' components/Dock.qml
+require_pattern 'windowActions\.minimizedOriginsSnapshot' components/Dock.qml
 
 require_pattern 'Grouped-window wheel cycling' README.md
 require_pattern 'mouse-wheel cycling' AGENTS.md
