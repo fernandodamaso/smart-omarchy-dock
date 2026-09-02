@@ -47,6 +47,7 @@ Item {
     sortByWorkspace: false,
     groupWindows: true,
     attentionBadgesEnabled: true,
+    urgentWindowAnimationEnabled: true,
     launcherBadgeMode: "automatic",
     hiddenApplications: [],
     pinned: [
@@ -68,6 +69,9 @@ Item {
         "hiddenApplications", parsed.hiddenApplications)
       parsed.attentionBadgesEnabled = typeof parsed.attentionBadgesEnabled === "boolean"
         ? parsed.attentionBadgesEnabled : true
+      parsed.urgentWindowAnimationEnabled =
+        typeof parsed.urgentWindowAnimationEnabled === "boolean"
+          ? parsed.urgentWindowAnimationEnabled : true
       parsed.launcherBadgeMode = parsed.launcherBadgeMode === "dots-only"
         ? "dots-only" : "automatic"
       settings = parsed
@@ -126,6 +130,7 @@ Item {
   function resetSettings() {
     var patch = DockModel.resetSettingsPatch()
     patch.attentionBadgesEnabled = true
+    patch.urgentWindowAnimationEnabled = true
     patch.launcherBadgeMode = "automatic"
     saveSettings(patch)
   }
