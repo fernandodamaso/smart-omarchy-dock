@@ -108,6 +108,8 @@ function workspaceIdentity(workspace) {
   if (typeof workspace === "string" || typeof workspace === "number") {
     var raw = String(workspace).trim()
     if (!raw) return ""
+    if (/^id:[1-9][0-9]*$/.test(raw))
+      return "id:" + String(Number(raw.slice(3)))
     if (/^[1-9][0-9]*$/.test(raw)) return "id:" + String(Number(raw))
     if (raw.indexOf("special:") === 0) return raw
     if (raw.indexOf("name:") === 0)
@@ -336,6 +338,7 @@ function shouldRefreshWindowScope(eventName) {
     "focusedmon",
     "activewindow",
     "activewindowv2",
+    "fullscreen",
     "urgent",
     "monitoradded",
     "monitoraddedv2",
