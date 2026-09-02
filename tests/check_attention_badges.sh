@@ -1,18 +1,49 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
 fail() {
   printf 'check_attention_badges: %s\n' "$*" >&2
   exit 1
 }
 
 model=components/DockBadgeModel.js
+tracker=components/DockBadgeTracker.qml
 qml_test=tests/tst_badgemodel.qml
 node_test=tests/test_badge_model.mjs
 
 [[ -f "$model" ]] || fail 'DockBadgeModel.js missing'
+[[ -f "$tracker" ]] || fail 'DockBadgeTracker.qml missing'
 [[ -f "$qml_test" ]] || fail 'QML badge model test missing'
 [[ -f "$node_test" ]] || fail 'Node badge model test missing'
+
+tracker_owners="$(grep -R -F 'DockBadgeTracker {' DockHost.qml components --include='*.qml' | wc -l | tr -d ' ')"
+[[ "$tracker_owners" == "1" ]] \
+  || fail "expected exactly one DockBadgeTracker owner, found $tracker_owners"
+grep -Fq 'DockBadgeTracker {' DockHost.qml \
+  || fail 'DockHost.qml must own DockBadgeTracker'
+grep -Fq 'badgeTracker: root.badgeTracker' DockHost.qml \
+  || fail 'DockHost.qml must share one tracker with every Dock'
+
+grep -Fq 'PersistentProperties {' "$tracker" \
+  || fail 'tracker must use PersistentProperties'
+if grep -Fq 'FileView' "$tracker"; then
+  fail 'attention state must not be persisted to disk'
+fi
+if grep -Fq 'NotificationServer' "$tracker" Overlay.qml DockHost.qml; then
+  fail 'SmartDock must not create a competing notification server'
+fi
+
+grep -Fq 'serviceFor("omarchy.notifications")' Overlay.qml \
+  || fail 'optional Omarchy notification service wiring missing'
+grep -Fq 'Status.NeedsAttention' "$tracker" \
+  || fail 'SNI NeedsAttention source missing'
+grep -Fq 'NotificationUrgency.Critical' "$tracker" \
+  || fail 'critical notification reduction missing'
+grep -Fq 'handle.urgent !== true' "$tracker" \
+  || fail 'Hyprland urgent source missing'
 
 grep -q 'LOCAL_ATTENTION_TTL_MS = 24 \* 60 \* 60 \* 1000' "$model" \
   || fail '24-hour local attention TTL missing'
@@ -26,8 +57,18 @@ grep -q 'function badgeSeverity' "$model" \
   || fail 'source reduction missing'
 grep -q 'function isPrimaryVisibleItem' "$model" \
   || fail 'ungrouped primary-item selection missing'
+grep -Fq 'isPrimaryVisibleItem' components/Dock.qml \
+  || fail 'Dock.qml must assign one primary item per app'
 
-if grep -Eqi 'unread.?count|badge.?count|numeric.?badge' "$model" "$qml_test" "$node_test"; then
+grep -Fq '"attentionBadgesEnabled": true' config/dock.json \
+  || fail 'config default must enable attention badges'
+grep -Fq 'attentionBadgesEnabled: true' DockHost.qml \
+  || fail 'host fallback must enable attention badges'
+grep -Fq 'root.attentionBadge === "urgent" ? Color.urgent : Color.accent' components/DockItem.qml \
+  || fail 'urgent/accent dot rendering missing'
+
+if grep -Eiq 'unread(Count|Total|Number)|notification(Count|Total)' \
+    "$model" "$tracker" components/DockItem.qml; then
   fail 'numeric unread counts belong to FDM-811, not FDM-809'
 fi
 
