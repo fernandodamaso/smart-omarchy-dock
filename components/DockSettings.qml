@@ -9,6 +9,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockWindowModel.js" as DockWindowModel
 
 PanelWindow {
   id: root
@@ -117,8 +118,16 @@ PanelWindow {
     : 120
   readonly property real dockEdgePassthrough: Math.max(1, dockHitThickness)
 
+  function normalizeSetting(key, value) {
+    if (key === "windowScope")
+      return DockWindowModel.normalizeWindowScope(value)
+    if (key === "showUrgentOutsideScope")
+      return DockWindowModel.normalizeShowUrgentOutsideScope(value)
+    return DockModel.normalizeSetting(key, value)
+  }
+
   function current(key) {
-    return DockModel.normalizeSetting(key, settings ? settings[key] : undefined)
+    return normalizeSetting(key, settings ? settings[key] : undefined)
   }
 
   function colorForSetting(key) {
@@ -129,11 +138,11 @@ PanelWindow {
   }
 
   function preview(key, value) {
-    settingPreviewed(key, DockModel.normalizeSetting(key, value))
+    settingPreviewed(key, normalizeSetting(key, value))
   }
 
   function commit(key, value) {
-    settingCommitted(key, DockModel.normalizeSetting(key, value))
+    settingCommitted(key, normalizeSetting(key, value))
   }
 
   function commitPatch(patch) {
@@ -810,6 +819,30 @@ PanelWindow {
                 description: "Show one icon per app; turn off for a separate icon per window"
                 checked: root.current("groupWindows")
                 onToggled: root.commit("groupWindows", !checked)
+              }
+
+              DockActionDropdown {
+                width: parent.width
+                label: "Window scope"
+                value: root.current("windowScope")
+                options: DockWindowModel.windowScopeOptions()
+                foreground: Color.menu.text
+                background: Color.menu.background
+                popupBorder: Color.menu.border
+                accent: Color.accent
+                onChanged: value => root.commit("windowScope", value)
+              }
+
+              DockSettingsToggleRow {
+                width: parent.width
+                label: "Show urgent outside scope"
+                description: root.current("windowScope") === "all"
+                  ? "All windows are already visible; no scope exception is needed"
+                  : "Allow true Hyprland urgent windows outside the selected scope"
+                enabled: root.current("windowScope") !== "all"
+                opacity: enabled ? 1 : 0.45
+                checked: root.current("showUrgentOutsideScope")
+                onToggled: root.commit("showUrgentOutsideScope", !checked)
               }
 
               DockSettingsToggleRow {
