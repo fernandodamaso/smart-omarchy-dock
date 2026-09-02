@@ -10,6 +10,9 @@ Item {
   readonly property string minimizedWorkspace: "special:smartdock-minimized"
   property var minimizedOrigins: ({})
   readonly property var minimizedOriginsSnapshot: copyOrigins(minimizedOrigins)
+  // FDM-810 can attach one preview implementation here. Until then the
+  // previews action is a safe no-op and does not create a second controller.
+  property var previewController: null
 
   function currentToplevels() {
     return ToplevelManager.toplevels
@@ -231,6 +234,48 @@ Item {
     if (!isAlive(toplevel) || typeof toplevel.close !== "function")
       return false
     toplevel.close()
+    return true
+  }
+
+  function focusToplevels(toplevels) {
+    var member = activeMember(toplevels)
+    return member ? activateToplevel(member) : false
+  }
+
+  function minimizeRestoreToplevels(toplevels) {
+    var members = liveMembers(toplevels)
+    if (members.length === 0) return false
+
+    var states = []
+    for (var stateIndex = 0; stateIndex < members.length; ++stateIndex)
+      states.push(windowState(members[stateIndex]))
+
+    var mode = DockModel.minimizeRestoreMode(states)
+    var changed = false
+    for (var i = 0; i < members.length; ++i) {
+      if (mode === "minimize" && !states[i].minimized)
+        changed = minimizeToplevel(members[i]) || changed
+      else if (mode === "restore" && states[i].minimized)
+        changed = restoreToplevel(members[i]) || changed
+    }
+    return changed
+  }
+
+  function closeToplevels(toplevels) {
+    var members = liveMembers(toplevels)
+    var requested = false
+    for (var i = 0; i < members.length; ++i)
+      requested = closeToplevel(members[i]) || requested
+    return requested
+  }
+
+  function showToplevelPreviews(desktopId, toplevels) {
+    var members = liveMembers(toplevels)
+    if (members.length === 0 || !previewController
+        || typeof previewController.showApplicationPreviews !== "function")
+      return false
+
+    previewController.showApplicationPreviews(String(desktopId || ""), members)
     return true
   }
 
