@@ -24,11 +24,12 @@ assert_count() {
 
 assert_contains config/dock.json '"windowScope": "all"' 'default windowScope must be all'
 assert_contains config/dock.json '"showUrgentOutsideScope": true' 'urgent-outside-scope must default true'
+assert_contains README.md '### Window scope filtering' 'README must document window scope behavior'
 assert_contains components/DockSettings.qml 'label: "Window scope"' 'Dock Settings must expose window scope'
 assert_contains components/DockSettings.qml 'label: "Show urgent outside scope"' 'Dock Settings must expose urgent exception toggle'
 assert_contains components/DockSettings.qml 'enabled: root.current("windowScope") !== "all"' 'urgent exception must explainably disable for all scope'
 assert_contains components/Dock.qml 'Hyprland.monitorFor(screen)' 'each Dock must resolve its Hyprland monitor from PanelWindow.screen'
-assert_contains components/Dock.qml 'filteredToplevels' 'Dock must filter individual windows before composing visible items'
+assert_contains components/Dock.qml 'pinned, filteredToplevels, applications' 'Dock must filter individual windows before visible-item composition'
 assert_contains DockHost.qml 'scopeRevision' 'DockHost must own shared scope revision state'
 assert_contains DockHost.qml 'scopeRefreshTimer' 'DockHost must own the debounced scope refresh timer'
 assert_contains DockHost.qml 'scopeRevision: root.scopeRevision' 'DockHost must pass one shared scope revision to each Dock'
