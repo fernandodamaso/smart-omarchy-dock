@@ -5,6 +5,7 @@ var BADGE_COUNT_MODE_AUTOMATIC = "automatic"
 var BADGE_COUNT_MODE_DOTS_ONLY = "dots-only"
 var LOCAL_ATTENTION_TTL_MS = 24 * 60 * 60 * 1000
 var FOCUS_DWELL_MS = 800
+var URGENT_WINDOW_COOLDOWN_MS = 3000
 
 function normalizeIdentity(value) {
   return String(value === undefined || value === null ? "" : value)
@@ -226,9 +227,6 @@ function launcherCountState(records, desktopId, providerAvailable) {
   var none = { authoritative: false, count: 0, visible: false }
   if (!providerAvailable) return none
 
-  // A canonical desktop-entry ID can legitimately end in `.desktop` (its
-  // storage filename then ends in `.desktop.desktop`). Prefer the exact ID and
-  // only then try storage-filename normalization, avoiding one suffix too many.
   var candidates = []
   var canonical = canonicalLauncherDesktopId(desktopId)
   if (canonical) candidates.push(canonical)
@@ -314,4 +312,110 @@ function isPrimaryVisibleItem(items, index) {
       return false
   }
   return true
+}
+
+function uniqueUrgentAddresses(values) {
+  var result = []
+  var source = values || []
+  for (var i = 0; i < source.length; ++i) {
+    var value = String(source[i] === undefined || source[i] === null
+      ? "" : source[i]).trim().toLowerCase()
+    if (value && result.indexOf(value) < 0) result.push(value)
+  }
+  return result
+}
+
+function reduceWindowUrgencyState(previous, addresses, primaryOwner, initialize) {
+  var before = previous || ({})
+  var oldAddresses = uniqueUrgentAddresses(before.urgentAddresses)
+  var current = uniqueUrgentAddresses(addresses)
+  var revision = Math.max(0, Number(before.windowUrgentRevision) || 0)
+  if (!initialize) {
+    for (var i = 0; i < current.length; ++i) {
+      if (oldAddresses.indexOf(current[i]) < 0) revision++
+    }
+  }
+  return {
+    urgentAddresses: current,
+    windowUrgent: current.length > 0,
+    primaryOwner: primaryOwner === true,
+    windowUrgentRevision: revision
+  }
+}
+
+function primeUrgentMotionState(previous, revision) {
+  var before = previous || ({})
+  return {
+    initialized: true,
+    seenRevision: Math.max(0, Number(revision) || 0),
+    pendingRevision: 0,
+    lastPlayedAt: Math.max(0, Number(before.lastPlayedAt) || 0)
+  }
+}
+
+function reduceUrgentMotion(previous, input) {
+  var data = input || ({})
+  var revision = Math.max(0, Number(data.revision) || 0)
+  if (!previous || previous.initialized !== true) {
+    return { state: primeUrgentMotionState(previous, revision), play: false }
+  }
+
+  var state = {
+    initialized: true,
+    seenRevision: Math.max(0, Number(previous.seenRevision) || 0),
+    pendingRevision: Math.max(0, Number(previous.pendingRevision) || 0),
+    lastPlayedAt: Math.max(0, Number(previous.lastPlayedAt) || 0)
+  }
+  if (data.primaryOwner !== true) return { state: state, play: false }
+
+  var eligible = data.windowUrgent === true
+    && data.badgesEnabled === true
+    && data.animationEnabled === true
+  var interaction = data.interactionActive === true
+  var dockShown = data.dockShown === true
+  var now = Math.max(0, Number(data.now) || 0)
+  var newRevision = revision > state.seenRevision
+
+  if (newRevision) {
+    state.seenRevision = revision
+    state.pendingRevision = 0
+    if (!eligible || interaction) return { state: state, play: false }
+    if (!dockShown) {
+      state.pendingRevision = revision
+      return { state: state, play: false }
+    }
+    if (state.lastPlayedAt > 0
+        && now - state.lastPlayedAt < URGENT_WINDOW_COOLDOWN_MS)
+      return { state: state, play: false }
+    state.lastPlayedAt = now
+    return { state: state, play: true }
+  }
+
+  if (state.pendingRevision > 0) {
+    if (!eligible || interaction) {
+      state.pendingRevision = 0
+      return { state: state, play: false }
+    }
+    if (!dockShown) return { state: state, play: false }
+    state.pendingRevision = 0
+    if (state.lastPlayedAt > 0
+        && now - state.lastPlayedAt < URGENT_WINDOW_COOLDOWN_MS)
+      return { state: state, play: false }
+    state.lastPlayedAt = now
+    return { state: state, play: true }
+  }
+
+  return { state: state, play: false }
+}
+
+function urgentMotionVector(position, distance) {
+  var amount = Number(distance)
+  if (!isFinite(amount)) amount = 0
+  switch (position) {
+  case "top": return { x: 0, y: amount }
+  case "left": return { x: amount, y: 0 }
+  case "right": return { x: -amount, y: 0 }
+  case "bottom":
+  default: return { x: 0, y: -amount }
+  }
 }
