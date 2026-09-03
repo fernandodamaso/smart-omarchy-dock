@@ -122,10 +122,14 @@ PanelWindow {
   }
 
   function colorForSetting(key) {
+    var fallback = key === "workspaceBadgeBackgroundColor"
+      ? Color.accent
+      : key === "workspaceBadgeTextColor" ? Qt.color("#ffffff")
+      : key === "backgroundColor" ? Color.menu.background : Color.menu.border
     return DockModel.resolveColorValue(
       current(key),
       themeColorTokens,
-      key === "backgroundColor" ? Color.menu.background : Color.menu.border)
+      fallback)
   }
 
   function preview(key, value) {
@@ -152,6 +156,11 @@ PanelWindow {
       backgroundColorInput.text = current("backgroundColor")
     if (!borderColorInput.activeFocus)
       borderColorInput.text = current("borderColor")
+    if (!workspaceBadgeBackgroundColorInput.activeFocus)
+      workspaceBadgeBackgroundColorInput.text = current(
+        "workspaceBadgeBackgroundColor")
+    if (!workspaceBadgeTextColorInput.activeFocus)
+      workspaceBadgeTextColorInput.text = current("workspaceBadgeTextColor")
   }
 
   function commitColor(key, field) {
@@ -170,7 +179,11 @@ PanelWindow {
     colorDialog.settingKey = key
     colorDialog.selectedColor = colorForSetting(key)
     colorDialog.title = key === "backgroundColor"
-      ? "Dock background color" : "Dock border color"
+      ? "Dock background color"
+      : key === "borderColor" ? "Dock border color"
+      : key === "workspaceBadgeBackgroundColor"
+        ? "Workspace badge background color"
+        : "Workspace badge text color"
     colorDialog.open()
   }
 
@@ -183,6 +196,10 @@ PanelWindow {
       backgroundColorInput.text = normalized
     else if (key === "borderColor")
       borderColorInput.text = normalized
+    else if (key === "workspaceBadgeBackgroundColor")
+      workspaceBadgeBackgroundColorInput.text = normalized
+    else if (key === "workspaceBadgeTextColor")
+      workspaceBadgeTextColorInput.text = normalized
     if (normalized !== current(key)) settingCommitted(key, normalized)
   }
 
@@ -720,6 +737,189 @@ PanelWindow {
                   label: "Custom width"
                   checked: root.current("borderWidthEnabled")
                   onToggled: root.commit("borderWidthEnabled", !checked)
+                }
+              }
+            }
+          }
+
+          DockSettingsSection {
+            id: workspaceBadgeSection
+            width: parent.width
+            title: "Workspace badge"
+            description: "Colors for workspace numbers on running app icons"
+            iconName: "layout-grid"
+
+            Flow {
+              width: parent.width
+              spacing: Style.spacing.md
+              flow: Flow.LeftToRight
+
+              Column {
+                width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+                spacing: Style.spacing.sm
+
+                Text {
+                  text: "Background"
+                  color: Color.menu.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                }
+
+                DockColorTokenDropdown {
+                  width: parent.width
+                  showLabel: false
+                  enabled: root.surfaceMode(
+                    "workspaceBadgeBackgroundColorEnabled",
+                    "workspaceBadgeBackgroundColor") !== "custom"
+                  opacity: enabled ? 1 : 0.45
+                  value: root.surfaceMode(
+                    "workspaceBadgeBackgroundColorEnabled",
+                    "workspaceBadgeBackgroundColor") === "token"
+                    ? root.current("workspaceBadgeBackgroundColor") : ""
+                  options: root.defaultTokenOptions(
+                    "Theme default", Color.accent)
+                  fallbackColor: Color.accent
+                  foreground: Color.menu.text
+                  background: Color.menu.background
+                  popupBorder: Color.menu.border
+                  accent: Color.accent
+                  onChanged: value => root.selectSurfaceColor(
+                    "workspaceBadgeBackgroundColorEnabled",
+                    "workspaceBadgeBackgroundColor", value)
+                }
+
+                DockSettingsToggleRow {
+                  width: parent.width
+                  label: "Custom hex"
+                  checked: root.surfaceMode(
+                    "workspaceBadgeBackgroundColorEnabled",
+                    "workspaceBadgeBackgroundColor") === "custom"
+                  onToggled: checked
+                    ? root.commitPatch({
+                      workspaceBadgeBackgroundColorEnabled: false
+                    })
+                    : root.enableCustomSurfaceColor(
+                      "workspaceBadgeBackgroundColorEnabled",
+                      "workspaceBadgeBackgroundColor")
+                }
+
+                Item {
+                  width: parent.width
+                  height: root.surfaceMode(
+                    "workspaceBadgeBackgroundColorEnabled",
+                    "workspaceBadgeBackgroundColor") === "custom"
+                    ? Style.spacing.controlHeight : 0
+                  visible: height > 0
+
+                  TextField {
+                    id: workspaceBadgeBackgroundColorInput
+                    anchors.left: parent.left
+                    anchors.right: workspaceBadgeBackgroundColorSwatch.left
+                    anchors.rightMargin: Style.spacing.sm
+                    anchors.verticalCenter: parent.verticalCenter
+                    placeholderText: "#RRGGBB or #AARRGGBB"
+                    text: root.current("workspaceBadgeBackgroundColor")
+                    foreground: Color.menu.text
+                    accent: Color.accent
+                    onEditingFinished: root.commitColor(
+                      "workspaceBadgeBackgroundColor",
+                      workspaceBadgeBackgroundColorInput)
+                  }
+
+                  DockColorSwatch {
+                    id: workspaceBadgeBackgroundColorSwatch
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    value: root.current("workspaceBadgeBackgroundColor")
+                    fallbackColor: Color.accent
+                    displayColor: root.colorForSetting(
+                      "workspaceBadgeBackgroundColor")
+                    onClicked: root.openColorPicker("workspaceBadgeBackgroundColor")
+                  }
+                }
+              }
+
+              Column {
+                width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+                spacing: Style.spacing.sm
+
+                Text {
+                  text: "Text"
+                  color: Color.menu.text
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                }
+
+                DockColorTokenDropdown {
+                  width: parent.width
+                  showLabel: false
+                  enabled: root.surfaceMode(
+                    "workspaceBadgeTextColorEnabled",
+                    "workspaceBadgeTextColor") !== "custom"
+                  opacity: enabled ? 1 : 0.45
+                  value: root.surfaceMode(
+                    "workspaceBadgeTextColorEnabled",
+                    "workspaceBadgeTextColor") === "token"
+                    ? root.current("workspaceBadgeTextColor") : ""
+                  options: root.defaultTokenOptions(
+                    "Theme default", "#ffffff")
+                  fallbackColor: "#ffffff"
+                  foreground: Color.menu.text
+                  background: Color.menu.background
+                  popupBorder: Color.menu.border
+                  accent: Color.accent
+                  onChanged: value => root.selectSurfaceColor(
+                    "workspaceBadgeTextColorEnabled",
+                    "workspaceBadgeTextColor", value)
+                }
+
+                DockSettingsToggleRow {
+                  width: parent.width
+                  label: "Custom hex"
+                  checked: root.surfaceMode(
+                    "workspaceBadgeTextColorEnabled",
+                    "workspaceBadgeTextColor") === "custom"
+                  onToggled: checked
+                    ? root.commitPatch({ workspaceBadgeTextColorEnabled: false })
+                    : root.enableCustomSurfaceColor(
+                      "workspaceBadgeTextColorEnabled",
+                      "workspaceBadgeTextColor")
+                }
+
+                Item {
+                  width: parent.width
+                  height: root.surfaceMode(
+                    "workspaceBadgeTextColorEnabled",
+                    "workspaceBadgeTextColor") === "custom"
+                    ? Style.spacing.controlHeight : 0
+                  visible: height > 0
+
+                  TextField {
+                    id: workspaceBadgeTextColorInput
+                    anchors.left: parent.left
+                    anchors.right: workspaceBadgeTextColorSwatch.left
+                    anchors.rightMargin: Style.spacing.sm
+                    anchors.verticalCenter: parent.verticalCenter
+                    placeholderText: "#RRGGBB or #AARRGGBB"
+                    text: root.current("workspaceBadgeTextColor")
+                    foreground: Color.menu.text
+                    accent: Color.accent
+                    onEditingFinished: root.commitColor(
+                      "workspaceBadgeTextColor", workspaceBadgeTextColorInput)
+                  }
+
+                  DockColorSwatch {
+                    id: workspaceBadgeTextColorSwatch
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    value: root.current("workspaceBadgeTextColor")
+                    fallbackColor: "#ffffff"
+                    displayColor: root.colorForSetting(
+                      "workspaceBadgeTextColor")
+                    onClicked: root.openColorPicker("workspaceBadgeTextColor")
+                  }
                 }
               }
             }

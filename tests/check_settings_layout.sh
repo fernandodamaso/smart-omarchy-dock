@@ -38,14 +38,14 @@ grep -Eq 'property bool compactControls' "$settings_qml" \
 rg -n 'compactControls: panelWidth < 560' "$settings_qml" >/dev/null \
   || { echo "Narrow settings controls must stack below 560 px" >&2; exit 1; }
 
-for section in 'Icons' 'Hover effect' 'Dock surface' 'Layout' 'Behavior'; do
+for section in 'Icons' 'Hover effect' 'Dock surface' 'Workspace badge' 'Layout' 'Behavior'; do
   rg -n "title: \"$section\"" "$settings_qml" >/dev/null || {
     printf 'Dock Settings is missing section: %s\n' "$section" >&2
     exit 1
   }
 done
 
-for icon in maximize-2 sparkles palette panel-bottom mouse-pointer-click; do
+for icon in maximize-2 sparkles palette layout-grid panel-bottom mouse-pointer-click; do
   rg -n "iconName: \"$icon\"" "$settings_qml" >/dev/null || {
     printf 'Dock Settings is missing section icon: %s\n' "$icon" >&2
     exit 1
