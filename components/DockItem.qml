@@ -5,7 +5,6 @@ import Quickshell.Widgets
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
-import "DockWindowModel.js" as DockWindowModel
 
 Item {
   id: root
@@ -35,8 +34,6 @@ Item {
   required property bool previewActive
   property real reorderOffset: 0
   property int lastActivatedToplevel: -1
-  property real wheelRemainder: 0
-  property double lastWheelTimestamp: 0
   signal dragStarted(int itemIndex)
   signal dragMoved(real mainPosition)
   signal dragFinished()
@@ -60,8 +57,6 @@ Item {
     ? runningToplevels[0]
     : null
   readonly property int runningCount: runningToplevels.length
-  readonly property var activeToplevel: root.windowActions
-    ? root.windowActions.activeToplevel : null
   readonly property string workspaceBadge: DockModel.workspaceBadgeText(
     runningToplevels, hyprToplevels)
   readonly property int minimizedCount: contextMenu.minimizedCount
@@ -89,20 +84,10 @@ Item {
       Quickshell.execDetached(["gtk-launch", desktopId + ".desktop"])
   }
 
-  function dispatchApplicationAction(action, options) {
+  function dispatchApplicationAction(action) {
     if (!DockModel.applicationActionCanRun(action, runningCount)) return false
 
-    var request = options || ({})
     switch (action) {
-    case "cycle-windows":
-      // FDM-808 owns the actual cycle implementation. This hook lets that
-      // successor branch reuse this canonical dispatcher without FDM-815
-      // introducing cycle state or runtime wheel behavior.
-      return root.windowActions
-        && typeof root.windowActions.cycleToplevels === "function"
-        ? root.windowActions.cycleToplevels(
-            root.runningToplevels, request.direction, root.activeToplevel)
-        : false
     case "minimize-restore":
       return root.windowActions.minimizeRestoreToplevels(root.runningToplevels)
     case "previews":
@@ -127,15 +112,13 @@ Item {
     }
   }
 
-  function dispatchPointerAction(input, modifiers, options) {
+  function dispatchPointerAction(input, modifiers) {
     return dispatchApplicationAction(DockModel.resolveApplicationPointerAction(
-      applicationActions, input, modifiers), options)
+      applicationActions, input, modifiers))
   }
 
   onRunningToplevelsChanged: {
     lastActivatedToplevel = -1
-    wheelRemainder = 0
-    lastWheelTimestamp = 0
     if (runningCount < 2) root.previewDismissRequested()
   }
 
@@ -333,18 +316,8 @@ Item {
 
   TapHandler {
     acceptedButtons: Qt.LeftButton
-    // Read the release event's modifiers in one handler. Two overlapping
-    // TapHandlers can lose the passive grab to the drag handler on compositors
-    // that keep Shift in the pointer event, so dispatch all left-click
-    // variants from the same event path.
-    acceptedModifiers: Qt.KeyboardModifierMask
-    onTapped: (eventPoint, button) => root.dispatchPointerAction(
-      "left", DockModel.pointerModifierState(eventPoint.modifiers, {
-        shift: Qt.ShiftModifier,
-        control: Qt.ControlModifier,
-        alt: Qt.AltModifier,
-        meta: Qt.MetaModifier
-      }))
+    acceptedModifiers: Qt.NoModifier
+    onTapped: root.dispatchPointerAction("left", {})
   }
 
   TapHandler {
@@ -360,44 +333,6 @@ Item {
     onTapped: {
       root.previewDismissRequested()
       contextMenu.open()
-    }
-  }
-
-  WheelHandler {
-    id: wheelHandler
-
-    enabled: root.applicationActions.scrollAction !== "none"
-    target: null
-    onWheel: event => {
-      // Ignore horizontal or diagonal gestures and keep sub-threshold
-      // high-resolution deltas until they form one logical wheel step.
-      event.accepted = false
-
-      var verticalDelta = DockWindowModel.dominantVerticalWheelDelta(
-        event.angleDelta.x, event.angleDelta.y)
-      if (verticalDelta === 0 && event.pixelDelta) {
-        // Touchpads may provide pixel deltas without a corresponding
-        // angleDelta. They use the same accumulator, so small gestures still
-        // produce one logical action instead of being dropped.
-        verticalDelta = DockWindowModel.dominantVerticalWheelDelta(
-          event.pixelDelta.x, event.pixelDelta.y)
-      }
-      if (verticalDelta === 0) return
-
-      var now = Date.now()
-      root.wheelRemainder = DockWindowModel.wheelRemainderForTimestamp(
-        root.wheelRemainder, root.lastWheelTimestamp, now, 220)
-      root.lastWheelTimestamp = now
-
-      var accumulated = DockModel.accumulateWheelSteps(
-        root.wheelRemainder, 0, verticalDelta)
-      root.wheelRemainder = accumulated.remainder
-      var direction = DockModel.wheelStepDirection(accumulated.steps)
-      if (direction === 0) return
-
-      var cycled = root.dispatchPointerAction(
-        "scroll", {}, { direction: direction })
-      event.accepted = cycled
     }
   }
 

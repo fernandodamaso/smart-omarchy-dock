@@ -45,8 +45,6 @@ Item {
     autoHide: false,
     clickAction: "focus-or-launch",
     middleClickAction: "none",
-    shiftClickAction: "none",
-    scrollAction: "none",
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
     groupWindows: true,

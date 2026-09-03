@@ -8,7 +8,6 @@ TestCase {
   function test_exposesCanonicalActionVocabulary() {
     compare(JSON.stringify(DockModel.applicationActionValues()), JSON.stringify([
       "none",
-      "cycle-windows",
       "minimize-restore",
       "previews",
       "close",
@@ -16,10 +15,10 @@ TestCase {
     ]))
 
     var options = DockModel.applicationActionOptions()
-    compare(options.length, 6)
+    compare(options.length, 5)
     compare(options[0].value, "none")
     compare(options[0].label, "No action")
-    compare(options[5].value, "focus-or-launch")
+    compare(options[4].value, "focus-or-launch")
     for (var optionIndex = 0; optionIndex < options.length; ++optionIndex) {
       verify(options[optionIndex].value !== "focus")
       verify(options[optionIndex].value !== "launch")
@@ -30,9 +29,7 @@ TestCase {
     var values = DockModel.applicationActionValues()
     var keys = [
       "clickAction",
-      "middleClickAction",
-      "shiftClickAction",
-      "scrollAction"
+      "middleClickAction"
     ]
 
     for (var keyIndex = 0; keyIndex < keys.length; ++keyIndex) {
@@ -45,8 +42,6 @@ TestCase {
     compare(DockModel.normalizeSetting("clickAction", "invalid"),
       "focus-or-launch")
     compare(DockModel.normalizeSetting("middleClickAction", "invalid"), "none")
-    compare(DockModel.normalizeSetting("shiftClickAction", "invalid"), "none")
-    compare(DockModel.normalizeSetting("scrollAction", "invalid"), "none")
     compare(DockModel.normalizeSetting("clickAction", "  focus  "),
       "focus-or-launch")
     compare(DockModel.normalizeSetting("clickAction", "launch"),
@@ -60,22 +55,16 @@ TestCase {
 
     compare(legacy.clickAction, "focus-or-launch")
     compare(legacy.middleClickAction, "none")
-    compare(legacy.shiftClickAction, "none")
-    compare(legacy.scrollAction, "none")
 
     var empty = DockModel.normalizeApplicationActionConfig({})
     compare(empty.clickAction, "focus-or-launch")
     compare(empty.middleClickAction, "none")
-    compare(empty.shiftClickAction, "none")
-    compare(empty.scrollAction, "none")
   }
 
   function test_resolvesPointerInputWithExactModifierPrecedence() {
     var config = {
       clickAction: "focus-or-launch",
-      middleClickAction: "focus-or-launch",
-      shiftClickAction: "close",
-      scrollAction: "minimize-restore"
+      middleClickAction: "focus-or-launch"
     }
 
     compare(DockModel.resolveApplicationPointerAction(config, "right", {}),
@@ -88,7 +77,7 @@ TestCase {
       "focus-or-launch")
     compare(DockModel.resolveApplicationPointerAction(config, "left", {
       shift: true
-    }), "close")
+    }), "none")
     compare(DockModel.resolveApplicationPointerAction(config, "middle", {}),
       "focus-or-launch")
     compare(DockModel.resolveApplicationPointerAction(config, "middle", {
@@ -108,27 +97,11 @@ TestCase {
       shift: true, control: true
     }), "none")
 
-    compare(DockModel.resolveApplicationPointerAction(config, "scroll", {}),
-      "minimize-restore")
-    compare(DockModel.resolveApplicationPointerAction(config, "scroll", {
-      shift: true
-    }), "none")
     compare(DockModel.resolveApplicationPointerAction(config, "unknown", {}), "none")
-  }
-
-  function test_extractsModifierFlagsForQmlPointerEvents() {
-    var masks = { shift: 1, control: 2, alt: 4, meta: 8 }
-    compare(JSON.stringify(DockModel.pointerModifierState(1, masks)),
-      JSON.stringify({ shift: true, control: false, alt: false, meta: false }))
-    compare(JSON.stringify(DockModel.pointerModifierState(10, masks)),
-      JSON.stringify({ shift: false, control: true, alt: false, meta: true }))
-    compare(JSON.stringify(DockModel.pointerModifierState(0, masks)),
-      JSON.stringify({ shift: false, control: false, alt: false, meta: false }))
   }
 
   function test_rejectsClosedApplicationActionsExceptLaunchCompatibleActions() {
     verify(!DockModel.applicationActionCanRun("none", 0))
-    verify(!DockModel.applicationActionCanRun("cycle-windows", 0))
     verify(!DockModel.applicationActionCanRun("minimize-restore", 0))
     verify(!DockModel.applicationActionCanRun("previews", 0))
     verify(!DockModel.applicationActionCanRun("close", 0))
@@ -153,44 +126,10 @@ TestCase {
     ]), "restore")
   }
 
-  function test_accumulatesVerticalWheelDeltasIntoLogicalSteps() {
-    var firstHalf = DockModel.accumulateWheelSteps(0, 0, 60)
-    compare(firstHalf.steps, 0)
-    compare(firstHalf.remainder, 60)
-
-    var fullStep = DockModel.accumulateWheelSteps(firstHalf.remainder, 0, 60)
-    compare(fullStep.steps, 1)
-    compare(fullStep.remainder, 0)
-
-    var negative = DockModel.accumulateWheelSteps(0, 0, -240)
-    compare(negative.steps, -2)
-    compare(negative.remainder, 0)
-
-    var partialNegative = DockModel.accumulateWheelSteps(0, 0, -70)
-    var completedNegative = DockModel.accumulateWheelSteps(
-      partialNegative.remainder, 0, -50)
-    compare(completedNegative.steps, -1)
-    compare(completedNegative.remainder, 0)
-
-    var horizontalOnly = DockModel.accumulateWheelSteps(30, 240, 0)
-    compare(horizontalOnly.steps, 0)
-    compare(horizontalOnly.remainder, 30)
-
-    var mixed = DockModel.accumulateWheelSteps(0, 480, -120)
-    compare(mixed.steps, -1)
-    compare(mixed.remainder, 0)
-
-    compare(DockModel.wheelStepDirection(2), 1)
-    compare(DockModel.wheelStepDirection(-2), -1)
-    compare(DockModel.wheelStepDirection(0), 0)
-  }
-
-  function test_resetAndMergePreserveTheFourActionSchema() {
+  function test_resetAndMergePreserveTheTwoActionSchema() {
     var reset = DockModel.resetSettingsPatch()
     compare(reset.clickAction, "focus-or-launch")
     compare(reset.middleClickAction, "none")
-    compare(reset.shiftClickAction, "none")
-    compare(reset.scrollAction, "none")
 
     var original = {
       pinned: ["browser"],
@@ -199,15 +138,11 @@ TestCase {
       futureOption: "keep-me"
     }
     var merged = DockModel.mergeSettings(original, {
-      middleClickAction: "close",
-      shiftClickAction: "focus-or-launch",
-      scrollAction: "minimize-restore"
+      middleClickAction: "close"
     })
 
     compare(merged.clickAction, "focus-or-launch")
     compare(merged.middleClickAction, "close")
-    compare(merged.shiftClickAction, "focus-or-launch")
-    compare(merged.scrollAction, "minimize-restore")
     compare(JSON.stringify(merged.pinned), JSON.stringify(["browser"]))
     compare(JSON.stringify(merged.hiddenApplications),
       JSON.stringify(["hidden.app"]))

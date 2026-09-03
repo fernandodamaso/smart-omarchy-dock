@@ -11,7 +11,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 
 - Smooth pointer-distance magnification
 - Freedesktop application icons and launching
-- Configurable application-icon left, middle, Shift+left, and scroll actions
+- Configurable application-icon left and middle click actions
 - Focuses an existing application on another workspace
 - Running-application indicators
 - First-position sliders control for the app launcher, Dock Settings, adding
@@ -153,8 +153,8 @@ are saved when released; switches and choices save immediately.
 Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
 effects sit side by side, Dock surface exposes Theme default, Omarchy token,
 and custom hex modes without leaving disabled inputs visible, and Layout and
-Behavior share a compact row. Behavior includes four application action
-selectors for Left click, Middle click, Shift+left, and Scroll. Advanced
+Behavior share a compact row. Behavior includes application action selectors
+for Left click and Middle click. Advanced
 launcher settings expand on demand; Reset and Close remain fixed at the bottom.
 On narrow screens the card grid stacks and the middle content area scrolls
 while the header and footer remain visible. The centered panel leaves the
@@ -198,8 +198,6 @@ width when the override is disabled.
   "autoHide": false,
   "clickAction": "focus-or-launch",
   "middleClickAction": "none",
-  "shiftClickAction": "none",
-  "scrollAction": "none",
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
@@ -240,8 +238,6 @@ width when the override is disabled.
 | `autoHide` | Hide the dock until the pointer reaches its screen edge; can also be toggled from the right-click menu |
 | `clickAction` | Action for an unmodified Left click; defaults to legacy-compatible `focus-or-launch` |
 | `middleClickAction` | Action for an unmodified Middle click; defaults to `none` |
-| `shiftClickAction` | Action for Shift+left; defaults to `none` |
-| `scrollAction` | Action for a vertical scroll over an application icon; defaults to `none` |
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
@@ -250,27 +246,19 @@ width when the override is disabled.
 
 ### Application pointer actions
 
-The four action keys accept the same vocabulary: `none`, `cycle-windows`,
-`minimize-restore`, `previews`, `close`, and `focus-or-launch`.
+The two action keys accept the same vocabulary: `none`, `minimize-restore`,
+`previews`, `close`, and `focus-or-launch`.
 
 Input precedence is intentionally strict:
 
 - Right click always opens the existing application context menu.
 - Left click with no modifier uses `clickAction`.
-- Shift+left uses `shiftClickAction`.
 - Middle click with no modifier uses `middleClickAction`.
-- Shift+middle is reserved and performs no action.
 - Ctrl, Alt, Meta, and mixed modifier combinations perform no application action.
-- `scrollAction` runs once per accumulated vertical wheel step; horizontal and
-  diagonal scroll is ignored. `cycle-windows` advances the shared grouped
-  window controller in the wheel direction.
 
 The current action semantics are:
 
 - `none`: no action.
-- `cycle-windows`: activate the next or previous member of a grouped running
-  application, wrapping at either end; groups with fewer than two windows do
-  nothing.
 - `minimize-restore`: all-or-nothing grouped behavior. If any member is visible,
   all visible members are minimized through the host-owned window controller;
   if all are minimized, all are restored through the same recorded-origin
@@ -279,14 +267,14 @@ The current action semantics are:
   after briefly hovering an application with two or more running windows.
 - `close`: request graceful closure of every live grouped member.
 - `focus-or-launch`: preserves the legacy Left click behavior exactly: repeated
-  clicks focus/cycle a running group in dock order, while a closed pinned
+  clicks focus successive windows in a running group in dock order, while a closed pinned
   application launches.
 
-Existing configuration files need no migration. If the three new keys are
-absent, they normalize to `none`; an absent or invalid legacy `clickAction`
+Existing configuration files need no migration. If either action key is absent,
+it normalizes to its default; an absent or invalid legacy `clickAction`
 normalizes to `focus-or-launch`. Older `focus` and `launch` action values are
 also normalized to `focus-or-launch`, so existing settings retain their useful
-behavior. Invalid values for the three new keys normalize to `none`.
+behavior. Invalid values for `middleClickAction` normalize to `none`.
 
 The first dock icon is always the dock controls icon and is not part of
 `pinned`. Clicking it opens the controls menu; **Open App Launcher** runs
