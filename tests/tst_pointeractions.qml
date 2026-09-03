@@ -8,20 +8,22 @@ TestCase {
   function test_exposesCanonicalActionVocabulary() {
     compare(JSON.stringify(DockModel.applicationActionValues()), JSON.stringify([
       "none",
-      "focus",
       "cycle-windows",
       "minimize-restore",
-      "launch",
       "previews",
       "close",
       "focus-or-launch"
     ]))
 
     var options = DockModel.applicationActionOptions()
-    compare(options.length, 8)
+    compare(options.length, 6)
     compare(options[0].value, "none")
     compare(options[0].label, "No action")
-    compare(options[7].value, "focus-or-launch")
+    compare(options[5].value, "focus-or-launch")
+    for (var optionIndex = 0; optionIndex < options.length; ++optionIndex) {
+      verify(options[optionIndex].value !== "focus")
+      verify(options[optionIndex].value !== "launch")
+    }
   }
 
   function test_normalizesEachActionKeyWithKeySpecificFallbacks() {
@@ -45,7 +47,10 @@ TestCase {
     compare(DockModel.normalizeSetting("middleClickAction", "invalid"), "none")
     compare(DockModel.normalizeSetting("shiftClickAction", "invalid"), "none")
     compare(DockModel.normalizeSetting("scrollAction", "invalid"), "none")
-    compare(DockModel.normalizeSetting("clickAction", "  focus  "), "focus")
+    compare(DockModel.normalizeSetting("clickAction", "  focus  "),
+      "focus-or-launch")
+    compare(DockModel.normalizeSetting("clickAction", "launch"),
+      "focus-or-launch")
   }
 
   function test_migratesLegacyConfigurationsWithoutChangingLeftClickBehavior() {
@@ -67,8 +72,8 @@ TestCase {
 
   function test_resolvesPointerInputWithExactModifierPrecedence() {
     var config = {
-      clickAction: "focus",
-      middleClickAction: "launch",
+      clickAction: "focus-or-launch",
+      middleClickAction: "focus-or-launch",
       shiftClickAction: "close",
       scrollAction: "minimize-restore"
     }
@@ -79,11 +84,13 @@ TestCase {
       shift: true, control: true, alt: true, meta: true
     }), "context-menu")
 
-    compare(DockModel.resolveApplicationPointerAction(config, "left", {}), "focus")
+    compare(DockModel.resolveApplicationPointerAction(config, "left", {}),
+      "focus-or-launch")
     compare(DockModel.resolveApplicationPointerAction(config, "left", {
       shift: true
     }), "close")
-    compare(DockModel.resolveApplicationPointerAction(config, "middle", {}), "launch")
+    compare(DockModel.resolveApplicationPointerAction(config, "middle", {}),
+      "focus-or-launch")
     compare(DockModel.resolveApplicationPointerAction(config, "middle", {
       shift: true
     }), "none")
@@ -109,16 +116,26 @@ TestCase {
     compare(DockModel.resolveApplicationPointerAction(config, "unknown", {}), "none")
   }
 
+  function test_extractsModifierFlagsForQmlPointerEvents() {
+    var masks = { shift: 1, control: 2, alt: 4, meta: 8 }
+    compare(JSON.stringify(DockModel.pointerModifierState(1, masks)),
+      JSON.stringify({ shift: true, control: false, alt: false, meta: false }))
+    compare(JSON.stringify(DockModel.pointerModifierState(10, masks)),
+      JSON.stringify({ shift: false, control: true, alt: false, meta: true }))
+    compare(JSON.stringify(DockModel.pointerModifierState(0, masks)),
+      JSON.stringify({ shift: false, control: false, alt: false, meta: false }))
+  }
+
   function test_rejectsClosedApplicationActionsExceptLaunchCompatibleActions() {
     verify(!DockModel.applicationActionCanRun("none", 0))
-    verify(!DockModel.applicationActionCanRun("focus", 0))
     verify(!DockModel.applicationActionCanRun("cycle-windows", 0))
     verify(!DockModel.applicationActionCanRun("minimize-restore", 0))
     verify(!DockModel.applicationActionCanRun("previews", 0))
     verify(!DockModel.applicationActionCanRun("close", 0))
-    verify(DockModel.applicationActionCanRun("launch", 0))
     verify(DockModel.applicationActionCanRun("focus-or-launch", 0))
-    verify(DockModel.applicationActionCanRun("focus", 1))
+    verify(DockModel.applicationActionCanRun("focus-or-launch", 1))
+    verify(!DockModel.applicationActionCanRun("focus", 1))
+    verify(!DockModel.applicationActionCanRun("launch", 1))
   }
 
   function test_choosesGroupedMinimizeRestoreModeAllOrNothing() {
@@ -178,18 +195,18 @@ TestCase {
     var original = {
       pinned: ["browser"],
       hiddenApplications: ["hidden.app"],
-      clickAction: "launch",
+      clickAction: "focus-or-launch",
       futureOption: "keep-me"
     }
     var merged = DockModel.mergeSettings(original, {
       middleClickAction: "close",
-      shiftClickAction: "focus",
+      shiftClickAction: "focus-or-launch",
       scrollAction: "minimize-restore"
     })
 
-    compare(merged.clickAction, "launch")
+    compare(merged.clickAction, "focus-or-launch")
     compare(merged.middleClickAction, "close")
-    compare(merged.shiftClickAction, "focus")
+    compare(merged.shiftClickAction, "focus-or-launch")
     compare(merged.scrollAction, "minimize-restore")
     compare(JSON.stringify(merged.pinned), JSON.stringify(["browser"]))
     compare(JSON.stringify(merged.hiddenApplications),

@@ -115,10 +115,8 @@ function controlCommand(settings) {
 function applicationActionValues() {
   return [
     "none",
-    "focus",
     "cycle-windows",
     "minimize-restore",
-    "launch",
     "previews",
     "close",
     "focus-or-launch"
@@ -128,10 +126,8 @@ function applicationActionValues() {
 function applicationActionOptions() {
   return [
     { value: "none", label: "No action" },
-    { value: "focus", label: "Focus" },
     { value: "cycle-windows", label: "Cycle windows" },
     { value: "minimize-restore", label: "Minimize / restore" },
-    { value: "launch", label: "Launch" },
     { value: "previews", label: "Show previews" },
     { value: "close", label: "Close" },
     { value: "focus-or-launch", label: "Focus or launch" }
@@ -170,11 +166,27 @@ function resolveApplicationPointerAction(config, input, modifiers) {
   return "none"
 }
 
+function pointerModifierState(flags, masks) {
+  var value = Number(flags)
+  if (!isFinite(value)) value = 0
+  var values = masks || ({})
+  function pressed(name) {
+    var mask = Number(values[name])
+    return isFinite(mask) && mask !== 0 && (value & mask) !== 0
+  }
+  return {
+    shift: pressed("shift"),
+    control: pressed("control"),
+    alt: pressed("alt"),
+    meta: pressed("meta")
+  }
+}
+
 function applicationActionCanRun(action, runningCount) {
   var value = String(action === undefined || action === null ? "" : action).trim()
   if (applicationActionValues().indexOf(value) < 0 || value === "none")
     return false
-  if (value === "launch" || value === "focus-or-launch") return true
+  if (value === "focus-or-launch") return true
   return Number(runningCount) > 0
 }
 
@@ -389,6 +401,10 @@ function normalizeSetting(key, value) {
   case "shiftClickAction":
   case "scrollAction": {
     var action = String(value === undefined || value === null ? "" : value).trim()
+    // Older settings exposed Focus and Launch separately. Treat both legacy
+    // values as the single combined action so existing files keep working.
+    if (action === "focus" || action === "launch")
+      return "focus-or-launch"
     return applicationActionValues().indexOf(action) >= 0 ? action : defaults[key]
   }
   case "controlCommand":

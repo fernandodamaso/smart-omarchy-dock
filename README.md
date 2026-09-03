@@ -231,7 +231,7 @@ override is disabled.
 | `clickAction` | Action for an unmodified Left click; defaults to legacy-compatible `focus-or-launch` |
 | `middleClickAction` | Action for an unmodified Middle click; defaults to `none` |
 | `shiftClickAction` | Action for Shift+left; defaults to `none` |
-| `scrollAction` | Action reserved for vertical scroll delivery; defaults to `none`; FDM-808 owns the runtime wheel handler |
+| `scrollAction` | Action for a vertical scroll over an application icon; defaults to `none` |
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
@@ -240,9 +240,8 @@ override is disabled.
 
 ### Application pointer actions
 
-The four action keys accept the same vocabulary: `none`, `focus`,
-`cycle-windows`, `minimize-restore`, `launch`, `previews`, `close`, and
-`focus-or-launch`.
+The four action keys accept the same vocabulary: `none`, `cycle-windows`,
+`minimize-restore`, `previews`, `close`, and `focus-or-launch`.
 
 Input precedence is intentionally strict:
 
@@ -252,26 +251,22 @@ Input precedence is intentionally strict:
 - Middle click with no modifier uses `middleClickAction`.
 - Shift+middle is reserved and performs no action.
 - Ctrl, Alt, Meta, and mixed modifier combinations perform no application action.
-- `scrollAction` is the canonical vertical-scroll action, while horizontal
-  scroll is ignored by the pure wheel helper. FDM-808 owns runtime
-  `WheelHandler` delivery, high-resolution delta state, throttling, natural
-  scroll testing, and the concrete `cycle-windows` implementation.
+- `scrollAction` runs once per accumulated vertical wheel step; horizontal and
+  diagonal scroll is ignored. `cycle-windows` advances the shared grouped
+  window controller in the wheel direction.
 
 The current action semantics are:
 
 - `none`: no action.
-- `focus`: restore and activate the active member of a running group, falling
-  back to its first live member; closed pinned applications do nothing.
-- `cycle-windows`: canonical action reserved for FDM-808. It safely does
-  nothing until that shared controller hook is supplied.
+- `cycle-windows`: activate the next or previous member of a grouped running
+  application, wrapping at either end; groups with fewer than two windows do
+  nothing.
 - `minimize-restore`: all-or-nothing grouped behavior. If any member is visible,
   all visible members are minimized through the host-owned window controller;
   if all are minimized, all are restored through the same recorded-origin
   state.
-- `launch`: execute the desktop entry even when the application is already
-  running; single-instance applications may still reuse their existing process.
-- `previews`: calls the shared preview-controller hook when one is available;
-  it safely does nothing until FDM-810 supplies that controller.
+- `previews`: show the grouped window preview popup. The same popup also opens
+  after briefly hovering an application with two or more running windows.
 - `close`: request graceful closure of every live grouped member.
 - `focus-or-launch`: preserves the legacy Left click behavior exactly: repeated
   clicks focus/cycle a running group in dock order, while a closed pinned
@@ -279,8 +274,9 @@ The current action semantics are:
 
 Existing configuration files need no migration. If the three new keys are
 absent, they normalize to `none`; an absent or invalid legacy `clickAction`
-normalizes to `focus-or-launch`. Invalid values for the three new keys also
-normalize to `none`.
+normalizes to `focus-or-launch`. Older `focus` and `launch` action values are
+also normalized to `focus-or-launch`, so existing settings retain their useful
+behavior. Invalid values for the three new keys normalize to `none`.
 
 The first dock icon is always the dock controls icon and is not part of
 `pinned`. Clicking it opens the controls menu; **Open App Launcher** runs

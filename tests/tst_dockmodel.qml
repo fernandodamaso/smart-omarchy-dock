@@ -76,7 +76,8 @@ TestCase {
     compare(DockModel.normalizeSetting("hoverGlowRadius", -1), 0)
     compare(DockModel.normalizeSetting("position", "left"), "left")
     compare(DockModel.normalizeSetting("position", "diagonal"), "bottom")
-    compare(DockModel.normalizeSetting("clickAction", "launch"), "launch")
+    compare(DockModel.normalizeSetting("clickAction", "launch"),
+      "focus-or-launch")
     compare(DockModel.normalizeSetting("clickAction", "invalid"), "focus-or-launch")
     compare(DockModel.normalizeSetting("fullLength", true), true)
     compare(DockModel.normalizeSetting("reserveSpace", false), false)
@@ -173,7 +174,7 @@ TestCase {
     var settings = {
       pinned: ["org.gnome.Nautilus", "com.google.Chrome"],
       hiddenApplications: ["org.example.Editor"],
-      clickAction: "launch"
+      clickAction: "focus-or-launch"
     }
     var updated = DockModel.mergeSettings(settings, {
       hiddenApplications: DockModel.addHiddenApplication(
