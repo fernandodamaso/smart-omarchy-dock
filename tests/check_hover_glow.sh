@@ -9,7 +9,7 @@ for relative_path in \
   components/DockTrashItem.qml; do
   qml_file="$plugin_root/$relative_path"
 
-  if ! rg -n '^    RectangularShadow \{' "$qml_file" >/dev/null; then
+  if ! rg -n '^[[:space:]]+RectangularShadow \{' "$qml_file" >/dev/null; then
     printf '%s must provide a hover glow behind the icon\n' "$relative_path" >&2
     exit 1
   fi

@@ -178,6 +178,9 @@ PanelWindow {
   readonly property bool attentionBadgesEnabled:
     typeof effectiveSetting("attentionBadgesEnabled") === "boolean"
       ? effectiveSetting("attentionBadgesEnabled") : true
+  readonly property bool urgentWindowAnimationEnabled:
+    typeof effectiveSetting("urgentWindowAnimationEnabled") === "boolean"
+      ? effectiveSetting("urgentWindowAnimationEnabled") : true
   readonly property var pinned: settings.pinned || []
   readonly property var hiddenApplications: DockModel.normalizeSetting(
     "hiddenApplications", effectiveSetting("hiddenApplications"))
@@ -236,10 +239,14 @@ PanelWindow {
     return settingPreviews[key] !== undefined ? settingPreviews[key] : settings[key]
   }
 
+  function primaryBadgeOwnerFor(index) {
+    return BadgeModel.isPrimaryVisibleItem(visibleItems, index)
+  }
+
   function attentionBadgeFor(item, index) {
     var badgeRevision = badgeStateRevision
     if (!attentionBadgesEnabled || !badgeTracker || !item) return "none"
-    if (!BadgeModel.isPrimaryVisibleItem(visibleItems, index)) return "none"
+    if (!primaryBadgeOwnerFor(index)) return "none"
     return badgeTracker.badgeFor(item.desktopId)
   }
 
@@ -543,7 +550,12 @@ PanelWindow {
               && modelData.toplevels.indexOf(root.activeToplevel) >= 0
             windowActions: root.windowActions
             hyprToplevels: root.hyprToplevels
+            badgeTracker: root.badgeTracker
             attentionBadge: root.attentionBadgeFor(modelData, index)
+            attentionBadgesEnabled: root.attentionBadgesEnabled
+            urgentWindowAnimationEnabled: root.urgentWindowAnimationEnabled
+            primaryBadgeOwner: root.primaryBadgeOwnerFor(index)
+            dockShown: root.dockShown
             fullscreenModeActive: root.fullscreenModeActive
             fullscreenEmphasized:
               modelData.toplevels.indexOf(root.fullscreenOwnerToplevel) >= 0

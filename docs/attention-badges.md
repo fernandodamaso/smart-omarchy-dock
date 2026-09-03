@@ -3,7 +3,7 @@
 FDM-809 adds application attention indicators without pretending SmartDock
 owns unread-message counts. The badge is always a dot: ordinary attention uses
 Omarchy's accent color and urgent/critical attention uses the urgent color.
-FDM-811 remains the owner of any future application-provided numeric badge.
+FDM-811 owns application-provided numeric badge counts and their provider.
 
 ## Sources and reduction
 
@@ -71,3 +71,34 @@ not duplicate the dot.
 Set `attentionBadgesEnabled` to `false` to hide attention dots without deleting
 local attention state. Re-enabling the setting resumes rendering from the
 current live/local state.
+
+## Urgent-window motion
+
+FDM-814 adds a reduced-motion-friendly, one-shot nudge only when a previously
+absent **Hyprland urgent window address** enters an application's urgent-address
+set. Notification events, SNI attention, FDM-811 numeric counts, titles,
+notification bodies, terminal/editor output, sender data, and window content do
+not trigger the animation and are not logged or persisted for motion decisions.
+
+The animation is bounded and never loops: the application artwork moves toward
+the desktop `0 -> 5 -> 0 -> 3 -> 0` pixels over about 520 ms with OutCubic
+easing. Bottom docks move upward, top docks downward, left docks rightward, and
+right docks leftward. The persistent running indicator remains anchored.
+
+Motion has a three-second per-application cooldown. Repeated urgency for an
+address that is already urgent does not increment the motion revision. Closing
+one urgent grouped member removes only that address; another urgent member can
+keep the application's static urgent state active. Clearing an address and
+later receiving urgency for it again creates a new revision.
+
+Hover, drag, an open context menu, or preview interaction suppresses the nudge
+without clearing the urgent badge. An auto-hidden dock does not reveal because
+of urgency; one eligible revision can remain pending and is consumed on the
+next ordinary reveal only if the application is still urgent. Hidden
+applications never animate, and showing one again primes motion at the current
+revision so old urgency is not replayed. Startup and QML reload use the same
+current-revision priming rule.
+
+`urgentWindowAnimationEnabled` defaults to `true`. It is effective only while
+`attentionBadgesEnabled` is also enabled. Turning it off disables motion while
+leaving the static urgent indicator and FDM-811 numeric count state unchanged.

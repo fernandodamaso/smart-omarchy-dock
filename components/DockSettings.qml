@@ -1028,14 +1028,6 @@ PanelWindow {
 
               DockSettingsToggleRow {
                 width: parent.width
-                label: "Attention badges"
-                description: "Show dot-first application attention and urgency indicators"
-                checked: root.current("attentionBadgesEnabled") !== false
-                onToggled: root.commit("attentionBadgesEnabled", !checked)
-              }
-
-              DockSettingsToggleRow {
-                width: parent.width
                 label: "Auto-hide"
                 checked: root.current("autoHide")
                 onToggled: root.commit("autoHide", !checked)
@@ -1077,6 +1069,31 @@ PanelWindow {
                 onChanged: value => root.commit("middleClickAction", value)
               }
 
+            }
+          }
+
+          DockSettingsSection {
+            width: parent.width
+            title: "Application Badges"
+            description: "Persistent badge state and reduced-motion controls"
+            iconName: "sparkles"
+
+            DockSettingsToggleRow {
+              width: parent.width
+              label: "Attention badges"
+              description: "Show dot-first application attention and urgency indicators"
+              checked: root.current("attentionBadgesEnabled") !== false
+              onToggled: root.commit("attentionBadgesEnabled", !checked)
+            }
+
+            DockSettingsToggleRow {
+              width: parent.width
+              label: "Urgent window animation"
+              description: "Nudge newly urgent windows once; disabling motion keeps the urgent badge"
+              enabled: root.current("attentionBadgesEnabled") !== false
+              opacity: enabled ? 1 : 0.45
+              checked: root.current("urgentWindowAnimationEnabled") !== false
+              onToggled: root.commit("urgentWindowAnimationEnabled", !checked)
             }
           }
 
