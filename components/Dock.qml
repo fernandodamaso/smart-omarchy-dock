@@ -49,6 +49,8 @@ PanelWindow {
     "hoverGlowOpacity", effectiveSetting("hoverGlowOpacity"))
   readonly property real hoverGlowRadius: DockModel.normalizeSetting(
     "hoverGlowRadius", effectiveSetting("hoverGlowRadius"))
+  readonly property bool showPreviews: DockModel.normalizeSetting(
+    "showPreviews", effectiveSetting("showPreviews"))
   readonly property int edgeMargin: settings.margin === undefined ? 10 : settings.margin
   // Names exposed by Dock Settings. Values are live bindings to Omarchy's
   // Color singleton so symbolic overrides follow a theme change immediately.
@@ -155,8 +157,10 @@ PanelWindow {
   readonly property bool reserveSpace: DockModel.shouldReserveSpace(
     DockModel.normalizeSetting("reserveSpace", effectiveSetting("reserveSpace")),
     autoHide)
-  readonly property string clickAction: DockModel.normalizeSetting(
-    "clickAction", effectiveSetting("clickAction"))
+  readonly property var applicationActions: DockModel.normalizeApplicationActionConfig({
+    clickAction: effectiveSetting("clickAction"),
+    middleClickAction: effectiveSetting("middleClickAction")
+  })
   readonly property string controlCommand: DockModel.normalizeSetting(
     "controlCommand", effectiveSetting("controlCommand"))
   readonly property string position: DockModel.normalizeSetting(
@@ -213,7 +217,8 @@ PanelWindow {
   readonly property int compactMainExtent: mainPadding * 2 + itemSize
     + appMainExtent + trailingMainExtent
   readonly property bool keepAutoHideOpen: windowPointer.hovered
-    || appPicker.visible || dockSettings.visible || openMenuCount > 0 || dragSource >= 0
+    || appPicker.visible || dockSettings.visible || openMenuCount > 0
+    || dragSource >= 0 || windowPreview.interactionActive
   readonly property bool dockShown: !autoHide || autoHideRevealed
   readonly property real pointerPosition: !pointer.hovered
     ? -10000
@@ -306,6 +311,9 @@ PanelWindow {
 
   onAutoHideChanged: updateAutoHideState()
   onKeepAutoHideOpenChanged: updateAutoHideState()
+  onOpenMenuCountChanged: if (openMenuCount > 0) windowPreview.dismissImmediately()
+  onDragSourceChanged: if (dragSource >= 0) windowPreview.dismissImmediately()
+  onShowPreviewsChanged: if (!showPreviews) windowPreview.dismissImmediately()
 
   Timer {
     id: fullscreenStateRefreshTimer
@@ -503,6 +511,7 @@ PanelWindow {
           model: root.visibleItems
 
           DockItem {
+            id: appItem
             required property var modelData
             required property int index
 
@@ -526,12 +535,15 @@ PanelWindow {
             hoverGlowRadius: root.hoverGlowRadius
             pointerPosition: root.pointerPosition
               - (root.vertical ? appGrid.y : appGrid.x)
-            clickAction: root.clickAction
+            applicationActions: root.applicationActions
+            showPreviews: root.showPreviews
             workspaceBadgeBackgroundColor: root.effectiveWorkspaceBadgeBackgroundColor
             workspaceBadgeTextColor: root.effectiveWorkspaceBadgeTextColor
             autoHide: root.autoHide
             position: root.position
             vertical: root.vertical
+            previewActive: windowPreview.anchorItem === appItem
+              && windowPreview.interactionActive
             reorderOffset: root.reorderOffset(index)
             onDragStarted: itemIndex => {
               root.dragSource = itemIndex
@@ -541,6 +553,12 @@ PanelWindow {
             onDragFinished: root.finishDrag()
             onRemoveRequested: desktopId => root.unpinRequested(desktopId)
             onHideRequested: desktopId => root.hideRequested(desktopId)
+            onPreviewRequested: (anchorItem, desktopId, toplevels, applicationEntry) => {
+              windowPreview.requestPreview(
+                anchorItem, desktopId, toplevels, applicationEntry)
+            }
+            onPreviewReleased: anchorItem => windowPreview.releasePreview(anchorItem)
+            onPreviewDismissRequested: windowPreview.dismissImmediately()
             onContextMenuVisibilityChanged: visible => {
               root.openMenuCount = Math.max(0,
                 root.openMenuCount + (visible ? 1 : -1))
@@ -583,8 +601,7 @@ PanelWindow {
         onOpenRequested: root.openTrashRequested()
         onEmptyRequested: root.emptyTrashRequested()
         onContextMenuVisibilityChanged: visible => {
-          root.openMenuCount = Math.max(0,
-            root.openMenuCount + (visible ? 1 : -1))
+          root.openMenuCount = Math.max(0, root.openMenuCount + (visible ? 1 : -1))
         }
       }
 
@@ -635,6 +652,14 @@ PanelWindow {
     HoverHandler {
       id: pointer
     }
+  }
+
+  DockWindowPreview {
+    id: windowPreview
+
+    windowActions: root.windowActions
+    position: root.position
+    visibleItems: root.visibleItems
   }
 
   DockAppPicker {

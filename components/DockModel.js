@@ -112,6 +112,68 @@ function controlCommand(settings) {
   return command || "omarchy-menu toggle apps"
 }
 
+function applicationActionValues() {
+  return [
+    "none",
+    "minimize-restore",
+    "previews",
+    "close",
+    "focus-or-launch"
+  ]
+}
+
+function applicationActionOptions() {
+  return [
+    { value: "none", label: "No action" },
+    { value: "minimize-restore", label: "Minimize / restore" },
+    { value: "previews", label: "Show previews" },
+    { value: "close", label: "Close" },
+    { value: "focus-or-launch", label: "Focus or launch" }
+  ]
+}
+
+function normalizeApplicationActionConfig(settings) {
+  var source = settings || ({})
+  return {
+    clickAction: normalizeSetting("clickAction", source.clickAction),
+    middleClickAction: normalizeSetting(
+      "middleClickAction", source.middleClickAction)
+  }
+}
+
+function resolveApplicationPointerAction(config, input, modifiers) {
+  var actionConfig = normalizeApplicationActionConfig(config)
+  var kind = String(input || "")
+  var keys = modifiers || ({})
+  var shift = keys.shift === true
+  var control = keys.control === true
+  var alt = keys.alt === true
+  var meta = keys.meta === true
+
+  if (kind === "right") return "context-menu"
+  if (control || alt || meta) return "none"
+
+  if (kind === "left")
+    return shift ? "none" : actionConfig.clickAction
+  if (kind === "middle")
+    return shift ? "none" : actionConfig.middleClickAction
+  return "none"
+}
+
+function applicationActionCanRun(action, runningCount) {
+  var value = String(action === undefined || action === null ? "" : action).trim()
+  if (applicationActionValues().indexOf(value) < 0 || value === "none")
+    return false
+  if (value === "focus-or-launch") return true
+  return Number(runningCount) > 0
+}
+
+function minimizeRestoreMode(states) {
+  var counts = windowStateCounts(states || [])
+  if (counts.total === 0) return "none"
+  return counts.visible > 0 ? "minimize" : "restore"
+}
+
 function settingsDefaults() {
   return {
     iconSize: 42,
@@ -120,6 +182,7 @@ function settingsDefaults() {
     hoverGlowEnabled: true,
     hoverGlowOpacity: 0.72,
     hoverGlowRadius: 28,
+    showPreviews: true,
     backgroundOpacity: 0.88,
     backgroundColorEnabled: false,
     backgroundColor: "",
@@ -136,6 +199,7 @@ function settingsDefaults() {
     reserveSpace: true,
     autoHide: false,
     clickAction: "focus-or-launch",
+    middleClickAction: "none",
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
     groupWindows: true
@@ -325,6 +389,7 @@ function normalizeSetting(key, value) {
   case "backgroundOpacity":
     return steppedNumber(value, 0, 1, 0.05, defaults.backgroundOpacity, 2)
   case "hoverGlowEnabled":
+  case "showPreviews":
   case "backgroundColorEnabled":
   case "borderColorEnabled":
   case "workspaceBadgeBackgroundColorEnabled":
@@ -348,8 +413,14 @@ function normalizeSetting(key, value) {
   case "groupWindows":
     return typeof value === "boolean" ? value : defaults[key]
   case "clickAction":
-    return ["focus-or-launch", "launch"].indexOf(value) >= 0
-      ? value : defaults.clickAction
+  case "middleClickAction": {
+    var action = String(value === undefined || value === null ? "" : value).trim()
+    // Older settings exposed Focus and Launch separately. Treat both legacy
+    // values as the single combined action so existing files keep working.
+    if (action === "focus" || action === "launch")
+      return "focus-or-launch"
+    return applicationActionValues().indexOf(action) >= 0 ? action : defaults[key]
+  }
   case "controlCommand":
     return controlCommand({ controlCommand: value })
   case "hiddenApplications":

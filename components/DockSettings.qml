@@ -1020,6 +1020,14 @@ PanelWindow {
 
               DockSettingsToggleRow {
                 width: parent.width
+                label: "Show previews"
+                description: "Show grouped window previews when hovering app icons"
+                checked: root.current("showPreviews")
+                onToggled: root.commit("showPreviews", !checked)
+              }
+
+              DockSettingsToggleRow {
+                width: parent.width
                 label: "Auto-hide"
                 checked: root.current("autoHide")
                 onToggled: root.commit("autoHide", !checked)
@@ -1037,43 +1045,30 @@ PanelWindow {
                 onToggled: root.commit("reserveSpace", !checked)
               }
 
-              Item {
-                readonly property bool stacked: root.compactControls
+              DockActionDropdown {
                 width: parent.width
-                height: stacked
-                  ? clickLabel.implicitHeight + Style.spacing.sm
-                    + clickActionGroup.implicitHeight
-                  : Math.max(clickLabel.implicitHeight, clickActionGroup.implicitHeight)
-
-                Text {
-                  id: clickLabel
-                  anchors.left: parent.left
-                  anchors.top: parent.stacked ? parent.top : undefined
-                  anchors.verticalCenter: parent.stacked ? undefined : parent.verticalCenter
-                  text: "Click action"
-                  color: Color.menu.text
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.body
-                }
-
-                ButtonGroup {
-                  id: clickActionGroup
-                  anchors.left: parent.stacked ? parent.left : undefined
-                  anchors.right: parent.stacked ? undefined : parent.right
-                  anchors.top: parent.stacked ? clickLabel.bottom : undefined
-                  anchors.topMargin: parent.stacked ? Style.spacing.sm : 0
-                  anchors.verticalCenter: parent.stacked ? undefined : parent.verticalCenter
-                  spacing: 2
-                  options: [
-                    { value: "focus-or-launch", label: "Focus or launch" },
-                    { value: "launch", label: "Always launch" }
-                  ]
-                  value: root.current("clickAction")
-                  foreground: Color.menu.text
-                  background: Color.menu.background
-                  onChanged: value => root.commit("clickAction", value)
-                }
+                label: "Left click"
+                value: root.current("clickAction")
+                options: DockModel.applicationActionOptions()
+                foreground: Color.menu.text
+                background: Color.menu.background
+                popupBorder: Color.menu.border
+                accent: Color.accent
+                onChanged: value => root.commit("clickAction", value)
               }
+
+              DockActionDropdown {
+                width: parent.width
+                label: "Middle click"
+                value: root.current("middleClickAction")
+                options: DockModel.applicationActionOptions()
+                foreground: Color.menu.text
+                background: Color.menu.background
+                popupBorder: Color.menu.border
+                accent: Color.accent
+                onChanged: value => root.commit("middleClickAction", value)
+              }
+
             }
           }
 

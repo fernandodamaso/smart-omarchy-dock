@@ -11,6 +11,8 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 
 - Smooth pointer-distance magnification
 - Freedesktop application icons and launching
+- Configurable application-icon left and middle click actions
+- Optional grouped window previews when hovering application icons
 - Focuses an existing application on another workspace
 - Running-application indicators
 - First-position sliders control for the app launcher, Dock Settings, adding
@@ -152,12 +154,13 @@ are saved when released; switches and choices save immediately.
 Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
 effects sit side by side, Dock surface exposes Theme default, Omarchy token,
 and custom hex modes without leaving disabled inputs visible, and Layout and
-Behavior share a compact row. Advanced launcher settings expand on demand;
-Reset and Close remain fixed at the bottom. On narrow screens the card grid
-stacks and the middle content area scrolls while the header and footer remain
-visible. The centered panel leaves the dock's edge strip interactive, so moving
-over dock icons continues to preview magnification and hover glow while you
-adjust settings.
+Behavior share a compact row. Behavior includes application action selectors
+for Left click and Middle click. Advanced
+launcher settings expand on demand; Reset and Close remain fixed at the bottom.
+On narrow screens the card grid stacks and the middle content area scrolls
+while the header and footer remain visible. The centered panel leaves the
+dock's edge strip interactive, so moving over dock icons continues to preview
+magnification and hover glow while you adjust settings.
 
 Background, border, and workspace badge color overrides use a progressive
 control: choose **Theme default**, pick an Omarchy token (for example
@@ -178,6 +181,7 @@ width when the override is disabled.
   "hoverGlowEnabled": true,
   "hoverGlowOpacity": 0.72,
   "hoverGlowRadius": 28,
+  "showPreviews": true,
   "margin": 10,
   "backgroundOpacity": 0.88,
   "backgroundColorEnabled": false,
@@ -195,6 +199,7 @@ width when the override is disabled.
   "reserveSpace": true,
   "autoHide": false,
   "clickAction": "focus-or-launch",
+  "middleClickAction": "none",
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
@@ -217,6 +222,7 @@ width when the override is disabled.
 | `hoverGlowEnabled` | Show the accent glow behind the icon currently under the pointer |
 | `hoverGlowOpacity` | Glow intensity from `0.0` (hidden) to `1.0` (full strength) |
 | `hoverGlowRadius` | Glow blur radius as a percentage of the icon size, from `0` to `100` |
+| `showPreviews` | When `true`, show grouped window previews while hovering application icons; defaults to `true` |
 | `margin` | Distance between the dock and screen edge |
 | `backgroundOpacity` | Dock background opacity from `0.0` (transparent) to `1.0` (opaque) |
 | `backgroundColorEnabled` | When `true`, use `backgroundColor` instead of Omarchy's menu background token |
@@ -233,12 +239,46 @@ width when the override is disabled.
 | `fullLength` | Fill the screen width, or height for a vertical dock |
 | `reserveSpace` | When `true` and `autoHide` is `false`, tiled windows stop beside the visible dock; hidden auto-hide docks do not reserve space |
 | `autoHide` | Hide the dock until the pointer reaches its screen edge; can also be toggled from the right-click menu |
-| `clickAction` | `focus-or-launch` focuses an existing window; `launch` always starts a new instance |
+| `clickAction` | Action for an unmodified Left click; defaults to legacy-compatible `focus-or-launch` |
+| `middleClickAction` | Action for an unmodified Middle click; defaults to `none` |
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
+
+### Application pointer actions
+
+The two action keys accept the same vocabulary: `none`, `minimize-restore`,
+`previews`, `close`, and `focus-or-launch`.
+
+Input precedence is intentionally strict:
+
+- Right click always opens the existing application context menu.
+- Left click with no modifier uses `clickAction`.
+- Middle click with no modifier uses `middleClickAction`.
+- Ctrl, Alt, Meta, and mixed modifier combinations perform no application action.
+
+The current action semantics are:
+
+- `none`: no action.
+- `minimize-restore`: all-or-nothing grouped behavior. If any member is visible,
+  all visible members are minimized through the host-owned window controller;
+  if all are minimized, all are restored through the same recorded-origin
+  state.
+- `previews`: show the grouped window preview popup when `showPreviews` is
+  enabled. The same popup also opens after briefly hovering an application with
+  two or more running windows.
+- `close`: request graceful closure of every live grouped member.
+- `focus-or-launch`: preserves the legacy Left click behavior exactly: repeated
+  clicks focus successive windows in a running group in dock order, while a closed pinned
+  application launches.
+
+Existing configuration files need no migration. If either action key is absent,
+it normalizes to its default; an absent or invalid legacy `clickAction`
+normalizes to `focus-or-launch`. Older `focus` and `launch` action values are
+also normalized to `focus-or-launch`, so existing settings retain their useful
+behavior. Invalid values for `middleClickAction` normalize to `none`.
 
 The first dock icon is always the dock controls icon and is not part of
 `pinned`. Clicking it opens the controls menu; **Open App Launcher** runs

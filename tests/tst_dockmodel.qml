@@ -76,13 +76,21 @@ TestCase {
     compare(DockModel.normalizeSetting("hoverGlowRadius", -1), 0)
     compare(DockModel.normalizeSetting("position", "left"), "left")
     compare(DockModel.normalizeSetting("position", "diagonal"), "bottom")
-    compare(DockModel.normalizeSetting("clickAction", "launch"), "launch")
+    compare(DockModel.normalizeSetting("clickAction", "launch"),
+      "focus-or-launch")
     compare(DockModel.normalizeSetting("clickAction", "invalid"), "focus-or-launch")
     compare(DockModel.normalizeSetting("fullLength", true), true)
     compare(DockModel.normalizeSetting("reserveSpace", false), false)
     compare(DockModel.normalizeSetting("autoHide", true), true)
+    compare(DockModel.normalizeSetting("showPreviews", true), true)
+    compare(DockModel.normalizeSetting("showPreviews", false), false)
+    compare(DockModel.normalizeSetting("showPreviews", "false"), true)
     compare(DockModel.normalizeSetting("controlCommand", "  launcher --toggle  "),
       "launcher --toggle")
+  }
+
+  function test_defaultsToShowingWindowPreviews() {
+    compare(DockModel.settingsDefaults().showPreviews, true)
   }
 
   function test_providesWorkspaceBadgeDefaults() {
@@ -181,7 +189,7 @@ TestCase {
     var settings = {
       pinned: ["org.gnome.Nautilus", "com.google.Chrome"],
       hiddenApplications: ["org.example.Editor"],
-      clickAction: "launch"
+      clickAction: "focus-or-launch"
     }
     var updated = DockModel.mergeSettings(settings, {
       hiddenApplications: DockModel.addHiddenApplication(

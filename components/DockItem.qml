@@ -26,12 +26,14 @@ Item {
   required property real hoverGlowOpacity
   required property real hoverGlowRadius
   required property real pointerPosition
-  required property string clickAction
+  required property var applicationActions
+  required property bool showPreviews
   required property color workspaceBadgeBackgroundColor
   required property color workspaceBadgeTextColor
   required property bool autoHide
   required property string position
   required property bool vertical
+  required property bool previewActive
   property real reorderOffset: 0
   property int lastActivatedToplevel: -1
   signal dragStarted(int itemIndex)
@@ -42,6 +44,9 @@ Item {
   signal hideRequested(string desktopId)
   signal autoHideToggled(bool enabled)
   signal contextMenuVisibilityChanged(bool visible)
+  signal previewRequested(var anchorItem, string desktopId, var toplevels, var applicationEntry)
+  signal previewReleased(var anchorItem)
+  signal previewDismissRequested()
 
   // Reading the model makes this binding update when Quickshell finishes its
   // asynchronous desktop-entry scan. Calling byId() alone is not reactive.
@@ -81,23 +86,43 @@ Item {
       Quickshell.execDetached(["gtk-launch", desktopId + ".desktop"])
   }
 
-  function activateOrLaunch() {
-    if (clickAction === "focus-or-launch" && runningCount > 0) {
-      lastActivatedToplevel = DockModel.nextToplevelIndex(
-        lastActivatedToplevel, runningCount)
-      root.windowActions.activateToplevel(
-        runningToplevels[lastActivatedToplevel])
-      return
+  function dispatchApplicationAction(action) {
+    if (!DockModel.applicationActionCanRun(action, runningCount)) return false
+
+    switch (action) {
+    case "minimize-restore":
+      return root.windowActions.minimizeRestoreToplevels(root.runningToplevels)
+    case "previews":
+      if (!root.showPreviews || root.runningCount < 2) return false
+      root.previewRequested(root, root.desktopId, root.runningToplevels, root.entry)
+      return true
+    case "close":
+      return root.windowActions.closeToplevels(root.runningToplevels)
+    case "focus-or-launch":
+      if (root.runningCount > 0) {
+        // Preserve the pre-FDM-815 left-click behavior exactly: repeated
+        // clicks walk the group in model order and activate the next window.
+        root.lastActivatedToplevel = DockModel.nextToplevelIndex(
+          root.lastActivatedToplevel, root.runningCount)
+        return root.windowActions.activateToplevel(
+          root.runningToplevels[root.lastActivatedToplevel])
+      }
+      root.launch()
+      return true
+    default:
+      return false
     }
-    launch()
   }
 
-  function closeRunning() {
-    if (runningToplevel)
-      root.windowActions.closeToplevel(runningToplevel)
+  function dispatchPointerAction(input, modifiers) {
+    return dispatchApplicationAction(DockModel.resolveApplicationPointerAction(
+      applicationActions, input, modifiers))
   }
 
-  onRunningToplevelsChanged: lastActivatedToplevel = -1
+  onRunningToplevelsChanged: {
+    lastActivatedToplevel = -1
+    if (runningCount < 2) root.previewDismissRequested()
+  }
 
   width: vertical ? slotSize + 6 : slotSize
   height: vertical ? slotSize : slotSize + 6
@@ -254,7 +279,7 @@ Item {
   }
 
   PanelToolTip {
-    visible: mouse.hovered && !contextMenu.visible
+    visible: mouse.hovered && !contextMenu.visible && !root.previewActive
     text: root.tooltipLabel()
     fontFamily: Style.font.family
     fontSize: Style.font.body
@@ -278,16 +303,38 @@ Item {
   HoverHandler {
     id: mouse
     cursorShape: Qt.PointingHandCursor
+    onHoveredChanged: {
+      if (hovered) {
+        if (root.showPreviews && root.runningCount >= 2
+            && !contextMenu.visible && !dragHandler.active)
+          root.previewRequested(root, root.desktopId,
+            root.runningToplevels, root.entry)
+      } else if (root.previewActive || root.runningCount >= 2) {
+        root.previewReleased(root)
+      }
+    }
   }
 
   TapHandler {
     acceptedButtons: Qt.LeftButton
-    onTapped: root.activateOrLaunch()
+    acceptedModifiers: Qt.NoModifier
+    onTapped: root.dispatchPointerAction("left", {})
+  }
+
+  TapHandler {
+    acceptedButtons: Qt.MiddleButton
+    acceptedModifiers: Qt.NoModifier
+    onTapped: root.dispatchPointerAction("middle", {})
   }
 
   TapHandler {
     acceptedButtons: Qt.RightButton
-    onTapped: contextMenu.open()
+    // Right click owns the context menu regardless of keyboard modifiers.
+    acceptedModifiers: Qt.KeyboardModifierMask
+    onTapped: {
+      root.previewDismissRequested()
+      contextMenu.open()
+    }
   }
 
   DragHandler {
@@ -296,13 +343,16 @@ Item {
     enabled: root.pinnedItem
     target: null
     acceptedButtons: Qt.LeftButton
+    acceptedModifiers: Qt.NoModifier
     xAxis.enabled: !root.vertical
     yAxis.enabled: root.vertical
     onActiveChanged: {
-      if (active)
+      if (active) {
+        root.previewDismissRequested()
         root.dragStarted(root.itemIndex)
-      else
+      } else {
         root.dragFinished()
+      }
     }
     onActiveTranslationChanged: {
       if (active)
