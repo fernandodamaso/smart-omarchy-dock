@@ -279,9 +279,12 @@ function herdrBadgeState(agents, providerAvailable) {
     else counts.unknown++
   }
 
-  var count = counts.blocked > 0 ? counts.blocked : counts.working
+  // Only unseen completions and user-blocking prompts need attention. Active
+  // work is intentionally omitted so the badge never becomes a workload
+  // counter.
+  var count = counts.blocked + counts.done
   var severity = counts.blocked > 0
-    ? BADGE_URGENT : counts.working > 0 ? BADGE_ATTENTION : BADGE_NONE
+    ? BADGE_URGENT : counts.done > 0 ? BADGE_ATTENTION : BADGE_NONE
   return {
     authoritative: count > 0,
     count: count,

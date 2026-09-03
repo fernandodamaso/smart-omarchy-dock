@@ -147,11 +147,12 @@ plugin's files, query configured remote hosts, or send a second notification
 daemon request. It runs the CLI with a two-second timeout every three seconds
 and exposes the result only for the `com.mitchellh.ghostty` desktop entry.
 
-For the Ghostty badge, blocked-agent count takes precedence and uses urgent
-severity; otherwise the working-agent count is shown with attention severity.
-Idle, done, unknown-only, or unavailable Herdr state produces no numeric badge,
-so existing FDM-809 attention sources remain available. Native Unity launcher
-counts remain authoritative if an application publishes one for the same ID.
+For the Ghostty badge, the count includes only unseen completions (`done`) and
+user-blocking prompts (`blocked`). Any blocked agent makes the badge urgent;
+done-only state uses attention severity. Working, idle, unknown-only, or
+unavailable Herdr state produces no numeric badge, so existing FDM-809
+attention sources remain available. Native Unity launcher counts remain
+authoritative if an application publishes one for the same ID.
 Standalone `shell.qml` does not instantiate this adapter.
 
 ## Rendering rules

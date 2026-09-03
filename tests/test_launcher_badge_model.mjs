@@ -99,25 +99,24 @@ assert.equal(presentation.kind, "none")
 const herdrWorking = herdrBadgeState([
   { agent_status: "working" },
   { agent_status: "working" },
-  { agent_status: "idle" },
-  { agent_status: "done" }
+  { agent_status: "idle" }
 ], true)
 assert.equal(JSON.stringify(herdrWorking), JSON.stringify({
-  authoritative: true,
-  count: 2,
-  visible: true,
-  severity: "attention",
-  total: 4,
+  authoritative: false,
+  count: 0,
+  visible: false,
+  severity: "none",
+  total: 3,
   working: 2,
   blocked: 0,
-  done: 1,
+  done: 0,
   idle: 1,
   unknown: 0
 }))
 assert.equal(
   herdrCountStateFor(
     "com.mitchellh.ghostty", "com.mitchellh.ghostty", herdrWorking).count,
-  2)
+  0)
 assert.equal(
   herdrCountStateFor("org.gnome.Nautilus", "com.mitchellh.ghostty", herdrWorking)
     .authoritative,
@@ -126,11 +125,20 @@ assert.equal(
 const herdrBlocked = herdrBadgeState([
   { agent_status: "blocked" },
   { agent_status: "working" },
+  { agent_status: "done" },
   { agent_status: "mystery" }
 ], true)
-assert.equal(herdrBlocked.count, 1)
+assert.equal(herdrBlocked.count, 2)
 assert.equal(herdrBlocked.severity, "urgent")
 assert.equal(herdrBlocked.unknown, 1)
+
+const herdrDone = herdrBadgeState([
+  { agent_status: "done" },
+  { agent_status: "done" },
+  { agent_status: "idle" }
+], true)
+assert.equal(herdrDone.count, 2)
+assert.equal(herdrDone.severity, "attention")
 
 const herdrIdle = herdrBadgeState([{ agent_status: "idle" }], true)
 assert.equal(herdrIdle.authoritative, false)

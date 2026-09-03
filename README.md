@@ -150,13 +150,14 @@ does not own this provider and therefore remains dot-only. See
 compatibility, and local validation details.
 
 On Omarchy, SmartDock also reads the local `herdr agent list` contract every
-three seconds when `herdr` is available. Blocked agents show an urgent numeric
-badge on the Ghostty launcher; otherwise working agents show an attention
-badge. This mirrors the data reduction used by the community
+three seconds when `herdr` is available. Unseen completed agents and agents
+blocked on a question or approval show a numeric badge on the Ghostty launcher;
+blocked state is urgent, while done-only state uses attention severity. Working
+agents do not create a badge. This mirrors the data reduction used by the community
 [`omarchy-herdr`](https://github.com/fabean/omarchy-herdr) bar plugin without
 depending on that plugin or querying its remote-host configuration. Idle or
-completed agents do not create a badge, and standalone SmartDock leaves this
-optional integration disabled.
+already-seen agents do not create a badge, and standalone SmartDock leaves
+this optional integration disabled.
 
 ### Development
 

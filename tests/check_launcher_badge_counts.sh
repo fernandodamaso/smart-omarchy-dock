@@ -66,6 +66,10 @@ grep -q 'function applicationBadgePresentation' "$model" \
   || fail 'count/dot precedence model missing'
 grep -q 'function applicationBadgeToken' "$model" \
   || fail 'shared badge rendering token missing'
+grep -q 'function herdrBadgeState' "$model" \
+  || fail 'Herdr badge state reduction missing'
+grep -Fq 'var count = counts.blocked + counts.done' "$model" \
+  || fail 'Herdr badges must count only blocked and unseen done agents'
 grep -Fq 'launcherCountFor(desktopId)' "$tracker" \
   || fail 'shared tracker count lookup missing'
 grep -Fq 'applicationBadgeToken(' "$tracker" \
