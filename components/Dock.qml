@@ -49,6 +49,8 @@ PanelWindow {
     "hoverGlowOpacity", effectiveSetting("hoverGlowOpacity"))
   readonly property real hoverGlowRadius: DockModel.normalizeSetting(
     "hoverGlowRadius", effectiveSetting("hoverGlowRadius"))
+  readonly property bool showPreviews: DockModel.normalizeSetting(
+    "showPreviews", effectiveSetting("showPreviews"))
   readonly property int edgeMargin: settings.margin === undefined ? 10 : settings.margin
   // Names exposed by Dock Settings. Values are live bindings to Omarchy's
   // Color singleton so symbolic overrides follow a theme change immediately.
@@ -311,6 +313,7 @@ PanelWindow {
   onKeepAutoHideOpenChanged: updateAutoHideState()
   onOpenMenuCountChanged: if (openMenuCount > 0) windowPreview.dismissImmediately()
   onDragSourceChanged: if (dragSource >= 0) windowPreview.dismissImmediately()
+  onShowPreviewsChanged: if (!showPreviews) windowPreview.dismissImmediately()
 
   Timer {
     id: fullscreenStateRefreshTimer
@@ -531,6 +534,7 @@ PanelWindow {
             pointerPosition: root.pointerPosition
               - (root.vertical ? appGrid.y : appGrid.x)
             applicationActions: root.applicationActions
+            showPreviews: root.showPreviews
             workspaceBadgeBackgroundColor: root.effectiveWorkspaceBadgeBackgroundColor
             workspaceBadgeTextColor: root.effectiveWorkspaceBadgeTextColor
             autoHide: root.autoHide

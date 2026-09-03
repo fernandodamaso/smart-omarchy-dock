@@ -19,8 +19,11 @@ require_pattern() {
 [[ -f components/DockWindowPreviewTile.qml ]] || fail "missing preview tile"
 [[ -f components/DockWindowPreviewModel.js ]] || fail "missing preview model"
 require_pattern 'DockWindowPreview[[:space:]]*\{' components/Dock.qml
+require_pattern 'showPreviews' components/Dock.qml
 require_pattern 'onPreviewRequested:' components/Dock.qml
 require_pattern 'previewRequested' components/DockItem.qml
+require_pattern 'required property bool showPreviews' components/DockItem.qml
+require_pattern 'root\.showPreviews' components/DockItem.qml
 require_pattern 'root\.previewRequested\(root' components/DockItem.qml
 require_pattern 'ScreencopyView[[:space:]]*\{' components/DockWindowPreviewTile.qml
 require_pattern 'captureFrame\(\)' components/DockWindowPreviewTile.qml

@@ -27,6 +27,7 @@ Item {
     hoverGlowEnabled: true,
     hoverGlowOpacity: 0.72,
     hoverGlowRadius: 28,
+    showPreviews: true,
     margin: 10,
     backgroundOpacity: 0.88,
     backgroundColorEnabled: false,

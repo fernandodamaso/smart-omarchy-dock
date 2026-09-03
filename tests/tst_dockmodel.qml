@@ -82,8 +82,15 @@ TestCase {
     compare(DockModel.normalizeSetting("fullLength", true), true)
     compare(DockModel.normalizeSetting("reserveSpace", false), false)
     compare(DockModel.normalizeSetting("autoHide", true), true)
+    compare(DockModel.normalizeSetting("showPreviews", true), true)
+    compare(DockModel.normalizeSetting("showPreviews", false), false)
+    compare(DockModel.normalizeSetting("showPreviews", "false"), true)
     compare(DockModel.normalizeSetting("controlCommand", "  launcher --toggle  "),
       "launcher --toggle")
+  }
+
+  function test_defaultsToShowingWindowPreviews() {
+    compare(DockModel.settingsDefaults().showPreviews, true)
   }
 
   function test_providesWorkspaceBadgeDefaults() {

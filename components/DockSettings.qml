@@ -1020,6 +1020,14 @@ PanelWindow {
 
               DockSettingsToggleRow {
                 width: parent.width
+                label: "Show previews"
+                description: "Show grouped window previews when hovering app icons"
+                checked: root.current("showPreviews")
+                onToggled: root.commit("showPreviews", !checked)
+              }
+
+              DockSettingsToggleRow {
+                width: parent.width
                 label: "Auto-hide"
                 checked: root.current("autoHide")
                 onToggled: root.commit("autoHide", !checked)

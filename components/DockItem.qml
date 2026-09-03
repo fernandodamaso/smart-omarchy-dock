@@ -26,6 +26,7 @@ Item {
   required property real hoverGlowRadius
   required property real pointerPosition
   required property var applicationActions
+  required property bool showPreviews
   required property color workspaceBadgeBackgroundColor
   required property color workspaceBadgeTextColor
   required property bool autoHide
@@ -91,7 +92,7 @@ Item {
     case "minimize-restore":
       return root.windowActions.minimizeRestoreToplevels(root.runningToplevels)
     case "previews":
-      if (root.runningCount < 2) return false
+      if (!root.showPreviews || root.runningCount < 2) return false
       root.previewRequested(root, root.desktopId, root.runningToplevels, root.entry)
       return true
     case "close":
@@ -305,7 +306,8 @@ Item {
     cursorShape: Qt.PointingHandCursor
     onHoveredChanged: {
       if (hovered) {
-        if (root.runningCount >= 2 && !contextMenu.visible && !dragHandler.active)
+        if (root.showPreviews && root.runningCount >= 2
+            && !contextMenu.visible && !dragHandler.active)
           root.previewRequested(root, root.desktopId,
             root.runningToplevels, root.entry)
       } else if (root.previewActive || root.runningCount >= 2) {

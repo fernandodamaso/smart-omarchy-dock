@@ -12,6 +12,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Smooth pointer-distance magnification
 - Freedesktop application icons and launching
 - Configurable application-icon left and middle click actions
+- Optional grouped window previews when hovering application icons
 - Focuses an existing application on another workspace
 - Running-application indicators
 - First-position sliders control for the app launcher, Dock Settings, adding
@@ -180,6 +181,7 @@ width when the override is disabled.
   "hoverGlowEnabled": true,
   "hoverGlowOpacity": 0.72,
   "hoverGlowRadius": 28,
+  "showPreviews": true,
   "margin": 10,
   "backgroundOpacity": 0.88,
   "backgroundColorEnabled": false,
@@ -220,6 +222,7 @@ width when the override is disabled.
 | `hoverGlowEnabled` | Show the accent glow behind the icon currently under the pointer |
 | `hoverGlowOpacity` | Glow intensity from `0.0` (hidden) to `1.0` (full strength) |
 | `hoverGlowRadius` | Glow blur radius as a percentage of the icon size, from `0` to `100` |
+| `showPreviews` | When `true`, show grouped window previews while hovering application icons; defaults to `true` |
 | `margin` | Distance between the dock and screen edge |
 | `backgroundOpacity` | Dock background opacity from `0.0` (transparent) to `1.0` (opaque) |
 | `backgroundColorEnabled` | When `true`, use `backgroundColor` instead of Omarchy's menu background token |
@@ -263,8 +266,9 @@ The current action semantics are:
   all visible members are minimized through the host-owned window controller;
   if all are minimized, all are restored through the same recorded-origin
   state.
-- `previews`: show the grouped window preview popup. The same popup also opens
-  after briefly hovering an application with two or more running windows.
+- `previews`: show the grouped window preview popup when `showPreviews` is
+  enabled. The same popup also opens after briefly hovering an application with
+  two or more running windows.
 - `close`: request graceful closure of every live grouped member.
 - `focus-or-launch`: preserves the legacy Left click behavior exactly: repeated
   clicks focus successive windows in a running group in dock order, while a closed pinned
