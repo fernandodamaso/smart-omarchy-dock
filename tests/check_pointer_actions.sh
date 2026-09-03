@@ -42,7 +42,18 @@ require_pattern 'acceptedModifiers:[[:space:]]*Qt\.NoModifier' components/DockIt
 require_pattern 'acceptedModifiers:[[:space:]]*Qt\.ShiftModifier' components/DockItem.qml
 require_pattern 'acceptedButtons:[[:space:]]*Qt\.MiddleButton' components/DockItem.qml
 require_pattern 'acceptedButtons:[[:space:]]*Qt\.RightButton' components/DockItem.qml
-require_pattern 'onTapped:[[:space:]]*contextMenu\.open\(\)' components/DockItem.qml
+if ! awk '
+  /^  TapHandler \{/ { in_tap = 1; has_right = 0; has_menu = 0 }
+  in_tap && /acceptedButtons:[[:space:]]*Qt\.RightButton/ { has_right = 1 }
+  in_tap && /contextMenu\.open\(\)/ { has_menu = 1 }
+  in_tap && /^  \}$/ {
+    if (has_right && has_menu) found = 1
+    in_tap = 0
+  }
+  END { exit(found ? 0 : 1) }
+' components/DockItem.qml; then
+  fail 'missing expected wiring in components/DockItem.qml: right-click handler must open contextMenu'
+fi
 require_pattern 'DragHandler[[:space:]]*\{' components/DockItem.qml
 require_pattern 'acceptedModifiers:[[:space:]]*Qt\.NoModifier' components/DockItem.qml
 
