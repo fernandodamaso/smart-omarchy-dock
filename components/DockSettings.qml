@@ -754,13 +754,12 @@ PanelWindow {
             description: "Colors for workspace numbers on running app icons"
             iconName: "layout-grid"
 
-            Flow {
+            Column {
               width: parent.width
               spacing: Style.spacing.md
-              flow: Flow.LeftToRight
 
               Column {
-                width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+                width: parent.width
                 spacing: Style.spacing.sm
 
                 Text {
@@ -846,7 +845,7 @@ PanelWindow {
               }
 
               Column {
-                width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+                width: parent.width
                 spacing: Style.spacing.sm
 
                 Text {
