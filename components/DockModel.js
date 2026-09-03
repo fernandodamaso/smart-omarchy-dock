@@ -146,6 +146,56 @@ function shouldReserveSpace(reserveSpace, autoHide) {
   return Boolean(reserveSpace) && !Boolean(autoHide)
 }
 
+function hasActiveMember(toplevels, activeToplevel) {
+  if (!activeToplevel) return false
+
+  var values = Array.isArray(toplevels)
+    ? toplevels
+    : toplevels && toplevels.values ? toplevels.values : []
+  for (var i = 0; i < values.length; ++i) {
+    if (values[i] === activeToplevel) return true
+  }
+  return false
+}
+
+function applicationStateIndicatorGeometry(position, iconWidth, iconHeight,
+                                           running, focused) {
+  var edge = ["top", "bottom", "left", "right"].indexOf(position) >= 0
+    ? position : "bottom"
+  var width = Math.max(0, Number(iconWidth) || 0)
+  var height = Math.max(0, Number(iconHeight) || 0)
+  var minimumDimension = Math.max(1, Math.min(width || 1, height || 1))
+  var thickness = Math.max(3,
+    Math.min(5, Math.round(minimumDimension * 0.1)))
+  var focusedLength = Math.max(10,
+    Math.min(18, Math.round(minimumDimension * 0.28)))
+  var markerLength = focused ? focusedLength : thickness
+  var vertical = edge === "left" || edge === "right"
+  var markerWidth = vertical ? thickness : markerLength
+  var markerHeight = vertical ? markerLength : thickness
+  var gap = 2
+  var x = Math.round((width - markerWidth) / 2)
+  var y = Math.round((height - markerHeight) / 2)
+
+  if (edge === "top")
+    y = -(markerHeight + gap)
+  else if (edge === "bottom")
+    y = height + gap
+  else if (edge === "left")
+    x = width + gap
+  else if (edge === "right")
+    x = -(markerWidth + gap)
+
+  return {
+    visible: Boolean(running),
+    x: x,
+    y: y,
+    width: markerWidth,
+    height: markerHeight,
+    radius: thickness / 2
+  }
+}
+
 function dockControlIcon(action, autoHide) {
   switch (action) {
   case "launcher":

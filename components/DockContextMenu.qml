@@ -15,6 +15,7 @@ PopupWindow {
   required property bool autoHide
   required property bool pinnedItem
   required property var runningToplevels
+  required property var windowActions
   property bool controlItem: false
   signal openLauncher()
   signal openSettings()
@@ -24,15 +25,17 @@ PopupWindow {
   signal hideFromDock()
   signal toggleAutoHide()
 
-  readonly property string minimizedWorkspace: "special:smartdock-minimized"
   property string page: "windows"
   property var selectedToplevel: null
-  property var minimizedOrigins: ({})
-  readonly property var selectedHandle: hyprToplevelFor(selectedToplevel)
+  readonly property var selectedHandle:
+    root.windowActions.handleFor(selectedToplevel)
   readonly property var selectedInfo: selectedHandle
     ? selectedHandle.lastIpcObject || ({})
     : ({})
-  readonly property bool selectedMinimized: isToplevelMinimized(selectedToplevel)
+  readonly property bool selectedMinimized: {
+    var originsRevision = root.windowActions.minimizedOriginsSnapshot
+    return root.windowActions.isMinimized(selectedToplevel)
+  }
   readonly property bool selectedFakeFullscreen:
     DockModel.isFakeFullscreen(selectedInfo)
   readonly property var runningWindowStates: buildWindowStates()
@@ -40,9 +43,12 @@ PopupWindow {
     DockModel.windowStateCounts(runningWindowStates)
   readonly property int minimizedCount: runningWindowCounts.minimized
   readonly property int visibleWindowCount: runningWindowCounts.visible
-  readonly property int selectedWorkspaceId: selectedHandle && selectedHandle.workspace
-    ? selectedHandle.workspace.id
-    : -1
+  readonly property int selectedWorkspaceId: {
+    var workspace = selectedInfo.workspace
+      || (selectedHandle ? selectedHandle.workspace : null)
+    var id = Number(workspace ? workspace.id : -1)
+    return Number.isInteger(id) ? id : -1
+  }
 
   function open() {
     page = "windows"
@@ -63,41 +69,16 @@ PopupWindow {
     selectedToplevel = toplevel
   }
 
-  function hyprToplevelFor(toplevel) {
-    if (!toplevel || !Hyprland.toplevels) return null
-    var handles = Hyprland.toplevels.values || []
-    for (var i = 0; i < handles.length; ++i) {
-      if (handles[i] && handles[i].wayland === toplevel)
-        return handles[i]
-    }
-    return null
-  }
-
   function selectedAddress() {
-    return DockModel.normalizeWindowAddress(
-      selectedHandle ? selectedHandle.address : "")
+    return root.windowActions.addressFor(selectedToplevel)
   }
 
   function windowState(toplevel) {
-    var handle = hyprToplevelFor(toplevel)
-    var address = DockModel.normalizeWindowAddress(handle ? handle.address : "")
-    var workspace = handle ? handle.workspace : null
-    var workspaceId = workspace ? Number(workspace.id) : -1
-    var workspaceName = workspace ? String(workspace.name || "").trim() : ""
-    var minimized = workspaceName === minimizedWorkspace
-      || (address !== "" && minimizedOrigins[address] !== undefined)
-
-    if (Number.isInteger(workspaceId) && workspaceId > 0)
-      workspaceName = String(workspaceId)
-    else if (workspaceName.indexOf("name:") !== 0
-             && workspaceName.indexOf("special:") !== 0
-             && workspaceName !== "")
-      workspaceName = "name:" + workspaceName
-
-    return { minimized: minimized, workspace: workspaceName }
+    return root.windowActions.windowState(toplevel)
   }
 
   function buildWindowStates() {
+    var originsRevision = root.windowActions.minimizedOriginsSnapshot
     var states = []
     for (var i = 0; i < runningToplevels.length; ++i)
       states.push(windowState(runningToplevels[i]))
@@ -108,94 +89,17 @@ PopupWindow {
     return DockModel.windowStatusLabel(windowState(toplevel))
   }
 
-  function copyMap(source) {
-    var result = {}
-    for (var key in source) result[key] = source[key]
-    return result
-  }
-
-  function workspaceTarget(workspace) {
-    if (!workspace) return ""
-    var id = Number(workspace.id)
-    if (Number.isInteger(id) && id > 0) return String(id)
-
-    var name = String(workspace.name || "").trim()
-    if (!name || name.indexOf("special:") === 0) return ""
-    return name.indexOf("name:") === 0 ? name : "name:" + name
-  }
-
-  function addressFor(toplevel) {
-    var handle = hyprToplevelFor(toplevel)
-    return DockModel.normalizeWindowAddress(handle ? handle.address : "")
-  }
-
-  function isToplevelMinimized(toplevel) {
-    var handle = hyprToplevelFor(toplevel)
-    var address = DockModel.normalizeWindowAddress(handle ? handle.address : "")
-    var workspaceName = handle && handle.workspace
-      ? String(handle.workspace.name || "") : ""
-    return workspaceName === minimizedWorkspace
-      || (address !== "" && minimizedOrigins[address] !== undefined)
-  }
-
-  function clearMinimizedOrigin(address) {
-    if (!address || minimizedOrigins[address] === undefined) return
-    var origins = copyMap(minimizedOrigins)
-    delete origins[address]
-    minimizedOrigins = origins
-  }
-
-  function minimizeToplevel(toplevel) {
-    var handle = hyprToplevelFor(toplevel)
-    var address = DockModel.normalizeWindowAddress(handle ? handle.address : "")
-    if (!address) return
-
-    var origin = workspaceTarget(handle ? handle.workspace : null)
-      || workspaceTarget(Hyprland.focusedWorkspace)
-    if (!origin) return
-
-    var origins = copyMap(minimizedOrigins)
-    origins[address] = origin
-    minimizedOrigins = origins
-    dispatchRequest(DockModel.minimizeWindowRequest(address, Hyprland.usingLua))
-  }
-
-  function restoreToplevel(toplevel) {
-    var address = addressFor(toplevel)
-    if (!address) return
-
-    var target = minimizedOrigins[address]
-      || workspaceTarget(Hyprland.focusedWorkspace)
-    if (!target) return
-
-    clearMinimizedOrigin(address)
-    dispatchRequest(DockModel.restoreWindowRequest(
-      address, target, Hyprland.usingLua))
-  }
-
-  function activateToplevel(toplevel) {
-    if (!toplevel) return
-    if (isToplevelMinimized(toplevel)) {
-      restoreToplevel(toplevel)
-      return
-    }
-
-    var request = DockModel.focusWindowRequest(
-      addressFor(toplevel), Hyprland.usingLua)
-    if (request)
-      dispatchRequest(request)
-    else
-      toplevel.activate()
-  }
-
   function dispatchRequest(request) {
     if (request) Hyprland.dispatch(request)
   }
 
   function moveSelectedToWorkspace(workspace) {
-    clearMinimizedOrigin(selectedAddress())
-    dispatchRequest(DockModel.moveWindowRequest(
-      selectedAddress(), workspace, Hyprland.usingLua))
+    var request = DockModel.moveWindowRequest(
+      selectedAddress(), workspace, Hyprland.usingLua)
+    if (request) {
+      root.windowActions.forgetOrigin(selectedToplevel)
+      dispatchRequest(request)
+    }
     dismiss()
   }
 
@@ -679,9 +583,9 @@ PopupWindow {
                 }
                 onTriggered: {
                   if (root.selectedMinimized)
-                    root.restoreToplevel(root.selectedToplevel)
+                    root.windowActions.restoreToplevel(root.selectedToplevel)
                   else
-                    root.minimizeToplevel(root.selectedToplevel)
+                    root.windowActions.minimizeToplevel(root.selectedToplevel)
                   root.dismiss()
                 }
               }
@@ -711,7 +615,7 @@ PopupWindow {
                   return -1
                 }
                 onTriggered: {
-                  root.selectedToplevel.close()
+                  root.windowActions.closeToplevel(root.selectedToplevel)
                   root.dismiss()
                 }
               }

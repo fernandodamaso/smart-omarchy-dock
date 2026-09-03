@@ -15,6 +15,9 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 - Run the dock with `./scripts/run`.
 - Keep the standalone entry point at `shell.qml` and the Omarchy plugin entry point at `Overlay.qml`.
 - Keep shared host behavior in `DockHost.qml`; never start a second Quickshell process from the plugin.
+- Keep window lifecycle actions and SmartDock-minimized origins in the single
+  `DockWindowActions` instance owned by `DockHost.qml`; per-screen docks and
+  context menus must consume that shared controller rather than duplicate it.
 - Put reusable visual components in `components/`.
 - Keep user-facing defaults in `config/dock.json` and mirror fallback defaults in `shell.qml`.
 - Installed user settings live outside the application at `~/.config/smartdock/dock.json`; updates must never overwrite them.
@@ -29,10 +32,13 @@ Before committing changes:
 
 ```bash
 timeout 6s ./scripts/run --no-color
-bash -n install.sh uninstall.sh scripts/smartdock scripts/run
+bash -n install.sh uninstall.sh scripts/smartdock scripts/run tests/check_window_actions.sh
+qmltestrunner -input tests -import components
 omarchy plugin validate .
 /usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" \
-  Overlay.qml DockHost.qml components/Dock.qml components/DockItem.qml shell.qml
+  Overlay.qml DockHost.qml components/Dock.qml components/DockItem.qml \
+  components/DockContextMenu.qml components/DockControlItem.qml \
+  components/DockWindowActions.qml shell.qml
 git diff --check
 ```
 

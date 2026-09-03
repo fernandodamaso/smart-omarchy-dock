@@ -12,6 +12,8 @@ Item {
   required property string desktopId
   required property bool pinnedItem
   required property var runningToplevels
+  required property bool focused
+  required property var windowActions
   required property var hyprToplevels
   required property bool fullscreenModeActive
   required property bool fullscreenEmphasized
@@ -83,7 +85,8 @@ Item {
     if (clickAction === "focus-or-launch" && runningCount > 0) {
       lastActivatedToplevel = DockModel.nextToplevelIndex(
         lastActivatedToplevel, runningCount)
-      contextMenu.activateToplevel(runningToplevels[lastActivatedToplevel])
+      root.windowActions.activateToplevel(
+        runningToplevels[lastActivatedToplevel])
       return
     }
     launch()
@@ -91,7 +94,7 @@ Item {
 
   function closeRunning() {
     if (runningToplevel)
-      runningToplevel.close()
+      root.windowActions.closeToplevel(runningToplevel)
   }
 
   onRunningToplevelsChanged: lastActivatedToplevel = -1
@@ -160,21 +163,16 @@ Item {
       Behavior on opacity { NumberAnimation { duration: 140 } }
     }
 
-    Rectangle {
-      width: 4
-      height: 4
-      radius: 2
-      x: root.position === "left"
-        ? iconContainer.width + 2
-        : root.position === "right"
-          ? -6
-          : (iconContainer.width - width) / 2
-      y: root.position === "top"
-        ? -6
-        : root.position === "bottom"
-          ? iconContainer.height + 2
-          : (iconContainer.height - height) / 2
-      color: root.visibleWindowCount > 0 ? Color.foreground : "transparent"
+    DockApplicationStateIndicator {
+      id: applicationStateIndicator
+
+      position: root.position
+      iconWidth: iconContainer.width
+      iconHeight: iconContainer.height
+      running: root.runningCount > 0
+      focused: root.focused
+      runningColor: Color.foreground
+      focusedColor: Color.accent
     }
 
     Rectangle {
@@ -264,14 +262,17 @@ Item {
 
   function tooltipLabel() {
     var name = root.entry ? root.entry.name : root.desktopId
+    var state = root.focused ? "focused application"
+      : root.runningCount > 0 ? "running application" : ""
+    var label = state ? name + " — " + state : name
     if (root.minimizedCount > 0) {
       var word = root.runningCount === 1 ? "window" : "windows"
-      return name + " (" + root.runningCount + " " + word
+      return label + " (" + root.runningCount + " " + word
         + ", " + root.minimizedCount + " minimized)"
     }
     if (root.runningCount > 1)
-      return name + " (" + root.runningCount + " windows)"
-    return name
+      return label + " (" + root.runningCount + " windows)"
+    return label
   }
 
   HoverHandler {
@@ -318,6 +319,7 @@ Item {
     autoHide: root.autoHide
     pinnedItem: root.pinnedItem
     runningToplevels: root.runningToplevels
+    windowActions: root.windowActions
     onVisibleChanged: root.contextMenuVisibilityChanged(visible)
     onOpenNewWindow: root.launch()
     onAddApplication: root.addApplicationRequested()

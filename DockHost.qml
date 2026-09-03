@@ -18,6 +18,7 @@ Item {
   property bool workspaceCountsReady: false
   property int workspaceCountsRevision: 0
   property bool workspaceCountsRefreshPending: false
+  readonly property var windowActions: windowActionsController
 
   property var settings: ({
     iconSize: 42,
@@ -242,6 +243,10 @@ Item {
     onSaveFailed: error => console.warn("Dock: could not save " + root.configPath + ":", error)
   }
 
+  DockWindowActions {
+    id: windowActionsController
+  }
+
   Variants {
     model: Quickshell.screens
 
@@ -250,6 +255,7 @@ Item {
         required property var modelData
         screen: modelData
         settings: root.settings
+        windowActions: root.windowActions
         trashItemCount: root.trashItemCount
         trashStateKnown: root.trashStateKnown
         workspaceWindowCounts: root.workspaceWindowCounts

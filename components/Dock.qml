@@ -12,6 +12,7 @@ PanelWindow {
   id: root
 
   required property var settings
+  required property var windowActions
   required property int trashItemCount
   required property bool trashStateKnown
   required property var workspaceWindowCounts
@@ -470,6 +471,7 @@ PanelWindow {
         x: root.vertical ? (parent.width - width) / 2 : root.mainPadding
         y: root.vertical ? root.mainPadding : (parent.height - height) / 2
         controlCommand: root.controlCommand
+        windowActions: root.windowActions
         slotSize: root.itemSize
         iconSize: root.iconSize
         magnification: root.magnification
@@ -507,6 +509,9 @@ PanelWindow {
             desktopId: modelData.desktopId
             pinnedItem: modelData.pinned
             runningToplevels: modelData.toplevels
+            focused: DockModel.hasActiveMember(
+              modelData.toplevels, root.activeToplevel)
+            windowActions: root.windowActions
             hyprToplevels: root.hyprToplevels
             fullscreenModeActive: root.fullscreenModeActive
             fullscreenEmphasized:
