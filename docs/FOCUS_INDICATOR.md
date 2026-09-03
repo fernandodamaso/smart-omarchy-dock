@@ -14,7 +14,7 @@ The marker remains present when all windows in an application group are minimize
 
 ## Focus source
 
-`Dock.qml` reads the existing `ToplevelManager.activeToplevel` and asks the pure `DockModel.hasActiveMember()` helper whether that exact toplevel is a member of each dock item's current group. The binding is direct: no focus cache, polling loop, duplicate window store, or additional Hyprland query is introduced.
+`Dock.qml` reads the existing `ToplevelManager.activeToplevel` and compares that exact toplevel identity against each dock item's current group. The comparison stays directly in the QML binding so active-object changes trigger live updates; no focus cache, polling loop, duplicate window store, or additional Hyprland query is introduced.
 
 This keeps focus identity tied to the compositor toplevel object while the existing item model continues to own grouping, hidden-application filtering, workspace sorting, and pinned order.
 

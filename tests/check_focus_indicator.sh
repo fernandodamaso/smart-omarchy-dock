@@ -40,7 +40,8 @@ require_pattern 'runningColor:[[:space:]]*Color\.foreground' components/DockItem
 require_pattern 'focusedColor:[[:space:]]*Color\.accent' components/DockItem.qml
 require_pattern 'root\.focused[[:space:]]*\?[[:space:]]*"focused application"' components/DockItem.qml
 require_pattern '"running application"' components/DockItem.qml
-require_pattern 'focused:[[:space:]]*DockModel\.hasActiveMember' components/Dock.qml
+require_pattern 'focused:[[:space:]]*root\.activeToplevel' components/Dock.qml
+require_pattern 'modelData\.toplevels\.indexOf\(root\.activeToplevel\)' components/Dock.qml
 require_pattern 'root\.activeToplevel' components/Dock.qml
 
 reject_pattern 'color:[[:space:]]*root\.visibleWindowCount[[:space:]]*>[[:space:]]*0[[:space:]]*\?[[:space:]]*Color\.foreground' components/DockItem.qml

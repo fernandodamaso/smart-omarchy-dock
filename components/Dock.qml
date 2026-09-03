@@ -509,8 +509,8 @@ PanelWindow {
             desktopId: modelData.desktopId
             pinnedItem: modelData.pinned
             runningToplevels: modelData.toplevels
-            focused: DockModel.hasActiveMember(
-              modelData.toplevels, root.activeToplevel)
+            focused: root.activeToplevel !== null
+              && modelData.toplevels.indexOf(root.activeToplevel) >= 0
             windowActions: root.windowActions
             hyprToplevels: root.hyprToplevels
             fullscreenModeActive: root.fullscreenModeActive
