@@ -1,0 +1,17 @@
+{
+  "updates": [
+    {
+      "uri": "application://org.example.Unknown.desktop",
+      "sender": ":1.30",
+      "count": 3,
+      "visible": true
+    }
+  ],
+  "expected": {
+    "org.example.unknown": {
+      "count": 3,
+      "visible": true,
+      "sender": ":1.30"
+    }
+  }
+}

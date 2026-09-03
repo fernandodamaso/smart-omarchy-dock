@@ -7,10 +7,12 @@
   "license": "MIT",
   "description": "A theme-aware application, window, and workspace dock for Omarchy and Hyprland.",
   "kinds": [
-    "overlay"
+    "overlay",
+    "service"
   ],
   "keepLoaded": true,
   "entryPoints": {
-    "overlay": "Overlay.qml"
+    "overlay": "Overlay.qml",
+    "service": "Service.qml"
   }
 }

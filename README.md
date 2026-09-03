@@ -15,6 +15,8 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Optional grouped window previews when hovering application icons
 - Focuses an existing application on another workspace
 - Running-application indicators
+- Dot-first application attention badges from live SNI/Hyprland state and available Omarchy notifications
+- Optional authoritative application-provided launcher badge counts with dot fallback
 - First-position sliders control for the app launcher, Dock Settings, adding
   applications, and auto-hide
 - Bundled Lucide SVG artwork for the Trash icon and dock context-menu actions
@@ -42,6 +44,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Quickshell 0.3 or newer
 - GLib's `gio` command for Trash integration
 - A working freedesktop icon theme
+- Optional numeric launcher counts: CMake, a C++20 compiler, and Qt 6.6+ Core/DBus development files to build the native provider
 
 ![SmartDock for Omarchy running at the bottom of an Omarchy desktop](preview.png)
 
@@ -124,6 +127,40 @@ The plugin uses `~/.config/smartdock/dock.json`, shared with the standalone
 version. Do not run the standalone and plugin versions together, or two docks
 will appear.
 
+### Launcher badge count provider
+
+Numeric counts are optional and provider-owned. Omarchy plugin installation
+never compiles or executes an install hook. Build the small QtDBus provider from
+a trusted source checkout when you want application-provided counts:
+
+```bash
+bash ./scripts/build-launcher-badge-provider
+```
+
+The script builds outside the Git checkout, runs the provider tests, and
+installs only the resulting executable under
+`${XDG_DATA_HOME:-$HOME/.local/share}/smartdock/providers/`. Reload or restart
+the SmartDock plugin afterwards. If the binary, Qt runtime, D-Bus service, or an
+application's launcher-count support is unavailable, SmartDock keeps the
+FDM-809 attention dots; it does not poll or scrape another source for a number.
+
+The provider listens to the established
+`com.canonical.Unity.LauncherEntry.Update` session-bus protocol and accepts only
+typed `count` and `count-visible` properties. Standalone SmartDock intentionally
+does not own this provider and therefore remains dot-only. See
+[`docs/launcher-badge-counts.md`](docs/launcher-badge-counts.md) for architecture,
+compatibility, and local validation details.
+
+On Omarchy, SmartDock also reads the local `herdr agent list` contract every
+three seconds when `herdr` is available. Unseen completed agents and agents
+blocked on a question or approval show a numeric badge on the Ghostty launcher;
+blocked state is urgent, while done-only state uses attention severity. Working
+agents do not create a badge. This mirrors the data reduction used by the community
+[`omarchy-herdr`](https://github.com/fabean/omarchy-herdr) bar plugin without
+depending on that plugin or querying its remote-host configuration. Idle or
+already-seen agents do not create a badge, and standalone SmartDock leaves
+this optional integration disabled.
+
 ### Development
 
 Development happens in the canonical source checkout or in your own clone,
@@ -203,6 +240,8 @@ width when the override is disabled.
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
+  "attentionBadgesEnabled": true,
+  "launcherBadgeMode": "automatic",
   "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",
@@ -244,6 +283,8 @@ width when the override is disabled.
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
+| `attentionBadgesEnabled` | Show application attention badges. FDM-809 dot severity remains the fallback; in automatic mode an authoritative positive visible launcher count may replace that dot. |
+| `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
@@ -279,6 +320,33 @@ it normalizes to its default; an absent or invalid legacy `clickAction`
 normalizes to `focus-or-launch`. Older `focus` and `launch` action values are
 also normalized to `focus-or-launch`, so existing settings retain their useful
 behavior. Invalid values for `middleClickAction` normalize to `none`.
+
+Attention dots deliberately represent **attention state**, not inferred unread
+counts. SmartDock reduces three FDM-809 sources when they are available:
+StatusNotifierItem `NeedsAttention`, Hyprland's live urgent state/events, and
+the Omarchy notification service. Notification events are never counted.
+Identity matching is exact after case-folding and an optional `.desktop` suffix
+removal; desktop-entry ID, application ID, `startupClass`, display name, and
+explicitly configured aliases are accepted, but substring/fuzzy matching is
+not. Grouped applications render one badge; ungrouped applications assign the
+badge to the first visible item for that app. Hidden applications do not render
+a badge.
+
+When the optional launcher provider is available and `launcherBadgeMode` is
+`automatic`, a positive count with `count-visible=true` takes precedence over
+the attention dot. Counts above 99 render as `99+`. Explicit zero or
+`count-visible=false` hides the number and allows any current FDM-809 attention
+dot to remain visible. `dots-only` ignores numeric state entirely. The count is
+authoritative application state: focusing a window does **not** clear it.
+Provider sender disconnects clear sender-owned state, and reconnects start from
+fresh state rather than carrying stale fields across process ownership.
+
+Dismissing a notification popup does not mark local attention read. Local
+notification attention expires after 24 hours and clears only after the matched
+application remains focused for about 800 ms. Live SNI state and authoritative
+launcher counts are never cleared by SmartDock focus handling. Standalone mode,
+or an Omarchy host without either optional service, simply omits the unavailable
+source while the remaining FDM-809 sources continue to work.
 
 The first dock icon is always the dock controls icon and is not part of
 `pinned`. Clicking it opens the controls menu; **Open App Launcher** runs

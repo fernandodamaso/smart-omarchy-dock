@@ -15,6 +15,7 @@ Item {
   required property bool focused
   required property var windowActions
   required property var hyprToplevels
+  required property string attentionBadge
   required property bool fullscreenModeActive
   required property bool fullscreenEmphasized
   required property int itemIndex
@@ -224,6 +225,12 @@ Item {
         font.pixelSize: Style.font.bodySmall
         font.bold: true
       }
+    }
+
+    DockApplicationBadge {
+      severity: root.attentionBadge
+      x: iconContainer.width - width + 3
+      y: root.runningCount > 1 ? 13 : -3
     }
 
     Rectangle {

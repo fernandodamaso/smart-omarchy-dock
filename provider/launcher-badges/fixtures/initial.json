@@ -1,0 +1,17 @@
+{
+  "updates": [
+    {
+      "uri": "application://com.discordapp.Discord.desktop",
+      "sender": ":1.10",
+      "count": 4,
+      "visible": true
+    }
+  ],
+  "expected": {
+    "com.discordapp.discord": {
+      "count": 4,
+      "visible": true,
+      "sender": ":1.10"
+    }
+  }
+}
