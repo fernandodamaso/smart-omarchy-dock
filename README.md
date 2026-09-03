@@ -14,6 +14,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Freedesktop application icons and launching
 - Configurable application-icon left, middle, Shift+left, and scroll actions
 - Grouped-window wheel cycling with high-resolution vertical-delta accumulation
+- Lazy still-image hover previews for grouped applications with two or more windows
 - Per-workspace and per-monitor running-window scopes with optional true-Hyprland urgent exceptions
 - Focuses an existing application on another workspace
 - Running-application indicators
@@ -42,6 +43,8 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 
 - Hyprland
 - Quickshell 0.3 or newer
+- Hyprland toplevel-export support for actual window thumbnails; protected or
+  unavailable captures fall back to an explicit **Preview unavailable** card
 - GLib's `gio` command for Trash integration
 - A working freedesktop icon theme
 
@@ -282,8 +285,9 @@ The current action semantics are:
   state.
 - `launch`: execute the desktop entry even when the application is already
   running; single-instance applications may still reuse their existing process.
-- `previews`: calls the shared preview-controller hook when one is available;
-  it safely does nothing until FDM-810 supplies that controller.
+- `previews`: remains the reserved pointer-action hook. FDM-810 hover previews
+  are dwell-driven and owned per `Dock.qml`; the host-shared window controller
+  is intentionally not rebound to one screen's preview popup.
 - `close`: request graceful closure of every live grouped member.
 - `focus-or-launch`: preserves the legacy Left click behavior exactly: repeated
   clicks focus/cycle a running group in dock order, while a closed pinned
@@ -334,6 +338,37 @@ Scope refresh is host-owned and debounced once for all monitor Docks. Hyprland
 open/close/move/workspace/focused-monitor/urgent/fullscreen/hotplug events
 refresh the shared monitor/workspace/toplevel context; there is no per-Dock
 scope polling path.
+
+### Grouped-window hover previews
+
+Hovering an application icon representing at least two already-filtered windows
+starts a 250 ms dwell. After that dwell, the Dock's single shared preview popup
+opens without taking keyboard focus. Top/bottom docks lay tiles out
+horizontally; left/right docks use a vertical stack. The popup is bounded to the
+current screen and becomes scrollable when many tiles would overflow it.
+
+Leaving the icon starts a 180 ms grace interval so the pointer can cross the gap
+to the popup. The popup stays alive while either its anchor icon or its own
+surface is hovered, and direct movement between grouped icons retargets the same
+shared popup. Auto-hide remains revealed while a preview is pending, hovered,
+or open. Right-click/context menus, drag start, anchor or monitor destruction,
+group disappearance, or shrink below two members dismiss the preview
+immediately. Single-window icons never request hover previews.
+
+Each tile shows the application icon, window title, and either the workspace or
+**Minimized** status. Clicking a tile restores/focuses through the existing
+host-owned `DockWindowActions`; the close button only requests compositor
+closure and the popup remains visible until the compositor actually removes or
+shrinks the group.
+
+Thumbnails use Quickshell `ScreencopyView` as a bounded, non-live still capture
+with cursor painting disabled. Capture exists only while the popup is visible;
+hiding or destroying a tile clears its capture source. If toplevel export is
+unsupported, protected, stopped, or otherwise unavailable, the tile explicitly
+shows **Preview unavailable** instead of persisting or storing an old image.
+SmartDock does not store thumbnails, run live preview video, preview single
+windows, reorder preview tiles, add minimize controls, expose preview delay/size
+settings, or add global preview keyboard navigation.
 
 ### Grouped-window wheel cycling
 

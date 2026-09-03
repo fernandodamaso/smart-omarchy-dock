@@ -30,6 +30,7 @@ Item {
   required property bool autoHide
   required property string position
   required property bool vertical
+  required property bool previewActive
   property real reorderOffset: 0
   property int lastActivatedToplevel: -1
   property real wheelRemainder: 0
@@ -42,6 +43,9 @@ Item {
   signal hideRequested(string desktopId)
   signal autoHideToggled(bool enabled)
   signal contextMenuVisibilityChanged(bool visible)
+  signal previewRequested(var anchorItem, string desktopId, var toplevels, var applicationEntry)
+  signal previewReleased(var anchorItem)
+  signal previewDismissRequested()
 
   // Reading the model makes this binding update when Quickshell finishes its
   // asynchronous desktop-entry scan. Calling byId() alone is not reactive.
@@ -128,6 +132,7 @@ Item {
     lastActivatedToplevel = -1
     wheelRemainder = 0
     lastWheelTimestamp = 0
+    if (runningCount < 2) root.previewDismissRequested()
   }
 
   width: vertical ? slotSize + 6 : slotSize
@@ -293,7 +298,7 @@ Item {
   }
 
   PanelToolTip {
-    visible: mouse.hovered && !contextMenu.visible
+    visible: mouse.hovered && !contextMenu.visible && !root.previewActive
     text: root.tooltipLabel()
     fontFamily: Style.font.family
     fontSize: Style.font.body
@@ -314,6 +319,14 @@ Item {
   HoverHandler {
     id: mouse
     cursorShape: Qt.PointingHandCursor
+    onHoveredChanged: {
+      if (hovered) {
+        if (root.runningCount >= 2 && !contextMenu.visible && !dragHandler.active)
+          root.previewRequested(root, root.desktopId, root.runningToplevels, root.entry)
+      } else if (root.previewActive || root.runningCount >= 2) {
+        root.previewReleased(root)
+      }
+    }
   }
 
   TapHandler {
@@ -338,7 +351,10 @@ Item {
     acceptedButtons: Qt.RightButton
     // Right click owns the context menu regardless of keyboard modifiers.
     acceptedModifiers: Qt.KeyboardModifierMask
-    onTapped: contextMenu.open()
+    onTapped: {
+      root.previewDismissRequested()
+      contextMenu.open()
+    }
   }
 
   WheelHandler {
@@ -384,10 +400,12 @@ Item {
     xAxis.enabled: !root.vertical
     yAxis.enabled: root.vertical
     onActiveChanged: {
-      if (active)
+      if (active) {
+        root.previewDismissRequested()
         root.dragStarted(root.itemIndex)
-      else
+      } else {
         root.dragFinished()
+      }
     }
     onActiveTranslationChanged: {
       if (active)
@@ -405,7 +423,10 @@ Item {
     pinnedItem: root.pinnedItem
     runningToplevels: root.runningToplevels
     windowActions: root.windowActions
-    onVisibleChanged: root.contextMenuVisibilityChanged(visible)
+    onVisibleChanged: {
+      if (visible) root.previewDismissRequested()
+      root.contextMenuVisibilityChanged(visible)
+    }
     onOpenNewWindow: root.launch()
     onAddApplication: root.addApplicationRequested()
     onRemoveFromDock: root.removeRequested(root.desktopId)
