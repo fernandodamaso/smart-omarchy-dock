@@ -85,6 +85,14 @@ TestCase {
       "launcher --toggle")
   }
 
+  function test_providesWorkspaceBadgeDefaults() {
+    var defaults = DockModel.settingsDefaults()
+    compare(defaults.workspaceBadgeBackgroundColorEnabled, false)
+    compare(defaults.workspaceBadgeBackgroundColor, "")
+    compare(defaults.workspaceBadgeTextColorEnabled, false)
+    compare(defaults.workspaceBadgeTextColor, "")
+  }
+
   function test_normalizesHiddenApplicationIds() {
     compare(JSON.stringify(DockModel.normalizeApplicationIds()), "[]")
     compare(JSON.stringify(DockModel.normalizeApplicationIds(null)), "[]")
@@ -201,6 +209,26 @@ TestCase {
     compare(DockModel.normalizeSetting("borderColor", " @menu.border "), "@menu.border")
     compare(DockModel.normalizeSetting("backgroundColor", "@"), "")
     compare(DockModel.normalizeSetting("borderColor", "theme.accent"), "")
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeBackgroundColorEnabled", true), true)
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeBackgroundColorEnabled", "true"), false)
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeTextColorEnabled", false), false)
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeBackgroundColor", " #12AbEf "), "#12abef")
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeTextColor", "#80112233"), "#80112233")
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeBackgroundColor", "@Accent"), "@accent")
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeTextColor", " @foreground "), "@foreground")
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeBackgroundColor", "#abc"), "")
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeTextColor", "not-a-color"), "")
+    compare(DockModel.normalizeSetting(
+      "workspaceBadgeTextColor", "@"), "")
     compare(DockModel.normalizeSetting("borderWidth", -2), 0)
     compare(DockModel.normalizeSetting("borderWidth", 20), 8)
     compare(DockModel.normalizeSetting("borderWidth", 3.4), 3)
@@ -230,6 +258,25 @@ TestCase {
     compare(JSON.stringify(DockModel.surfaceColorPatch(
       "borderColorEnabled", "borderColor", "not-a-color")), "{}")
     compare(JSON.stringify(DockModel.surfaceColorPatch(
+      "workspaceBadgeBackgroundColorEnabled",
+      "workspaceBadgeBackgroundColor", "@Accent")),
+      JSON.stringify({
+        workspaceBadgeBackgroundColorEnabled: true,
+        workspaceBadgeBackgroundColor: "@accent"
+      }))
+    compare(JSON.stringify(DockModel.surfaceColorPatch(
+      "workspaceBadgeTextColorEnabled", "workspaceBadgeTextColor", "#AABBCC")),
+      JSON.stringify({
+        workspaceBadgeTextColorEnabled: true,
+        workspaceBadgeTextColor: "#aabbcc"
+      }))
+    compare(JSON.stringify(DockModel.surfaceColorPatch(
+      "workspaceBadgeBackgroundColorEnabled",
+      "workspaceBadgeBackgroundColor", "")),
+      JSON.stringify({ workspaceBadgeBackgroundColorEnabled: false }))
+    compare(JSON.stringify(DockModel.surfaceColorPatch(
+      "workspaceBadgeTextColorEnabled", "workspaceBadgeTextColor", "bad")), "{}")
+    compare(JSON.stringify(DockModel.surfaceColorPatch(
       "autoHide", "borderColor", "@accent")), "{}")
   }
 
@@ -255,6 +302,21 @@ TestCase {
     compare(DockModel.effectiveBorderWidth(false, 7, 2), 2)
     compare(DockModel.effectiveBorderWidth(true, 7, 2), 7)
     compare(DockModel.effectiveBorderWidth(true, 99, 2), 8)
+  }
+
+  function test_resolvesWorkspaceBadgeColorsWithDefaultsAndOverrides() {
+    compare(DockModel.effectiveColor(
+      false, "", "#c0ffee"), "#c0ffee")
+    compare(DockModel.effectiveColor(
+      false, "", "#ffffff"), "#ffffff")
+    compare(DockModel.effectiveColor(
+      true, "#123456", "#c0ffee"), "#123456")
+    compare(DockModel.effectiveColor(
+      true, "@accent", "#c0ffee", { accent: "#abcdef" }), "#abcdef")
+    compare(DockModel.effectiveColor(
+      true, "invalid", "#c0ffee"), "#c0ffee")
+    compare(DockModel.effectiveColor(
+      true, "@missing", "#ffffff", { accent: "#abcdef" }), "#ffffff")
   }
 
   function test_mapsDockControlActionsToIcons() {
@@ -325,6 +387,10 @@ TestCase {
     compare(reset.backgroundColor, "")
     compare(reset.borderColorEnabled, false)
     compare(reset.borderColor, "")
+    compare(reset.workspaceBadgeBackgroundColorEnabled, false)
+    compare(reset.workspaceBadgeBackgroundColor, "")
+    compare(reset.workspaceBadgeTextColorEnabled, false)
+    compare(reset.workspaceBadgeTextColor, "")
     compare(reset.borderWidthEnabled, false)
     compare(reset.borderWidth, 2)
     compare(reset.position, "bottom")

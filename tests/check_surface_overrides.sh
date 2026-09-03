@@ -3,6 +3,7 @@ set -euo pipefail
 
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dock_qml="$plugin_root/components/Dock.qml"
+dock_item_qml="$plugin_root/components/DockItem.qml"
 settings_qml="$plugin_root/components/DockSettings.qml"
 
 for token in \
@@ -10,6 +11,10 @@ for token in \
   backgroundColor \
   borderColorEnabled \
   borderColor \
+  workspaceBadgeBackgroundColorEnabled \
+  workspaceBadgeBackgroundColor \
+  workspaceBadgeTextColorEnabled \
+  workspaceBadgeTextColor \
   borderWidthEnabled \
   borderWidth; do
   if ! rg -n "$token" "$dock_qml" "$settings_qml" >/dev/null; then
@@ -23,8 +28,25 @@ if ! rg -n 'effectiveColor|effectiveBorderWidth' "$dock_qml" >/dev/null; then
   exit 1
 fi
 
-for label in 'Dock surface' 'Background opacity' 'Theme default' \
-  'Custom hex' 'Custom width'; do
+for flow in \
+  'workspaceBadgeBackgroundColor:.*effectiveWorkspaceBadgeBackgroundColor' \
+  'workspaceBadgeTextColor:.*effectiveWorkspaceBadgeTextColor'; do
+  if ! rg -n "$flow" "$dock_qml" >/dev/null; then
+    printf 'Dock must pass resolved workspace badge colors to DockItem: %s\n' "$flow" >&2
+    exit 1
+  fi
+done
+rg -n 'required property color workspaceBadgeBackgroundColor' "$dock_item_qml" >/dev/null \
+  || { echo 'DockItem is missing the workspace badge background color input' >&2; exit 1; }
+rg -n 'required property color workspaceBadgeTextColor' "$dock_item_qml" >/dev/null \
+  || { echo 'DockItem is missing the workspace badge text color input' >&2; exit 1; }
+rg -n 'color: root\.workspaceBadgeBackgroundColor' "$dock_item_qml" >/dev/null \
+  || { echo 'Workspace badge background does not use its resolved color' >&2; exit 1; }
+rg -n 'color: root\.workspaceBadgeTextColor' "$dock_item_qml" >/dev/null \
+  || { echo 'Workspace badge text does not use its resolved color' >&2; exit 1; }
+
+for label in 'Dock surface' 'Workspace badge' 'Background opacity' \
+  'Theme default' 'Custom hex' 'Custom width'; do
   rg -n "$label" "$settings_qml" >/dev/null || {
     printf 'Dock Settings is missing progressive surface control: %s\n' "$label" >&2
     exit 1

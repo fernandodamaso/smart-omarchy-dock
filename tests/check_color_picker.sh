@@ -39,6 +39,10 @@ grep -Eq 'openColorPicker\("backgroundColor"\)' "$settings" \
   || { echo "Background color swatch is not wired" >&2; exit 1; }
 grep -Eq 'openColorPicker\("borderColor"\)' "$settings" \
   || { echo "Border color swatch is not wired" >&2; exit 1; }
+grep -Eq 'openColorPicker\("workspaceBadgeBackgroundColor"\)' "$settings" \
+  || { echo "Workspace badge background color swatch is not wired" >&2; exit 1; }
+grep -Eq 'openColorPicker\("workspaceBadgeTextColor"\)' "$settings" \
+  || { echo "Workspace badge text color swatch is not wired" >&2; exit 1; }
 grep -Eq 'themeColorOptions' "$settings" \
   || { echo "Dock Settings is missing its Omarchy theme token options" >&2; exit 1; }
 grep -Eq 'DockColorTokenDropdown \{' "$settings" \
@@ -56,4 +60,4 @@ grep -Eq 'optionColor|colorForOption' "$token_picker" \
 grep -Eq 'Rectangle \{' "$token_picker" \
   || { echo "Theme token selector must render color squares" >&2; exit 1; }
 
-echo "Dock color pickers are wired for background and border colors"
+echo "Dock color pickers are wired for dock surface and workspace badge colors"

@@ -25,6 +25,8 @@ Item {
   required property real hoverGlowRadius
   required property real pointerPosition
   required property string clickAction
+  required property color workspaceBadgeBackgroundColor
+  required property color workspaceBadgeTextColor
   required property bool autoHide
   required property string position
   required property bool vertical
@@ -236,10 +238,7 @@ Item {
       radius: Math.min(height / 2, Style.cornerRadius)
       x: -5
       y: iconContainer.height - height + 5
-      // Workspace badges need to remain legible over arbitrary application
-      // icons. Use the theme's opaque accent role instead of the menu
-      // selected-background tint, which is intentionally very subtle.
-      color: Color.accent
+      color: root.workspaceBadgeBackgroundColor
       border.width: 0
       z: 3
 
@@ -248,7 +247,7 @@ Item {
 
         anchors.centerIn: parent
         text: root.workspaceBadge
-        color: "#ffffff"
+        color: root.workspaceBadgeTextColor
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         font.bold: true

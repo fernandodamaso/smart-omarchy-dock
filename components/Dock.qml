@@ -77,6 +77,34 @@ PanelWindow {
     "notifications.border": Color.notifications.border,
     "notifications.countdown": Color.notifications.countdown
   })
+  readonly property bool workspaceBadgeBackgroundColorEnabled:
+    DockModel.normalizeSetting(
+      "workspaceBadgeBackgroundColorEnabled",
+      effectiveSetting("workspaceBadgeBackgroundColorEnabled"))
+  readonly property string workspaceBadgeBackgroundColorOverride:
+    DockModel.normalizeSetting(
+      "workspaceBadgeBackgroundColor",
+      effectiveSetting("workspaceBadgeBackgroundColor"))
+  readonly property color effectiveWorkspaceBadgeBackgroundColor:
+    DockModel.effectiveColor(
+      workspaceBadgeBackgroundColorEnabled,
+      workspaceBadgeBackgroundColorOverride,
+      Color.accent,
+      themeColorTokens)
+  readonly property bool workspaceBadgeTextColorEnabled:
+    DockModel.normalizeSetting(
+      "workspaceBadgeTextColorEnabled",
+      effectiveSetting("workspaceBadgeTextColorEnabled"))
+  readonly property string workspaceBadgeTextColorOverride:
+    DockModel.normalizeSetting(
+      "workspaceBadgeTextColor",
+      effectiveSetting("workspaceBadgeTextColor"))
+  readonly property color effectiveWorkspaceBadgeTextColor:
+    DockModel.effectiveColor(
+      workspaceBadgeTextColorEnabled,
+      workspaceBadgeTextColorOverride,
+      "#ffffff",
+      themeColorTokens)
   readonly property bool backgroundColorEnabled: DockModel.normalizeSetting(
     "backgroundColorEnabled", effectiveSetting("backgroundColorEnabled"))
   readonly property string backgroundColorOverride: DockModel.normalizeSetting(
@@ -494,6 +522,8 @@ PanelWindow {
             pointerPosition: root.pointerPosition
               - (root.vertical ? appGrid.y : appGrid.x)
             clickAction: root.clickAction
+            workspaceBadgeBackgroundColor: root.effectiveWorkspaceBadgeBackgroundColor
+            workspaceBadgeTextColor: root.effectiveWorkspaceBadgeTextColor
             autoHide: root.autoHide
             position: root.position
             vertical: root.vertical

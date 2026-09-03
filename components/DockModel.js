@@ -125,6 +125,10 @@ function settingsDefaults() {
     backgroundColor: "",
     borderColorEnabled: false,
     borderColor: "",
+    workspaceBadgeBackgroundColorEnabled: false,
+    workspaceBadgeBackgroundColor: "",
+    workspaceBadgeTextColorEnabled: false,
+    workspaceBadgeTextColor: "",
     borderWidthEnabled: false,
     borderWidth: 2,
     position: "bottom",
@@ -171,7 +175,7 @@ function normalizedHexColor(value) {
   return /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/.test(color) ? color : ""
 }
 
-// Surface color settings may be either a literal hex value or a symbolic
+// Color settings may be either a literal hex value or a symbolic
 // Omarchy theme token such as "@accent" / "@menu.background". Keeping the
 // token in the existing setting means it follows theme changes automatically.
 function normalizedColorValue(value) {
@@ -235,6 +239,10 @@ function surfaceColorPatch(enabledKey, valueKey, value) {
       && valueKey === "backgroundColor")
     || (enabledKey === "borderColorEnabled"
       && valueKey === "borderColor")
+    || (enabledKey === "workspaceBadgeBackgroundColorEnabled"
+      && valueKey === "workspaceBadgeBackgroundColor")
+    || (enabledKey === "workspaceBadgeTextColorEnabled"
+      && valueKey === "workspaceBadgeTextColor")
   if (!validPair) return ({})
 
   var raw = String(value === undefined || value === null ? "" : value).trim()
@@ -269,10 +277,14 @@ function normalizeSetting(key, value) {
   case "hoverGlowEnabled":
   case "backgroundColorEnabled":
   case "borderColorEnabled":
+  case "workspaceBadgeBackgroundColorEnabled":
+  case "workspaceBadgeTextColorEnabled":
   case "borderWidthEnabled":
     return typeof value === "boolean" ? value : defaults[key]
   case "backgroundColor":
   case "borderColor":
+  case "workspaceBadgeBackgroundColor":
+  case "workspaceBadgeTextColor":
     return normalizedColorValue(value)
   case "borderWidth":
     return steppedNumber(value, 0, 8, 1, defaults.borderWidth, 0)

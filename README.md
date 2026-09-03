@@ -159,14 +159,16 @@ visible. The centered panel leaves the dock's edge strip interactive, so moving
 over dock icons continues to preview magnification and hover glow while you
 adjust settings.
 
-Background and border overrides use a progressive control: choose **Theme
-default**, pick an Omarchy token (for example `@accent`, `@menu.background`, or
-`@popups.border`), or enable **Custom hex** and use the clickable alpha-aware
-color swatch or manual `#RRGGBB` / `#AARRGGBB` entry. Token selections store the
-symbolic reference so the color follows future theme changes; custom hex values
-store a fixed override. The border width similarly switches between the theme
-width and a **Custom width** slider, preserving the stored width when the
-override is disabled.
+Background, border, and workspace badge color overrides use a progressive
+control: choose **Theme default**, pick an Omarchy token (for example
+`@accent`, `@menu.background`, or `@popups.border`), or enable **Custom hex** and
+use the clickable alpha-aware color swatch or manual `#RRGGBB` /
+`#AARRGGBB` entry. Token selections store the symbolic reference so the color
+follows future theme changes; custom hex values store a fixed override. The
+workspace badge has independent Background and Text controls and defaults to
+the accent background with white text. The border width similarly switches
+between the theme width and a **Custom width** slider, preserving the stored
+width when the override is disabled.
 
 ```json
 {
@@ -182,6 +184,10 @@ override is disabled.
   "backgroundColor": "",
   "borderColorEnabled": false,
   "borderColor": "",
+  "workspaceBadgeBackgroundColorEnabled": false,
+  "workspaceBadgeBackgroundColor": "",
+  "workspaceBadgeTextColorEnabled": false,
+  "workspaceBadgeTextColor": "",
   "borderWidthEnabled": false,
   "borderWidth": 2,
   "position": "bottom",
@@ -217,6 +223,10 @@ override is disabled.
 | `backgroundColor` | Custom dock background in `#RRGGBB`, `#AARRGGBB`, or an Omarchy token such as `@menu.background` |
 | `borderColorEnabled` | When `true`, use `borderColor` instead of Omarchy's menu border token |
 | `borderColor` | Custom dock border color in `#RRGGBB`, `#AARRGGBB`, or an Omarchy token such as `@accent` |
+| `workspaceBadgeBackgroundColorEnabled` | When `true`, use `workspaceBadgeBackgroundColor` for application workspace-number badge backgrounds |
+| `workspaceBadgeBackgroundColor` | Workspace badge background in `#RRGGBB`, `#AARRGGBB`, or an Omarchy token such as `@accent` |
+| `workspaceBadgeTextColorEnabled` | When `true`, use `workspaceBadgeTextColor` for application workspace-number badge text |
+| `workspaceBadgeTextColor` | Workspace badge text in `#RRGGBB`, `#AARRGGBB`, or an Omarchy token such as `@foreground` |
 | `borderWidthEnabled` | When `true`, use `borderWidth` instead of the theme border width |
 | `borderWidth` | Custom dock border width from `0` to `8` pixels |
 | `position` | Screen edge: `top`, `bottom`, `left`, or `right` |
@@ -269,9 +279,9 @@ set the option to `[]` when you also want to reset hidden applications.
 
 The configuration file is watched and updates automatically. Drag a dock icon to another slot to reorder it; the new `pinned` order is written back to this file. Reserved space follows visibility: while auto-hide is off, the `reserveSpace` option decides whether tiled windows keep a clear dock-sized area; while auto-hide is on, the hidden dock never reserves space.
 
-The three surface override settings are independent. Leave an `*Enabled`
-flag set to `false` to follow the active Omarchy theme; enable it to use the
-matching custom color or width. Custom background alpha is multiplied by
+Surface override settings are independent. Leave an `*Enabled` flag set to
+`false` to follow the active Omarchy theme; enable it to use the matching
+custom color or width. Custom background alpha is multiplied by
 `backgroundOpacity` just like the theme background.
 
 For a full-height vertical dock on the left, use:
