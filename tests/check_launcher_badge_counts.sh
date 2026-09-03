@@ -14,6 +14,7 @@ tracker=components/DockBadgeTracker.qml
 service=components/DockLauncherBadgeService.qml
 badge=components/DockApplicationBadge.qml
 provider=provider/launcher-badges/LauncherBadgeProvider.cpp
+provider_main=provider/launcher-badges/main.cpp
 
 for path in \
   "$model" "$tracker" "$service" "$badge" Service.qml \
@@ -25,6 +26,11 @@ for path in \
   tests/test_launcher_badge_model.mjs tests/tst_launcherbadgemodel.qml; do
   [[ -f "$path" ]] || fail "missing $path"
 done
+
+lock_line="$(grep -n 'QLockFile lock' "$provider_main" | cut -d: -f1 || true)"
+mkdir_line="$(grep -n 'mkpath' "$provider_main" | head -1 | cut -d: -f1 || true)"
+[[ -n "$lock_line" && -n "$mkdir_line" && "$mkdir_line" -lt "$lock_line" ]] \
+  || fail 'provider must create the state directory before acquiring its lock'
 
 for fixture in initial partial hide clear reconnect malformed unknown; do
   [[ -f "provider/launcher-badges/fixtures/$fixture.json" ]] \

@@ -1,7 +1,9 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QLockFile>
 #include <QTextStream>
 
@@ -31,6 +33,12 @@ int main(int argc, char* argv[]) {
   if (stateFile.isEmpty()) {
     QTextStream(stderr) << "--state-file is required\n";
     return 2;
+  }
+
+  QFileInfo stateInfo(stateFile);
+  if (!stateInfo.dir().mkpath(QStringLiteral("."))) {
+    QTextStream(stderr) << "could not create launcher badge state directory\n";
+    return 3;
   }
 
   QLockFile lock(stateFile + QStringLiteral(".lock"));
