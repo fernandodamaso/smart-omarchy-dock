@@ -10,8 +10,9 @@ Item {
   readonly property string minimizedWorkspace: "special:smartdock-minimized"
   property var minimizedOrigins: ({})
   readonly property var minimizedOriginsSnapshot: copyOrigins(minimizedOrigins)
-  // FDM-810 can attach one preview implementation here. Until then the
-  // previews action is a safe no-op and does not create a second controller.
+  // Kept as a compatibility hook for callers that provide their own preview
+  // surface. Dock.qml owns the built-in preview popup and does not create a
+  // second window-actions controller.
   property var previewController: null
   readonly property var activeToplevel: ToplevelManager.activeToplevel
 
