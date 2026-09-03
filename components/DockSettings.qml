@@ -528,8 +528,13 @@ PanelWindow {
             }
           }
 
-          DockSettingsSection {
+          Flow {
             width: parent.width
+            spacing: Style.spacing.md
+            flow: Flow.LeftToRight
+
+            DockSettingsSection {
+            width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
             title: "Dock surface"
             iconName: "palette"
 
@@ -742,20 +747,19 @@ PanelWindow {
             }
           }
 
-          DockSettingsSection {
+            DockSettingsSection {
             id: workspaceBadgeSection
-            width: parent.width
+            width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
             title: "Workspace badge"
             description: "Colors for workspace numbers on running app icons"
             iconName: "layout-grid"
 
-            Flow {
+            Column {
               width: parent.width
               spacing: Style.spacing.md
-              flow: Flow.LeftToRight
 
               Column {
-                width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+                width: parent.width
                 spacing: Style.spacing.sm
 
                 Text {
@@ -841,7 +845,7 @@ PanelWindow {
               }
 
               Column {
-                width: root.wideLayout ? (parent.width - parent.spacing) / 2 : parent.width
+                width: parent.width
                 spacing: Style.spacing.sm
 
                 Text {
@@ -923,6 +927,8 @@ PanelWindow {
                 }
               }
             }
+          }
+
           }
 
           Flow {

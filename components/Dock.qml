@@ -533,8 +533,7 @@ PanelWindow {
             pointerPosition: root.pointerPosition
               - (root.vertical ? appGrid.y : appGrid.x)
             applicationActions: root.applicationActions
-            workspaceBadgeBackgroundColor:
-              root.effectiveWorkspaceBadgeBackgroundColor
+            workspaceBadgeBackgroundColor: root.effectiveWorkspaceBadgeBackgroundColor
             workspaceBadgeTextColor: root.effectiveWorkspaceBadgeTextColor
             autoHide: root.autoHide
             position: root.position
