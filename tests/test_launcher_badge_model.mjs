@@ -16,7 +16,9 @@ const {
   normalizeLauncherCount,
   launcherCountState,
   applicationBadgePresentation,
-  applicationBadgeToken
+  applicationBadgeToken,
+  herdrBadgeState,
+  herdrCountStateFor
 } = context
 
 assert.equal(
@@ -93,5 +95,46 @@ assert.equal(applicationBadgeToken(true, "dots-only", discord, "attention"), "at
 
 presentation = applicationBadgePresentation(false, "automatic", discord, "urgent")
 assert.equal(presentation.kind, "none")
+
+const herdrWorking = herdrBadgeState([
+  { agent_status: "working" },
+  { agent_status: "working" },
+  { agent_status: "idle" },
+  { agent_status: "done" }
+], true)
+assert.equal(JSON.stringify(herdrWorking), JSON.stringify({
+  authoritative: true,
+  count: 2,
+  visible: true,
+  severity: "attention",
+  total: 4,
+  working: 2,
+  blocked: 0,
+  done: 1,
+  idle: 1,
+  unknown: 0
+}))
+assert.equal(
+  herdrCountStateFor(
+    "com.mitchellh.ghostty", "com.mitchellh.ghostty", herdrWorking).count,
+  2)
+assert.equal(
+  herdrCountStateFor("org.gnome.Nautilus", "com.mitchellh.ghostty", herdrWorking)
+    .authoritative,
+  false)
+
+const herdrBlocked = herdrBadgeState([
+  { agent_status: "blocked" },
+  { agent_status: "working" },
+  { agent_status: "mystery" }
+], true)
+assert.equal(herdrBlocked.count, 1)
+assert.equal(herdrBlocked.severity, "urgent")
+assert.equal(herdrBlocked.unknown, 1)
+
+const herdrIdle = herdrBadgeState([{ agent_status: "idle" }], true)
+assert.equal(herdrIdle.authoritative, false)
+assert.equal(herdrIdle.severity, "none")
+assert.equal(herdrBadgeState([], false).authoritative, false)
 
 console.log("launcher badge model tests: PASS")

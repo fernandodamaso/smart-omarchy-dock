@@ -12,12 +12,13 @@ fail() {
 model=components/DockBadgeModel.js
 tracker=components/DockBadgeTracker.qml
 service=components/DockLauncherBadgeService.qml
+herdr_service=components/DockHerdrBadgeService.qml
 badge=components/DockApplicationBadge.qml
 provider=provider/launcher-badges/LauncherBadgeProvider.cpp
 provider_main=provider/launcher-badges/main.cpp
 
 for path in \
-  "$model" "$tracker" "$service" "$badge" Service.qml \
+  "$model" "$tracker" "$service" "$herdr_service" "$badge" Service.qml \
   provider/launcher-badges/LauncherBadgeModel.h \
   provider/launcher-badges/LauncherBadgeModel.cpp \
   provider/launcher-badges/LauncherBadgeProvider.h \
@@ -69,6 +70,12 @@ grep -Fq 'launcherCountFor(desktopId)' "$tracker" \
   || fail 'shared tracker count lookup missing'
 grep -Fq 'applicationBadgeToken(' "$tracker" \
   || fail 'shared tracker must combine authoritative count and FDM-809 severity'
+grep -Fq 'herdrBadgeStateFor' "$tracker" Service.qml \
+  || fail 'Herdr badge count wiring missing'
+grep -Fq 'herdrBadgeSeverityFor' "$tracker" Service.qml \
+  || fail 'Herdr badge severity wiring missing'
+grep -Fq 'DockHerdrBadgeService {' Service.qml \
+  || fail 'Omarchy service must own one Herdr badge adapter'
 grep -Fq 'clearMatchingNotifications' "$tracker" \
   || fail 'FDM-809 local focus clear missing'
 if grep -A12 -F 'function clearFocusedLocal()' "$tracker" | grep -Fq 'launcherBadge'; then
@@ -93,9 +100,14 @@ grep -Fq 'QSaveFile' "$provider" \
   || fail 'provider snapshot must be atomic'
 grep -Fq 'QLockFile' provider/launcher-badges/main.cpp \
   || fail 'provider process single-owner lock missing'
+grep -Fq 'herdr", "agent", "list' "$herdr_service" \
+  || fail 'Herdr adapter must consume the local agent list contract'
+grep -Fq 'com.mitchellh.ghostty' "$herdr_service" \
+  || fail 'Herdr adapter must target the Ghostty desktop entry'
 
 if grep -REiq 'dbus-monitor|gdbus[[:space:]].*monitor|while[[:space:]]+true' \
-    components/DockLauncherBadgeService.qml provider/launcher-badges scripts/build-launcher-badge-provider; then
+    components/DockLauncherBadgeService.qml components/DockHerdrBadgeService.qml \
+    provider/launcher-badges scripts/build-launcher-badge-provider; then
   fail 'polling or long-running text parser detected'
 fi
 if grep -Fq 'StdioCollector' "$service"; then

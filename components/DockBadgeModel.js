@@ -249,6 +249,64 @@ function launcherCountState(records, desktopId, providerAvailable) {
   return none
 }
 
+function herdrBadgeState(agents, providerAvailable) {
+  var empty = {
+    authoritative: false,
+    count: 0,
+    visible: false,
+    severity: BADGE_NONE,
+    total: 0,
+    working: 0,
+    blocked: 0,
+    done: 0,
+    idle: 0,
+    unknown: 0
+  }
+  if (!providerAvailable || !Array.isArray(agents)) return empty
+
+  var counts = {
+    total: agents.length,
+    working: 0,
+    blocked: 0,
+    done: 0,
+    idle: 0,
+    unknown: 0
+  }
+  for (var i = 0; i < agents.length; ++i) {
+    var status = String(agents[i] && agents[i].agent_status || "unknown")
+      .trim().toLowerCase()
+    if (counts[status] !== undefined && status !== "total") counts[status]++
+    else counts.unknown++
+  }
+
+  var count = counts.blocked > 0 ? counts.blocked : counts.working
+  var severity = counts.blocked > 0
+    ? BADGE_URGENT : counts.working > 0 ? BADGE_ATTENTION : BADGE_NONE
+  return {
+    authoritative: count > 0,
+    count: count,
+    visible: count > 0,
+    severity: severity,
+    total: counts.total,
+    working: counts.working,
+    blocked: counts.blocked,
+    done: counts.done,
+    idle: counts.idle,
+    unknown: counts.unknown
+  }
+}
+
+function herdrCountStateFor(desktopId, targetDesktopId, state) {
+  var none = { authoritative: false, count: 0, visible: false }
+  if (normalizeIdentity(desktopId) !== normalizeIdentity(targetDesktopId))
+    return none
+  var source = state || ({})
+  var count = normalizeLauncherCount(source.count)
+  if (source.authoritative !== true || source.visible !== true
+      || count === null || count <= 0) return none
+  return { authoritative: true, count: count, visible: true }
+}
+
 function applicationBadgePresentation(enabled, mode, countState, severity) {
   var safeSeverity = severityRank(severity) > 0 ? severity : BADGE_NONE
   var none = {

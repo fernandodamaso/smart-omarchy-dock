@@ -113,8 +113,12 @@ Item {
     // even when the service reuses the same counts object identity.
     var providerRevision = service ? Number(service.revision || 0) : 0
     var counts = service && service.counts ? service.counts : ({})
-    return BadgeModel.launcherCountState(
+    var providerState = BadgeModel.launcherCountState(
       counts, desktopId, !!(service && service.available))
+    if (providerState.authoritative) return providerState
+    if (service && typeof service.herdrBadgeStateFor === "function")
+      return service.herdrBadgeStateFor(desktopId)
+    return providerState
   }
 
   function badgeFor(desktopId) {
@@ -130,6 +134,12 @@ Item {
       sniNeedsAttentionFor(desktopId, entry),
       hyprUrgentFor(desktopId, entry),
       local)
+    if (launcherBadgeService
+        && typeof launcherBadgeService.herdrBadgeSeverityFor === "function") {
+      severity = BadgeModel.reduceSeverity([
+        severity, launcherBadgeService.herdrBadgeSeverityFor(desktopId)
+      ])
+    }
     return BadgeModel.applicationBadgeToken(
       true,
       launcherBadgeMode,
