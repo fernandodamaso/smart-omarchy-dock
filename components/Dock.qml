@@ -227,8 +227,8 @@ PanelWindow {
     : Math.max(0, visibleWorkspaceIds.length * 32 + 6)
   readonly property int trashMainExtent: TrashModel.sectionMainExtent(
     showTrash, itemSize, 12)
-  readonly property int trailingMainExtent: 12 + trashMainExtent
-    + workspaceMainExtent
+  readonly property int trailingMainExtent: TrashModel.trailingMainExtent(
+    showTrash, itemSize, 12, workspaceMainExtent)
   readonly property int compactMainExtent: mainPadding * 2 + itemSize
     + appMainExtent + trailingMainExtent
   readonly property bool keepAutoHideOpen: windowPointer.hovered
@@ -500,6 +500,9 @@ PanelWindow {
       readonly property real leadingEnd: root.mainPadding + root.itemSize
       readonly property real trailingStart: (root.vertical ? height : width)
         - root.mainPadding - root.trailingMainExtent
+      readonly property real trashOffset: root.showTrash
+        ? (root.vertical ? appTrashSeparator.height : appTrashSeparator.width)
+          + root.trashMainExtent : 0
       readonly property real centeredAppStart: ((root.vertical ? height : width)
         - root.appMainExtent) / 2
       readonly property real appStart: root.fullLength
@@ -615,6 +618,7 @@ PanelWindow {
         vertical: root.vertical
         slotSize: root.itemSize
         iconSize: root.iconSize
+        visible: root.showTrash
       }
 
       DockTrashItem {
@@ -667,9 +671,9 @@ PanelWindow {
 
         x: root.vertical
           ? (parent.width - width) / 2
-          : parent.trailingStart + appTrashSeparator.width + root.trashMainExtent
+          : parent.trailingStart + parent.trashOffset
         y: root.vertical
-          ? parent.trailingStart + appTrashSeparator.height + root.trashMainExtent
+          ? parent.trailingStart + parent.trashOffset
           : (parent.height - height) / 2
         workspaceIds: root.visibleWorkspaceIds
         workspaces: root.hyprWorkspaces

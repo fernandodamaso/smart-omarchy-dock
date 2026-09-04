@@ -183,6 +183,7 @@ function settingsDefaults() {
     hoverGlowOpacity: 0.72,
     hoverGlowRadius: 28,
     showPreviews: true,
+    showTrash: true,
     backgroundOpacity: 0.88,
     backgroundColorEnabled: false,
     backgroundColor: "",
@@ -390,6 +391,7 @@ function normalizeSetting(key, value) {
     return steppedNumber(value, 0, 1, 0.05, defaults.backgroundOpacity, 2)
   case "hoverGlowEnabled":
   case "showPreviews":
+  case "showTrash":
   case "backgroundColorEnabled":
   case "borderColorEnabled":
   case "workspaceBadgeBackgroundColorEnabled":

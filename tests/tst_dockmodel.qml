@@ -85,12 +85,15 @@ TestCase {
     compare(DockModel.normalizeSetting("showPreviews", true), true)
     compare(DockModel.normalizeSetting("showPreviews", false), false)
     compare(DockModel.normalizeSetting("showPreviews", "false"), true)
+    compare(DockModel.normalizeSetting("showTrash", false), false)
+    compare(DockModel.normalizeSetting("showTrash", "false"), true)
     compare(DockModel.normalizeSetting("controlCommand", "  launcher --toggle  "),
       "launcher --toggle")
   }
 
   function test_defaultsToShowingWindowPreviews() {
     compare(DockModel.settingsDefaults().showPreviews, true)
+    compare(DockModel.settingsDefaults().showTrash, true)
   }
 
   function test_providesWorkspaceBadgeDefaults() {
@@ -391,6 +394,7 @@ TestCase {
     compare(reset.hoverGlowEnabled, true)
     compare(reset.hoverGlowOpacity, 0.72)
     compare(reset.hoverGlowRadius, 28)
+    compare(reset.showTrash, true)
     compare(reset.backgroundColorEnabled, false)
     compare(reset.backgroundColor, "")
     compare(reset.borderColorEnabled, false)

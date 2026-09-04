@@ -139,7 +139,6 @@ Item {
 
   function resetSettings() {
     var patch = DockModel.resetSettingsPatch()
-    patch.showTrash = true
     patch.attentionBadgesEnabled = true
     patch.urgentWindowAnimationEnabled = true
     patch.launcherBadgeMode = "automatic"
