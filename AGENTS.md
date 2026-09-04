@@ -12,6 +12,9 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
   the installed plugin through `omarchy plugin update`.
 - Releases are cut from validated `main`. Imports from `upstream` are explicit
   review work on a dedicated branch and must pass the complete validation gate.
+- Follow `docs/DELIVERY.md` for PR-only delivery, exact-SHA evidence, protected-main
+  policy, and stacked-branch retarget/rebuild rules. Never merge a local feature
+  branch directly onto `main` and push that merge as feature delivery.
 - Run the dock with `./scripts/run`.
 - Keep the standalone entry point at `shell.qml` and the Omarchy plugin entry point at `Overlay.qml`.
 - Keep shared host behavior in `DockHost.qml`; never start a second Quickshell process from the plugin.
@@ -28,7 +31,9 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 
 ## Validation
 
-Before committing changes:
+GitHub `Headless CI` runs the host-independent subset documented in
+`docs/DELIVERY.md`. Before committing runtime changes, also run the full local
+validation gate when the owning issue requires it:
 
 ```bash
 timeout 6s ./scripts/run --no-color
