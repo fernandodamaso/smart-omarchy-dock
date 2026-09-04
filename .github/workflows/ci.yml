@@ -57,7 +57,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh
+          for script in install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh; do
+            bash -n "$script"
+          done
 
       - name: Run structural guards
         shell: bash
