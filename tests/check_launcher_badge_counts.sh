@@ -29,7 +29,7 @@ done
 
 [[ ! -e components/DockHerdrBadgeService.qml ]] \
   || fail 'recurring Herdr adapter must remain removed'
-herdr_runtime_pattern='DockHerdrBadgeService[[:space:]]*\{|herdr[[:space:]]+agent[[:space:]]+list|"herdr"[[:space:]]*,[[:space:]]*"agent"[[:space:]]*,[[:space:]]*"list"'
+herdr_runtime_pattern='^[[:space:]]*DockHerdrBadgeService[[:space:]]*\{|^[[:space:]]*command[[:space:]]*:.*(herdr[[:space:]]+agent[[:space:]]+list|"herdr"[[:space:]]*,[[:space:]]*"agent"[[:space:]]*,[[:space:]]*"list")'
 if grep -REiq --include='*.qml' "$herdr_runtime_pattern" Service.qml components; then
   fail 'Herdr polling/service execution must remain removed'
 fi
