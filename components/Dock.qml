@@ -14,6 +14,7 @@ PanelWindow {
   id: root
 
   required property var settings
+  required property bool showTrash
   required property var windowActions
   required property var badgeTracker
   required property int trashItemCount
@@ -55,8 +56,6 @@ PanelWindow {
     "hoverGlowRadius", effectiveSetting("hoverGlowRadius"))
   readonly property bool showPreviews: DockModel.normalizeSetting(
     "showPreviews", effectiveSetting("showPreviews"))
-  readonly property bool showTrash: TrashModel.normalizeShowTrash(
-    effectiveSetting("showTrash"))
   readonly property int edgeMargin: settings.margin === undefined ? 10 : settings.margin
   // Names exposed by Dock Settings. Values are live bindings to Omarchy's
   // Color singleton so symbolic overrides follow a theme change immediately.

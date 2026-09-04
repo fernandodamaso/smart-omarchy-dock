@@ -30,6 +30,8 @@ TestCase {
     compare(TrashModel.shouldRefresh(true, false), true)
     compare(TrashModel.shouldRefresh(false, false), false)
     compare(TrashModel.shouldRefresh(true, true), false)
+    compare(TrashModel.shouldRefresh(true, false, false), false)
+    compare(TrashModel.shouldRefresh(false, false, true), false)
   }
 
   function test_dismissesOpenMenuWhenTrashBecomesHidden() {

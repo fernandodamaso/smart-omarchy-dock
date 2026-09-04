@@ -21,8 +21,9 @@ function trailingMainExtent(showTrash, itemSize, separatorExtent, workspaceExten
     + sectionMainExtent(true, itemSize, separatorExtent) + workspace
 }
 
-function shouldRefresh(showTrash, processRunning) {
-  return normalizeShowTrash(showTrash) && processRunning !== true
+function shouldRefresh(showTrash, processRunning, settingsLoaded) {
+  return settingsLoaded !== false
+    && normalizeShowTrash(showTrash) && processRunning !== true
 }
 
 function shouldDismissMenu(showTrash, menuVisible) {

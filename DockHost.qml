@@ -17,13 +17,15 @@ Item {
 
   property int trashItemCount: 0
   property bool trashStateKnown: false
+  property bool settingsLoaded: false
+  property bool showTrashSetting: true
   property var workspaceWindowCounts: ({})
   property bool workspaceCountsReady: false
   property int workspaceCountsRevision: 0
   property bool workspaceCountsRefreshPending: false
   readonly property var windowActions: windowActionsController
   readonly property var badgeTracker: badgeTrackerController
-  readonly property bool showTrash: TrashModel.normalizeShowTrash(settings.showTrash)
+  readonly property bool showTrash: showTrashSetting
 
   property var settings: ({
     iconSize: 42,
@@ -84,10 +86,14 @@ Item {
           ? parsed.urgentWindowAnimationEnabled : true
       parsed.launcherBadgeMode = parsed.launcherBadgeMode === "dots-only"
         ? "dots-only" : "automatic"
+      showTrashSetting = parsed.showTrash
       settings = parsed
     } catch (error) {
       console.warn("Dock: could not load " + configPath + ":", error)
     }
+
+    settingsLoaded = true
+    if (showTrash) Qt.callLater(root.refreshTrash)
   }
 
   function reorderPinned(sourceDesktopId, targetDesktopId) {
@@ -133,6 +139,8 @@ Item {
   function saveSettings(patch) {
     var updated = DockModel.mergeSettings(settings, patch)
 
+    updated.showTrash = TrashModel.normalizeShowTrash(updated.showTrash)
+    showTrashSetting = updated.showTrash
     settings = updated
     configFile.setText(JSON.stringify(updated, null, 2) + "\n")
   }
@@ -146,7 +154,8 @@ Item {
   }
 
   function refreshTrash() {
-    if (!TrashModel.shouldRefresh(showTrash, trashListProcess.running)) return
+    if (!TrashModel.shouldRefresh(showTrash, trashListProcess.running,
+        settingsLoaded)) return
     trashListProcess.running = true
   }
 
@@ -169,20 +178,19 @@ Item {
   }
 
   onShowTrashChanged: {
-    if (!showTrash) return
+    if (!settingsLoaded || !showTrash) return
     trashStateKnown = false
     Qt.callLater(root.refreshTrash)
   }
 
   Component.onCompleted: {
-    if (showTrash) refreshTrash()
     refreshWorkspaceCounts()
   }
 
   Timer {
     interval: 3000
     repeat: true
-    running: root.showTrash
+    running: root.settingsLoaded && root.showTrash
     onTriggered: root.refreshTrash()
   }
 
@@ -297,6 +305,7 @@ Item {
         required property var modelData
         screen: modelData
         settings: root.settings
+        showTrash: root.showTrash
         windowActions: root.windowActions
         badgeTracker: root.badgeTracker
         trashItemCount: root.trashItemCount
