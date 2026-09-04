@@ -1,24 +1,29 @@
 import QtQuick
 import QtTest
-import "../components/DockModel.js" as DockModel
+import "../components/DockTrashModel.js" as TrashModel
 
 TestCase {
   name: "ShowTrash"
 
   function test_defaultsToShowingTrash() {
-    compare(DockModel.settingsDefaults().showTrash, true)
+    compare(TrashModel.normalizeShowTrash(undefined), true)
+    compare(TrashModel.normalizeShowTrash("false"), true)
   }
 
   function test_normalizesShowTrashAsBoolean() {
-    compare(DockModel.normalizeSetting("showTrash", true), true)
-    compare(DockModel.normalizeSetting("showTrash", false), false)
-    compare(DockModel.normalizeSetting("showTrash", undefined), true)
-    compare(DockModel.normalizeSetting("showTrash", "false"), true)
+    compare(TrashModel.normalizeShowTrash(true), true)
+    compare(TrashModel.normalizeShowTrash(false), false)
   }
 
   function test_removesTrashSectionExtentWhenHidden() {
-    compare(DockModel.trashSectionMainExtent(true, 56), 68)
-    compare(DockModel.trashSectionMainExtent(false, 56), 0)
-    compare(DockModel.trashSectionMainExtent(true, -10), 12)
+    compare(TrashModel.sectionMainExtent(true, 56, 12), 68)
+    compare(TrashModel.sectionMainExtent(false, 56, 12), 0)
+    compare(TrashModel.sectionMainExtent(true, -10, 12), 12)
+  }
+
+  function test_refreshesTrashOnlyWhenVisibleAndIdle() {
+    compare(TrashModel.shouldRefresh(true, false), true)
+    compare(TrashModel.shouldRefresh(false, false), false)
+    compare(TrashModel.shouldRefresh(true, true), false)
   }
 }
