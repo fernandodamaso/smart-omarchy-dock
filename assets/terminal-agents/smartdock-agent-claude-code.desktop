@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Claude Code
+Comment=Launch Claude Code in Ghostty
+Exec=ghostty --gtk-single-instance=false --class=io.github.fernandodamaso.smartdock.agent.claude-code -e claude
+Icon=smartdock-agent-claude-code
+Terminal=false
+Categories=Development;
+Keywords=AI;Agent;Coding;Terminal;
+StartupWMClass=io.github.fernandodamaso.smartdock.agent.claude-code
+StartupNotify=true

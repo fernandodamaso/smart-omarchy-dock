@@ -16,12 +16,99 @@ var TERMINAL_APP_IDS = [
 ]
 
 var TERMINAL_CLI_APP_IDS = [
-  "opencode", "herdr", "kimi", "codex", "hermes"
+  "opencode", "herdr", "kimi", "codex", "hermes",
+  "smartdock-agent-pi", "smartdock-agent-oh-my-pi",
+  "smartdock-agent-command-code", "smartdock-agent-cursor",
+  "smartdock-agent-claude-code", "smartdock-agent-kilo-code",
+  "smartdock-agent-cline"
 ]
 
+var TERMINAL_AGENT_APP_IDS = [
+  "smartdock-agent-pi", "smartdock-agent-oh-my-pi",
+  "smartdock-agent-command-code", "smartdock-agent-cursor",
+  "smartdock-agent-claude-code", "smartdock-agent-kilo-code",
+  "smartdock-agent-cline"
+]
+
+var TERMINAL_AGENT_APP_ID_MAPPINGS = [
+  ["io.github.fernandodamaso.smartdock.agent.pi", "smartdock-agent-pi"],
+  ["io.github.fernandodamaso.smartdock.agent.oh-my-pi", "smartdock-agent-oh-my-pi"],
+  ["io.github.fernandodamaso.smartdock.agent.command-code", "smartdock-agent-command-code"],
+  ["io.github.fernandodamaso.smartdock.agent.cursor", "smartdock-agent-cursor"],
+  ["io.github.fernandodamaso.smartdock.agent.claude-code", "smartdock-agent-claude-code"],
+  ["io.github.fernandodamaso.smartdock.agent.kilo-code", "smartdock-agent-kilo-code"],
+  ["io.github.fernandodamaso.smartdock.agent.cline", "smartdock-agent-cline"]
+]
+
+var TERMINAL_AGENT_SPINNER_FRAMES = [
+  "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"
+]
+
+var TERMINAL_AGENT_CLAUDE_STATUS_SYMBOLS = [
+  "✳", "✱", "✢", "✶", "✻", "✽", "⠂", "⠐", "◐", "◓", "◑", "◒"
+]
+
+var TERMINAL_AGENT_KILO_STATUS_SYMBOLS = [
+  "◔", "⚠", "✓", "💭", "🔶", "✅"
+]
+
+function hasNonemptyTitleSuffix(title, prefix) {
+  return title.indexOf(prefix) === 0
+    && title.slice(prefix.length).trim() !== ""
+}
+
+function hasKnownStatusPrefix(title, base, symbols) {
+  for (var i = 0; i < symbols.length; ++i) {
+    if (title === symbols[i] + " " + base) return true
+  }
+  return false
+}
+
+function hasKnownStatusSessionTitle(title, base, symbols) {
+  for (var i = 0; i < symbols.length; ++i) {
+    if (hasNonemptyTitleSuffix(title, symbols[i] + " " + base + " | "))
+      return true
+  }
+  return false
+}
+
+function hasKnownStatusTitle(title, prefix, symbols) {
+  for (var i = 0; i < symbols.length; ++i) {
+    var marker = prefix + symbols[i]
+    if (title.indexOf(marker) !== 0) continue
+    var suffix = title.slice(marker.length)
+    if (suffix === "" || /^\s+\S/.test(suffix)) return true
+  }
+  return false
+}
+
 function terminalCliAppId(title) {
-  var raw = String(title || "").toLowerCase().trim()
+  var text = String(title || "").trim()
+  var raw = text.toLowerCase()
   if (!raw) return ""
+  if (/^π - .*\S.*$/.test(text))
+    return "smartdock-agent-pi"
+  if (text === "π"
+      || /^π\s*[:>!](?:\s+.*\S)?$/.test(text)
+      || hasKnownStatusTitle(text, "π ", TERMINAL_AGENT_SPINNER_FRAMES))
+    return "smartdock-agent-oh-my-pi"
+  if (/^⌘ Command Code(?: · .*\S)?$/.test(text))
+    return "smartdock-agent-command-code"
+  if (text === "Cursor Agent" || text === "Cursor Agent (local-agent)")
+    return "smartdock-agent-cursor"
+  if (text === "Claude Code"
+      || hasKnownStatusPrefix(text, "Claude Code",
+        TERMINAL_AGENT_CLAUDE_STATUS_SYMBOLS))
+    return "smartdock-agent-claude-code"
+  if (text === "Kilo CLI"
+      || hasKnownStatusPrefix(text, "Kilo CLI",
+        TERMINAL_AGENT_KILO_STATUS_SYMBOLS)
+      || hasKnownStatusSessionTitle(text, "Kilo CLI",
+        TERMINAL_AGENT_KILO_STATUS_SYMBOLS)
+      || hasNonemptyTitleSuffix(text, "Kilo CLI | "))
+    return "smartdock-agent-kilo-code"
+  if (text === "Cline")
+    return "smartdock-agent-cline"
   // opencode replaces the window title with its session title
   // (e.g. "OC | <session>") shortly after launch.
   if (raw.indexOf("opencode") >= 0 || /^oc\s*\|/.test(raw))
@@ -60,15 +147,42 @@ function entryForCliAppId(cliAppId, entries) {
   return null
 }
 
+function entryForTerminalAgentAppId(appId, entries) {
+  var wanted = normalizedId(appId)
+  var list = entries || []
+  for (var i = 0; i < list.length; ++i) {
+    if (normalizedId(list[i].id) === wanted)
+      return list[i]
+  }
+  return null
+}
+
+function terminalAgentDesktopId(appId) {
+  var wanted = normalizedId(appId)
+  for (var i = 0; i < TERMINAL_AGENT_APP_ID_MAPPINGS.length; ++i) {
+    if (TERMINAL_AGENT_APP_ID_MAPPINGS[i][0] === wanted)
+      return TERMINAL_AGENT_APP_ID_MAPPINGS[i][1]
+  }
+  return ""
+}
+
 function toplevelAppId(toplevel, entries) {
   var appId = toplevel ? toplevel.appId : ""
   if (!appId) return ""
-  if (TERMINAL_APP_IDS.indexOf(normalizedId(appId)) < 0)
+  var normalizedAppId = normalizedId(appId)
+  var agentDesktopId = terminalAgentDesktopId(normalizedAppId)
+  if (agentDesktopId) {
+    var agentEntry = entryForTerminalAgentAppId(agentDesktopId, entries)
+    return agentEntry ? agentEntry.id : appId
+  }
+  if (TERMINAL_APP_IDS.indexOf(normalizedAppId) < 0)
     return appId
   var cliAppId = terminalCliAppId(toplevel.title)
   if (!cliAppId || TERMINAL_CLI_APP_IDS.indexOf(cliAppId) < 0)
     return appId
-  var cliEntry = entryForCliAppId(cliAppId, entries)
+  var cliEntry = TERMINAL_AGENT_APP_IDS.indexOf(cliAppId) >= 0
+    ? entryForTerminalAgentAppId(cliAppId, entries)
+    : entryForCliAppId(cliAppId, entries)
   if (!cliEntry)
     return appId
   return cliEntry.id

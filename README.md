@@ -157,6 +157,50 @@ integration is intentionally excluded until a separate event-driven provider
 exists; optional numeric counts remain limited to application-published
 LauncherEntry state.
 
+### Terminal-agent launchers
+
+SmartDock bundles visible application entries that open these terminal agents
+in separate Ghostty windows:
+
+| Launcher | Desktop ID | Ghostty window class | Command |
+| --- | --- | --- | --- |
+| Pi | `smartdock-agent-pi` | `io.github.fernandodamaso.smartdock.agent.pi` | `pi` |
+| Oh My Pi | `smartdock-agent-oh-my-pi` | `io.github.fernandodamaso.smartdock.agent.oh-my-pi` | `omp` |
+| Command Code | `smartdock-agent-command-code` | `io.github.fernandodamaso.smartdock.agent.command-code` | `commandcode` |
+| Cursor Agent | `smartdock-agent-cursor` | `io.github.fernandodamaso.smartdock.agent.cursor` | `cursor-agent` |
+| Claude Code | `smartdock-agent-claude-code` | `io.github.fernandodamaso.smartdock.agent.claude-code` | `claude` |
+| Kilo Code | `smartdock-agent-kilo-code` | `io.github.fernandodamaso.smartdock.agent.kilo-code` | `kilo` |
+| Cline | `smartdock-agent-cline` | `io.github.fernandodamaso.smartdock.agent.cline` | `cline` |
+
+Each launcher runs `ghostty --gtk-single-instance=false` with a unique, valid
+GTK/Wayland application ID. Standalone users get these entries from the
+normal `./install.sh`. Plugin users can install only the launchers and icons
+from a SmartDock source checkout, without requiring Quickshell, installing a
+second dock, enabling autostart, or changing the dock configuration:
+
+```bash
+./install.sh --agent-assets-only
+```
+
+The plugin itself is installed with:
+
+```bash
+omarchy plugin add https://github.com/fernandodamaso/smart-omarchy-dock.git --enable --yes
+```
+
+Agent grouping is best effort. SmartDock uses the terminal window's observed
+title or agent marker as a fallback because these CLIs run inside a terminal,
+so title updates can be delayed, overwritten by a shell, or unavailable. A
+manually started Pi, Oh My Pi, or Kilo session usually retains a recognizable
+title. Command Code, Cursor Agent, Claude Code, and Cline can replace their
+branded title with arbitrary session or prompt text, so only their branded
+startup/default phases are recognized outside the dedicated launchers. A
+tab or split inside Ghostty usually shares the same top-level window and cannot
+be separated reliably. The same limitation applies to multiple sessions in
+tmux. An agent running over SSH or inside a container may expose only the local
+shell/terminal title, so it can remain grouped under Ghostty instead of its
+agent launcher. These entries still provide direct launches even when runtime
+grouping cannot identify a session.
 ### Development
 
 Development happens in the canonical source checkout or in your own clone,

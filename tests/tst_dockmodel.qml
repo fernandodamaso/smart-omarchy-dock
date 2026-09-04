@@ -975,6 +975,152 @@ TestCase {
     compare(DockModel.terminalCliAppId(null), "")
   }
 
+  function test_detectsStrictTerminalAgentTitles() {
+    compare(DockModel.terminalCliAppId("π - /home/admin/project"),
+      "smartdock-agent-pi")
+    compare(DockModel.terminalCliAppId("π - session - /home/admin/project"),
+      "smartdock-agent-pi")
+    compare(DockModel.terminalCliAppId("π -"), "")
+    compare(DockModel.terminalCliAppId("π"), "smartdock-agent-oh-my-pi")
+    compare(DockModel.terminalCliAppId("π : project"),
+      "smartdock-agent-oh-my-pi")
+    compare(DockModel.terminalCliAppId("π > project"),
+      "smartdock-agent-oh-my-pi")
+    compare(DockModel.terminalCliAppId("π ! project"),
+      "smartdock-agent-oh-my-pi")
+    compare(DockModel.terminalCliAppId("π ⠋ project"),
+      "smartdock-agent-oh-my-pi")
+    compare(DockModel.terminalCliAppId("π - generated-name"),
+      "smartdock-agent-pi")
+
+    compare(DockModel.terminalCliAppId("⌘ Command Code"),
+      "smartdock-agent-command-code")
+    compare(DockModel.terminalCliAppId("⌘ Command Code · fix dock"),
+      "smartdock-agent-command-code")
+    compare(DockModel.terminalCliAppId("⌘ Command Code fix dock"), "")
+    compare(DockModel.terminalCliAppId("Command Code"), "")
+
+    compare(DockModel.terminalCliAppId("Cursor Agent"),
+      "smartdock-agent-cursor")
+    compare(DockModel.terminalCliAppId("Cursor Agent (local-agent)"),
+      "smartdock-agent-cursor")
+    compare(DockModel.terminalCliAppId("Cursor Agent - project"), "")
+
+    compare(DockModel.terminalCliAppId("Claude Code"),
+      "smartdock-agent-claude-code")
+    compare(DockModel.terminalCliAppId("✳ Claude Code"),
+      "smartdock-agent-claude-code")
+    compare(DockModel.terminalCliAppId("⠂ Claude Code"),
+      "smartdock-agent-claude-code")
+    compare(DockModel.terminalCliAppId("Claude Code - generated name"), "")
+    compare(DockModel.terminalCliAppId("✳ generated name"), "")
+
+    compare(DockModel.terminalCliAppId("Kilo CLI"),
+      "smartdock-agent-kilo-code")
+    compare(DockModel.terminalCliAppId("◔ Kilo CLI | fix dock"),
+      "smartdock-agent-kilo-code")
+    compare(DockModel.terminalCliAppId("Kilo CLI | fix dock"),
+      "smartdock-agent-kilo-code")
+    compare(DockModel.terminalCliAppId("Kilo CLI fix dock"), "")
+    compare(DockModel.terminalCliAppId("◔ Kilo Code"), "")
+
+    compare(DockModel.terminalCliAppId("Cline"),
+      "smartdock-agent-cline")
+    compare(DockModel.terminalCliAppId("> Cline"), "")
+    compare(DockModel.terminalCliAppId("Cline - project"), "")
+  }
+
+  function test_classifiesAuthoritativeTerminalAgentClassesOnlyWithMatchingEntries() {
+    var mappings = [
+      ["io.github.fernandodamaso.smartdock.agent.pi", "smartdock-agent-pi"],
+      ["io.github.fernandodamaso.smartdock.agent.oh-my-pi", "smartdock-agent-oh-my-pi"],
+      ["io.github.fernandodamaso.smartdock.agent.command-code", "smartdock-agent-command-code"],
+      ["io.github.fernandodamaso.smartdock.agent.cursor", "smartdock-agent-cursor"],
+      ["io.github.fernandodamaso.smartdock.agent.claude-code", "smartdock-agent-claude-code"],
+      ["io.github.fernandodamaso.smartdock.agent.kilo-code", "smartdock-agent-kilo-code"],
+      ["io.github.fernandodamaso.smartdock.agent.cline", "smartdock-agent-cline"]
+    ]
+    var entries = []
+    for (var i = 0; i < mappings.length; ++i) {
+      entries.push({ id: mappings[i][1], startupClass: mappings[i][0] })
+      var window = { appId: mappings[i][0], title: "arbitrary generated title" }
+      compare(DockModel.toplevelAppId(window, entries), mappings[i][1])
+    }
+
+    var arbitraryEntry = { id: "smartdock-agent-pi-other", name: "Pi" }
+    compare(DockModel.toplevelAppId(
+      { appId: mappings[0][0], title: "anything" },
+      [arbitraryEntry]), mappings[0][0])
+  }
+
+  function test_groupsAllAuthoritativeTerminalAgentClasses() {
+    var mappings = [
+      ["io.github.fernandodamaso.smartdock.agent.pi", "smartdock-agent-pi"],
+      ["io.github.fernandodamaso.smartdock.agent.oh-my-pi", "smartdock-agent-oh-my-pi"],
+      ["io.github.fernandodamaso.smartdock.agent.command-code", "smartdock-agent-command-code"],
+      ["io.github.fernandodamaso.smartdock.agent.cursor", "smartdock-agent-cursor"],
+      ["io.github.fernandodamaso.smartdock.agent.claude-code", "smartdock-agent-claude-code"],
+      ["io.github.fernandodamaso.smartdock.agent.kilo-code", "smartdock-agent-kilo-code"],
+      ["io.github.fernandodamaso.smartdock.agent.cline", "smartdock-agent-cline"]
+    ]
+    var pinned = []
+    var windows = []
+    var entries = []
+    for (var i = 0; i < mappings.length; ++i) {
+      pinned.push(mappings[i][1])
+      windows.push({ appId: mappings[i][0], title: "renamed session " + i })
+      entries.push({ id: mappings[i][1], startupClass: mappings[i][0] })
+    }
+
+    var items = DockModel.buildVisibleItems(pinned, windows, entries)
+    compare(items.length, mappings.length)
+    for (var j = 0; j < items.length; ++j) {
+      compare(items[j].desktopId, mappings[j][1])
+      compare(items[j].toplevels.length, 1)
+      compare(items[j].toplevels[0], windows[j])
+    }
+  }
+
+  function test_gatesTerminalAgentTitleFallbackAndPreservesMissingEntries() {
+    var entries = [
+      { id: "org.wezfurlong.wezterm", startupClass: "org.wezfurlong.wezterm" },
+      { id: "smartdock-agent-cursor", name: "Cursor Agent" }
+    ]
+    var title = "Cursor Agent"
+
+    compare(DockModel.toplevelAppId(
+      { appId: "org.example.editor", title: title }, entries),
+      "org.example.editor")
+    compare(DockModel.toplevelAppId(
+      { appId: "org.wezfurlong.wezterm", title: title }, entries),
+      "smartdock-agent-cursor")
+    compare(DockModel.toplevelAppId(
+      { appId: "org.wezfurlong.wezterm", title: title }, [
+        entries[0], { id: "other-cursor", name: "smartdock-agent-cursor" }
+      ]), "org.wezfurlong.wezterm")
+    compare(DockModel.toplevelAppId(
+      { appId: "org.wezfurlong.wezterm", title: "Cursor Agent - generated" },
+      entries), "org.wezfurlong.wezterm")
+    compare(DockModel.toplevelAppId(
+      { appId: "org.wezfurlong.wezterm", title: "Cline" }, entries),
+      "org.wezfurlong.wezterm")
+
+    var missingEntryTitles = [
+      "π - /home/admin/project",
+      "π > project",
+      "⌘ Command Code",
+      "Cursor Agent",
+      "✳ Claude Code",
+      "Kilo CLI | project",
+      "Cline"
+    ]
+    for (var i = 0; i < missingEntryTitles.length; ++i) {
+      compare(DockModel.toplevelAppId({
+        appId: "org.wezfurlong.wezterm", title: missingEntryTitles[i]
+      }, [entries[0]]), "org.wezfurlong.wezterm")
+    }
+  }
+
   function test_separatesTerminalCliAppIntoOwnDockItem() {
     var entries = [
       { id: "com.mitchellh.ghostty", startupClass: "com.mitchellh.ghostty", name: "Ghostty" },
