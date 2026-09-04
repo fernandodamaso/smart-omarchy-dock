@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  headless:
+    name: Headless CI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Check out exact tested SHA
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Record exact-SHA evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          test "$actual_sha" = "$EXPECTED_SHA"
+          printf 'base=%s\nhead=%s\n' "$BASE_SHA" "$actual_sha"
+          {
+            echo '### Exact-SHA evidence'
+            echo "- base: \`$BASE_SHA\`"
+            echo "- head: \`$actual_sha\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install headless test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            qt6-declarative-dev-tools \
+            qml6-module-qtquick \
+            qml6-module-qttest
+
+      - name: Check shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh
+
+      - name: Run structural guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_script in tests/check_*.sh; do
+            echo "::group::$test_script"
+            bash "$test_script"
+            echo '::endgroup::'
+          done
+
+      - name: Run JavaScript model tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_script in tests/test_*.mjs; do
+            node "$test_script"
+          done
+
+      - name: Run Python model tests
+        shell: bash
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+      - name: Run pure QML tests
+        shell: bash
+        run: /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+
+      - name: Check final diff whitespace
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$BASE_SHA" ]] && [[ ! "$BASE_SHA" =~ ^0+$ ]] && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            git diff --check "$BASE_SHA...HEAD"
+          else
+            git diff --check HEAD^ HEAD
+          fi
