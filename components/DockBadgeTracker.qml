@@ -175,12 +175,8 @@ Item {
     var service = launcherBadgeService
     var providerRevision = service ? Number(service.revision || 0) : 0
     var counts = service && service.counts ? service.counts : ({})
-    var providerState = BadgeModel.launcherCountState(
+    return BadgeModel.launcherCountState(
       counts, desktopId, !!(service && service.available))
-    if (providerState.authoritative) return providerState
-    if (service && typeof service.herdrBadgeStateFor === "function")
-      return service.herdrBadgeStateFor(desktopId)
-    return providerState
   }
 
   function badgeFor(desktopId) {
@@ -190,14 +186,7 @@ Item {
       Date.now(), BadgeModel.LOCAL_ATTENTION_TTL_MS)
     var severity = BadgeModel.badgeSeverity(
       sniNeedsAttentionFor(desktopId, entry),
-      hyprUrgentFor(desktopId, entry),
-      local)
-    if (launcherBadgeService
-        && typeof launcherBadgeService.herdrBadgeSeverityFor === "function") {
-      severity = BadgeModel.reduceSeverity([
-        severity, launcherBadgeService.herdrBadgeSeverityFor(desktopId)
-      ])
-    }
+      hyprUrgentFor(desktopId, entry), local)
     return BadgeModel.applicationBadgeToken(
       true, launcherBadgeMode, launcherCountFor(desktopId), severity)
   }

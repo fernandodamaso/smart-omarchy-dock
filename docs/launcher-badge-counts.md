@@ -3,9 +3,7 @@
 FDM-811 extends FDM-809's shared application-badge ownership with authoritative
 numeric counts supplied by applications. It does **not** derive unread totals
 from notifications, window titles, accessibility APIs, application databases,
-or the native provider's polling loop. Omarchy also has an optional local Herdr
-adapter described below; that adapter uses the same bounded CLI query as the
-community Herdr bar plugin.
+or any polling loop.
 
 ## Decision
 
@@ -21,8 +19,6 @@ Omarchy plugin registry
     -> DockLauncherBadgeService.qml (one provider process owner)
       -> smartdock-launcher-badge-provider (QtDBus)
         -> atomic provider snapshot
-    -> DockHerdrBadgeService.qml (one bounded local Herdr query)
-      -> `herdr agent list`
   -> Overlay.qml
     -> shell.serviceFor("io.github.fernandodamaso.smartdock")
       -> DockHost.qml
@@ -137,24 +133,6 @@ atomic JSON snapshot. The QML service reads that finite snapshot with
 `FileView`; it never parses a long-running stdout stream. Provider exit clears
 QML availability immediately and schedules a bounded event-driven restart.
 
-### Herdr status on Ghostty
-
-The Omarchy service also consumes the local `herdr agent list` JSON contract,
-following the approach used by the community
-[`fabean/omarchy-herdr`](https://github.com/fabean/omarchy-herdr) bar plugin.
-SmartDock intentionally keeps this adapter local: it does not read the other
-plugin's files, query configured remote hosts, or send a second notification
-daemon request. It runs the CLI with a two-second timeout every three seconds
-and exposes the result only for the `com.mitchellh.ghostty` desktop entry.
-
-For the Ghostty badge, the count includes only unseen completions (`done`) and
-user-blocking prompts (`blocked`). Any blocked agent makes the badge urgent;
-done-only state uses attention severity. Working, idle, unknown-only, or
-unavailable Herdr state produces no numeric badge, so existing FDM-809
-attention sources remain available. Native Unity launcher counts remain
-authoritative if an application publishes one for the same ID.
-Standalone `shell.qml` does not instantiate this adapter.
-
 ## Rendering rules
 
 `Dock.qml` retains FDM-809's `isPrimaryVisibleItem()` ownership gate. FDM-811
@@ -229,9 +207,8 @@ Omarchy/Quickshell/Qt environment:
    fields.
 5. Inject the malformed and unknown launcher fixtures; malformed input must be
    ignored, while unknown valid IDs must not badge unrelated dock items.
-6. Leave the native provider idle and inspect CPU usage and wakeups; it must not
-   poll. If Herdr is installed, separately confirm its bounded three-second
-   `herdr agent list` adapter does not leave a process running between queries.
+6. Leave the provider idle and inspect CPU usage and wakeups; there must be no
+   periodic provider polling.
 7. Run standalone SmartDock with no provider service and confirm the FDM-809 dot
    fallback remains null-safe.
 8. Validate one real supporting application when available. Record the exact
