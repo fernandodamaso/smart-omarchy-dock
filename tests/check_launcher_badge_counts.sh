@@ -12,21 +12,28 @@ fail() {
 model=components/DockBadgeModel.js
 tracker=components/DockBadgeTracker.qml
 service=components/DockLauncherBadgeService.qml
-herdr_service=components/DockHerdrBadgeService.qml
 badge=components/DockApplicationBadge.qml
 provider=provider/launcher-badges/LauncherBadgeProvider.cpp
 provider_main=provider/launcher-badges/main.cpp
 
 for path in \
-  "$model" "$tracker" "$service" "$herdr_service" "$badge" Service.qml \
+  "$model" "$tracker" "$service" "$badge" Service.qml \
   provider/launcher-badges/LauncherBadgeModel.h \
   provider/launcher-badges/LauncherBadgeModel.cpp \
   provider/launcher-badges/LauncherBadgeProvider.h \
-  "$provider" provider/launcher-badges/main.cpp \
+  "$provider" "$provider_main" \
   provider/launcher-badges/CMakeLists.txt \
   tests/test_launcher_badge_model.mjs tests/tst_launcherbadgemodel.qml; do
   [[ -f "$path" ]] || fail "missing $path"
 done
+
+[[ ! -e components/DockHerdrBadgeService.qml ]] \
+  || fail 'recurring Herdr adapter must remain removed'
+if grep -REiq \
+    'DockHerdrBadgeService|herdrBadge(State|Severity|Count)|herdr[[:space:]]+agent[[:space:]]+list|"herdr",[[:space:]]*"agent",[[:space:]]*"list"' \
+    Service.qml components README.md docs/launcher-badge-counts.md; then
+  fail 'Herdr polling integration must remain removed'
+fi
 
 lock_line="$(grep -n 'QLockFile lock' "$provider_main" | cut -d: -f1 || true)"
 mkdir_line="$(grep -n 'mkpath' "$provider_main" | head -1 | cut -d: -f1 || true)"
@@ -66,20 +73,10 @@ grep -q 'function applicationBadgePresentation' "$model" \
   || fail 'count/dot precedence model missing'
 grep -q 'function applicationBadgeToken' "$model" \
   || fail 'shared badge rendering token missing'
-grep -q 'function herdrBadgeState' "$model" \
-  || fail 'Herdr badge state reduction missing'
-grep -Fq 'var count = counts.blocked + counts.done' "$model" \
-  || fail 'Herdr badges must count only blocked and unseen done agents'
 grep -Fq 'launcherCountFor(desktopId)' "$tracker" \
   || fail 'shared tracker count lookup missing'
 grep -Fq 'applicationBadgeToken(' "$tracker" \
   || fail 'shared tracker must combine authoritative count and FDM-809 severity'
-grep -Fq 'herdrBadgeStateFor' "$tracker" Service.qml \
-  || fail 'Herdr badge count wiring missing'
-grep -Fq 'herdrBadgeSeverityFor' "$tracker" Service.qml \
-  || fail 'Herdr badge severity wiring missing'
-grep -Fq 'DockHerdrBadgeService {' Service.qml \
-  || fail 'Omarchy service must own one Herdr badge adapter'
 grep -Fq 'clearMatchingNotifications' "$tracker" \
   || fail 'FDM-809 local focus clear missing'
 if grep -A12 -F 'function clearFocusedLocal()' "$tracker" | grep -Fq 'launcherBadge'; then
@@ -102,16 +99,12 @@ grep -Fq 'QDBusServiceWatcher' provider/launcher-badges/LauncherBadgeProvider.h 
   || fail 'sender disconnect reconciliation missing'
 grep -Fq 'QSaveFile' "$provider" \
   || fail 'provider snapshot must be atomic'
-grep -Fq 'QLockFile' provider/launcher-badges/main.cpp \
+grep -Fq 'QLockFile' "$provider_main" \
   || fail 'provider process single-owner lock missing'
-grep -Fq 'herdr", "agent", "list' "$herdr_service" \
-  || fail 'Herdr adapter must consume the local agent list contract'
-grep -Fq 'com.mitchellh.ghostty' "$herdr_service" \
-  || fail 'Herdr adapter must target the Ghostty desktop entry'
 
 if grep -REiq 'dbus-monitor|gdbus[[:space:]].*monitor|while[[:space:]]+true' \
-    components/DockLauncherBadgeService.qml components/DockHerdrBadgeService.qml \
-    provider/launcher-badges scripts/build-launcher-badge-provider; then
+    components/DockLauncherBadgeService.qml provider/launcher-badges \
+    scripts/build-launcher-badge-provider; then
   fail 'polling or long-running text parser detected'
 fi
 if grep -Fq 'StdioCollector' "$service"; then
