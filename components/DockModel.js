@@ -16,7 +16,7 @@ var TERMINAL_APP_IDS = [
 ]
 
 var TERMINAL_CLI_APP_IDS = [
-  "opencode"
+  "opencode", "herdr"
 ]
 
 function terminalCliAppId(title) {
@@ -26,6 +26,12 @@ function terminalCliAppId(title) {
   // (e.g. "OC | <session>") shortly after launch.
   if (raw.indexOf("opencode") >= 0 || /^oc\s*\|/.test(raw))
     return "opencode"
+  // Herdr writes "{hostname}: {workspace}" to the terminal title
+  // (e.g. "omarchy: Lumen Media Hub"). The "@" guard keeps
+  // "user@host: ..." shell titles on the terminal icon.
+  if (raw.indexOf("herdr") >= 0
+    || (/^[\w][\w.-]*: /.test(raw) && raw.indexOf("@") < 0))
+    return "herdr"
   return ""
 }
 

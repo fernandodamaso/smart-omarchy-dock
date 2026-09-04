@@ -962,6 +962,9 @@ TestCase {
     compare(DockModel.terminalCliAppId("opencode --session ses_abc123"), "opencode")
     compare(DockModel.terminalCliAppId("fish"), "")
     compare(DockModel.terminalCliAppId("Ghostty"), "")
+    compare(DockModel.terminalCliAppId("omarchy: Lumen Media Hub"), "herdr")
+    compare(DockModel.terminalCliAppId("herdr"), "herdr")
+    compare(DockModel.terminalCliAppId("user@omarchy: ~/projects"), "")
     compare(DockModel.terminalCliAppId(""), "")
     compare(DockModel.terminalCliAppId(null), "")
   }
@@ -1009,5 +1012,23 @@ TestCase {
 
     compare(items.length, 1)
     compare(items[0].desktopId, "com.mitchellh.ghostty")
+  }
+
+  function test_groupsHerdrWindowsUnderHerdrIcon() {
+    var entries = [
+      { id: "com.mitchellh.ghostty", startupClass: "com.mitchellh.ghostty", name: "Ghostty" },
+      { id: "herdr", name: "Herdr", icon: "herdr" }
+    ]
+    var shell = { appId: "com.mitchellh.ghostty", title: "fish" }
+    var workspace = { appId: "com.mitchellh.ghostty", title: "omarchy: Lumen Media Hub" }
+
+    var items = DockModel.buildVisibleItems([], [shell, workspace], entries)
+
+    compare(items.length, 2)
+    compare(items[0].desktopId, "com.mitchellh.ghostty")
+    compare(items[1].desktopId, "herdr")
+    compare(items[1].pinned, false)
+    compare(items[1].toplevels.length, 1)
+    compare(items[1].toplevels[0], workspace)
   }
 }
