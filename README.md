@@ -152,15 +152,10 @@ does not own this provider and therefore remains dot-only. See
 [`docs/launcher-badge-counts.md`](docs/launcher-badge-counts.md) for architecture,
 compatibility, and local validation details.
 
-On Omarchy, SmartDock also reads the local `herdr agent list` contract every
-three seconds when `herdr` is available. Unseen completed agents and agents
-blocked on a question or approval show a numeric badge on the Ghostty launcher;
-blocked state is urgent, while done-only state uses attention severity. Working
-agents do not create a badge. This mirrors the data reduction used by the community
-[`omarchy-herdr`](https://github.com/fabean/omarchy-herdr) bar plugin without
-depending on that plugin or querying its remote-host configuration. Idle or
-already-seen agents do not create a badge, and standalone SmartDock leaves
-this optional integration disabled.
+SmartDock does not invoke Herdr or any recurring agent-status CLI. Agent-status
+integration is intentionally excluded until a separate event-driven provider
+exists; optional numeric counts remain limited to application-published
+LauncherEntry state.
 
 ### Development
 
