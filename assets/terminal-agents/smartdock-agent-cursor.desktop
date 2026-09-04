@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Cursor Agent
+Comment=Launch Cursor Agent in Ghostty
+Exec=ghostty --gtk-single-instance=false --class=io.github.fernandodamaso.smartdock.agent.cursor -e cursor-agent
+Icon=smartdock-agent-cursor
+Terminal=false
+Categories=Development;
+Keywords=AI;Agent;Coding;Terminal;
+StartupWMClass=io.github.fernandodamaso.smartdock.agent.cursor
+StartupNotify=true

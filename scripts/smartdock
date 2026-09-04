@@ -104,17 +104,25 @@ case "${1:-}" in
     exit
     ;;
   update|--update)
-    # Refresh the standalone copy from the installer already on disk. Remote
-    # source control belongs to the user's own SmartDock repository.
-    if [[ ! -f "$app_dir/install.sh" ]]; then
-      echo "smartdock: installer not found at $app_dir/install.sh" >&2
+    # Refresh from the source checkout recorded by the installer. Remote
+    # source control still belongs to the user's own SmartDock repository.
+    source_file="$app_dir/.source-dir"
+    if [[ ! -f "$source_file" ]]; then
+      echo "smartdock: source checkout record not found at $source_file" >&2
+      echo "Run install.sh from your SmartDock source tree." >&2
+      exit 1
+    fi
+    source_dir="$(<"$source_file")"
+    installer="$source_dir/install.sh"
+    if [[ ! -f "$installer" ]]; then
+      echo "smartdock: source installer not found at $installer" >&2
       echo "Run install.sh from your SmartDock source tree." >&2
       exit 1
     fi
     if [[ -f "$autostart_file" ]]; then
-      bash "$app_dir/install.sh"
+      bash "$installer"
     else
-      bash "$app_dir/install.sh" --no-autostart
+      bash "$installer" --no-autostart
     fi
     exit
     ;;

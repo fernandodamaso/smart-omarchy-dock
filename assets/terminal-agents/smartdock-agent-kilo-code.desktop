@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Kilo Code
+Comment=Launch Kilo Code in Ghostty
+Exec=ghostty --gtk-single-instance=false --class=io.github.fernandodamaso.smartdock.agent.kilo-code -e kilo
+Icon=smartdock-agent-kilo-code
+Terminal=false
+Categories=Development;
+Keywords=AI;Agent;Coding;Terminal;
+StartupWMClass=io.github.fernandodamaso.smartdock.agent.kilo-code
+StartupNotify=true
