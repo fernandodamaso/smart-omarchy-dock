@@ -14,8 +14,16 @@ function sectionMainExtent(showTrash, itemSize, separatorExtent) {
   return nonNegativeExtent(itemSize) + nonNegativeExtent(separatorExtent)
 }
 
-function shouldRefresh(showTrash, processRunning) {
-  return normalizeShowTrash(showTrash) && processRunning !== true
+function trailingMainExtent(showTrash, itemSize, separatorExtent, workspaceExtent) {
+  var workspace = nonNegativeExtent(workspaceExtent)
+  if (!normalizeShowTrash(showTrash)) return workspace
+  return nonNegativeExtent(separatorExtent)
+    + sectionMainExtent(true, itemSize, separatorExtent) + workspace
+}
+
+function shouldRefresh(showTrash, processRunning, settingsLoaded) {
+  return settingsLoaded !== false
+    && normalizeShowTrash(showTrash) && processRunning !== true
 }
 
 function shouldDismissMenu(showTrash, menuVisible) {
