@@ -1,0 +1,7 @@
+# Local captures may contain window titles, process listings, and journal data.
+local-*/
+environment-*/
+events-*/
+manual/
+*.tar.gz
+*.tar.gz.sha256

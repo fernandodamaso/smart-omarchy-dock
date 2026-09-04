@@ -1,0 +1,297 @@
+{
+  "issue": "FDM-816",
+  "probeComplete": true,
+  "reviewedAt": "2026-09-04",
+  "reviewReason": "PR review corrected the original bounded-adaptive conclusion: the sampler was manually started, while no production-available non-polling start trigger or deterministic stability stop signal was verified.",
+  "versions": {
+    "repositoryHead": "472e0c898804695a8eb39cddf48ca3eb5d28a928",
+    "omarchy": "4.0.2-1",
+    "hyprland": "0.56.2",
+    "quickshell": "0.3.1",
+    "qt": "6.11.2",
+    "wayland": "1.26.0-1",
+    "waylandProtocols": "1.49-1",
+    "aquamarine": "0.14.0-2",
+    "xdgDesktopPortalHyprland": "1.4.1-1"
+  },
+  "numericStateMapping": {
+    "verifiedAgainstPinnedVersions": true,
+    "fullscreenField": {
+      "field": "fullscreen",
+      "observedValues": [
+        0,
+        1,
+        2
+      ],
+      "meaningByValue": {
+        "0": "normal/tiled",
+        "1": "maximized",
+        "2": "fullscreen"
+      }
+    },
+    "fullscreenClientField": {
+      "field": "fullscreenClient",
+      "observedValues": [
+        0,
+        1,
+        2
+      ],
+      "meaningByValue": {
+        "0": "no client fullscreen/maximized state",
+        "1": "client maximized",
+        "2": "client fullscreen"
+      }
+    },
+    "maximizedEvidence": {
+      "observedFields": [
+        "fullscreen",
+        "fullscreenClient",
+        "at",
+        "size"
+      ],
+      "notes": "Mappings were derived from observed toggles on the pinned runtime."
+    }
+  },
+  "scenarios": {
+    "tiled resize": {
+      "eventOrProtocolSignals": [
+        "No socket2 geometry event was observed for pure tiled resize."
+      ],
+      "freshnessMs": [
+        126.4,
+        8652.2,
+        null
+      ],
+      "maxMismatchMs": 8652.2,
+      "hyprctlFixtureLabels": [
+        "tiled-resize-reviewed-fixtures"
+      ],
+      "quickshellFixtureLabels": [
+        "tiled-resize-reviewed-model-captures"
+      ],
+      "cpuAndLogNotes": "The bounded sampler completed 12 samples at 250 ms with roughly 4.2\u20135.1 ms per query and no observed sustained process or journal churn. Cost was within the provisional budget, but cost alone does not establish a usable trigger.",
+      "notes": "Passive data could remain stale until an unrelated event. No non-polling signal was verified to start an adaptive burst."
+    },
+    "floating drag/resize": {
+      "eventOrProtocolSignals": [
+        "changefloatingmode was observed for the float toggle; no event was observed during the drag/resize itself."
+      ],
+      "freshnessMs": [
+        2719.0,
+        null,
+        null
+      ],
+      "maxMismatchMs": 20000.0,
+      "hyprctlFixtureLabels": [
+        "floating-drag-resize-reviewed-fixtures"
+      ],
+      "quickshellFixtureLabels": [
+        "floating-drag-resize-reviewed-model-captures"
+      ],
+      "cpuAndLogNotes": "The bounded sampler completed 12 samples at 250 ms with roughly 4.2\u20135.1 ms per query and no observed sustained process or journal churn. Cost was within the provisional budget, but cost alone does not establish a usable trigger.",
+      "notes": "The manually started sampler observed positions, but the movement itself exposed no verified burst-start trigger."
+    },
+    "maximize/fullscreen": {
+      "eventOrProtocolSignals": [
+        "fullscreen and active-window events were observed for state toggles."
+      ],
+      "freshnessMs": [
+        3304.9,
+        1669.3,
+        null
+      ],
+      "maxMismatchMs": 20000.0,
+      "hyprctlFixtureLabels": [
+        "maximize-fullscreen-reviewed-fixtures"
+      ],
+      "quickshellFixtureLabels": [
+        "maximize-fullscreen-reviewed-model-captures"
+      ],
+      "cpuAndLogNotes": "The bounded sampler completed 12 samples at 250 ms with roughly 4.2\u20135.1 ms per query and no observed sustained process or journal churn. Cost was within the provisional budget, but cost alone does not establish a usable trigger.",
+      "notes": "Discrete fullscreen transitions are observable, but this does not cover geometry-only movement."
+    },
+    "workspace/special-workspace": {
+      "eventOrProtocolSignals": [
+        "move-window, workspace, active-special, and focused-monitor events were observed."
+      ],
+      "freshnessMs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "maxMismatchMs": 0.0,
+      "hyprctlFixtureLabels": [
+        "workspace-special-workspace-reviewed-fixtures"
+      ],
+      "quickshellFixtureLabels": [
+        "workspace-special-workspace-reviewed-model-captures"
+      ],
+      "cpuAndLogNotes": "The bounded sampler completed 12 samples at 250 ms with roughly 4.2\u20135.1 ms per query and no observed sustained process or journal churn. Cost was within the provisional budget, but cost alone does not establish a usable trigger.",
+      "notes": "Workspace and special-workspace transitions were observable through events/model updates."
+    },
+    "monitor scale/transform/rearrangement": {
+      "eventOrProtocolSignals": [
+        "Monitor-related model changes and layer/focus events were observed during the bounded trials."
+      ],
+      "freshnessMs": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "maxMismatchMs": 0.0,
+      "hyprctlFixtureLabels": [
+        "monitor-scale-transform-rearrangement-reviewed-fixtures"
+      ],
+      "quickshellFixtureLabels": [
+        "monitor-scale-transform-rearrangement-reviewed-model-captures"
+      ],
+      "cpuAndLogNotes": "The bounded sampler completed 12 samples at 250 ms with roughly 4.2\u20135.1 ms per query and no observed sustained process or journal churn. Cost was within the provisional budget, but cost alone does not establish a usable trigger.",
+      "notes": "The secondary monitor was restored after each mutation; this row does not provide a trigger for arbitrary client movement."
+    },
+    "hotplug": {
+      "eventOrProtocolSignals": [
+        "monitorremoved and workspace relocation events were observed in the usable trial."
+      ],
+      "freshnessMs": [
+        null,
+        2576.3,
+        null
+      ],
+      "maxMismatchMs": 2576.3,
+      "hyprctlFixtureLabels": [
+        "hotplug-reviewed-fixtures"
+      ],
+      "quickshellFixtureLabels": [
+        "hotplug-reviewed-model-captures"
+      ],
+      "cpuAndLogNotes": "The bounded sampler completed 12 samples at 250 ms with roughly 4.2\u20135.1 ms per query and no observed sustained process or journal churn. Cost was within the provisional budget, but cost alone does not establish a usable trigger.",
+      "notes": "One clean restoration trial demonstrated recovery; two trials were contaminated by a monitor re-enable quirk and were excluded."
+    },
+    "slow overlap-boundary movement": {
+      "eventOrProtocolSignals": [
+        "No event was observed during the ten slow visual-proxy crossings."
+      ],
+      "freshnessMs": [
+        null,
+        null,
+        null
+      ],
+      "maxMismatchMs": 20000.0,
+      "hyprctlFixtureLabels": [
+        "slow-overlap-boundary-movement-reviewed-fixtures"
+      ],
+      "quickshellFixtureLabels": [
+        "slow-overlap-boundary-movement-reviewed-model-captures"
+      ],
+      "cpuAndLogNotes": "The bounded sampler completed 12 samples at 250 ms with roughly 4.2\u20135.1 ms per query and no observed sustained process or journal churn. Cost was within the provisional budget, but cost alone does not establish a usable trigger.",
+      "notes": "Crossings used a visual proxy because the FDM-812 rectangle contract was unavailable. The sampler was started manually."
+    },
+    "rapid overlap-boundary movement": {
+      "eventOrProtocolSignals": [
+        "No event was observed during the ten rapid visual-proxy crossings."
+      ],
+      "freshnessMs": [
+        null,
+        null,
+        null
+      ],
+      "maxMismatchMs": 20000.0,
+      "hyprctlFixtureLabels": [
+        "rapid-overlap-boundary-movement-reviewed-fixtures"
+      ],
+      "quickshellFixtureLabels": [
+        "rapid-overlap-boundary-movement-reviewed-model-captures"
+      ],
+      "cpuAndLogNotes": "The bounded sampler completed 12 samples at 250 ms with roughly 4.2\u20135.1 ms per query and no observed sustained process or journal churn. Cost was within the provisional budget, but cost alone does not establish a usable trigger.",
+      "notes": "A 250 ms sample interval aliased rapid motion, and neither an automatic start trigger nor a stability-based stop signal was verified."
+    }
+  },
+  "candidateEvaluation": {
+    "event/protocol": {
+      "coversAllRequiredScenarios": false,
+      "notes": "Discrete state/workspace/monitor transitions were observable, but pure geometry movement emitted no usable event."
+    },
+    "centralized refresh": {
+      "coversAllRequiredScenarios": false,
+      "refreshOwner": "single host-owned coordinator only",
+      "notes": "A coalesced refresh works only after an event; it cannot self-trigger for event-less geometry changes."
+    },
+    "bounded adaptive refresh": {
+      "coversAllRequiredScenarios": false,
+      "boundedSampleCount": 12,
+      "boundedIntervalMs": 250,
+      "startTrigger": null,
+      "startTriggerVerified": false,
+      "stopCondition": null,
+      "stopConditionVerified": false,
+      "notes": "The sampler observed geometry only because the experiment started it manually. Without a verified start and stop signal, arbitrary movement requires continuous polling."
+    },
+    "documented degraded behavior": {
+      "acceptable": false,
+      "documentedLimitations": [
+        "Geometry-only movement can remain stale until an unrelated event.",
+        "Boundary crossings were visual proxies pending the FDM-812 rectangle contract."
+      ],
+      "notes": "No degraded behavior was accepted during this review."
+    }
+  },
+  "evidence": {
+    "matrixComplete": true,
+    "numericStateMappingVerified": true,
+    "eventDrivenCoversAll": false,
+    "boundedAdaptiveCoversAll": false,
+    "degradedBehaviorAccepted": false,
+    "performanceWithinBudget": true,
+    "continuousHyprctlPollingRequired": true
+  },
+  "target": {
+    "address": "[redacted ephemeral client address]",
+    "class": "[redacted local application class]",
+    "title": "[redacted local window title]",
+    "originalWorkspace": 2,
+    "originalGeometry": {
+      "at": [
+        2992,
+        46
+      ],
+      "size": [
+        838,
+        426
+      ]
+    },
+    "originalStatePath": "[local evidence only]"
+  },
+  "coordinateSpace": {
+    "description": "Hyprland client at/size values were observed in global layout pixels on the pinned two-monitor setup.",
+    "dockRectangleAvailable": false,
+    "notes": "FDM-812 must provide and validate the shared dock/client rectangle contract before overlap behavior can be implemented."
+  },
+  "refreshObservation": {
+    "owner": "single host-owned coordinator only",
+    "refreshCount": 1,
+    "refreshRequestTimestamps": [
+      "redacted; retained in local evidence"
+    ],
+    "refreshCompletionTimestamps": [
+      "redacted; retained in local evidence"
+    ],
+    "overlappingRefreshers": false,
+    "notes": "The corrected centralized probe showed no overlapping refreshes, but it cannot initiate from event-less geometry changes."
+  },
+  "actionMarkers": {
+    "path": "[local evidence only]",
+    "count": 75
+  },
+  "artifactManifest": [
+    "reviewed-result.json",
+    "README.md",
+    "Raw window, process, journal, and capture artifacts intentionally remain local and are ignored by Git."
+  ],
+  "decision": "NO-GO",
+  "allowedDecisions": [
+    "event-driven",
+    "bounded adaptive refresh",
+    "documented degraded behavior",
+    "NO-GO"
+  ]
+}

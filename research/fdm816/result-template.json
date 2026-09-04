@@ -1,0 +1,174 @@
+{
+  "issue": "FDM-816",
+  "probeComplete": false,
+  "versions": {
+    "repositoryHead": null,
+    "omarchy": null,
+    "hyprland": null,
+    "quickshell": null,
+    "qt": null,
+    "wayland": null,
+    "waylandProtocols": null,
+    "aquamarine": null,
+    "xdgDesktopPortalHyprland": null
+  },
+  "numericStateMapping": {
+    "verifiedAgainstPinnedVersions": false,
+    "fullscreenField": {
+      "field": "fullscreen",
+      "observedValues": [],
+      "meaningByValue": {}
+    },
+    "fullscreenClientField": {
+      "field": "fullscreenClient",
+      "observedValues": [],
+      "meaningByValue": {}
+    },
+    "maximizedEvidence": {
+      "observedFields": [],
+      "notes": null
+    }
+  },
+  "scenarios": {
+    "tiled resize": {
+      "eventOrProtocolSignals": [],
+      "freshnessMs": [],
+      "maxMismatchMs": null,
+      "hyprctlFixtureLabels": [],
+      "quickshellFixtureLabels": [],
+      "cpuAndLogNotes": null,
+      "notes": null
+    },
+    "floating drag/resize": {
+      "eventOrProtocolSignals": [],
+      "freshnessMs": [],
+      "maxMismatchMs": null,
+      "hyprctlFixtureLabels": [],
+      "quickshellFixtureLabels": [],
+      "cpuAndLogNotes": null,
+      "notes": null
+    },
+    "maximize/fullscreen": {
+      "eventOrProtocolSignals": [],
+      "freshnessMs": [],
+      "maxMismatchMs": null,
+      "hyprctlFixtureLabels": [],
+      "quickshellFixtureLabels": [],
+      "cpuAndLogNotes": null,
+      "notes": null
+    },
+    "workspace/special-workspace": {
+      "eventOrProtocolSignals": [],
+      "freshnessMs": [],
+      "maxMismatchMs": null,
+      "hyprctlFixtureLabels": [],
+      "quickshellFixtureLabels": [],
+      "cpuAndLogNotes": null,
+      "notes": null
+    },
+    "monitor scale/transform/rearrangement": {
+      "eventOrProtocolSignals": [],
+      "freshnessMs": [],
+      "maxMismatchMs": null,
+      "hyprctlFixtureLabels": [],
+      "quickshellFixtureLabels": [],
+      "cpuAndLogNotes": null,
+      "notes": null
+    },
+    "hotplug": {
+      "eventOrProtocolSignals": [],
+      "freshnessMs": [],
+      "maxMismatchMs": null,
+      "hyprctlFixtureLabels": [],
+      "quickshellFixtureLabels": [],
+      "cpuAndLogNotes": null,
+      "notes": null
+    },
+    "slow overlap-boundary movement": {
+      "eventOrProtocolSignals": [],
+      "freshnessMs": [],
+      "maxMismatchMs": null,
+      "hyprctlFixtureLabels": [],
+      "quickshellFixtureLabels": [],
+      "cpuAndLogNotes": null,
+      "notes": null
+    },
+    "rapid overlap-boundary movement": {
+      "eventOrProtocolSignals": [],
+      "freshnessMs": [],
+      "maxMismatchMs": null,
+      "hyprctlFixtureLabels": [],
+      "quickshellFixtureLabels": [],
+      "cpuAndLogNotes": null,
+      "notes": null
+    }
+  },
+  "candidateEvaluation": {
+    "event/protocol": {
+      "coversAllRequiredScenarios": null,
+      "notes": null
+    },
+    "centralized refresh": {
+      "coversAllRequiredScenarios": null,
+      "refreshOwner": "single host-owned coordinator only",
+      "notes": null
+    },
+    "bounded adaptive refresh": {
+      "coversAllRequiredScenarios": null,
+      "boundedSampleCount": null,
+      "boundedIntervalMs": null,
+      "startTrigger": null,
+      "startTriggerVerified": false,
+      "stopCondition": null,
+      "stopConditionVerified": false,
+      "notes": null
+    },
+    "documented degraded behavior": {
+      "acceptable": null,
+      "documentedLimitations": [],
+      "notes": null
+    }
+  },
+  "evidence": {
+    "matrixComplete": false,
+    "numericStateMappingVerified": false,
+    "eventDrivenCoversAll": false,
+    "boundedAdaptiveCoversAll": false,
+    "degradedBehaviorAccepted": false,
+    "performanceWithinBudget": false,
+    "continuousHyprctlPollingRequired": false
+  },
+  "target": {
+    "address": null,
+    "class": null,
+    "title": null,
+    "originalWorkspace": null,
+    "originalGeometry": null,
+    "originalStatePath": null
+  },
+  "coordinateSpace": {
+    "description": null,
+    "dockRectangleAvailable": false,
+    "notes": null
+  },
+  "refreshObservation": {
+    "owner": "single host-owned coordinator only",
+    "refreshCount": null,
+    "refreshRequestTimestamps": [],
+    "refreshCompletionTimestamps": [],
+    "overlappingRefreshers": null,
+    "notes": null
+  },
+  "actionMarkers": {
+    "path": null,
+    "count": null
+  },
+  "artifactManifest": [],
+  "decision": null,
+  "allowedDecisions": [
+    "event-driven",
+    "bounded adaptive refresh",
+    "documented degraded behavior",
+    "NO-GO"
+  ]
+}
