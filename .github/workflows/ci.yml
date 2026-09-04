@@ -65,14 +65,19 @@ jobs:
       - name: Run structural guards
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          status=0
           for test_script in tests/check_*.sh; do
             echo "::group::$test_script"
-            bash "$test_script"
+            if ! bash "$test_script"; then
+              status=1
+            fi
             echo '::endgroup::'
           done
+          exit "$status"
 
       - name: Run JavaScript model tests
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail
@@ -81,14 +86,17 @@ jobs:
           done
 
       - name: Run Python model tests
+        if: ${{ !cancelled() }}
         shell: bash
         run: python3 -m unittest discover -s tests -p 'test_*.py'
 
       - name: Run pure QML tests
+        if: ${{ !cancelled() }}
         shell: bash
         run: /usr/lib/qt6/bin/qmltestrunner -input tests -import components
 
       - name: Check final diff whitespace
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail
