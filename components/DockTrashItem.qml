@@ -6,6 +6,7 @@ import Quickshell
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockTrashModel.js" as TrashModel
 
 Item {
   id: root
@@ -125,6 +126,15 @@ Item {
     grabFocus: true
 
     onVisibleChanged: root.contextMenuVisibilityChanged(visible)
+
+    Connections {
+      target: root
+
+      function onVisibleChanged() {
+        if (TrashModel.shouldDismissMenu(root.visible, trashMenu.visible))
+          trashMenu.dismiss()
+      }
+    }
 
     anchor {
       window: root.QsWindow.window

@@ -22,7 +22,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
   applications, and auto-hide
 - Bundled Lucide SVG artwork for the Trash icon and dock context-menu actions
 - Theme-aware graphical settings panel with live previews and persistent changes
-- Dynamic Trash icon with item count, open, and confirmed empty actions
+- Optional dynamic Trash icon with item count, open, and confirmed empty actions
 - Compact trailing workspace switcher that mirrors the Omarchy top-bar visibility rule
 - Minimized-window markers, counts, tooltip summaries, and per-window status labels
 - Fullscreen focus emphasis that enlarges the owner and fades other dock icons
@@ -43,7 +43,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 
 - Hyprland
 - Quickshell 0.3 or newer
-- GLib's `gio` command for Trash integration
+- GLib's `gio` command for optional Trash integration
 - A working freedesktop icon theme
 - Optional numeric launcher counts: CMake, a C++20 compiler, and Qt 6.6+ Core/DBus development files to build the native provider
 
@@ -192,14 +192,15 @@ are saved when released; switches and choices save immediately.
 Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
 effects sit side by side, Dock surface exposes Theme default, Omarchy token,
 and custom hex modes without leaving disabled inputs visible, and Layout and
-Behavior share a compact row. Behavior includes application action selectors
-for Left click and Middle click. **Application Badges** contains the persistent
-attention-badge switch and the separate urgent-window motion switch. Advanced
-launcher settings expand on demand; Reset and Close remain fixed at the bottom.
-On narrow screens the card grid stacks and the middle content area scrolls while
-the header and footer remain visible. The centered panel leaves the dock's edge
-strip interactive, so moving over dock icons continues to preview magnification
-and hover glow while you adjust settings.
+Behavior share a compact row. Layout includes the persistent **Show Trash**
+switch. Behavior includes application action selectors for Left click and
+Middle click. **Application Badges** contains the persistent attention-badge
+switch and the separate urgent-window motion switch. Advanced launcher settings
+expand on demand; Reset and Close remain fixed at the bottom. On narrow screens
+the card grid stacks and the middle content area scrolls while the header and
+footer remain visible. The centered panel leaves the dock's edge strip
+interactive, so moving over dock icons continues to preview magnification and
+hover glow while you adjust settings.
 
 Background, border, and workspace badge color overrides use a progressive
 control: choose **Theme default**, pick an Omarchy token (for example
@@ -221,6 +222,7 @@ width when the override is disabled.
   "hoverGlowOpacity": 0.72,
   "hoverGlowRadius": 28,
   "showPreviews": true,
+  "showTrash": true,
   "margin": 10,
   "backgroundOpacity": 0.88,
   "backgroundColorEnabled": false,
@@ -265,6 +267,7 @@ width when the override is disabled.
 | `hoverGlowOpacity` | Glow intensity from `0.0` (hidden) to `1.0` (full strength) |
 | `hoverGlowRadius` | Glow blur radius as a percentage of the icon size, from `0` to `100` |
 | `showPreviews` | When `true`, show grouped window previews while hovering application icons; defaults to `true` |
+| `showTrash` | When `true`, show the Trash shortcut and count; disabling it removes the Trash section and pauses Trash polling |
 | `margin` | Distance between the dock and screen edge |
 | `backgroundOpacity` | Dock background opacity from `0.0` (transparent) to `1.0` (opaque) |
 | `backgroundColorEnabled` | When `true`, use `backgroundColor` instead of Omarchy's menu background token |
@@ -380,10 +383,11 @@ launcher plugin instead of the stock apps menu:
 }
 ```
 
-The trailing Trash and workspace controls are fixed dock utilities and are
-also not part of `pinned`. Trash uses the freedesktop `trash:///` location.
-Workspace buttons always include 1 and 2, then add any focused or occupied
-workspace through 10; clicking a number focuses it.
+The trailing Trash and workspace controls are not part of `pinned`. Trash uses
+the freedesktop `trash:///` location and can be removed from the dock with
+`showTrash`; while hidden, SmartDock also pauses its recurring Trash count
+query. Workspace buttons always include 1 and 2, then add any focused or
+occupied workspace through 10; clicking a number focuses it.
 
 Pinned values are desktop-entry filenames without the `.desktop` suffix. List available IDs with:
 

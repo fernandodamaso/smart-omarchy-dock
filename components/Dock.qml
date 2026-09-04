@@ -8,6 +8,7 @@ import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
 import "DockBadgeModel.js" as BadgeModel
+import "DockTrashModel.js" as TrashModel
 
 PanelWindow {
   id: root
@@ -54,6 +55,8 @@ PanelWindow {
     "hoverGlowRadius", effectiveSetting("hoverGlowRadius"))
   readonly property bool showPreviews: DockModel.normalizeSetting(
     "showPreviews", effectiveSetting("showPreviews"))
+  readonly property bool showTrash: TrashModel.normalizeShowTrash(
+    effectiveSetting("showTrash"))
   readonly property int edgeMargin: settings.margin === undefined ? 10 : settings.margin
   // Names exposed by Dock Settings. Values are live bindings to Omarchy's
   // Color singleton so symbolic overrides follow a theme change immediately.
@@ -222,7 +225,10 @@ PanelWindow {
   readonly property int workspaceMainExtent: vertical
     ? Math.max(0, visibleWorkspaceIds.length * 32 + 6)
     : Math.max(0, visibleWorkspaceIds.length * 32 + 6)
-  readonly property int trailingMainExtent: 12 + itemSize + 12 + workspaceMainExtent
+  readonly property int trashMainExtent: TrashModel.sectionMainExtent(
+    showTrash, itemSize, 12)
+  readonly property int trailingMainExtent: 12 + trashMainExtent
+    + workspaceMainExtent
   readonly property int compactMainExtent: mainPadding * 2 + itemSize
     + appMainExtent + trailingMainExtent
   readonly property bool keepAutoHideOpen: windowPointer.hovered
@@ -620,6 +626,8 @@ PanelWindow {
         y: root.vertical
           ? parent.trailingStart + appTrashSeparator.height
           : (parent.height - height) / 2
+        visible: root.showTrash
+        enabled: root.showTrash
         trashItemCount: root.trashItemCount
         trashStateKnown: root.trashStateKnown
         slotSize: root.itemSize
@@ -648,6 +656,7 @@ PanelWindow {
         y: root.vertical
           ? parent.trailingStart + appTrashSeparator.height + trashItem.height
           : (parent.height - height) / 2
+        visible: root.showTrash
         vertical: root.vertical
         slotSize: root.itemSize
         iconSize: root.iconSize
@@ -658,11 +667,9 @@ PanelWindow {
 
         x: root.vertical
           ? (parent.width - width) / 2
-          : parent.trailingStart + appTrashSeparator.width + trashItem.width
-            + trashWorkspaceSeparator.width
+          : parent.trailingStart + appTrashSeparator.width + root.trashMainExtent
         y: root.vertical
-          ? parent.trailingStart + appTrashSeparator.height + trashItem.height
-            + trashWorkspaceSeparator.height
+          ? parent.trailingStart + appTrashSeparator.height + root.trashMainExtent
           : (parent.height - height) / 2
         workspaceIds: root.visibleWorkspaceIds
         workspaces: root.hyprWorkspaces

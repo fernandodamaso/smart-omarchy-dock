@@ -47,6 +47,10 @@ done
 
 rg -n 'label: "Show previews"' "$settings_qml" >/dev/null \
   || { echo "Dock Settings is missing the Show previews toggle" >&2; exit 1; }
+rg -n 'label: "Show Trash"' "$settings_qml" >/dev/null \
+  || { echo "Dock Settings is missing the Show Trash toggle" >&2; exit 1; }
+rg -n 'root\.commit\("showTrash", !checked\)' "$settings_qml" >/dev/null \
+  || { echo "Show Trash must persist through the normal settings path" >&2; exit 1; }
 
 for icon in maximize-2 sparkles palette layout-grid panel-bottom mouse-pointer-click; do
   rg -n "iconName: \"$icon\"" "$settings_qml" >/dev/null || {

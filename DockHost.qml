@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import "components"
 import "components/DockModel.js" as DockModel
+import "components/DockTrashModel.js" as TrashModel
 
 Item {
   id: root
@@ -22,6 +23,7 @@ Item {
   property bool workspaceCountsRefreshPending: false
   readonly property var windowActions: windowActionsController
   readonly property var badgeTracker: badgeTrackerController
+  readonly property bool showTrash: TrashModel.normalizeShowTrash(settings.showTrash)
 
   property var settings: ({
     iconSize: 42,
@@ -31,6 +33,7 @@ Item {
     hoverGlowOpacity: 0.72,
     hoverGlowRadius: 28,
     showPreviews: true,
+    showTrash: true,
     margin: 10,
     backgroundOpacity: 0.88,
     backgroundColorEnabled: false,
@@ -71,6 +74,7 @@ Item {
       var parsed = JSON.parse(raw)
       if (!parsed.pinned || !Array.isArray(parsed.pinned))
         throw new Error("'pinned' must be an array")
+      parsed.showTrash = TrashModel.normalizeShowTrash(parsed.showTrash)
       parsed.hiddenApplications = DockModel.normalizeSetting(
         "hiddenApplications", parsed.hiddenApplications)
       parsed.attentionBadgesEnabled = typeof parsed.attentionBadgesEnabled === "boolean"
@@ -135,6 +139,7 @@ Item {
 
   function resetSettings() {
     var patch = DockModel.resetSettingsPatch()
+    patch.showTrash = true
     patch.attentionBadgesEnabled = true
     patch.urgentWindowAnimationEnabled = true
     patch.launcherBadgeMode = "automatic"
@@ -142,7 +147,8 @@ Item {
   }
 
   function refreshTrash() {
-    if (!trashListProcess.running) trashListProcess.running = true
+    if (!TrashModel.shouldRefresh(showTrash, trashListProcess.running)) return
+    trashListProcess.running = true
   }
 
   function refreshWorkspaceCounts() {
@@ -163,15 +169,21 @@ Item {
     if (!trashEmptyProcess.running) trashEmptyProcess.running = true
   }
 
+  onShowTrashChanged: {
+    if (!showTrash) return
+    trashStateKnown = false
+    Qt.callLater(root.refreshTrash)
+  }
+
   Component.onCompleted: {
-    refreshTrash()
+    if (showTrash) refreshTrash()
     refreshWorkspaceCounts()
   }
 
   Timer {
     interval: 3000
     repeat: true
-    running: true
+    running: root.showTrash
     onTriggered: root.refreshTrash()
   }
 
