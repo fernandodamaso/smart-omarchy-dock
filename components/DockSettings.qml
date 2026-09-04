@@ -9,6 +9,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockTrashModel.js" as TrashModel
 
 PanelWindow {
   id: root
@@ -118,6 +119,8 @@ PanelWindow {
   readonly property real dockEdgePassthrough: Math.max(1, dockHitThickness)
 
   function current(key) {
+    if (key === "showTrash")
+      return TrashModel.normalizeShowTrash(settings ? settings[key] : undefined)
     return DockModel.normalizeSetting(key, settings ? settings[key] : undefined)
   }
 
@@ -990,6 +993,14 @@ PanelWindow {
                 label: "Full length"
                 checked: root.current("fullLength")
                 onToggled: root.commit("fullLength", !checked)
+              }
+
+              DockSettingsToggleRow {
+                width: parent.width
+                label: "Show Trash"
+                description: "Show the Trash shortcut and item count"
+                checked: root.current("showTrash")
+                onToggled: root.commit("showTrash", !checked)
               }
 
               DockSettingsToggleRow {
