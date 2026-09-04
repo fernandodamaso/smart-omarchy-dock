@@ -955,4 +955,59 @@ TestCase {
     compare(items[1].desktopId, "com.mitchellh.ghostty")
     compare(items[2].desktopId, "com.google.Chrome")
   }
+
+  function test_detectsTerminalCliAppTitles() {
+    compare(DockModel.terminalCliAppId("opencode"), "opencode")
+    compare(DockModel.terminalCliAppId("OC | Smart dock plugin"), "opencode")
+    compare(DockModel.terminalCliAppId("opencode --session ses_abc123"), "opencode")
+    compare(DockModel.terminalCliAppId("fish"), "")
+    compare(DockModel.terminalCliAppId("Ghostty"), "")
+    compare(DockModel.terminalCliAppId(""), "")
+    compare(DockModel.terminalCliAppId(null), "")
+  }
+
+  function test_separatesTerminalCliAppIntoOwnDockItem() {
+    var entries = [
+      { id: "com.mitchellh.ghostty", startupClass: "com.mitchellh.ghostty", name: "Ghostty" },
+      { id: "opencode-desktop", name: "OpenCode", icon: "ai.opencode.desktop" }
+    ]
+    var shell = { appId: "com.mitchellh.ghostty", title: "fish" }
+    var agent = { appId: "com.mitchellh.ghostty", title: "OC | Smart dock plugin" }
+
+    var items = DockModel.buildVisibleItems([], [shell, agent], entries)
+
+    compare(items.length, 2)
+    compare(items[0].desktopId, "com.mitchellh.ghostty")
+    compare(items[0].toplevels.length, 1)
+    compare(items[0].toplevels[0], shell)
+    compare(items[1].desktopId, "opencode-desktop")
+    compare(items[1].pinned, false)
+    compare(items[1].toplevels.length, 1)
+    compare(items[1].toplevels[0], agent)
+  }
+
+  function test_keepsPlainTerminalWindowsOnTerminalIcon() {
+    var entries = [
+      { id: "com.mitchellh.ghostty", startupClass: "com.mitchellh.ghostty", name: "Ghostty" },
+      { id: "opencode-desktop", name: "OpenCode", icon: "ai.opencode.desktop" }
+    ]
+    var shell = { appId: "com.mitchellh.ghostty", title: "fish" }
+
+    var items = DockModel.buildVisibleItems([], [shell], entries)
+
+    compare(items.length, 1)
+    compare(items[0].desktopId, "com.mitchellh.ghostty")
+  }
+
+  function test_keepsTerminalCliAppOnTerminalIconWithoutDesktopEntry() {
+    var entries = [
+      { id: "com.mitchellh.ghostty", startupClass: "com.mitchellh.ghostty", name: "Ghostty" }
+    ]
+    var agent = { appId: "com.mitchellh.ghostty", title: "OC | Smart dock plugin" }
+
+    var items = DockModel.buildVisibleItems([], [agent], entries)
+
+    compare(items.length, 1)
+    compare(items[0].desktopId, "com.mitchellh.ghostty")
+  }
 }

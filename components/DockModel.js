@@ -4,6 +4,60 @@ function normalizedId(value) {
   return String(value || "").toLowerCase().replace(/\.desktop$/, "")
 }
 
+var TERMINAL_APP_IDS = [
+  "com.mitchellh.ghostty", "ghostty",
+  "kitty", "alacritty", "org.alacritty",
+  "foot", "footclient",
+  "org.wezfurlong.wezterm", "wezterm",
+  "gnome-terminal", "org.gnome.terminal",
+  "konsole", "org.kde.konsole",
+  "ptyxis", "org.gnome.ptyxis",
+  "xterm", "uxterm"
+]
+
+var TERMINAL_CLI_APP_IDS = [
+  "opencode"
+]
+
+function terminalCliAppId(title) {
+  var raw = String(title || "").toLowerCase().trim()
+  if (!raw) return ""
+  // opencode replaces the window title with its session title
+  // (e.g. "OC | <session>") shortly after launch.
+  if (raw.indexOf("opencode") >= 0 || /^oc\s*\|/.test(raw))
+    return "opencode"
+  return ""
+}
+
+function entryForCliAppId(cliAppId, entries) {
+  var wanted = normalizedId(cliAppId)
+  if (!wanted) return null
+  var list = entries || []
+  for (var i = 0; i < list.length; ++i) {
+    if (normalizedId(list[i].id) === wanted)
+      return list[i]
+  }
+  for (var j = 0; j < list.length; ++j) {
+    if (normalizedId(list[j].name) === wanted)
+      return list[j]
+  }
+  return null
+}
+
+function toplevelAppId(toplevel, entries) {
+  var appId = toplevel ? toplevel.appId : ""
+  if (!appId) return ""
+  if (TERMINAL_APP_IDS.indexOf(normalizedId(appId)) < 0)
+    return appId
+  var cliAppId = terminalCliAppId(toplevel.title)
+  if (!cliAppId || TERMINAL_CLI_APP_IDS.indexOf(cliAppId) < 0)
+    return appId
+  var cliEntry = entryForCliAppId(cliAppId, entries)
+  if (!cliEntry)
+    return appId
+  return cliEntry.id
+}
+
 function normalizeApplicationIds(value) {
   if (!Array.isArray(value)) return []
 
@@ -1007,12 +1061,15 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
   for (var topIndex = 0; topIndex < toplevels.length; ++topIndex) {
     var toplevel = toplevels[topIndex]
     var matchedPinned = false
+    // Terminal windows running a recognized CLI app (e.g. opencode)
+    // group under that app instead of the terminal emulator.
+    var effectiveAppId = toplevelAppId(toplevel, entries)
 
     if (mergeWindows) {
       for (var pinnedIndex = 0; pinnedIndex < items.length; ++pinnedIndex) {
         var item = items[pinnedIndex]
         var pinnedEntry = entryForDesktopId(item.desktopId, entries)
-        if (!entryMatchesAppId(item.desktopId, pinnedEntry, toplevel.appId))
+        if (!entryMatchesAppId(item.desktopId, pinnedEntry, effectiveAppId))
           continue
 
         item.toplevels.push(toplevel)
@@ -1023,10 +1080,10 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
       if (matchedPinned) continue
     }
 
-    var runningEntry = entryForAppId(toplevel.appId, entries)
+    var runningEntry = entryForAppId(effectiveAppId, entries)
     var desktopId = runningEntry && runningEntry.id
       ? runningEntry.id
-      : String(toplevel.appId || "unknown-application")
+      : String(effectiveAppId || "unknown-application")
 
     if (!mergeWindows) {
       var attachedPinned = false
@@ -1034,7 +1091,7 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
         var pinnedItem = items[pinIndex]
         if (pinnedItem.toplevels.length > 0) continue
         var pinnedEntry = entryForDesktopId(pinnedItem.desktopId, entries)
-        if (!entryMatchesAppId(pinnedItem.desktopId, pinnedEntry, toplevel.appId))
+        if (!entryMatchesAppId(pinnedItem.desktopId, pinnedEntry, effectiveAppId))
           continue
         pinnedItem.toplevels.push(toplevel)
         attachedPinned = true
