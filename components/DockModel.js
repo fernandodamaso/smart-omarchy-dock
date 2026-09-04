@@ -16,7 +16,7 @@ var TERMINAL_APP_IDS = [
 ]
 
 var TERMINAL_CLI_APP_IDS = [
-  "opencode", "herdr"
+  "opencode", "herdr", "kimi", "codex"
 ]
 
 function terminalCliAppId(title) {
@@ -30,6 +30,14 @@ function terminalCliAppId(title) {
   // (e.g. "omarchy · herdr · Lumen Media Hub").
   if (raw.indexOf("herdr") >= 0)
     return "herdr"
+  // Kimi leaves the terminal title alone, so a shell wrapper marks it
+  // (see ~/.bashrc): the title is "kimi" for the whole session.
+  if (raw.indexOf("kimi") >= 0)
+    return "kimi"
+  // Same for Codex: terminal_title is set to [] so the wrapper-set
+  // "codex" title survives for the whole session.
+  if (raw.indexOf("codex") >= 0)
+    return "codex"
   return ""
 }
 
