@@ -50,10 +50,23 @@ REQUIRED_SCENARIO_TEXT_FIELDS = (
     "notes",
 )
 
+REQUIRED_CANDIDATES = (
+    "event/protocol",
+    "centralized refresh",
+    "bounded adaptive refresh",
+    "documented degraded behavior",
+)
+
 
 def _require_boolean(mapping, key):
     if key not in mapping or not isinstance(mapping[key], bool):
         raise ValueError(f"{key} must be an explicit boolean")
+    return mapping[key]
+
+
+def _require_candidate_boolean(mapping, key, prefix):
+    if key not in mapping or not isinstance(mapping[key], bool):
+        raise ValueError(f"{prefix}.{key} must be an explicit boolean")
     return mapping[key]
 
 
@@ -137,16 +150,19 @@ def _require_numeric_mapping(payload):
         raise ValueError("numericStateMapping.maximizedEvidence.notes must be non-empty")
 
 
-def _require_bounded_adaptive_candidate(payload):
+def _require_candidate_mapping(payload):
     candidates = payload.get("candidateEvaluation")
     if not isinstance(candidates, dict):
         raise ValueError("candidateEvaluation must be a completed evidence mapping")
-    candidate = candidates.get("bounded adaptive refresh")
-    if not isinstance(candidate, dict):
-        raise ValueError(
-            "candidateEvaluation.bounded adaptive refresh must be recorded"
-        )
+    for name in REQUIRED_CANDIDATES:
+        if not isinstance(candidates.get(name), dict):
+            raise ValueError(f"candidateEvaluation.{name} must be recorded")
+    return candidates
 
+
+def _require_bounded_adaptive_candidate(payload):
+    candidates = _require_candidate_mapping(payload)
+    candidate = candidates["bounded adaptive refresh"]
     prefix = "candidateEvaluation.bounded adaptive refresh"
     if candidate.get("coversAllRequiredScenarios") is not True:
         raise ValueError(f"{prefix}.coversAllRequiredScenarios must be true")
@@ -170,6 +186,76 @@ def _require_bounded_adaptive_candidate(payload):
     _require_non_empty_text(candidate, "stopCondition", prefix)
     if candidate.get("stopConditionVerified") is not True:
         raise ValueError(f"{prefix}.stopConditionVerified must be true")
+    _require_non_empty_text(candidate, "notes", prefix)
+
+
+def _require_degraded_candidate(candidate):
+    prefix = "candidateEvaluation.documented degraded behavior"
+    limitations = candidate.get("documentedLimitations")
+    if (
+        not isinstance(limitations, list)
+        or not limitations
+        or any(not isinstance(value, str) or not value.strip() for value in limitations)
+    ):
+        raise ValueError(
+            f"{prefix}.documentedLimitations must be a non-empty list of text"
+        )
+    _require_non_empty_text(candidate, "notes", prefix)
+
+
+def _require_candidate_evidence(payload, evidence):
+    candidates = _require_candidate_mapping(payload)
+    event_candidate = candidates["event/protocol"]
+    centralized_candidate = candidates["centralized refresh"]
+    bounded_candidate = candidates["bounded adaptive refresh"]
+    degraded_candidate = candidates["documented degraded behavior"]
+
+    event_protocol_covers = _require_candidate_boolean(
+        event_candidate,
+        "coversAllRequiredScenarios",
+        "candidateEvaluation.event/protocol",
+    )
+    centralized_covers = _require_candidate_boolean(
+        centralized_candidate,
+        "coversAllRequiredScenarios",
+        "candidateEvaluation.centralized refresh",
+    )
+    bounded_covers = _require_candidate_boolean(
+        bounded_candidate,
+        "coversAllRequiredScenarios",
+        "candidateEvaluation.bounded adaptive refresh",
+    )
+    degraded_accepted = _require_candidate_boolean(
+        degraded_candidate,
+        "acceptable",
+        "candidateEvaluation.documented degraded behavior",
+    )
+
+    expected = {
+        "eventDrivenCoversAll": event_protocol_covers or centralized_covers,
+        "boundedAdaptiveCoversAll": bounded_covers,
+        "degradedBehaviorAccepted": degraded_accepted,
+    }
+    for key, candidate_value in expected.items():
+        if evidence[key] != candidate_value:
+            raise ValueError(
+                f"evidence.{key} must match the completed candidate evaluation"
+            )
+
+    if event_protocol_covers:
+        _require_non_empty_text(
+            event_candidate,
+            "notes",
+            "candidateEvaluation.event/protocol",
+        )
+    if centralized_covers:
+        prefix = "candidateEvaluation.centralized refresh"
+        _require_non_empty_text(centralized_candidate, "refreshOwner", prefix)
+        _require_non_empty_text(centralized_candidate, "notes", prefix)
+    if bounded_covers:
+        _require_bounded_adaptive_candidate(payload)
+    if degraded_accepted:
+        _require_degraded_candidate(degraded_candidate)
 
 
 def _require_full_record(payload):
@@ -194,8 +280,7 @@ def classify(payload):
         raise ValueError(
             "numericStateMappingVerified must be true before recording a decision"
         )
-    if values["boundedAdaptiveCoversAll"]:
-        _require_bounded_adaptive_candidate(payload)
+    _require_candidate_evidence(payload, values)
 
     # Continuous hyprctl polling is outside the accepted production design.
     if values["continuousHyprctlPollingRequired"]:
