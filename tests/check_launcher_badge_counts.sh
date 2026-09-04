@@ -29,10 +29,13 @@ done
 
 [[ ! -e components/DockHerdrBadgeService.qml ]] \
   || fail 'recurring Herdr adapter must remain removed'
-if grep -REiq \
-    'DockHerdrBadgeService|herdrBadge(State|Severity|Count)|herdr[[:space:]]+agent[[:space:]]+list|"herdr",[[:space:]]*"agent",[[:space:]]*"list"' \
-    Service.qml components README.md docs/launcher-badge-counts.md; then
-  fail 'Herdr polling integration must remain removed'
+if grep -REiq 'herdr' Service.qml components; then
+  fail 'Herdr runtime integration must remain removed'
+fi
+if grep -Eiq \
+    'herdr[[:space:]]+agent[[:space:]]+list|"herdr",[[:space:]]*"agent",[[:space:]]*"list"' \
+    README.md docs/launcher-badge-counts.md; then
+  fail 'Herdr CLI polling contract must remain removed from documentation'
 fi
 
 lock_line="$(grep -n 'QLockFile lock' "$provider_main" | cut -d: -f1 || true)"
