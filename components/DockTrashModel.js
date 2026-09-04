@@ -17,3 +17,7 @@ function sectionMainExtent(showTrash, itemSize, separatorExtent) {
 function shouldRefresh(showTrash, processRunning) {
   return normalizeShowTrash(showTrash) && processRunning !== true
 }
+
+function shouldDismissMenu(showTrash, menuVisible) {
+  return !normalizeShowTrash(showTrash) && menuVisible === true
+}
