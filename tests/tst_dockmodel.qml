@@ -962,8 +962,9 @@ TestCase {
     compare(DockModel.terminalCliAppId("opencode --session ses_abc123"), "opencode")
     compare(DockModel.terminalCliAppId("fish"), "")
     compare(DockModel.terminalCliAppId("Ghostty"), "")
-    compare(DockModel.terminalCliAppId("omarchy: Lumen Media Hub"), "herdr")
+    compare(DockModel.terminalCliAppId("omarchy · herdr · Lumen Media Hub"), "herdr")
     compare(DockModel.terminalCliAppId("herdr"), "herdr")
+    compare(DockModel.terminalCliAppId("omarchy: Smart dock plugin"), "")
     compare(DockModel.terminalCliAppId("user@omarchy: ~/projects"), "")
     compare(DockModel.terminalCliAppId(""), "")
     compare(DockModel.terminalCliAppId(null), "")
@@ -1020,7 +1021,7 @@ TestCase {
       { id: "herdr", name: "Herdr", icon: "herdr" }
     ]
     var shell = { appId: "com.mitchellh.ghostty", title: "fish" }
-    var workspace = { appId: "com.mitchellh.ghostty", title: "omarchy: Lumen Media Hub" }
+    var workspace = { appId: "com.mitchellh.ghostty", title: "omarchy · herdr · Lumen Media Hub" }
 
     var items = DockModel.buildVisibleItems([], [shell, workspace], entries)
 
