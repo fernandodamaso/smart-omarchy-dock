@@ -967,6 +967,8 @@ TestCase {
     compare(DockModel.terminalCliAppId("kimi"), "kimi")
     compare(DockModel.terminalCliAppId("codex"), "codex")
     compare(DockModel.terminalCliAppId("codex resume 01a0672e --yolo"), "codex")
+    compare(DockModel.terminalCliAppId("hermes"), "hermes")
+    compare(DockModel.terminalCliAppId("hermes-agent chat"), "hermes")
     compare(DockModel.terminalCliAppId("omarchy: Smart dock plugin"), "")
     compare(DockModel.terminalCliAppId("user@omarchy: ~/projects"), "")
     compare(DockModel.terminalCliAppId(""), "")

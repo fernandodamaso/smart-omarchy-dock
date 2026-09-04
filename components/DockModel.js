@@ -16,7 +16,7 @@ var TERMINAL_APP_IDS = [
 ]
 
 var TERMINAL_CLI_APP_IDS = [
-  "opencode", "herdr", "kimi", "codex"
+  "opencode", "herdr", "kimi", "codex", "hermes"
 ]
 
 function terminalCliAppId(title) {
@@ -38,6 +38,10 @@ function terminalCliAppId(title) {
   // "codex" title survives for the whole session.
   if (raw.indexOf("codex") >= 0)
     return "codex"
+  // Hermes CLI: marked by a shell wrapper like kimi/codex
+  // (see ~/.bashrc).
+  if (raw.indexOf("hermes") >= 0)
+    return "hermes"
   return ""
 }
 
