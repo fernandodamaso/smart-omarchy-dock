@@ -152,7 +152,9 @@ With `attentionBadgesEnabled=true`:
 Existing severity still styles the badge. If the application is urgent while a
 number is visible, the numeric badge uses the urgent treatment. FDM-811 does
 not consume the protocol's optional `urgent` property because this issue owns
-numeric counts only.
+numeric counts only. Counts alone never trigger FDM-814 motion; a count token
+that carries attention or urgent severity remains eligible for the bounded
+attention nudge and its three-second reminders.
 
 Focusing an application may clear only FDM-809's local notification-derived
 attention after its existing dwell. Focus never changes authoritative provider

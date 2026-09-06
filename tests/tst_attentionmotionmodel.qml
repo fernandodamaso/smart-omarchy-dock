@@ -40,6 +40,8 @@ TestCase {
       primaryOwner: true,
       badgesEnabled: true,
       animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
       dockShown: false,
       interactionActive: false,
       now: 10000
@@ -53,6 +55,8 @@ TestCase {
       primaryOwner: true,
       badgesEnabled: true,
       animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
       dockShown: false,
       interactionActive: false,
       now: 10010
@@ -66,6 +70,8 @@ TestCase {
       primaryOwner: true,
       badgesEnabled: true,
       animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
       dockShown: true,
       interactionActive: false,
       now: 10020
@@ -82,6 +88,8 @@ TestCase {
       primaryOwner: true,
       badgesEnabled: true,
       animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
       dockShown: true,
       interactionActive: false,
       now: 20000
@@ -94,6 +102,8 @@ TestCase {
       primaryOwner: true,
       badgesEnabled: true,
       animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
       dockShown: true,
       interactionActive: false,
       now: 20000 + BadgeModel.URGENT_WINDOW_COOLDOWN_MS - 1
@@ -106,12 +116,106 @@ TestCase {
       primaryOwner: true,
       badgesEnabled: true,
       animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
       dockShown: true,
       interactionActive: true,
       now: 24000
     })
     compare(suppressed.play, false)
-    compare(suppressed.state.pendingRevision, 0)
+    compare(suppressed.state.pendingRevision, 13)
+    compare(suppressed.state.pendingReminder, true)
+
+    var afterSuppression = BadgeModel.reduceUrgentMotion(suppressed.state, {
+      revision: 13,
+      windowUrgent: true,
+      primaryOwner: true,
+      badgesEnabled: true,
+      animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
+      dockShown: true,
+      interactionActive: false,
+      now: 27000
+    })
+    compare(afterSuppression.play, true)
+  }
+
+  function test_attentionRemindersCountOnlySuppressionAndClear() {
+    var state = BadgeModel.primeUrgentMotionState(null, 0)
+    var attention = BadgeModel.reduceUrgentMotion(state, {
+      revision: 0,
+      windowUrgent: false,
+      primaryOwner: true,
+      badgesEnabled: true,
+      animationEnabled: true,
+      attentionActive: true,
+      reminder: true,
+      dockShown: true,
+      interactionActive: false,
+      now: 40000
+    })
+    compare(attention.play, true)
+
+    var countOnly = BadgeModel.reduceUrgentMotion(attention.state, {
+      revision: 0,
+      windowUrgent: false,
+      primaryOwner: true,
+      badgesEnabled: true,
+      animationEnabled: true,
+      attentionActive: false,
+      reminder: true,
+      dockShown: true,
+      interactionActive: false,
+      now: 43000
+    })
+    compare(countOnly.play, false)
+    compare(countOnly.state.pendingReminder, false)
+
+    var hidden = BadgeModel.reduceUrgentMotion(
+      BadgeModel.primeUrgentMotionState(null, 0), {
+        revision: 0,
+        windowUrgent: false,
+        primaryOwner: true,
+        badgesEnabled: true,
+        animationEnabled: true,
+        attentionActive: true,
+        reminder: true,
+        dockShown: false,
+        interactionActive: false,
+        now: 50000
+      })
+    compare(hidden.play, false)
+    compare(hidden.state.pendingReminder, true)
+
+    var revealed = BadgeModel.reduceUrgentMotion(hidden.state, {
+      revision: 0,
+      windowUrgent: false,
+      primaryOwner: true,
+      badgesEnabled: true,
+      animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
+      dockShown: true,
+      interactionActive: false,
+      now: 50001
+    })
+    compare(revealed.play, true)
+
+    var cleared = BadgeModel.reduceUrgentMotion(revealed.state, {
+      revision: 0,
+      windowUrgent: false,
+      primaryOwner: true,
+      badgesEnabled: true,
+      animationEnabled: true,
+      attentionActive: false,
+      reminder: true,
+      dockShown: true,
+      interactionActive: false,
+      now: 54000
+    })
+    compare(cleared.play, false)
+    compare(cleared.state.pendingReminder, false)
   }
 
   function test_primaryOwnershipAndVectors() {
@@ -122,6 +226,8 @@ TestCase {
       primaryOwner: false,
       badgesEnabled: true,
       animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
       dockShown: true,
       interactionActive: false,
       now: 30000
@@ -135,6 +241,8 @@ TestCase {
       primaryOwner: true,
       badgesEnabled: true,
       animationEnabled: true,
+      attentionActive: true,
+      reminder: false,
       dockShown: true,
       interactionActive: false,
       now: 30000

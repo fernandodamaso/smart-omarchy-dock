@@ -5,6 +5,7 @@ import Quickshell.Widgets
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockBadgeModel.js" as BadgeModel
 
 Item {
   id: root
@@ -95,6 +96,10 @@ Item {
   readonly property bool windowUrgent: urgentBadgeState.windowUrgent === true
   readonly property int windowUrgentRevision:
     Number(urgentBadgeState.windowUrgentRevision || 0)
+  readonly property string attentionSeverity:
+    BadgeModel.attentionSeverityFromBadgeToken(attentionBadge)
+  readonly property bool attentionActive:
+    attentionSeverity !== BadgeModel.BADGE_NONE
   readonly property bool urgentMotionSuppressed: mouse.hovered
     || dragHandler.active || contextMenu.visible
     || previewActive || previewInteractionActive
@@ -152,12 +157,14 @@ Item {
       desktopId, Number(state.windowUrgentRevision || 0))
   }
 
-  function requestUrgentMotion() {
+  function requestUrgentMotion(reminder) {
     if (!badgeTracker || !primaryBadgeOwner) return
     if (urgentMotionSuppressed) attentionMotion.stop()
     var play = badgeTracker.requestUrgentMotion(desktopId, {
       revision: windowUrgentRevision,
       windowUrgent: windowUrgent,
+      attentionActive: attentionActive,
+      reminder: reminder === true,
       primaryOwner: true,
       badgesEnabled: attentionBadgesEnabled,
       animationEnabled: urgentWindowAnimationEnabled,
@@ -168,7 +175,19 @@ Item {
     if (play && !urgentMotionSuppressed) attentionMotion.play()
   }
 
-  Component.onCompleted: primeUrgentMotion()
+  Component.onCompleted: {
+    primeUrgentMotion()
+    requestUrgentMotion(false)
+  }
+  onAttentionActiveChanged: {
+    if (attentionActive) {
+      requestUrgentMotion(true)
+      return
+    }
+    attentionReminderTimer.stop()
+    attentionMotion.stop()
+    requestUrgentMotion(false)
+  }
   onWindowUrgentRevisionChanged: requestUrgentMotion()
   onWindowUrgentChanged: requestUrgentMotion()
   onDockShownChanged: requestUrgentMotion()
@@ -177,12 +196,28 @@ Item {
     requestUrgentMotion()
   }
   onUrgentWindowAnimationEnabledChanged: {
-    if (!urgentWindowAnimationEnabled) attentionMotion.stop()
+    if (!urgentWindowAnimationEnabled) {
+      attentionReminderTimer.stop()
+      attentionMotion.stop()
+    }
     requestUrgentMotion()
   }
   onAttentionBadgesEnabledChanged: {
-    if (!attentionBadgesEnabled) attentionMotion.stop()
+    if (!attentionBadgesEnabled) {
+      attentionReminderTimer.stop()
+      attentionMotion.stop()
+    }
     requestUrgentMotion()
+  }
+
+  Timer {
+    id: attentionReminderTimer
+    interval: 3000
+    repeat: true
+    running: root.primaryBadgeOwner && root.attentionActive
+      && root.attentionBadgesEnabled
+      && root.urgentWindowAnimationEnabled
+    onTriggered: root.requestUrgentMotion(true)
   }
 
   width: vertical ? slotSize + 6 : slotSize
@@ -362,8 +397,10 @@ Item {
     }
   }
 
-  PanelToolTip {
-    visible: mouse.hovered && !contextMenu.visible && !root.previewActive
+  DockToolTip {
+    anchorItem: root
+    position: root.position
+    requestedVisible: mouse.hovered && !contextMenu.visible && !root.previewActive && !dragHandler.active && root.reorderOffset === 0
     text: root.tooltipLabel()
     fontFamily: Style.font.family
     fontSize: Style.font.body

@@ -25,6 +25,8 @@ function decision(previous, overrides = {}) {
     primaryOwner: true,
     badgesEnabled: true,
     animationEnabled: true,
+    attentionActive: true,
+    reminder: false,
     dockShown: true,
     interactionActive: false,
     now: 10000,
@@ -107,6 +109,7 @@ stalePending = decision(stalePending.state, { revision: 31, dockShown: false, no
 const clearedBeforeReveal = decision(stalePending.state, {
   revision: 31,
   windowUrgent: false,
+  attentionActive: false,
   dockShown: true,
   now: 40100
 })
@@ -120,13 +123,14 @@ suppressed = decision(suppressed.state, {
   now: 50000
 })
 assert.equal(suppressed.play, false)
-assert.equal(suppressed.state.pendingRevision, 0)
+assert.equal(suppressed.state.pendingRevision, 41)
+assert.equal(suppressed.state.pendingReminder, true)
 const afterInteraction = decision(suppressed.state, {
   revision: 41,
   interactionActive: false,
   now: 54000
 })
-assert.equal(afterInteraction.play, false)
+assert.equal(afterInteraction.play, true)
 
 let nonPrimary = decision(null, { revision: 50, primaryOwner: false })
 nonPrimary = decision(nonPrimary.state, {
@@ -163,6 +167,71 @@ badgesDisabled = decision(badgesDisabled.state, {
   now: 80000
 })
 assert.equal(badgesDisabled.play, false)
+
+let attention = decision(primeUrgentMotionState(null, 0), {
+  revision: 0,
+  windowUrgent: false,
+  attentionActive: true,
+  reminder: true,
+  now: 90000
+})
+assert.equal(attention.play, true)
+
+let countOnly = decision(primeUrgentMotionState(null, 80), {
+  revision: 81,
+  windowUrgent: true,
+  attentionActive: false,
+  reminder: true,
+  now: 93000
+})
+assert.equal(countOnly.play, false)
+
+const reminderCooldown = decision(attention.state, {
+  revision: 0,
+  windowUrgent: false,
+  attentionActive: true,
+  reminder: true,
+  now: 90000 + URGENT_WINDOW_COOLDOWN_MS - 1
+})
+assert.equal(reminderCooldown.play, false)
+assert.equal(reminderCooldown.state.pendingReminder, true)
+const reminderAfterCooldown = decision(reminderCooldown.state, {
+  revision: 0,
+  windowUrgent: false,
+  attentionActive: true,
+  reminder: true,
+  now: 90000 + URGENT_WINDOW_COOLDOWN_MS
+})
+assert.equal(reminderAfterCooldown.play, true)
+
+let hiddenAttention = decision(primeUrgentMotionState(null, 0), {
+  revision: 0,
+  windowUrgent: false,
+  attentionActive: true,
+  reminder: true,
+  dockShown: false,
+  now: 100000
+})
+assert.equal(hiddenAttention.play, false)
+assert.equal(hiddenAttention.state.pendingReminder, true)
+const revealedAttention = decision(hiddenAttention.state, {
+  revision: 0,
+  windowUrgent: false,
+  attentionActive: true,
+  dockShown: true,
+  now: 100001
+})
+assert.equal(revealedAttention.play, true)
+
+const clearedAttention = decision(revealedAttention.state, {
+  revision: 0,
+  windowUrgent: false,
+  attentionActive: false,
+  reminder: true,
+  now: 104000
+})
+assert.equal(clearedAttention.play, false)
+assert.equal(clearedAttention.state.pendingReminder, false)
 
 const primed = primeUrgentMotionState({
   initialized: true,

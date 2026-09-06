@@ -121,8 +121,10 @@ Item {
     }
   }
 
-  PanelToolTip {
-    visible: mouse.hovered && !contextMenu.visible
+  DockToolTip {
+    anchorItem: root
+    position: root.position
+    requestedVisible: mouse.hovered && !contextMenu.visible
     text: "Dock Controls"
     fontFamily: Style.font.family
     fontSize: Style.font.body

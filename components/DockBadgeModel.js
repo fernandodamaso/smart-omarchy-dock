@@ -293,6 +293,14 @@ function applicationBadgeToken(enabled, mode, countState, severity) {
   return presentation.severity
 }
 
+function attentionSeverityFromBadgeToken(token) {
+  var value = String(token === undefined || token === null ? "" : token)
+    .trim().toLowerCase()
+  if (/^count:\d+:(none|attention|urgent)$/.test(value))
+    value = value.split(":")[2]
+  return severityRank(value) > 0 ? value : BADGE_NONE
+}
+
 function shouldClearFocused(focusedSince, now, dwellMs) {
   var started = Number(focusedSince)
   var current = Number(now)
@@ -349,6 +357,7 @@ function primeUrgentMotionState(previous, revision) {
     initialized: true,
     seenRevision: Math.max(0, Number(revision) || 0),
     pendingRevision: 0,
+    pendingReminder: false,
     lastPlayedAt: Math.max(0, Number(before.lastPlayedAt) || 0)
   }
 }
@@ -364,43 +373,72 @@ function reduceUrgentMotion(previous, input) {
     initialized: true,
     seenRevision: Math.max(0, Number(previous.seenRevision) || 0),
     pendingRevision: Math.max(0, Number(previous.pendingRevision) || 0),
+    pendingReminder: previous.pendingReminder === true,
     lastPlayedAt: Math.max(0, Number(previous.lastPlayedAt) || 0)
   }
   if (data.primaryOwner !== true) return { state: state, play: false }
 
-  var eligible = data.windowUrgent === true
+  var eligible = data.attentionActive === true
     && data.badgesEnabled === true
     && data.animationEnabled === true
   var interaction = data.interactionActive === true
   var dockShown = data.dockShown === true
   var now = Math.max(0, Number(data.now) || 0)
   var newRevision = revision > state.seenRevision
+  var reminder = data.reminder === true
 
   if (newRevision) {
     state.seenRevision = revision
     state.pendingRevision = 0
-    if (!eligible || interaction) return { state: state, play: false }
-    if (!dockShown) {
+    state.pendingReminder = false
+    if (!eligible) return { state: state, play: false }
+    if (interaction || !dockShown) {
       state.pendingRevision = revision
+      state.pendingReminder = true
       return { state: state, play: false }
     }
     if (state.lastPlayedAt > 0
-        && now - state.lastPlayedAt < URGENT_WINDOW_COOLDOWN_MS)
+        && now - state.lastPlayedAt < URGENT_WINDOW_COOLDOWN_MS) {
+      state.pendingReminder = true
       return { state: state, play: false }
+    }
     state.lastPlayedAt = now
     return { state: state, play: true }
   }
 
   if (state.pendingRevision > 0) {
-    if (!eligible || interaction) {
+    if (!eligible) {
       state.pendingRevision = 0
+      state.pendingReminder = false
       return { state: state, play: false }
     }
-    if (!dockShown) return { state: state, play: false }
+    if (interaction || !dockShown) return { state: state, play: false }
     state.pendingRevision = 0
     if (state.lastPlayedAt > 0
-        && now - state.lastPlayedAt < URGENT_WINDOW_COOLDOWN_MS)
+        && now - state.lastPlayedAt < URGENT_WINDOW_COOLDOWN_MS) {
+      state.pendingReminder = true
       return { state: state, play: false }
+    }
+    state.pendingReminder = false
+    state.lastPlayedAt = now
+    return { state: state, play: true }
+  }
+
+  if (state.pendingReminder || reminder) {
+    if (!eligible) {
+      state.pendingReminder = false
+      return { state: state, play: false }
+    }
+    if (interaction || !dockShown) {
+      state.pendingReminder = true
+      return { state: state, play: false }
+    }
+    if (state.lastPlayedAt > 0
+        && now - state.lastPlayedAt < URGENT_WINDOW_COOLDOWN_MS) {
+      state.pendingReminder = true
+      return { state: state, play: false }
+    }
+    state.pendingReminder = false
     state.lastPlayedAt = now
     return { state: state, play: true }
   }

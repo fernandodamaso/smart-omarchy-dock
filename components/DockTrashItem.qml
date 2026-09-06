@@ -81,8 +81,10 @@ Item {
     }
   }
 
-  PanelToolTip {
-    visible: trashHover.hovered && !trashMenu.visible
+  DockToolTip {
+    anchorItem: root
+    position: root.position
+    requestedVisible: trashHover.hovered && !trashMenu.visible
     text: root.trashStateKnown
       ? DockModel.trashTooltip(root.trashItemCount)
       : "Trash — checking…"

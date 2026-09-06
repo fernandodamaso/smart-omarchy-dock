@@ -802,6 +802,50 @@ TestCase {
     compare(items[2].toplevels.length, 2)
   }
 
+  function test_acceptsEqualVisibleItemSnapshotsWithStableToplevels() {
+    var entries = [
+      { id: "org.example.Editor", startupClass: "org.example.Editor" }
+    ]
+    var editorOne = { appId: "org.example.Editor", title: "One" }
+    var editorTwo = { appId: "org.example.Editor", title: "Two" }
+
+    var first = DockModel.buildVisibleItems([], [editorOne, editorTwo], entries)
+    var next = DockModel.buildVisibleItems([], [editorOne, editorTwo], entries)
+
+    verify(DockModel.visibleItemsEqual(first, next))
+    editorOne.title = "Updated"
+    verify(DockModel.visibleItemsEqual(first, next))
+    verify(!DockModel.visibleItemsEqual(first, [
+      { desktopId: "org.example.Editor", pinned: false,
+        toplevels: [editorTwo, editorOne] }
+    ]))
+  }
+
+  function test_rejectsVisibleItemMembershipOrderGroupingAndDesktopChanges() {
+    var entries = [
+      { id: "org.example.Editor", startupClass: "org.example.Editor" },
+      { id: "org.example.Terminal", startupClass: "org.example.Terminal" }
+    ]
+    var editorOne = { appId: "org.example.Editor", title: "One" }
+    var editorTwo = { appId: "org.example.Editor", title: "Two" }
+    var terminal = { appId: "org.example.Terminal", title: "Shell" }
+    var base = DockModel.buildVisibleItems(
+      ["org.example.Editor"], [editorOne, editorTwo], entries)
+
+    verify(!DockModel.visibleItemsEqual(base,
+      DockModel.buildVisibleItems(["org.example.Editor"],
+        [editorOne, editorTwo, terminal], entries)))
+    verify(!DockModel.visibleItemsEqual(base,
+      DockModel.buildVisibleItems(["org.example.Terminal", "org.example.Editor"],
+        [editorOne, editorTwo], entries)))
+    verify(!DockModel.visibleItemsEqual(base,
+      DockModel.buildVisibleItems(["org.example.Editor"],
+        [editorOne, editorTwo], entries, [], false, false)))
+    verify(!DockModel.visibleItemsEqual(base,
+      DockModel.buildVisibleItems(["org.example.Terminal"],
+        [editorOne, editorTwo], entries)))
+  }
+
   function test_hidesPinnedApplicationsWithoutChangingPinnedOrder() {
     var pinned = ["org.gnome.Nautilus", "com.google.Chrome", "com.mitchellh.ghostty"]
     var entries = [

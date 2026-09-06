@@ -16,7 +16,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Focuses an existing application on another workspace
 - Running-application indicators
 - Dot-first application attention badges from live SNI/Hyprland state and available Omarchy notifications
-- One-shot reduced-motion urgent-window nudge driven only by newly urgent Hyprland window addresses
+- Reduced-motion bounded attention nudge with three-second reminders while attention remains active
 - Optional authoritative application-provided launcher badge counts with dot fallback
 - First-position sliders control for the app launcher, Dock Settings, adding
   applications, and auto-hide
@@ -329,7 +329,7 @@ width when the override is disabled.
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
 | `attentionBadgesEnabled` | Show application attention badges. FDM-809 dot severity remains the fallback; in automatic mode an authoritative positive visible launcher count may replace that dot. |
-| `urgentWindowAnimationEnabled` | When `true`, newly urgent Hyprland windows may nudge the owning application icon once. Motion is effective only while `attentionBadgesEnabled` is also enabled; disabling it leaves the static urgent badge intact. |
+| `urgentWindowAnimationEnabled` | When `true`, active SNI, critical local-notification, or Hyprland urgent attention may nudge the owning application icon, no more than once every 3000 ms while attention remains. A launcher count alone never animates; a count with attention still does. Motion is effective only while `attentionBadgesEnabled` is also enabled; disabling it leaves the static badge intact. |
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
@@ -378,18 +378,20 @@ not. Grouped applications render one badge; ungrouped applications assign the
 badge to the first visible item for that app. Hidden applications do not render
 a badge.
 
-FDM-814 motion is narrower than badge state: only a previously absent Hyprland
-urgent **window address** entering an application's urgent-address set creates a
-motion revision. Duplicate urgency while that address remains urgent does not
-restart motion, and ordinary notifications, SNI attention, FDM-811 numeric
-counts, titles, notification bodies, terminal/editor output, sender data, and
-window content never create a motion revision. The nudge is one bounded
-`0 -> 5 -> 0 -> 3 -> 0` px sequence over about 520 ms with OutCubic easing and
-a three-second per-application cooldown. Hover, drag, context menus, and preview
+FDM-814 motion follows active badge severity: SNI `NeedsAttention`, critical
+local-notification attention, and Hyprland urgent window state can trigger the
+nudge. A previously absent Hyprland urgent **window address** still creates a
+motion revision, while duplicate urgency for an address that remains urgent
+does not. A launcher count without attention never triggers motion; a count
+coexisting with attention still does. Titles, notification bodies,
+terminal/editor output, sender data, and window content never create a motion
+trigger. Each play is the bounded `0 -> 5 -> 0 -> 3 -> 0` px sequence over
+about 520 ms with OutCubic easing; reminders repeat no more than once every
+3000 ms while attention remains active. Hover, drag, context menus, and preview
 interaction suppress motion without clearing the badge. Auto-hidden docks do
-not reveal for urgency; one eligible revision may wait for the next normal
-reveal while the app remains urgent. Hidden/restored applications and startup
-prime at the current revision so stale urgency is not replayed. See
+not reveal for attention; pending timer/reveal retries remain safe while the
+badge is active. Hidden/restored applications and startup prime at the current
+revision so stale urgency is not replayed. See
 [`docs/attention-badges.md`](docs/attention-badges.md) for ownership and motion
 semantics.
 

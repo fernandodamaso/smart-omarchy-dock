@@ -41,6 +41,14 @@ grep -Fq 'function reduceUrgentMotion' "$model" \
   || fail 'pure urgent motion decision reducer missing'
 grep -Fq 'function urgentMotionVector' "$model" \
   || fail 'position-aware vector helper missing'
+grep -Fq 'function attentionSeverityFromBadgeToken' "$model" \
+  || fail 'badge-token attention severity helper missing'
+grep -Fq 'attentionActive' "$model" \
+  || fail 'attention-active reducer gate missing'
+grep -Fq 'pendingReminder' "$model" \
+  || fail 'reminder retry state missing'
+grep -Fq 'reminder = data.reminder === true' "$model" \
+  || fail 'reminder reducer input missing'
 
 grep -Fq 'case "top": return { x: 0, y: amount }' "$model" \
   || fail 'top edge must nudge downward'
@@ -51,7 +59,8 @@ grep -Fq 'case "right": return { x: -amount, y: 0 }' "$model" \
 grep -Fq 'default: return { x: 0, y: -amount }' "$model" \
   || fail 'bottom edge must nudge upward'
 
-# Motion is bounded: one 520ms two-excursion sequence and never loops.
+# Motion is bounded per play: one 520ms two-excursion sequence; the item-level
+# reminder timer controls later plays while attention remains active.
 grep -Fq 'loops: 1' "$motion" || fail 'motion must not loop'
 [[ "$(grep -F 'duration: 130' "$motion" | wc -l | tr -d ' ')" == "4" ]] \
   || fail 'motion must have four 130ms legs (~520ms total)'
@@ -79,6 +88,22 @@ grep -Fq 'previewInteractionActive' "$item" || fail 'preview suppression hook mi
 grep -Fq 'mouse.hovered' "$item" || fail 'hover suppression missing'
 grep -Fq 'dragHandler.active' "$item" || fail 'drag suppression missing'
 grep -Fq 'contextMenu.visible' "$item" || fail 'context-menu suppression missing'
+grep -Fq 'attentionSeverityFromBadgeToken' "$item" \
+  || fail 'DockItem must derive attention from its badge token'
+grep -Fq 'readonly property bool attentionActive' "$item" \
+  || fail 'DockItem attention-active property missing'
+grep -Fq 'id: attentionReminderTimer' "$item" \
+  || fail 'primary attention reminder timer missing'
+grep -Fq 'interval: 3000' "$item" \
+  || fail 'attention reminder timer must use the three-second interval'
+grep -Fq 'repeat: true' "$item" \
+  || fail 'attention reminder timer must repeat'
+grep -Fq 'requestUrgentMotion(true)' "$item" \
+  || fail 'attention reminder timer must issue reminder requests'
+grep -Fq 'onAttentionActiveChanged' "$item" \
+  || fail 'attention state transition hook missing'
+grep -Fq 'attentionReminderTimer.stop()' "$item" \
+  || fail 'attention reminder cleanup missing'
 grep -Fq 'BadgeModel.isPrimaryVisibleItem' "$dock" \
   || fail 'ungrouped primary-owner selection missing'
 
