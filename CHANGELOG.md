@@ -4,6 +4,11 @@
 
 ### Changed
 
+- Updated FDM-814 attention motion so SNI `NeedsAttention`, critical local
+  notification attention, and Hyprland urgency share the bounded
+  `0 -> 5 -> 0 -> 3 -> 0` nudge. Active attention can receive reminders no more
+  than once every three seconds; launcher counts alone remain static while
+  counts with attention remain eligible.
 - Reorganized Dock Settings into icon-led Icons, Hover effect, Dock surface,
   Layout, and Behavior cards matching the approved compact layout.
 - Added progressive Theme default, Omarchy token, custom hex, and custom border

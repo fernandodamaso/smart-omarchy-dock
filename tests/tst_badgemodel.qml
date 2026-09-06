@@ -34,6 +34,16 @@ TestCase {
     compare(BadgeModel.notificationSeverity(1, 2), "attention")
     compare(BadgeModel.badgeSeverity(true, false, "none"), "attention")
     compare(BadgeModel.badgeSeverity(true, true, "attention"), "urgent")
+    compare(BadgeModel.attentionSeverityFromBadgeToken("none"), "none")
+    compare(BadgeModel.attentionSeverityFromBadgeToken("attention"), "attention")
+    compare(BadgeModel.attentionSeverityFromBadgeToken("urgent"), "urgent")
+    compare(BadgeModel.attentionSeverityFromBadgeToken("count:7:attention"),
+      "attention")
+    compare(BadgeModel.attentionSeverityFromBadgeToken("count:8:urgent"),
+      "urgent")
+    compare(BadgeModel.attentionSeverityFromBadgeToken("count:5:none"), "none")
+    compare(BadgeModel.attentionSeverityFromBadgeToken("count:5"), "none")
+    compare(BadgeModel.attentionSeverityFromBadgeToken(""), "none")
   }
 
   function test_replacesNotificationsByOriginalIdAndExpiresAfterTtl() {

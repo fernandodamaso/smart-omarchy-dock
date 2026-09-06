@@ -1172,6 +1172,30 @@ function itemWorkspaceId(item, handles) {
   return ids[0]
 }
 
+function visibleItemsEqual(current, next) {
+  if (!Array.isArray(current) || !Array.isArray(next)
+      || current.length !== next.length)
+    return false
+
+  for (var i = 0; i < current.length; ++i) {
+    var currentItem = current[i]
+    var nextItem = next[i]
+    if (!currentItem || !nextItem
+        || currentItem.desktopId !== nextItem.desktopId
+        || currentItem.pinned !== nextItem.pinned
+        || !Array.isArray(currentItem.toplevels)
+        || !Array.isArray(nextItem.toplevels)
+        || currentItem.toplevels.length !== nextItem.toplevels.length)
+      return false
+
+    for (var j = 0; j < currentItem.toplevels.length; ++j) {
+      if (currentItem.toplevels[j] !== nextItem.toplevels[j]) return false
+    }
+  }
+
+  return true
+}
+
 function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspace,
                            groupWindows, hiddenApplicationIds) {
   var items = []

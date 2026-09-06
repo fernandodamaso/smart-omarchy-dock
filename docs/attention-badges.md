@@ -74,30 +74,32 @@ current live/local state.
 
 ## Urgent-window motion
 
-FDM-814 adds a reduced-motion-friendly, one-shot nudge only when a previously
-absent **Hyprland urgent window address** enters an application's urgent-address
-set. Notification events, SNI attention, FDM-811 numeric counts, titles,
-notification bodies, terminal/editor output, sender data, and window content do
-not trigger the animation and are not logged or persisted for motion decisions.
+FDM-814 uses the badge's active severity as the motion contract. SNI
+`NeedsAttention`, critical local-notification attention, and Hyprland urgent
+window state can trigger the nudge. A positive launcher count without attention
+never triggers it; a count coexisting with attention still does. A previously
+absent **Hyprland urgent window address** entering an application's
+urgent-address set creates a motion revision, while duplicate urgency for an
+address that remains urgent does not. Titles, notification bodies,
+terminal/editor output, sender data, and window content do not trigger motion
+and are not logged or persisted for motion decisions.
 
-The animation is bounded and never loops: the application artwork moves toward
-the desktop `0 -> 5 -> 0 -> 3 -> 0` pixels over about 520 ms with OutCubic
-easing. Bottom docks move upward, top docks downward, left docks rightward, and
-right docks leftward. The persistent running indicator remains anchored.
+Each play is bounded: application artwork moves toward the desktop
+`0 -> 5 -> 0 -> 3 -> 0` pixels over about 520 ms with OutCubic easing. Bottom
+docks move upward, top docks downward, left docks rightward, and right docks
+leftward. The persistent running indicator remains anchored. While any active
+attention severity remains, the primary visible item may receive a reminder no
+more than once every three seconds; the shared tracker keeps grouped and
+multi-screen items from duplicating that motion.
 
-Motion has a three-second per-application cooldown. Repeated urgency for an
-address that is already urgent does not increment the motion revision. Closing
-one urgent grouped member removes only that address; another urgent member can
-keep the application's static urgent state active. Clearing an address and
-later receiving urgency for it again creates a new revision.
-
-Hover, drag, an open context menu, or preview interaction suppresses the nudge
-without clearing the urgent badge. An auto-hidden dock does not reveal because
-of urgency; one eligible revision can remain pending and is consumed on the
-next ordinary reveal only if the application is still urgent. Hidden
-applications never animate, and showing one again primes motion at the current
-revision so old urgency is not replayed. Startup and QML reload use the same
-current-revision priming rule.
+Closing one urgent grouped member removes only that address; another urgent
+member can keep the application's static urgent state active. Clearing all
+badge severity stops motion and removes pending retries. Hover, drag, an open
+context menu, or preview interaction suppresses the nudge without clearing the
+badge, and later timer or reveal requests can retry it. An auto-hidden dock
+does not reveal because of attention. Hidden applications never animate, and
+showing one again primes motion at the current revision so old urgency is not
+replayed. Startup and QML reload use the same current-revision priming rule.
 
 `urgentWindowAnimationEnabled` defaults to `true`. It is effective only while
 `attentionBadgesEnabled` is also enabled. Turning it off disables motion while

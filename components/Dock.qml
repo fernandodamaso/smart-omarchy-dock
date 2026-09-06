@@ -204,9 +204,7 @@ PanelWindow {
     toplevels, hyprToplevels, focusedWorkspaceId, activeToplevel,
     fullscreenStateRevision)
   readonly property bool fullscreenModeActive: fullscreenOwnerToplevel !== null
-  readonly property var visibleItems: DockModel.buildVisibleItems(
-    pinned, toplevels, applications, hyprToplevels, sortByWorkspace,
-    groupWindows, hiddenApplications)
+  property var visibleItems: []
   readonly property var visibleWorkspaceIds: {
     var revision = workspaceStateRevision + workspaceCountsRevision
     return DockModel.visibleWorkspaceIds(
@@ -242,6 +240,18 @@ PanelWindow {
 
   function effectiveSetting(key) {
     return settingPreviews[key] !== undefined ? settingPreviews[key] : settings[key]
+  }
+
+  function refreshVisibleItems() {
+    var nextItems = DockModel.buildVisibleItems(
+      pinned, toplevels, applications, hyprToplevels, sortByWorkspace,
+      groupWindows, hiddenApplications)
+    if (!DockModel.visibleItemsEqual(visibleItems, nextItems))
+      visibleItems = nextItems
+  }
+
+  function scheduleVisibleItemsRefresh() {
+    visibleItemsRefreshTimer.restart()
   }
 
   function primaryBadgeOwnerFor(index) {
@@ -339,6 +349,14 @@ PanelWindow {
   onOpenMenuCountChanged: if (openMenuCount > 0) windowPreview.dismissImmediately()
   onDragSourceChanged: if (dragSource >= 0) windowPreview.dismissImmediately()
   onShowPreviewsChanged: if (!showPreviews) windowPreview.dismissImmediately()
+  onSettingsChanged: root.scheduleVisibleItemsRefresh()
+  onSettingPreviewsChanged: root.scheduleVisibleItemsRefresh()
+  onPinnedChanged: root.scheduleVisibleItemsRefresh()
+  onSortByWorkspaceChanged: root.scheduleVisibleItemsRefresh()
+  onGroupWindowsChanged: root.scheduleVisibleItemsRefresh()
+  onHiddenApplicationsChanged: root.scheduleVisibleItemsRefresh()
+
+  Component.onCompleted: root.scheduleVisibleItemsRefresh()
 
   Connections {
     target: root.badgeTracker
@@ -353,7 +371,10 @@ PanelWindow {
 
     interval: 80
     repeat: false
-    onTriggered: root.fullscreenStateRevision++
+    onTriggered: {
+      root.fullscreenStateRevision++
+      root.scheduleVisibleItemsRefresh()
+    }
   }
 
   Timer {
@@ -361,7 +382,26 @@ PanelWindow {
 
     interval: 80
     repeat: false
-    onTriggered: root.workspaceStateRevision++
+    onTriggered: {
+      root.workspaceStateRevision++
+      root.scheduleVisibleItemsRefresh()
+    }
+  }
+
+  Timer {
+    id: visibleItemsRefreshTimer
+
+    interval: 0
+    repeat: false
+    onTriggered: root.refreshVisibleItems()
+  }
+
+  Timer {
+    id: visibleItemsRawEventTimer
+
+    interval: 80
+    repeat: false
+    onTriggered: root.scheduleVisibleItemsRefresh()
   }
 
   Connections {
@@ -379,6 +419,26 @@ PanelWindow {
         Hyprland.refreshToplevels()
         workspaceStateRefreshTimer.restart()
       }
+      if (["windowtitle", "windowtitlev2"].indexOf(String(name)) >= 0)
+        visibleItemsRawEventTimer.restart()
+    }
+  }
+
+  Connections {
+    target: DesktopEntries.applications
+    ignoreUnknownSignals: true
+
+    function onValuesChanged() {
+      root.scheduleVisibleItemsRefresh()
+    }
+  }
+
+  Connections {
+    target: ToplevelManager.toplevels
+    ignoreUnknownSignals: true
+
+    function onValuesChanged() {
+      root.scheduleVisibleItemsRefresh()
     }
   }
 
@@ -394,6 +454,7 @@ PanelWindow {
     target: Hyprland.toplevels
 
     function onValuesChanged() {
+      root.scheduleVisibleItemsRefresh()
       workspaceStateRefreshTimer.restart()
     }
   }
