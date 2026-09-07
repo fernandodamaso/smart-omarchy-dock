@@ -67,9 +67,12 @@ assert_contains components/Dock.qml 'function refreshVisibleItems()' \
 assert_contains components/Dock.qml \
   'pinned, filteredToplevels, applications, hyprToplevels' \
   'deferred visible-item refresh must use filtered windows'
-assert_contains components/Dock.qml \
-  'onScopeRevisionChanged: root.scheduleVisibleItemsRefresh()' \
-  'scope revisions must schedule the deferred visible-item snapshot'
+
+scope_handler="$(sed -n '/onScopeRevisionChanged:/,/^  }/p' components/Dock.qml)"
+grep -Fq 'root.windowPreview.dismissImmediately()' <<<"$scope_handler" \
+  || fail 'scope change must dismiss stale previews'
+grep -Fq 'root.scheduleVisibleItemsRefresh()' <<<"$scope_handler" \
+  || fail 'scope revisions must schedule the deferred visible-item snapshot'
 
 assert_contains components/DockWindowActions.qml 'minimizedOriginsSnapshot' \
   'host-owned controller must expose its origin snapshot'
