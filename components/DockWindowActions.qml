@@ -70,12 +70,16 @@ Item {
 
     var ipc = workspace.lastIpcObject || workspace
     var id = Number(ipc.id !== undefined ? ipc.id : workspace.id)
-    if (Number.isInteger(id) && id > 0) return String(id)
-
-    var name = String(
-      ipc.name !== undefined ? ipc.name : workspace.name || "").trim()
-    if (!name || name.indexOf("special:") === 0) return ""
-    return name.indexOf("name:") === 0 ? name : "name:" + name
+    var target = ""
+    if (Number.isInteger(id) && id > 0) {
+      target = String(id)
+    } else {
+      var name = String(
+        ipc.name !== undefined ? ipc.name : workspace.name || "").trim()
+      if (!name || name.indexOf("special:") === 0) return ""
+      target = name.indexOf("name:") === 0 ? name : "name:" + name
+    }
+    return DockModel.normalizeWorkspaceTarget(target)
   }
 
   function monitorIdentity(handle) {
