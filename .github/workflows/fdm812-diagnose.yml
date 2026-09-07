@@ -1,0 +1,36 @@
+name: FDM-812 structural diagnosis
+
+on:
+  push:
+    branches: [recovery/fdm-812-window-scope]
+    paths:
+      - .github/workflows/fdm812-diagnose.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: recovery/fdm-812-window-scope
+      - name: Install structural dependency
+        run: sudo apt-get update && sudo apt-get install --yes --no-install-recommends ripgrep
+      - name: Capture structural results
+        run: |
+          set +e
+          : > .github/fdm812_structural.txt
+          for script in tests/check_*.sh; do
+            echo "===== $script =====" >> .github/fdm812_structural.txt
+            bash "$script" >> .github/fdm812_structural.txt 2>&1
+            echo "exit=$?" >> .github/fdm812_structural.txt
+          done
+          set -e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/fdm812_structural.txt
+          git commit -m 'chore: capture FDM-812 structural results'
+          git push origin HEAD:recovery/fdm-812-window-scope
