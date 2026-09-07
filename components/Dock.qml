@@ -8,6 +8,7 @@ import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
 import "DockWindowModel.js" as DockWindowModel
+import "DockWindowPreviewModel.js" as PreviewModel
 import "DockWorkspaceModel.js" as WorkspaceModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockTrashModel.js" as TrashModel
@@ -822,7 +823,12 @@ PanelWindow {
     windowActions: root.windowActions
     hyprToplevels: root.hyprToplevels
     badgeTracker: root.badgeTracker
-    readonly property int renderedIndex: root.renderedItems.indexOf(modelData)
+    readonly property int renderedIndex: {
+      if (!originOnly) return index
+      var items = root.renderedItems
+      return items.indexOf(PreviewModel.visiblePreviewTarget(
+        items, presentationId, identityToplevel))
+    }
     localUrgent: modelData.localUrgent === true
     sticky: modelData.sticky === true
     attentionScopeKey: originOnly && root.badgeTracker && root.screen

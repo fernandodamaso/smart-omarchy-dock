@@ -93,3 +93,11 @@ if grep -Eq '(Animation|Behavior)[[:space:]]' "$badge"; then
 fi
 
 printf 'check_attention_badges: PASS\n'
+
+if grep -Fq 'root.renderedItems.indexOf(modelData)' components/Dock.qml; then
+  fail 'QML Repeater QVariant records must be matched by stable presentation identity'
+fi
+grep -Fq 'items.indexOf(PreviewModel.visiblePreviewTarget(' components/Dock.qml \
+  || fail 'grouped owners must reuse stable presentation and window identity lookup'
+grep -Fq 'if (!originOnly) return index' components/Dock.qml \
+  || fail 'flat ungrouped owners must retain the repeater index'
