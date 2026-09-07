@@ -27,7 +27,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Minimized-window markers, counts, tooltip summaries, and per-window status labels
 - Fullscreen focus emphasis that enlarges the owner and fades other dock icons
 - Per-window right-click management for workspace moves, fullscreen-with-bars,
-  Hyprland-style minimize/restore, floating, workspace pinning, focus, and close
+  Hyprland-style minimize/restore, focus, and close
 - Drag-to-reorder with persistent pinned-app order
 - Context-menu hiding with persistent restoration controls in Dock Settings
 - Right-click actions to launch, close, pin, or unpin applications

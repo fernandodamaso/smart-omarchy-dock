@@ -22,7 +22,6 @@ const {
   localSeverity,
   clearMatchingNotifications,
   badgeSeverity,
-  attentionSeverityFromBadgeToken,
   shouldClearFocused,
   isPrimaryVisibleItem,
   LOCAL_ATTENTION_TTL_MS,
@@ -65,14 +64,6 @@ assert.equal(notificationSeverity(2, 2), "urgent")
 assert.equal(notificationSeverity(1, 2), "attention")
 assert.equal(badgeSeverity(true, false, "urgent"), "urgent")
 assert.equal(badgeSeverity(true, false, "none"), "attention")
-assert.equal(attentionSeverityFromBadgeToken("none"), "none")
-assert.equal(attentionSeverityFromBadgeToken("attention"), "attention")
-assert.equal(attentionSeverityFromBadgeToken("urgent"), "urgent")
-assert.equal(attentionSeverityFromBadgeToken("count:7:attention"), "attention")
-assert.equal(attentionSeverityFromBadgeToken("count:8:urgent"), "urgent")
-assert.equal(attentionSeverityFromBadgeToken("count:5:none"), "none")
-assert.equal(attentionSeverityFromBadgeToken("count:5"), "none")
-assert.equal(attentionSeverityFromBadgeToken(""), "none")
 
 const slack = { id: "com.slack.Slack", startupClass: "Slack", name: "Slack" }
 const discord = entries[1]

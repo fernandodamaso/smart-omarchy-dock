@@ -26,7 +26,6 @@ reject_pattern() {
 [[ -f components/DockApplicationStateIndicator.qml ]] \
   || fail "components/DockApplicationStateIndicator.qml does not exist"
 
-require_pattern '^function hasActiveMember\(' components/DockModel.js
 require_pattern '^function applicationStateIndicatorGeometry\(' components/DockModel.js
 require_pattern 'required property string position' components/DockApplicationStateIndicator.qml
 require_pattern 'required property real iconWidth' components/DockApplicationStateIndicator.qml

@@ -57,22 +57,6 @@ TestCase {
       "movetoworkspacesilent 4,address:0xabc123")
     compare(DockModel.moveWindowRequest("0xabc123", 0, true), "")
 
-    compare(
-      DockModel.floatWindowRequest("0xabc123", "toggle", true),
-      'hl.dsp.window.float({ window = "address:0xabc123", action = "toggle" })')
-    compare(
-      DockModel.floatWindowRequest("0xabc123", "enable", false),
-      "setfloating address:0xabc123")
-    compare(
-      DockModel.floatWindowRequest("0xabc123", "disable", false),
-      "settiled address:0xabc123")
-
-    compare(
-      DockModel.pinWindowRequest("0xabc123", true),
-      'hl.dsp.window.pin({ window = "address:0xabc123", action = "toggle" })')
-    compare(
-      DockModel.pinWindowRequest("0xabc123", false),
-      "pin address:0xabc123")
   }
 
   function test_buildsHyprlandNativeMinimizeAndRestoreRequests() {
@@ -756,14 +740,6 @@ TestCase {
       DockModel.fullscreenOwner(
         [formerOwner, activeWindow], handles, 1, activeWindow),
       activeWindow)
-  }
-
-  function test_refreshesFullscreenPresentationForRelevantHyprlandEvents() {
-    verify(DockModel.shouldRefreshFullscreenPresentation("activewindow"))
-    verify(DockModel.shouldRefreshFullscreenPresentation("activewindowv2"))
-    verify(DockModel.shouldRefreshFullscreenPresentation("fullscreen"))
-    verify(DockModel.shouldRefreshFullscreenPresentation("workspacev2"))
-    verify(!DockModel.shouldRefreshFullscreenPresentation("urgent"))
   }
 
   function test_presentsFullscreenOwnerAndFadesOtherIcons() {

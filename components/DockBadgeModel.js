@@ -305,14 +305,6 @@ function applicationBadgeToken(enabled, mode, countState, severity) {
   return presentation.severity
 }
 
-function attentionSeverityFromBadgeToken(token) {
-  var value = String(token === undefined || token === null ? "" : token)
-    .trim().toLowerCase()
-  if (/^count:\d+:(none|attention|urgent)$/.test(value))
-    value = value.split(":")[2]
-  return severityRank(value) > 0 ? value : BADGE_NONE
-}
-
 function shouldClearFocused(focusedSince, now, dwellMs) {
   var started = Number(focusedSince)
   var current = Number(now)

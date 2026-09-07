@@ -47,10 +47,8 @@ require_pattern 'acceptedModifiers:[[:space:]]*Qt\.NoModifier' components/DockIt
 
 reject_pattern 'pointerModifierState|eventPoint\.modifiers|ShiftModifier' components/DockItem.qml
 
-require_pattern 'function focusToplevels\(' components/DockWindowActions.qml
 require_pattern 'function minimizeRestoreToplevels\(' components/DockWindowActions.qml
 require_pattern 'function closeToplevels\(' components/DockWindowActions.qml
-require_pattern 'function showToplevelPreviews\(' components/DockWindowActions.qml
 require_pattern 'previewRequested' components/DockItem.qml
 require_pattern 'DockWindowPreview[[:space:]]*\{' components/Dock.qml
 

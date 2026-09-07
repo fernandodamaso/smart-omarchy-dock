@@ -15,14 +15,6 @@ function liveGroupMembers(candidates, liveToplevels) {
   return result
 }
 
-function activeGroupMember(candidates, activeToplevel, liveToplevels) {
-  var live = liveGroupMembers(candidates, liveToplevels)
-  if (live.length === 0) return null
-  if (activeToplevel && live.indexOf(activeToplevel) >= 0)
-    return activeToplevel
-  return live[0]
-}
-
 function cycleTargetIndex(count, originIndex, direction) {
   var size = Math.floor(Number(count))
   var value = Number(originIndex)

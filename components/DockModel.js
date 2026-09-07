@@ -409,18 +409,6 @@ function shouldReserveSpace(reserveSpace, autoHide) {
   return Boolean(reserveSpace) && !Boolean(autoHide)
 }
 
-function hasActiveMember(toplevels, activeToplevel) {
-  if (!activeToplevel) return false
-
-  var values = Array.isArray(toplevels)
-    ? toplevels
-    : toplevels && toplevels.values ? toplevels.values : []
-  for (var i = 0; i < values.length; ++i) {
-    if (values[i] === activeToplevel) return true
-  }
-  return false
-}
-
 function applicationStateIndicatorGeometry(position, iconWidth, iconHeight,
                                            running, focused) {
   var edge = ["top", "bottom", "left", "right"].indexOf(position) >= 0
@@ -705,13 +693,6 @@ function workspaceGridPosition(position, parentWidth, parentHeight,
 function ipcWorkspaceFromHandle(handle) {
   var ipc = handle && handle.lastIpcObject ? handle.lastIpcObject : null
   return ipc && ipc.workspace ? ipc.workspace : null
-}
-
-function workspaceFromHandle(handle) {
-  // Quickshell's object-level workspace relationship can be stale; prefer
-  // the authoritative IPC record carried by lastIpcObject.
-  return ipcWorkspaceFromHandle(handle)
-    || (handle && handle.workspace) || ({})
 }
 
 function workspaceIpcWindowCount(workspace) {
@@ -1008,20 +989,6 @@ function fullscreenIconPresentation(modeActive, isOwner, hovered) {
   return { scale: 0.9, opacity: 0.45 }
 }
 
-function shouldRefreshFullscreenPresentation(eventName) {
-  return [
-    "activewindow",
-    "activewindowv2",
-    "fullscreen",
-    "workspace",
-    "workspacev2",
-    "openwindow",
-    "closewindow",
-    "movewindow",
-    "movewindowv2"
-  ].indexOf(String(eventName || "")) >= 0
-}
-
 function shouldRefreshWorkspaceState(eventName) {
   return [
     "openwindow",
@@ -1088,29 +1055,6 @@ function windowStatusLabel(state) {
   if (workspace.indexOf("name:") === 0)
     workspace = workspace.slice(5)
   return "[" + workspace + "]"
-}
-
-function floatWindowRequest(address, action, usingLua) {
-  var target = normalizeWindowAddress(address)
-  if (!target || ["toggle", "enable", "disable"].indexOf(action) < 0)
-    return ""
-
-  if (usingLua)
-    return 'hl.dsp.window.float({ window = "address:' + target
-      + '", action = "' + action + '" })'
-  if (action === "enable") return "setfloating address:" + target
-  if (action === "disable") return "settiled address:" + target
-  return "togglefloating address:" + target
-}
-
-function pinWindowRequest(address, usingLua) {
-  var target = normalizeWindowAddress(address)
-  if (!target) return ""
-
-  if (usingLua)
-    return 'hl.dsp.window.pin({ window = "address:' + target
-      + '", action = "toggle" })'
-  return "pin address:" + target
 }
 
 function nextToplevelIndex(currentIndex, count) {

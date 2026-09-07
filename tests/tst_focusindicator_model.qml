@@ -5,22 +5,6 @@ import "../components/DockModel.js" as DockModel
 TestCase {
   name: "DockFocusIndicatorModel"
 
-  function test_detectsActiveMemberByToplevelIdentity() {
-    var first = { title: "First" }
-    var second = { title: "Second" }
-    var values = [first, second]
-
-    verify(DockModel.hasActiveMember(values, second))
-    verify(DockModel.hasActiveMember({ values: values }, first))
-    verify(!DockModel.hasActiveMember(values, { title: "Second" }))
-    verify(!DockModel.hasActiveMember(values, null))
-    verify(!DockModel.hasActiveMember(null, second))
-
-    compare(values.length, 2)
-    compare(values[0], first)
-    compare(values[1], second)
-  }
-
   function test_buildsPositionAwareRunningAndFocusedGeometry() {
     var topRunning = DockModel.applicationStateIndicatorGeometry(
       "top", 42, 42, true, false)
