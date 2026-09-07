@@ -19,5 +19,7 @@ DockHost {
   launcherBadgeService: shell && typeof shell.serviceFor === "function"
     ? shell.serviceFor("io.github.fernandodamaso.smartdock") : null
 
-  configPath: Quickshell.env("HOME") + "/.config/smartdock/dock.json"
+  configPath: (Quickshell.env("XDG_CONFIG_HOME")
+    || Quickshell.env("HOME") + "/.config")
+    + "/smartdock/dock.json"
 }
