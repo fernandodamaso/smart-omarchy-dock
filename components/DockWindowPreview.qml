@@ -221,6 +221,30 @@ PopupWindow {
       contentHeight: root.orientationHorizontal ? height : tileFlow.height
       interactive: contentWidth > width || contentHeight > height
 
+      WheelHandler {
+        target: null
+        onWheel: event => {
+          event.accepted = false
+          var primary = Math.abs(event.angleDelta.y) >= Math.abs(event.angleDelta.x)
+            ? event.angleDelta.y : event.angleDelta.x
+          if (primary === 0) return
+
+          if (root.orientationHorizontal
+              && previewViewport.contentWidth > previewViewport.width) {
+            var maxX = previewViewport.contentWidth - previewViewport.width
+            previewViewport.contentX = Math.max(
+              0, Math.min(maxX, previewViewport.contentX - primary))
+            event.accepted = true
+          } else if (!root.orientationHorizontal
+                     && previewViewport.contentHeight > previewViewport.height) {
+            var maxY = previewViewport.contentHeight - previewViewport.height
+            previewViewport.contentY = Math.max(
+              0, Math.min(maxY, previewViewport.contentY - primary))
+            event.accepted = true
+          }
+        }
+      }
+
       Item {
         id: tileFlow
         width: root.orientationHorizontal
@@ -262,6 +286,20 @@ PopupWindow {
   onPositionChanged: if (root.visible) Qt.callLater(root.reanchor)
   onMembersChanged: if (root.visible && root.members.length >= 2)
     Qt.callLater(root.reanchor)
+  onAnchorItemChanged: {
+    if (!root.anchorItem && root.desktopId !== "")
+      root.dismissImmediately()
+  }
+
+  Connections {
+    target: root.anchorItem
+    function onDestroyed() { root.dismissImmediately() }
+  }
+
+  Connections {
+    target: root.anchorScreen
+    function onDestroyed() { root.dismissImmediately() }
+  }
 
   Connections {
     target: ToplevelManager.toplevels
