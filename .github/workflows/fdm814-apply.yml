@@ -1,0 +1,32 @@
+name: FDM-814 source eligibility patcher
+
+on:
+  push:
+    branches: [fix/fdm-814-motion-source-eligibility]
+    paths:
+      - .github/fdm814_apply.py
+      - .github/workflows/fdm814-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: fix/fdm-814-motion-source-eligibility
+      - name: Apply exact FDM-814 repair
+        run: python3 .github/fdm814_apply.py
+      - name: Commit implementation
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add components/DockBadgeModel.js components/DockBadgeTracker.qml components/DockItem.qml tests/check_urgent_window_motion.sh
+          git diff --cached --check
+          git commit -m 'fix: restrict FDM-814 motion to eligible attention sources'
+          git push origin HEAD:fix/fdm-814-motion-source-eligibility
