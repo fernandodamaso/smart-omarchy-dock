@@ -632,12 +632,7 @@ function resetSettingsPatch() {
 }
 
 function mergeSettings(settings, patch) {
-  var merged = {}
-  var source = settings || ({})
-  var changes = patch || ({})
-  for (var key in source) merged[key] = source[key]
-  for (var changedKey in changes) merged[changedKey] = changes[changedKey]
-  return merged
+  return Object.assign({}, settings || {}, patch || {})
 }
 
 function centeredPopupAnchor(position, screenWidth, screenHeight,

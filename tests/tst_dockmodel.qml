@@ -56,7 +56,6 @@ TestCase {
       DockModel.moveWindowRequest("0xabc123", 4, false),
       "movetoworkspacesilent 4,address:0xabc123")
     compare(DockModel.moveWindowRequest("0xabc123", 0, true), "")
-
   }
 
   function test_buildsHyprlandNativeMinimizeAndRestoreRequests() {
@@ -446,10 +445,11 @@ TestCase {
       pinned: ["browser"],
       futureOption: "keep-me"
     }
-    var merged = DockModel.mergeSettings(original, {
+    var patch = {
       iconSize: 58,
       autoHide: true
-    })
+    }
+    var merged = DockModel.mergeSettings(original, patch)
 
     compare(merged.iconSize, 58)
     compare(merged.autoHide, true)
@@ -457,6 +457,15 @@ TestCase {
     compare(merged.pinned[0], "browser")
     compare(merged.futureOption, "keep-me")
     compare(original.iconSize, 42)
+    verify(merged.pinned === original.pinned)
+    merged.iconSize = 99
+    compare(original.iconSize, 42)
+    compare(patch.iconSize, 58)
+    compare(JSON.stringify(DockModel.mergeSettings(null, null)), "{}")
+    compare(JSON.stringify(DockModel.mergeSettings(null, patch)),
+      JSON.stringify(patch))
+    compare(JSON.stringify(DockModel.mergeSettings(original, null)),
+      JSON.stringify(original))
   }
 
   function test_mirrorsCompactOmarchyWorkspaceVisibility() {
