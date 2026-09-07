@@ -179,6 +179,16 @@ Item {
       counts, desktopId, !!(service && service.available))
   }
 
+  function motionAttentionFor(desktopId) {
+    var entry = BadgeModel.entryForDesktopId(desktopId, applications)
+    var local = BadgeModel.localSeverity(
+      persisted.localNotifications, desktopId, entry, identityAliases,
+      Date.now(), BadgeModel.LOCAL_ATTENTION_TTL_MS)
+    return BadgeModel.motionAttentionEligible(
+      sniNeedsAttentionFor(desktopId, entry),
+      hyprUrgentFor(desktopId, entry), local)
+  }
+
   function badgeFor(desktopId) {
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     var local = BadgeModel.localSeverity(
