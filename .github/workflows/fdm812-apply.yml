@@ -1,0 +1,32 @@
+name: FDM-812 recovery patcher
+
+on:
+  push:
+    branches: [recovery/fdm-812-window-scope]
+    paths:
+      - .github/fdm812_apply.py
+      - .github/workflows/fdm812-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: recovery/fdm-812-window-scope
+      - name: Apply exact recovery patch
+        run: python3 .github/fdm812_apply.py
+      - name: Commit implementation
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add DockHost.qml config/dock.json README.md components tests/check_window_scope.sh
+          git diff --cached --check
+          git commit -m 'feat: replay FDM-812 window scope filtering'
+          git push origin HEAD:recovery/fdm-812-window-scope
