@@ -9,7 +9,16 @@ TestCase {
     compare(DockModel.normalizeSetting("workspaceLayout", undefined), "flat")
     compare(DockModel.normalizeSetting("workspaceLayout", "invalid"), "flat")
     compare(DockModel.normalizeSetting("workspaceLayout", "grouped"), "grouped")
-    var settings = DockModel.mergeSettings({ pinned: ["chrome"], other: 7 }, { workspaceLayout: "grouped" })
+    var original = {
+      pinned: ["chrome"], hiddenApplications: ["hidden"], other: 7,
+      windowScope: "monitor", sortByWorkspace: true,
+      showUrgentOutsideScope: false, groupWindows: false, showTrash: false
+    }
+    var settings = DockModel.mergeSettings(original, { workspaceLayout: "grouped" })
+    for (var key in original) compare(settings[key], original[key])
+    var flat = DockModel.mergeSettings(settings, { workspaceLayout: "flat" })
+    for (var flatKey in original) compare(flat[flatKey], original[flatKey])
+    compare(settings.workspaceLayout, "grouped")
     compare(JSON.parse(JSON.stringify(settings)).workspaceLayout, "grouped")
     var reset = DockModel.mergeSettings(settings, DockModel.resetSettingsPatch())
     compare(reset.workspaceLayout, "flat")

@@ -9,7 +9,7 @@ function load(name, imports = {}) {
   return scope
 }
 const DockModel = load('DockModel')
-const DockWindowModel = load('DockWindowModel')
+const DockWindowModel = load('DockWindowModel', { DockModel })
 const file = new URL('../components/DockWorkspaceModel.js', import.meta.url)
 const model = fs.existsSync(file) ? load('DockWorkspaceModel', { DockModel, DockWindowModel }) : {}
 assert.equal(typeof model.buildWorkspacePresentation, 'function', 'workspace composer exists')
@@ -84,4 +84,86 @@ const otherMonitor = model.buildWorkspacePresentation([], [], [],
   { monitor: 'id:1', activeWorkspace: 'id:11' })
 assert.equal(otherMonitor.groups[0].activationTarget, '11')
 assert.equal(otherMonitor.groups[0].active, true)
+
+// Alias joins, retained origins, and sticky placement use the complete inventory.
+const monitors = [{ id: 0, name: 'DP-1' }, { id: 1, name: 'HDMI-A-1' }]
+const scopedContext = { ...context, monitors }
+const stickyWindow = { appId: 'chrome' }
+const stickyHandle = { wayland: stickyWindow, address: 'abc', urgent: false,
+  lastIpcObject: { monitor: 0, workspace: { id: 2 }, pinned: true, urgent: true } }
+function stickyPresentation(origins = {}, descriptors = workspaces, ctx = scopedContext) {
+  return model.buildWorkspacePresentation(
+    [{ desktopId: 'chrome', pinned: true, toplevels: [stickyWindow] }],
+    [{ toplevel: stickyWindow,
+      ...DockWindowModel.locationForToplevel(stickyWindow, [stickyHandle], origins) }],
+    descriptors, ctx)
+}
+assert.equal(DockWindowModel.monitorIdentity('id:0'), 'id:0')
+assert.equal(DockWindowModel.canonicalMonitorIdentity('DP-1', monitors), 'id:0')
+assert.equal(DockWindowModel.canonicalMonitorIdentity('name:DP-1', monitors), 'id:0')
+assert.equal(DockWindowModel.canonicalMonitorIdentity(monitors[0], monitors), 'id:0')
+let stickyResult = stickyPresentation()
+assert.equal(stickyResult.groups[0].count, 1)
+assert.equal(stickyResult.groups[0].items[0].sticky, true)
+assert.equal(stickyResult.groups[0].urgent, false, 'live false beats stale IPC urgent true')
+const calmResult = stickyResult
+stickyHandle.urgent = true
+stickyResult = stickyPresentation()
+assert.equal(stickyResult.groups[0].urgent, true)
+assert.equal(model.presentationsEqual(calmResult, stickyResult), false, 'urgency refreshes same-reference items')
+assert.equal(stickyPresentation({}, workspaces, { ...scopedContext, activeWorkspace: 'id:2' })
+  .groups[1].count, 1, 'sticky follows this monitor active workspace')
+assert.equal(stickyPresentation({}, workspaces, { ...scopedContext, monitor: 'id:1', activeWorkspace: 'id:3' })
+  .groups.reduce((n, g) => n + g.count, 0), 0, 'known other monitor excluded')
+stickyHandle.lastIpcObject.monitor = undefined
+assert.equal(stickyPresentation().fallbackItems[0].toplevels.length, 1, 'unknown monitor stays fallback')
+stickyHandle.lastIpcObject.monitor = 0
+stickyHandle.lastIpcObject.workspace = { name: 'special:smartdock-minimized' }
+const savedOrigin = { '0xabc': { workspace: 'name:Design work', monitor: 'DP-1' } }
+let retained = stickyPresentation(savedOrigin, [])
+assert.equal(retained.groups[1].activationTarget, 'name:Design work')
+assert.equal(retained.groups[1].count, 1)
+assert.equal(retained.groups[1].items[0].sticky, false, 'minimized origin wins over sticky')
+retained = stickyPresentation(savedOrigin, [{ name: 'Design work', monitorID: 1 }])
+assert.equal(retained.groups.length, 1, 'live workspace ownership overrides saved monitor')
+assert.equal(retained.fallbackItems.length, 0)
+for (const target of ['', '0', 'special:scratch', 'name:bad;dispatch']) {
+  const invalid = stickyPresentation({ '0xabc': { workspace: target, monitor: 'DP-1' } }, [])
+  assert.equal(invalid.groups.length, 1, 'invalid origins never invent a card')
+  assert.equal(invalid.fallbackItems.length, 1)
+}
+assert.equal(stickyPresentation({}, []).fallbackItems.length, 1, 'missing origin is fallback')
+const closed = model.buildWorkspacePresentation([], [], [], scopedContext)
+assert.equal(closed.groups.length, 1, 'closing removes the retained origin card')
+assert.equal(closed.groups[0].count, 0)
+
+// Workspace urgency is local even when ungrouped badge ownership selects another member.
+handles.forEach((handle, i) => {
+  handle.urgent = i === 2
+  handle.lastIpcObject = { workspace: { id: i ? 2 : 1 }, monitor: 0 }
+})
+result = build([], false)
+assert.equal(result.groups[0].urgent, false)
+assert.equal(result.groups[1].urgent, true)
+assert.deepEqual(Array.from(result.groups[1].items, item => item.localUrgent), [false, true])
+assert.equal(result.groups[1].count, 2)
+assert.equal(build(['chrome']).groups[1].urgent, false, 'hiding removes local urgency')
+const BadgeModel = load('DockBadgeModel')
+assert.equal(BadgeModel.isPrimaryVisibleItem(result.groups[1].items, 0), true)
+assert.equal(BadgeModel.isPrimaryVisibleItem(result.groups[1].items, 1), false)
+assert.equal(result.renderedItems.some(item => item.localUrgent), false, 'collapsed urgent windows cannot own app badges')
+handles[2].lastIpcObject.monitor = 1
+assert.equal(build().groups[1].urgent, false, 'move transfers urgency with the same window reference')
+
+const specialOrigin = DockWindowModel.locationForToplevel(stickyWindow, [stickyHandle],
+  { '0xabc': { workspace: 'special:notes', monitor: 'DP-1' } })
+assert.equal(specialOrigin.workspace, 'special:notes', 'flat scope preserves special origin identity')
+assert.equal(specialOrigin.workspaceKnown, true)
+assert.equal(specialOrigin.originValid, false, 'grouped normal origin eligibility is separate')
+assert.equal(DockWindowModel.monitorIdentity({ id: null }), '')
+assert.equal(DockWindowModel.monitorIdentity(-1), '')
+assert.equal(DockWindowModel.canonicalMonitorIdentity('DP-1', [monitors[1]]), '')
+assert.equal(stickyPresentation(savedOrigin, [], { ...scopedContext, monitors: [monitors[1]] })
+  .fallbackItems.length, 1, 'removed connector remains unresolved fallback')
+
 console.log('workspace model: PASS')

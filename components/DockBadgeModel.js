@@ -223,6 +223,13 @@ function badgeSeverity(sniNeedsAttention, hyprUrgent, localAttention) {
   ])
 }
 
+// Scoped windows contribute independently of the single app-wide source owner.
+function scopedBadgeSeverity(sniNeedsAttention, hyprUrgent, localAttention, scope) {
+  if (!scope) return badgeSeverity(sniNeedsAttention, hyprUrgent, localAttention)
+  return badgeSeverity(scope.primaryOwner === true && sniNeedsAttention,
+    scope.localUrgent === true, scope.primaryOwner === true ? localAttention : BADGE_NONE)
+}
+
 function motionAttentionEligible(sniNeedsAttention, hyprUrgent, localAttention) {
   return sniNeedsAttention === true || hyprUrgent === true
     || localAttention === BADGE_URGENT

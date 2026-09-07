@@ -29,12 +29,12 @@ assert_contains config/dock.json '"showUrgentOutsideScope": true' \
   'urgent-outside-scope must default true'
 assert_contains README.md '### Window scope filtering' \
   'README must document window scope behavior'
-assert_contains components/DockSettings.qml 'label: "Window scope"' \
+assert_contains components/DockSettings.qml 'label: root.groupedEffective ? "Window scope (flat layout only)" : "Window scope"' \
   'Dock Settings must expose window scope'
 assert_contains components/DockSettings.qml 'label: "Show urgent outside scope"' \
   'Dock Settings must expose urgent exception toggle'
 assert_contains components/DockSettings.qml \
-  'enabled: root.current("windowScope") !== "all"' \
+  'enabled: !root.groupedEffective && root.current("windowScope") !== "all"' \
   'urgent exception must disable when scope is all'
 
 assert_contains DockHost.qml 'property int scopeRevision: 0' \

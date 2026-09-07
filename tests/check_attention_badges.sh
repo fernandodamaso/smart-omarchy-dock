@@ -38,7 +38,7 @@ if grep -Fq 'NotificationServer' "$tracker" Overlay.qml DockHost.qml; then
   fail 'SmartDock must not create a competing notification server'
 fi
 
-badge_for_body="$(sed -n '/function badgeFor(desktopId)/,/^  }/p' "$tracker")"
+badge_for_body="$(sed -n '/function badgeFor(desktopId, scope)/,/^  }/p' "$tracker")"
 if grep -Fq 'revision' <<<"$badge_for_body"; then
   fail 'badgeFor must not read tracker revision from inside the DockItem binding'
 fi
@@ -59,7 +59,7 @@ grep -Fq 'Status.NeedsAttention' "$tracker" \
   || fail 'SNI NeedsAttention source missing'
 grep -Fq 'NotificationUrgency.Critical' "$tracker" \
   || fail 'critical notification reduction missing'
-grep -Fq 'handle.urgent !== true' "$tracker" \
+grep -Fq '!DockWindowModel.handleUrgent(handle)' "$tracker" \
   || fail 'Hyprland urgent source missing'
 
 grep -q 'LOCAL_ATTENTION_TTL_MS = 24 \* 60 \* 60 \* 1000' "$model" \

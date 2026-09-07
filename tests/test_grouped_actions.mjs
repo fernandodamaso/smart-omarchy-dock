@@ -3,13 +3,13 @@ import fs from 'node:fs'
 import vm from 'node:vm'
 
 const read = name => fs.readFileSync(new URL(`../components/${name}`, import.meta.url), 'utf8')
-function model(name) {
-  const scope = vm.createContext({})
-  vm.runInContext(read(name).replace(/^\.pragma.*$/gm, ''), scope)
+function model(name, imports = {}) {
+  const scope = vm.createContext(imports)
+  vm.runInContext(read(name).replace(/^\.(pragma|import).*$/gm, ''), scope)
   return scope
 }
 const DockModel = model('DockModel.js')
-const DockWindowModel = model('DockWindowModel.js')
+const DockWindowModel = model('DockWindowModel.js', { DockModel })
 // Execute the real QML method bodies; only compositor transport is substituted.
 function methods(file, properties) {
   const scope = vm.createContext(properties)

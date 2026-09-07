@@ -42,6 +42,8 @@ PanelWindow {
   readonly property bool wideLayout: panelWidth >= 720
   readonly property bool compactControls: panelWidth < 560
   property bool advancedExpanded: false
+  readonly property bool groupedEffective: current("workspaceLayout") === "grouped"
+    && position !== "left" && position !== "right"
   // The values are symbolic references to Omarchy's live Color singleton.
   // Persisting the reference (rather than a snapshot hex value) keeps a
   // selected preset synchronized when the active theme changes.
@@ -989,6 +991,20 @@ PanelWindow {
                 }
               }
 
+              DockActionDropdown {
+                width: parent.width
+                label: "Workspace layout (top / bottom only)"
+                value: root.current("workspaceLayout")
+                options: [
+                  { value: "flat", label: "Flat" },
+                  { value: "grouped", label: "Workspace cards" }
+                ]
+                onChanged: value => {
+                  root.preview("workspaceLayout", value)
+                  root.commit("workspaceLayout", value)
+                }
+              }
+
               DockSettingsToggleRow {
                 width: parent.width
                 label: "Full length"
@@ -1007,7 +1023,9 @@ PanelWindow {
               DockSettingsToggleRow {
                 width: parent.width
                 label: "Sort by workspace"
-                description: "Group open apps by workspace; closed pinned apps stay first"
+                description: root.groupedEffective ? "Flat layout only" : "Group open apps by workspace; closed pinned apps stay first"
+                enabled: !root.groupedEffective
+                opacity: enabled ? 1 : 0.45
                 checked: root.current("sortByWorkspace")
                 onToggled: root.commit("sortByWorkspace", !checked)
               }
@@ -1024,7 +1042,9 @@ PanelWindow {
 
               DockActionDropdown {
                 width: parent.width
-                label: "Window scope"
+                label: root.groupedEffective ? "Window scope (flat layout only)" : "Window scope"
+                enabled: !root.groupedEffective
+                opacity: enabled ? 1 : 0.45
                 value: DockWindowModel.normalizeWindowScope(
                   root.current("windowScope"))
                 options: DockWindowModel.windowScopeOptions()
@@ -1038,9 +1058,10 @@ PanelWindow {
               DockSettingsToggleRow {
                 width: parent.width
                 label: "Show urgent outside scope"
-                description: root.current("windowScope") === "all"
-                  ? "All windows are already visible" : "Include truly urgent Hyprland windows from elsewhere"
-                enabled: root.current("windowScope") !== "all"
+                description: root.groupedEffective ? "Flat layout only"
+                  : root.current("windowScope") === "all"
+                    ? "All windows are already visible" : "Include truly urgent Hyprland windows from elsewhere"
+                enabled: !root.groupedEffective && root.current("windowScope") !== "all"
                 opacity: enabled ? 1 : 0.45
                 checked: root.current("showUrgentOutsideScope") !== false
                 onToggled: root.commit("showUrgentOutsideScope", !checked)

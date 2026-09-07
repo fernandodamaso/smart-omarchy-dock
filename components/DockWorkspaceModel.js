@@ -13,13 +13,15 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
   var fallbackItems = []
   var byWorkspace = Object.create(null)
   var active = context.activeWorkspace || ""
+  var monitor = DockWindowModel.canonicalMonitorIdentity(context.monitor, context.monitors)
+  var workspaceMonitors = Object.create(null)
 
   function addWorkspace(identity) {
     var target = activationTarget(identity)
     if (!target || byWorkspace[identity]) return
     var group = {
       identity: identity, label: identity.replace(/^(id:|name:)/, ""),
-      activationTarget: target, active: identity === active, items: [], count: 0
+      activationTarget: target, active: identity === active, items: [], count: 0, urgent: false
     }
     byWorkspace[identity] = group
     groups.push(group)
@@ -28,12 +30,27 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
   for (var w = 0; w < workspaces.length; ++w) {
     var descriptor = workspaces[w]
     var ipc = descriptor.lastIpcObject || descriptor
-    var monitor = DockWindowModel.monitorIdentity(
-      ipc.monitorID !== undefined ? ipc.monitorID : descriptor.monitor)
-    if (monitor === context.monitor)
-      addWorkspace(DockWindowModel.workspaceIdentity(descriptor))
+    var owner = DockWindowModel.canonicalMonitorIdentity(
+      ipc.monitorID !== undefined ? ipc.monitorID
+        : ipc.monitor !== undefined ? ipc.monitor : descriptor.monitor, context.monitors)
+    var identity = DockWindowModel.workspaceIdentity(descriptor)
+    if (owner) workspaceMonitors[identity] = owner
+    if (owner && owner === monitor) addWorkspace(identity)
   }
   addWorkspace(active)
+  // Live workspace ownership wins over a saved minimized-origin connector.
+  records = records.map(function(record) {
+    var owner = record.minimized && workspaceMonitors[record.workspace]
+      || DockWindowModel.canonicalMonitorIdentity(record.monitor, context.monitors)
+    var workspace = record.sticky && !record.minimized && owner && owner === monitor
+      ? active : record.minimized && record.originValid === false ? "" : record.workspace
+    var resolved = Object.assign({}, record, { monitor: owner, monitorKnown: !!owner,
+      workspace: workspace, workspaceKnown: workspace !== "",
+      sticky: record.sticky === true && !record.minimized })
+    if (resolved.minimized && owner && owner === monitor && resolved.workspaceKnown)
+      addWorkspace(workspace)
+    return resolved
+  })
   groups.sort(function(a, b) {
     var an = a.identity.indexOf("id:") === 0
     var bn = b.identity.indexOf("id:") === 0
@@ -58,7 +75,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     for (var t = 0; t < item.toplevels.length; ++t) {
       var toplevel = item.toplevels[t]
       var record = records.find(function(value) { return value.toplevel === toplevel })
-      if (record && record.monitorKnown && record.monitor !== context.monitor) continue
+      if (record && record.monitorKnown && record.monitor !== monitor) continue
       var key = record && record.monitorKnown && record.workspaceKnown
         && byWorkspace[record.workspace] ? record.workspace : "other"
       if (!partitions[key]) partitions[key] = []
@@ -75,13 +92,24 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       var scoped = Object.assign({}, item, {
         pinned: pinnedIds.indexOf(DockModel.normalizedId(item.desktopId)) >= 0,
         toplevels: members, presentationId: identity,
-        identityToplevel: context.groupWindows === false ? members[0] : null
+        identityToplevel: context.groupWindows === false ? members[0] : null,
+        localUrgent: false, sticky: false, urgentAddresses: []
       })
+      for (var m = 0; m < members.length; ++m) {
+        var member = records.find(function(value) { return value.toplevel === members[m] })
+        if (!member) continue
+        scoped.sticky = scoped.sticky || member.sticky === true
+        if (member.urgent === true) {
+          scoped.localUrgent = true
+          scoped.urgentAddresses.push(member.address || "pending:" + m)
+        }
+      }
       if (key === "global") globalLaunchers.push(scoped)
       else if (key === "other") fallbackItems.push(scoped)
       else {
         byWorkspace[key].items.push(scoped)
         byWorkspace[key].count += members.length
+        byWorkspace[key].urgent = byWorkspace[key].urgent || scoped.localUrgent
       }
     }
   }
@@ -93,15 +121,26 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     groups: groups, renderedItems: renderedItems.concat(globalLaunchers, fallbackItems) }
 }
 
+function scopedItemsEqual(a, b) {
+  if (!DockModel.visibleItemsEqual(a, b)) return false
+  for (var i = 0; i < a.length; ++i) {
+    if (a[i].localUrgent !== b[i].localUrgent || a[i].sticky !== b[i].sticky
+        || JSON.stringify(a[i].urgentAddresses) !== JSON.stringify(b[i].urgentAddresses))
+      return false
+  }
+  return true
+}
+
 function presentationsEqual(a, b) {
-  if (!DockModel.visibleItemsEqual(a.globalLaunchers, b.globalLaunchers)
-      || !DockModel.visibleItemsEqual(a.fallbackItems, b.fallbackItems)
+  if (!scopedItemsEqual(a.globalLaunchers, b.globalLaunchers)
+      || !scopedItemsEqual(a.fallbackItems, b.fallbackItems)
       || a.groups.length !== b.groups.length) return false
   for (var i = 0; i < a.groups.length; ++i) {
     var left = a.groups[i]
     var right = b.groups[i]
     if (left.identity !== right.identity || left.active !== right.active
-        || left.count !== right.count || !DockModel.visibleItemsEqual(left.items, right.items))
+        || left.count !== right.count || left.urgent !== right.urgent
+        || !scopedItemsEqual(left.items, right.items))
       return false
   }
   return true

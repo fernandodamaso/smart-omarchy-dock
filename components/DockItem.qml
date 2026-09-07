@@ -43,6 +43,26 @@ Item {
   required property bool vertical
   required property bool previewActive
   property bool originOnly: false
+  property bool localUrgent: false
+  property bool sticky: false
+  property string attentionScopeKey: ""
+  property bool presentationVisible: true
+  property bool motionReady: false
+  readonly property var attentionScope: attentionScopeKey
+    ? ({ localUrgent: localUrgent, primaryOwner: primaryBadgeOwner }) : null
+  readonly property bool motionOwner: attentionScopeKey !== "" || primaryBadgeOwner
+
+  function dismissPopups() {
+    contextMenu.dismiss()
+    previewReleased(root)
+  }
+
+  function refreshPopupGeometry() {
+    if (!presentationVisible) return
+    tooltip.scheduleReanchor()
+    if (contextMenu.visible) contextMenu.anchor.updateAnchor()
+  }
+  onPresentationVisibleChanged: if (!presentationVisible) dismissPopups()
   property int scopeRevision: 0
   property bool menuOpen: false
   onScopeRevisionChanged: if (originOnly && contextMenu.visible) contextMenu.dismiss()
@@ -109,16 +129,16 @@ Item {
       fullscreenModeActive, fullscreenEmphasized, mouse.hovered)
   readonly property real iconScale: fullscreenPresentation.scale
     * (1 + (magnification - 1) * influence)
-  readonly property var urgentBadgeState: !originOnly && badgeTracker
-    ? badgeTracker.urgentStateFor(desktopId, primaryBadgeOwner)
+  readonly property var urgentBadgeState: badgeTracker
+    ? badgeTracker.urgentStateFor(desktopId, motionOwner, attentionScopeKey)
     : ({ windowUrgent: false, primaryOwner: primaryBadgeOwner,
          windowUrgentRevision: 0 })
   readonly property bool windowUrgent: urgentBadgeState.windowUrgent === true
   readonly property int windowUrgentRevision:
     Number(urgentBadgeState.windowUrgentRevision || 0)
-  readonly property bool attentionActive: !originOnly && badgeTracker
-    ? badgeTracker.motionAttentionFor(desktopId) : false
-  readonly property bool urgentMotionSuppressed: mouse.hovered
+  readonly property bool attentionActive: badgeTracker
+    ? badgeTracker.motionAttentionFor(desktopId, attentionScope) : false
+  readonly property bool urgentMotionSuppressed: !presentationVisible || mouse.hovered
     || dragHandler.active || contextMenu.visible
     || previewActive || previewInteractionActive
 
@@ -174,15 +194,15 @@ Item {
   }
 
   function primeUrgentMotion() {
-    if (originOnly || !badgeTracker || !primaryBadgeOwner) return
-    badgeTracker.ensureUrgentState(desktopId)
-    var state = badgeTracker.urgentStateFor(desktopId, true)
+    if (!badgeTracker || !motionOwner) return
+    if (!attentionScopeKey) badgeTracker.ensureUrgentState(desktopId)
+    var state = badgeTracker.urgentStateFor(desktopId, true, attentionScopeKey)
     badgeTracker.primeUrgentMotion(
-      desktopId, Number(state.windowUrgentRevision || 0))
+      desktopId, Number(state.windowUrgentRevision || 0), attentionScopeKey)
   }
 
   function requestUrgentMotion(reminder) {
-    if (originOnly || !badgeTracker || !primaryBadgeOwner) return
+    if (!motionReady || !badgeTracker || !motionOwner) return
     if (urgentMotionSuppressed) attentionMotion.stop()
     var play = badgeTracker.requestUrgentMotion(desktopId, {
       revision: windowUrgentRevision,
@@ -192,15 +212,16 @@ Item {
       primaryOwner: true,
       badgesEnabled: attentionBadgesEnabled,
       animationEnabled: urgentWindowAnimationEnabled,
-      dockShown: dockShown,
+      dockShown: dockShown && presentationVisible,
       interactionActive: urgentMotionSuppressed,
       now: Date.now()
-    })
+    }, attentionScopeKey)
     if (play && !urgentMotionSuppressed) attentionMotion.play()
   }
 
   Component.onCompleted: {
     primeUrgentMotion()
+    motionReady = true
     requestUrgentMotion(false)
   }
   onAttentionActiveChanged: {
@@ -238,7 +259,8 @@ Item {
     id: attentionReminderTimer
     interval: 3000
     repeat: true
-    running: root.primaryBadgeOwner && root.attentionActive
+    running: root.motionReady && root.motionOwner && root.attentionActive
+      && root.dockShown && root.presentationVisible
       && root.attentionBadgesEnabled
       && root.urgentWindowAnimationEnabled
     onTriggered: root.requestUrgentMotion(true)
@@ -355,6 +377,18 @@ Item {
       }
 
       Rectangle {
+        visible: root.sticky
+        width: 10
+        height: 10
+        radius: 2
+        x: -3
+        y: iconContainer.height - height + 3
+        color: Color.background
+        border.width: 2
+        border.color: Color.accent
+      }
+
+      Rectangle {
         id: minimizedCountBadge
 
         visible: root.minimizedCount > 0
@@ -422,9 +456,10 @@ Item {
   }
 
   DockToolTip {
+    id: tooltip
     anchorItem: root
     position: root.position
-    requestedVisible: mouse.hovered && !contextMenu.visible && !root.previewActive && !dragHandler.active && root.reorderOffset === 0
+    requestedVisible: root.presentationVisible && mouse.hovered && !contextMenu.visible && !root.previewActive && !dragHandler.active && root.reorderOffset === 0
     text: root.tooltipLabel()
     fontFamily: Style.font.family
     fontSize: Style.font.body
@@ -435,6 +470,7 @@ Item {
     var state = root.focused ? "focused application"
       : root.runningCount > 0 ? "running application" : ""
     var label = state ? name + " — " + state : name
+    if (root.sticky) label += " (sticky on this monitor)"
     if (root.minimizedCount > 0) {
       var word = root.runningCount === 1 ? "window" : "windows"
       return label + " (" + root.runningCount + " " + word

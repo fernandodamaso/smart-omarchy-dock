@@ -237,11 +237,13 @@ PanelWindow {
   readonly property bool groupedRequested: !vertical
     && DockModel.normalizeSetting("workspaceLayout", effectiveSetting("workspaceLayout")) === "grouped"
   property var workspacePresentation: ({ groups: [], globalLaunchers: [], fallbackItems: [], renderedItems: [] })
-  // ponytail: crowded cards use flat until WS4 adds bounded scrolling.
-  readonly property bool grouped: groupedRequested && screen
-    && groupedRow.implicitWidth + mainPadding * 2 + itemSize
-      + trashMainExtent + (showTrash ? 12 : 0) <= screen.width
+  readonly property bool grouped: groupedRequested
   readonly property var renderedItems: grouped ? workspacePresentation.renderedItems : visibleItems
+  readonly property string activeCardIdentity: {
+    var active = workspacePresentation.groups.find(function(group) { return group.active })
+    return active ? active.identity : ""
+  }
+  onActiveCardIdentityChanged: Qt.callLater(root.revealActiveWorkspace)
 
   readonly property var visibleWorkspaceIds: {
     var revision = scopeRevision + workspaceCountsRevision
@@ -256,7 +258,7 @@ PanelWindow {
   readonly property int crossExtent: vertical
     ? Math.ceil(iconSize * magnification + 80) + edgeMargin
     : Math.ceil(iconSize * magnification + 48) + edgeMargin
-  readonly property int appMainExtent: grouped ? groupedRow.implicitWidth : visibleItems.length * itemSize
+  readonly property int appMainExtent: grouped ? groupedLayout.desiredWidth : visibleItems.length * itemSize
   readonly property int workspaceMainExtent: grouped ? 0 : vertical
     ? Math.max(0, visibleWorkspaceIds.length * 32 + 6)
     : Math.max(0, visibleWorkspaceIds.length * 32 + 6)
@@ -294,8 +296,14 @@ PanelWindow {
           monitor: DockWindowModel.monitorIdentity(monitor),
           activeWorkspace: DockWindowModel.workspaceIdentity(ipc.activeWorkspace
             || (monitor ? monitor.activeWorkspace : null)),
+          monitors: hyprMonitors,
           groupWindows: groupWindows
         })
+      if (badgeTracker && screen)
+        badgeTracker.syncWorkspaceScopes(screen.name,
+          nextPresentation.groups.reduce(function(items, group) {
+            return items.concat(group.items)
+          }, []).concat(nextPresentation.globalLaunchers, nextPresentation.fallbackItems))
       if (!WorkspaceModel.presentationsEqual(workspacePresentation, nextPresentation)) {
         windowPreview.dismissImmediately()
         workspacePresentation = nextPresentation
@@ -313,14 +321,27 @@ PanelWindow {
   }
 
   function primaryBadgeOwnerFor(index) {
-    return BadgeModel.isPrimaryVisibleItem(visibleItems, index)
+    return BadgeModel.isPrimaryVisibleItem(renderedItems, index)
   }
 
   function attentionBadgeFor(item, index) {
     var badgeRevision = badgeStateRevision
     if (!attentionBadgesEnabled || !badgeTracker || !item) return "none"
-    if (!primaryBadgeOwnerFor(index)) return "none"
-    return badgeTracker.badgeFor(item.desktopId)
+    var owner = primaryBadgeOwnerFor(index)
+    if (grouped)
+      return badgeTracker.badgeFor(item.desktopId, { localUrgent: item.localUrgent, primaryOwner: owner })
+    return owner ? badgeTracker.badgeFor(item.desktopId) : "none"
+  }
+
+  function revealActiveWorkspace() {
+    if (!grouped) return
+    for (var i = 0; i < workspaceCards.count; ++i) {
+      var card = workspaceCards.itemAt(i)
+      if (card && card.expanded) {
+        groupedLayout.ensureVisible(card, card.headerWidth)
+        break
+      }
+    }
   }
 
   function previewSetting(key, value) {
@@ -411,7 +432,19 @@ PanelWindow {
   onSettingPreviewsChanged: root.scheduleVisibleItemsRefresh()
   onPinnedChanged: root.scheduleVisibleItemsRefresh()
   onSortByWorkspaceChanged: root.scheduleVisibleItemsRefresh()
-  onGroupedChanged: windowPreview.dismissImmediately()
+  onGroupedChanged: {
+    windowPreview.dismissImmediately()
+    dragSource = -1
+    dragTarget = -1
+    if (!grouped && badgeTracker && screen) badgeTracker.syncWorkspaceScopes(screen.name, [])
+    if (grouped) Qt.callLater(root.revealActiveWorkspace)
+  }
+  onDockHyprMonitorChanged: root.scheduleVisibleItemsRefresh()
+  onHyprMonitorsChanged: root.scheduleVisibleItemsRefresh()
+  onHyprWorkspacesChanged: root.scheduleVisibleItemsRefresh()
+  Component.onDestruction: {
+    if (badgeTracker && screen) badgeTracker.syncWorkspaceScopes(screen.name, [])
+  }
   onWorkspaceCountsRevisionChanged: root.scheduleVisibleItemsRefresh()
   onGroupWindowsChanged: root.scheduleVisibleItemsRefresh()
   onHiddenApplicationsChanged: root.scheduleVisibleItemsRefresh()
@@ -432,6 +465,7 @@ PanelWindow {
 
     function onRevisionChanged() {
       root.badgeStateRevision++
+      root.scheduleVisibleItemsRefresh()
     }
   }
 
@@ -495,7 +529,7 @@ PanelWindow {
   }
   implicitWidth: vertical
     ? crossExtent
-    : fullLength ? 0 : compactMainExtent
+    : fullLength ? 0 : grouped && screen ? Math.min(screen.width, compactMainExtent) : compactMainExtent
   implicitHeight: vertical
     ? fullLength ? 0 : compactMainExtent
     : crossExtent
@@ -622,23 +656,35 @@ PanelWindow {
         }
       }
 
-      Row {
-        id: groupedRow
+      DockWorkspaceLayout {
+        id: groupedLayout
         visible: root.grouped
         x: dockLayout.appStart
-        y: (parent.height - height) / 2
-        spacing: 6
+        width: Math.max(0, Math.min(desiredWidth, dockLayout.trailingStart - x))
+        height: root.crossExtent - root.edgeMargin
+        y: root.position === "top" ? 0 : dockLayout.height - height
+        rowY: root.position === "top" ? (dockLayout.height - root.itemSize - 6) / 2
+          : height - (dockLayout.height + root.itemSize + 6) / 2
+        contentPadding: Math.ceil(root.iconSize * (root.magnification - 1) / 2) + 8
+        foreground: Color.menu.text
+        background: Color.menu.background
+        accent: Color.accent
+        onViewportChanged: windowPreview.refreshAnchorGeometry()
         Repeater {
           model: root.groupedRequested ? root.workspacePresentation.globalLaunchers : []
           AppIcon {}
         }
         Repeater {
+          id: workspaceCards
           model: root.groupedRequested ? root.workspacePresentation.groups : []
           DockWorkspaceGroup {
             id: workspaceCard
             required property var modelData
             label: modelData.label
             count: modelData.count
+            urgent: modelData.urgent === true && root.attentionBadgesEnabled
+            position: root.position
+            viewport: groupedLayout
             expanded: modelData.active
             slotSize: root.itemSize
             onActivated: {
@@ -654,6 +700,8 @@ PanelWindow {
         DockWorkspaceGroup {
           visible: root.groupedRequested && root.workspacePresentation.fallbackItems.length > 0
           label: "Other windows"
+          position: root.position
+          viewport: groupedLayout
           count: root.workspacePresentation.fallbackItems.reduce(function(total, item) {
             return total + item.toplevels.length
           }, 0)
@@ -774,10 +822,24 @@ PanelWindow {
     windowActions: root.windowActions
     hyprToplevels: root.hyprToplevels
     badgeTracker: root.badgeTracker
-    attentionBadge: originOnly ? "none" : root.attentionBadgeFor(modelData, index)
-    attentionBadgesEnabled: !originOnly && root.attentionBadgesEnabled
-    urgentWindowAnimationEnabled: !originOnly && root.urgentWindowAnimationEnabled
-    primaryBadgeOwner: !originOnly && root.primaryBadgeOwnerFor(index)
+    readonly property int renderedIndex: root.renderedItems.indexOf(modelData)
+    localUrgent: modelData.localUrgent === true
+    sticky: modelData.sticky === true
+    attentionScopeKey: originOnly && root.badgeTracker && root.screen
+      ? root.badgeTracker.workspaceScopeKey(root.screen.name, modelData.presentationId) : ""
+    attentionBadge: root.attentionBadgeFor(modelData, renderedIndex)
+    attentionBadgesEnabled: root.attentionBadgesEnabled
+    urgentWindowAnimationEnabled: root.urgentWindowAnimationEnabled
+    primaryBadgeOwner: root.primaryBadgeOwnerFor(renderedIndex)
+    presentationVisible: !originOnly || groupedLayout.containsItem(appItem)
+    Connections {
+      target: groupedLayout
+      function onViewportChanged() {
+        appItem.presentationVisible = !appItem.originOnly || groupedLayout.containsItem(appItem)
+        if (!appItem.presentationVisible) appItem.dismissPopups()
+        else appItem.refreshPopupGeometry()
+      }
+    }
     dockShown: root.dockShown
     fullscreenModeActive: root.fullscreenModeActive
     fullscreenEmphasized:
@@ -829,6 +891,7 @@ PanelWindow {
     windowActions: root.windowActions
     position: root.position
     visibleItems: root.renderedItems
+    clipItem: root.grouped ? groupedLayout : null
   }
 
   DockAppPicker {

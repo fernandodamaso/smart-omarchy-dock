@@ -127,4 +127,20 @@ assert.equal(isPrimaryVisibleItem(ungrouped, 1), false)
 assert.equal(isPrimaryVisibleItem(ungrouped, 2), true)
 assert.equal(isPrimaryVisibleItem([{ desktopId: "org.mozilla.firefox" }], 0), true)
 
+
+// App-wide sources belong to one rendered owner; local window urgency does not.
+const ownerScope = { primaryOwner: true, localUrgent: false }
+const localScope = { primaryOwner: false, localUrgent: true }
+assert.equal(context.scopedBadgeSeverity(false, true, 'none', ownerScope), 'none')
+assert.equal(context.scopedBadgeSeverity(false, true, 'none', localScope), 'urgent')
+assert.equal(context.scopedBadgeSeverity(true, true, 'urgent', { ...localScope, localUrgent: false }), 'none')
+assert.equal(context.scopedBadgeSeverity(true, false, 'none', ownerScope), 'attention')
+assert.equal(context.scopedBadgeSeverity(false, false, 'urgent', ownerScope), 'urgent')
+assert.equal(context.scopedBadgeSeverity(false, false, 'none', localScope), 'urgent', 'clearing notifications preserves window urgency')
+assert.equal(context.scopedBadgeSeverity(false, true, 'none'), 'urgent', 'flat urgency unchanged')
+assert.equal(context.applicationBadgeToken(true, 'automatic',
+  { authoritative: true, visible: true, count: 7 }, 'none'), 'count:7:none')
+assert.equal(context.applicationBadgeToken(true, 'automatic', null,
+  context.scopedBadgeSeverity(false, true, 'none', localScope)), 'urgent')
+
 console.log("attention badge model tests: PASS")

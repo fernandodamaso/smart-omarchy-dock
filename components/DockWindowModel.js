@@ -1,4 +1,5 @@
 .pragma library
+.import "DockModel.js" as DockModel
 
 function liveGroupMembers(candidates, liveToplevels) {
   var values = candidates || []
@@ -139,15 +140,41 @@ function monitorIdentity(monitor) {
   if (typeof monitor === "string" || typeof monitor === "number") {
     var raw = String(monitor).trim()
     if (!raw) return ""
+    if (/^id:[0-9]+$/.test(raw)) return "id:" + String(Number(raw.slice(3)))
+    if (/^(id:)?-[0-9]+$/.test(raw)) return ""
     if (/^-?[0-9]+$/.test(raw)) return "id:" + String(Number(raw))
+    if (raw.indexOf("name:") === 0) return raw
     return "name:" + raw
   }
 
   var ipc = monitor.lastIpcObject || monitor
-  var id = Number(ipc.id !== undefined ? ipc.id : monitor.id)
-  if (Number.isInteger(id)) return "id:" + id
+  var rawId = ipc.id !== undefined ? ipc.id : monitor.id
+  var id = rawId === null || rawId === "" ? NaN : Number(rawId)
+  if (Number.isInteger(id) && id >= 0) return "id:" + id
   var name = String(ipc.name !== undefined ? ipc.name : monitor.name || "").trim()
   return name ? "name:" + name : ""
+}
+
+// Resolve connector snapshots and IPC ids through the current monitor inventory.
+function canonicalMonitorIdentity(value, monitors) {
+  var identity = monitorIdentity(value)
+  var values = monitors || []
+  if (!identity) return ""
+  for (var i = 0; i < values.length; ++i) {
+    var monitor = values[i]
+    if (!monitor) continue
+    var ipc = monitor.lastIpcObject || monitor
+    if (identity === monitorIdentity(monitor)
+        || identity === monitorIdentity(ipc.name || monitor.name))
+      return monitorIdentity(monitor)
+  }
+  return monitors === undefined ? identity : ""
+}
+
+function handleUrgent(handle) {
+  if (!handle) return false
+  return typeof handle.urgent === "boolean" ? handle.urgent
+    : (handle.lastIpcObject || ({})).urgent === true
 }
 
 function focusedWorkspaceIdentity(monitors, focusedWorkspace) {
@@ -202,7 +229,7 @@ function locationForToplevel(toplevel, handles, originSnapshot) {
   var address = normalizedAddress(handle.address || ipc.address)
   var workspace = workspaceIdentity(ipc.workspace || handle.workspace)
   var minimized = workspace === "special:smartdock-minimized"
-  var urgent = ipc.urgent === true
+  var urgent = handleUrgent(handle)
 
   if (minimized) {
     var origins = originSnapshot || ({})
@@ -223,6 +250,7 @@ function locationForToplevel(toplevel, handles, originSnapshot) {
       workspaceKnown: originWorkspace !== "",
       monitorKnown: originMonitor !== "",
       minimized: true,
+      originValid: DockModel.normalizeWorkspaceTarget(origin.workspace) !== "",
       urgent: urgent
     }
   }
@@ -236,6 +264,7 @@ function locationForToplevel(toplevel, handles, originSnapshot) {
     workspaceKnown: workspace !== "",
     monitorKnown: monitor !== "",
     minimized: false,
+    sticky: ipc.pinned === true,
     urgent: urgent
   }
 }
@@ -322,7 +351,7 @@ function shouldRefreshWindowScope(eventName) {
     "openwindow", "closewindow", "movewindow", "movewindowv2",
     "workspace", "workspacev2", "createworkspace", "createworkspacev2",
     "destroyworkspace", "destroyworkspacev2", "focusedmon",
-    "activewindow", "activewindowv2", "fullscreen", "urgent",
+    "activewindow", "activewindowv2", "fullscreen", "urgent", "pin",
     "monitoradded", "monitoraddedv2", "monitorremoved", "monitorremovedv2"
   ].indexOf(String(eventName || "")) >= 0
 }
