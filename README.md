@@ -11,7 +11,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 
 - Smooth pointer-distance magnification
 - Freedesktop application icons and launching
-- Configurable application-icon left and middle click actions
+- Configurable application-icon left, middle, and grouped-window scroll actions
 - Optional grouped window previews when hovering application icons
 - Focuses an existing application on another workspace
 - Running-application indicators
@@ -280,6 +280,7 @@ width when the override is disabled.
   "autoHide": false,
   "clickAction": "focus-or-launch",
   "middleClickAction": "none",
+  "scrollAction": "none",
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
@@ -325,6 +326,7 @@ width when the override is disabled.
 | `autoHide` | Hide the dock until the pointer reaches its screen edge; can also be toggled from the right-click menu |
 | `clickAction` | Action for an unmodified Left click; defaults to legacy-compatible `focus-or-launch` |
 | `middleClickAction` | Action for an unmodified Middle click; defaults to `none` |
+| `scrollAction` | Vertical scroll action; `cycle-windows` cycles grouped live windows, while `none` preserves pass-through |
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
@@ -336,15 +338,17 @@ width when the override is disabled.
 
 ### Application pointer actions
 
-The two action keys accept the same vocabulary: `none`, `minimize-restore`,
-`previews`, `close`, and `focus-or-launch`.
+The Left and Middle click keys accept the same vocabulary: `none`,
+`minimize-restore`, `previews`, `close`, and `focus-or-launch`. `scrollAction`
+is intentionally narrower: `none` or `cycle-windows`.
 
 Input precedence is intentionally strict:
 
 - Right click always opens the existing application context menu.
 - Left click with no modifier uses `clickAction`.
 - Middle click with no modifier uses `middleClickAction`.
-- Ctrl, Alt, Meta, and mixed modifier combinations perform no application action.
+- Vertical-dominant scrolling uses `scrollAction`; horizontal/tied gestures pass through.
+- Ctrl, Alt, Meta, Shift, and mixed modifier combinations do not trigger scroll actions.
 
 The current action semantics are:
 
@@ -365,7 +369,13 @@ Existing configuration files need no migration. If either action key is absent,
 it normalizes to its default; an absent or invalid legacy `clickAction`
 normalizes to `focus-or-launch`. Older `focus` and `launch` action values are
 also normalized to `focus-or-launch`, so existing settings retain their useful
-behavior. Invalid values for `middleClickAction` normalize to `none`.
+behavior. Invalid values for `middleClickAction` normalize to `none`. Missing or invalid
+`scrollAction` values also normalize to `none`, so existing configurations keep
+their current behavior. When set to `cycle-windows`, scroll input is consumed
+only for a grouped icon with at least two live windows. High-resolution vertical
+deltas accumulate in 120-unit steps, residual input resets after about 220 ms,
+and minimized targets restore through the shared host-owned window controller
+before focus.
 
 Attention dots deliberately represent **attention state**, not inferred unread
 counts. SmartDock reduces three FDM-809 sources when they are available:

@@ -164,7 +164,8 @@ PanelWindow {
     autoHide)
   readonly property var applicationActions: DockModel.normalizeApplicationActionConfig({
     clickAction: effectiveSetting("clickAction"),
-    middleClickAction: effectiveSetting("middleClickAction")
+    middleClickAction: effectiveSetting("middleClickAction"),
+    scrollAction: effectiveSetting("scrollAction")
   })
   readonly property string controlCommand: DockModel.normalizeSetting(
     "controlCommand", effectiveSetting("controlCommand"))
