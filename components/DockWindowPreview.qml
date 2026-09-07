@@ -15,6 +15,9 @@ PopupWindow {
   required property var visibleItems
 
   property Item anchorItem: null
+  property string presentationId: ""
+  property var identityToplevel: null
+  property bool originOnly: false
   property string desktopId: ""
   property var applicationEntry: null
   property var members: []
@@ -58,15 +61,14 @@ PopupWindow {
   }
 
   function visibleTarget() {
-    var items = root.visibleItems || []
-    for (var i = 0; i < items.length; ++i) {
-      if (items[i] && String(items[i].desktopId || "") === root.desktopId)
-        return items[i]
-    }
-    return null
+    return PreviewModel.visiblePreviewTarget(
+      root.visibleItems, root.presentationId, root.identityToplevel)
   }
 
   function clearSession() {
+    root.presentationId = ""
+    root.identityToplevel = null
+    root.originOnly = false
     root.desktopId = ""
     root.applicationEntry = null
     root.members = []
@@ -105,6 +107,9 @@ PopupWindow {
     closeTimer.stop()
     root.anchorItem = anchorItem
     root.desktopId = String(desktopId || "")
+    root.presentationId = String(anchorItem.presentationId || root.desktopId)
+    root.identityToplevel = anchorItem.identityToplevel || null
+    root.originOnly = anchorItem.originOnly === true
     root.applicationEntry = applicationEntry || null
     root.members = requested
     root.anchorHovered = true
@@ -130,6 +135,7 @@ PopupWindow {
 
   function refreshFromVisibleItems() {
     if (!root.anchorItem || !root.desktopId) return
+    if (!root.anchorItem.visible) { root.dismissImmediately(); return }
     var target = root.visibleTarget()
     if (!target) {
       root.dismissImmediately()
@@ -146,7 +152,7 @@ PopupWindow {
 
   function activateToplevel(toplevel) {
     if (!root.windowActions
-        || !root.windowActions.activateToplevel(toplevel)) return false
+        || !root.windowActions.activateToplevel(toplevel, root.originOnly)) return false
     root.dismissImmediately()
     return true
   }
@@ -294,6 +300,7 @@ PopupWindow {
   Connections {
     target: root.anchorItem
     function onDestroyed() { root.dismissImmediately() }
+    function onVisibleChanged() { if (root.anchorItem && !root.anchorItem.visible) root.dismissImmediately() }
   }
 
   Connections {

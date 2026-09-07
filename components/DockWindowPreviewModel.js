@@ -62,3 +62,13 @@ function previewStatus(state) {
   if (workspace.indexOf("name:") === 0) workspace = workspace.slice(5)
   return "Workspace " + workspace
 }
+
+function visiblePreviewTarget(items, presentationId, identityToplevel) {
+  var values = items || []
+  for (var i = 0; i < values.length; ++i) {
+    var item = values[i]
+    if (item && String(item.presentationId || item.desktopId || "") === presentationId
+        && (item.identityToplevel || null) === (identityToplevel || null)) return item
+  }
+  return null
+}

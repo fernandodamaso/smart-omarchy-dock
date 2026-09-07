@@ -5,6 +5,19 @@ import "../components/DockWindowPreviewModel.js" as PreviewModel
 TestCase {
   name: "WindowPreviews"
 
+  function test_keyedRefreshNeverChoosesAnotherWorkspace() {
+    var a = { desktopId: "chrome", presentationId: "id:1/chrome" }
+    var b = { desktopId: "chrome", presentationId: "id:2/chrome" }
+    compare(PreviewModel.visiblePreviewTarget([a, b], b.presentationId, null), b)
+    compare(PreviewModel.visiblePreviewTarget([a], b.presentationId, null), null)
+    var first = {}
+    var second = {}
+    a.identityToplevel = first
+    b.presentationId = a.presentationId
+    b.identityToplevel = second
+    compare(PreviewModel.visiblePreviewTarget([a, b], a.presentationId, second), b)
+  }
+
   function test_onlyShowsGroupsWithAtLeastTwoLiveWindows() {
     var first = { title: "First" }
     var second = { title: "Second" }

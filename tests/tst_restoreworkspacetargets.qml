@@ -5,6 +5,14 @@ import "../components/DockModel.js" as DockModel
 TestCase {
   name: "RestoreWorkspaceTargets"
 
+  function test_switchesValidatedNamedAndLargeNumberedTargets() {
+    compare(DockModel.focusWorkspaceTargetRequest("11", false), "workspace 11")
+    compare(DockModel.focusWorkspaceTargetRequest("name:Design work", true),
+      'hl.dsp.focus({ workspace = "name:Design work" })')
+    compare(DockModel.focusWorkspaceTargetRequest("name:bad,dispatch", false), "")
+    compare(DockModel.focusWorkspaceTargetRequest("special:scratch", false), "")
+  }
+
   function test_acceptsNamedWorkspaceWithSpaces() {
     compare(
       DockModel.normalizeWorkspaceTarget("name:Design work"),

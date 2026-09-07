@@ -5,6 +5,18 @@ import "../components/DockModel.js" as DockModel
 TestCase {
   name: "DockModel"
 
+  function test_workspaceLayoutDefaultsRoundtripAndReset() {
+    compare(DockModel.normalizeSetting("workspaceLayout", undefined), "flat")
+    compare(DockModel.normalizeSetting("workspaceLayout", "invalid"), "flat")
+    compare(DockModel.normalizeSetting("workspaceLayout", "grouped"), "grouped")
+    var settings = DockModel.mergeSettings({ pinned: ["chrome"], other: 7 }, { workspaceLayout: "grouped" })
+    compare(JSON.parse(JSON.stringify(settings)).workspaceLayout, "grouped")
+    var reset = DockModel.mergeSettings(settings, DockModel.resetSettingsPatch())
+    compare(reset.workspaceLayout, "flat")
+    compare(reset.other, 7)
+    compare(reset.pinned[0], "chrome")
+  }
+
   function test_buildsAddressTargetedWindowManagementRequests() {
     compare(DockModel.normalizeWindowAddress("ABC123"), "0xabc123")
     compare(DockModel.normalizeWindowAddress("0xABC123"), "0xabc123")

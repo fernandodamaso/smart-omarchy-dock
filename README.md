@@ -523,3 +523,11 @@ This disables cursor warping for all workspace changes, not only dock clicks.
 ## License
 
 [MIT](LICENSE)
+
+### Workspace cards (WS1 opt-in)
+
+Set `"workspaceLayout": "grouped"` in `${XDG_CONFIG_HOME:-$HOME/.config}/smartdock/dock.json` to enable horizontal workspace cards; live reload applies the change. Set it back to `"flat"` to roll back. Missing/invalid values and Reset use flat. Left/right positions and cards wider than the screen use flat without changing the saved preference.
+
+Each monitor expands its own active normal workspace, including when empty. Other registered workspaces remain compact and show local window counts; click a card to switch. Closed pinned launchers and **Other windows** (unknown/special membership) stay outside normal cards. Known windows on another monitor are excluded. Window actions and previews use only the item's members; hide and launcher pinning remain application-wide. Grouped dragging and redundant per-icon workspace labels are disabled.
+
+Grouped minimize/restore requires a validated recorded workspace: an unknown origin never moves a window to a guessed focused workspace. Flat mode retains its fallback. Grouped application attention badges and motion are temporarily suppressed until WS3. Sticky/topology refinements are WS2; crowded-screen scrolling and the layout settings UI are WS4. Real GUI acceptance is pending FDM-848.

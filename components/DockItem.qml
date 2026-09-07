@@ -42,6 +42,23 @@ Item {
   required property string position
   required property bool vertical
   required property bool previewActive
+  property bool originOnly: false
+  property int scopeRevision: 0
+  property bool menuOpen: false
+  onScopeRevisionChanged: if (originOnly && contextMenu.visible) contextMenu.dismiss()
+  onVisibleChanged: if (!visible) {
+    contextMenu.dismiss()
+    root.previewReleased(root)
+  }
+  Component.onDestruction: {
+    if (menuOpen) {
+      menuOpen = false
+      root.contextMenuVisibilityChanged(false)
+    }
+    root.previewReleased(root)
+  }
+  property string presentationId: desktopId
+  property var identityToplevel: null
   // Kept as an optional compatibility hook for preview controllers that use
   // the earlier FDM-814 name; the host's previewActive binding remains the
   // canonical source.
@@ -73,7 +90,7 @@ Item {
     ? runningToplevels[0]
     : null
   readonly property int runningCount: runningToplevels.length
-  readonly property string workspaceBadge: DockModel.workspaceBadgeText(
+  readonly property string workspaceBadge: originOnly ? "" : DockModel.workspaceBadgeText(
     runningToplevels, hyprToplevels)
   readonly property int minimizedCount: contextMenu.minimizedCount
   readonly property int visibleWindowCount: contextMenu.visibleWindowCount
@@ -92,14 +109,14 @@ Item {
       fullscreenModeActive, fullscreenEmphasized, mouse.hovered)
   readonly property real iconScale: fullscreenPresentation.scale
     * (1 + (magnification - 1) * influence)
-  readonly property var urgentBadgeState: badgeTracker
+  readonly property var urgentBadgeState: !originOnly && badgeTracker
     ? badgeTracker.urgentStateFor(desktopId, primaryBadgeOwner)
     : ({ windowUrgent: false, primaryOwner: primaryBadgeOwner,
          windowUrgentRevision: 0 })
   readonly property bool windowUrgent: urgentBadgeState.windowUrgent === true
   readonly property int windowUrgentRevision:
     Number(urgentBadgeState.windowUrgentRevision || 0)
-  readonly property bool attentionActive: badgeTracker
+  readonly property bool attentionActive: !originOnly && badgeTracker
     ? badgeTracker.motionAttentionFor(desktopId) : false
   readonly property bool urgentMotionSuppressed: mouse.hovered
     || dragHandler.active || contextMenu.visible
@@ -119,9 +136,9 @@ Item {
     switch (action) {
     case "cycle-windows":
       return root.windowActions.cycleToplevels(
-        root.runningToplevels, request.direction, root.windowActions.activeToplevel)
+        root.runningToplevels, request.direction, root.windowActions.activeToplevel, root.originOnly)
     case "minimize-restore":
-      return root.windowActions.minimizeRestoreToplevels(root.runningToplevels)
+      return root.windowActions.minimizeRestoreToplevels(root.runningToplevels, root.originOnly)
     case "previews":
       if (!root.showPreviews || root.runningCount < 2) return false
       root.previewRequested(root, root.desktopId, root.runningToplevels, root.entry)
@@ -135,7 +152,7 @@ Item {
         root.lastActivatedToplevel = DockModel.nextToplevelIndex(
           root.lastActivatedToplevel, root.runningCount)
         return root.windowActions.activateToplevel(
-          root.runningToplevels[root.lastActivatedToplevel])
+          root.runningToplevels[root.lastActivatedToplevel], root.originOnly)
       }
       root.launch()
       return true
@@ -157,7 +174,7 @@ Item {
   }
 
   function primeUrgentMotion() {
-    if (!badgeTracker || !primaryBadgeOwner) return
+    if (originOnly || !badgeTracker || !primaryBadgeOwner) return
     badgeTracker.ensureUrgentState(desktopId)
     var state = badgeTracker.urgentStateFor(desktopId, true)
     badgeTracker.primeUrgentMotion(
@@ -165,7 +182,7 @@ Item {
   }
 
   function requestUrgentMotion(reminder) {
-    if (!badgeTracker || !primaryBadgeOwner) return
+    if (originOnly || !badgeTracker || !primaryBadgeOwner) return
     if (urgentMotionSuppressed) attentionMotion.stop()
     var play = badgeTracker.requestUrgentMotion(desktopId, {
       revision: windowUrgentRevision,
@@ -498,7 +515,7 @@ Item {
   DragHandler {
     id: dragHandler
 
-    enabled: root.pinnedItem
+    enabled: root.pinnedItem && !root.originOnly
     target: null
     acceptedButtons: Qt.LeftButton
     acceptedModifiers: Qt.NoModifier
@@ -528,7 +545,13 @@ Item {
     pinnedItem: root.pinnedItem
     runningToplevels: root.runningToplevels
     windowActions: root.windowActions
-    onVisibleChanged: root.contextMenuVisibilityChanged(visible)
+    originOnly: root.originOnly
+    onVisibleChanged: {
+      if (root.menuOpen !== visible) {
+        root.menuOpen = visible
+        root.contextMenuVisibilityChanged(visible)
+      }
+    }
     onOpenNewWindow: root.launch()
     onAddApplication: root.addApplicationRequested()
     onRemoveFromDock: root.removeRequested(root.desktopId)

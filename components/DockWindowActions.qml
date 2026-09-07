@@ -178,15 +178,21 @@ Item {
     return true
   }
 
-  function minimizeToplevel(toplevel) {
+  function resolveOriginTarget(recorded, originOnly) {
+    var target = DockModel.normalizeWorkspaceTarget(recorded)
+    if (recorded || originOnly === true) return target
+    return workspaceTarget(Hyprland.focusedWorkspace)
+  }
+
+  function minimizeToplevel(toplevel, originOnly) {
     if (!isAlive(toplevel) || isMinimized(toplevel)) return false
 
     var handle = handleFor(toplevel)
     var address = DockModel.normalizeWindowAddress(handle ? handle.address : "")
     if (!address) return false
 
-    var workspace = workspaceTarget(workspaceForHandle(handle))
-      || workspaceTarget(Hyprland.focusedWorkspace)
+    var workspace = resolveOriginTarget(
+      workspaceTarget(workspaceForHandle(handle)), originOnly)
     if (!workspace) return false
 
     var request = DockModel.minimizeWindowRequest(address, Hyprland.usingLua)
@@ -199,15 +205,14 @@ Item {
     return dispatchRequest(request)
   }
 
-  function restoreToplevel(toplevel) {
+  function restoreToplevel(toplevel, originOnly) {
     if (!isAlive(toplevel)) return false
 
     var address = addressFor(toplevel)
     if (!address) return false
 
     var origin = originFor(address)
-    var target = origin && origin.workspace
-      ? origin.workspace : workspaceTarget(Hyprland.focusedWorkspace)
+    var target = resolveOriginTarget(origin ? origin.workspace : "", originOnly)
     if (!target) return false
 
     var request = DockModel.restoreWindowRequest(
@@ -219,11 +224,11 @@ Item {
     return true
   }
 
-  function activateToplevel(toplevel) {
+  function activateToplevel(toplevel, originOnly) {
     if (!isAlive(toplevel)) return false
 
     if (isMinimized(toplevel))
-      return restoreToplevel(toplevel)
+      return restoreToplevel(toplevel, originOnly)
 
     var request = DockModel.focusWindowRequest(
       addressFor(toplevel), Hyprland.usingLua)
@@ -236,12 +241,12 @@ Item {
     return false
   }
 
-  function focusToplevels(toplevels) {
+  function focusToplevels(toplevels, originOnly) {
     var member = activeMember(toplevels)
-    return member ? activateToplevel(member) : false
+    return member ? activateToplevel(member, originOnly) : false
   }
 
-  function cycleToplevels(toplevels, direction, activeToplevel) {
+  function cycleToplevels(toplevels, direction, activeToplevel, originOnly) {
     var members = liveMembers(toplevels)
     if (members.length < 2) return false
 
@@ -255,7 +260,7 @@ Item {
     if (!address) return false
 
     if (isMinimized(target)) {
-      if (!restoreToplevel(target)) return false
+      if (!restoreToplevel(target, originOnly)) return false
       var focusRequest = DockModel.focusWindowRequest(address, Hyprland.usingLua)
       if (dispatchRequest(focusRequest)) return true
       if (typeof target.activate === "function") {
@@ -265,10 +270,10 @@ Item {
       return true
     }
 
-    return activateToplevel(target)
+    return activateToplevel(target, originOnly)
   }
 
-  function minimizeRestoreToplevels(toplevels) {
+  function minimizeRestoreToplevels(toplevels, originOnly) {
     var members = liveMembers(toplevels)
     if (members.length === 0) return false
 
@@ -280,9 +285,9 @@ Item {
     var changed = false
     for (var i = 0; i < members.length; ++i) {
       if (mode === "minimize" && !states[i].minimized)
-        changed = minimizeToplevel(members[i]) || changed
+        changed = minimizeToplevel(members[i], originOnly) || changed
       else if (mode === "restore" && states[i].minimized)
-        changed = restoreToplevel(members[i]) || changed
+        changed = restoreToplevel(members[i], originOnly) || changed
     }
     return changed
   }
@@ -302,13 +307,13 @@ Item {
     return true
   }
 
-  function showToplevelPreviews(desktopId, toplevels) {
+  function showToplevelPreviews(desktopId, toplevels, originOnly) {
     var members = liveMembers(toplevels)
     if (members.length === 0 || !previewController
         || typeof previewController.showApplicationPreviews !== "function")
       return false
 
-    previewController.showApplicationPreviews(String(desktopId || ""), members)
+    previewController.showApplicationPreviews(String(desktopId || ""), members, originOnly === true)
     return true
   }
 
