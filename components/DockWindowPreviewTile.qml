@@ -15,6 +15,7 @@ Item {
   required property bool captureEnabled
   property int previewWidth: 216
   property int previewHeight: 122
+  property bool captureStopped: false
   signal activateRequested(var toplevel)
   signal closeRequested(var toplevel)
 
@@ -33,6 +34,14 @@ Item {
     && root.applicationEntry.icon
       ? Quickshell.iconPath(root.applicationEntry.icon, true)
       : Quickshell.iconPath("application-x-executable", true)
+
+  implicitWidth: 232
+  implicitHeight: 176
+
+  Accessible.role: Accessible.Button
+  Accessible.name: root.titleText + ", " + root.statusText
+  Accessible.description: "Focus or restore this application window"
+  Accessible.onPressAction: root.activateRequested(root.toplevel)
 
   BorderSurface {
     anchors.fill: parent
@@ -61,30 +70,40 @@ Item {
       live: false
       paintCursor: false
       constraintSize: Qt.size(root.previewWidth, root.previewHeight)
-      width: hasContent ? Math.min(parent.width, Math.max(1, implicitWidth)) : 0
-      height: hasContent ? Math.min(parent.height, Math.max(1, implicitHeight)) : 0
-      visible: hasContent
+      width: hasContent && !root.captureStopped
+        ? Math.min(parent.width, Math.max(1, implicitWidth)) : 0
+      height: hasContent && !root.captureStopped
+        ? Math.min(parent.height, Math.max(1, implicitHeight)) : 0
+      visible: hasContent && !root.captureStopped
 
       onCaptureSourceChanged: {
+        root.captureStopped = false
         if (!captureSource || !root.captureEnabled) return
         Qt.callLater(() => {
           if (preview.captureSource && root.captureEnabled)
             preview.captureFrame()
         })
       }
+      onStopped: root.captureStopped = true
     }
 
-    Text {
-      anchors.centerIn: parent
-      visible: !preview.hasContent
-      text: "Preview unavailable"
-      color: Color.muted
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
+    Item {
+      anchors.fill: parent
+      visible: root.captureStopped || !preview.hasContent
+
+      Text {
+        anchors.centerIn: parent
+        text: "Preview unavailable"
+        color: Color.muted
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+      }
     }
   }
 
   IconImage {
+    id: appIcon
+
     x: 10
     y: previewFrame.y + previewFrame.height + 10
     width: 26
@@ -93,34 +112,38 @@ Item {
     asynchronous: true
   }
 
-  Text {
-    x: 44
-    y: previewFrame.y + previewFrame.height + 9
-    width: parent.width - x - closeButton.width - 18
-    text: root.titleText
-    color: Color.menu.text
-    font.family: Style.font.family
-    font.pixelSize: Style.font.bodySmall
-    font.bold: true
-    elide: Text.ElideRight
-  }
+  Item {
+    id: metadata
 
-  Text {
-    x: 44
-    y: previewFrame.y + previewFrame.height + 29
+    x: appIcon.x + appIcon.width + 8
+    y: previewFrame.y + previewFrame.height + 7
     width: parent.width - x - closeButton.width - 18
-    text: root.statusText
-    color: Color.muted
-    font.family: Style.font.family
-    font.pixelSize: Style.font.caption
-    elide: Text.ElideRight
-  }
+    height: 38
 
-  MouseArea {
-    anchors.fill: parent
-    anchors.rightMargin: closeButton.width + 10
-    cursorShape: Qt.PointingHandCursor
-    onClicked: root.activateRequested(root.toplevel)
+    Text {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: parent.top
+      text: root.titleText
+      color: Color.menu.text
+      font.family: Style.font.family
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
+      elide: Text.ElideRight
+      maximumLineCount: 1
+    }
+
+    Text {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      text: root.statusText
+      color: Color.muted
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      elide: Text.ElideRight
+      maximumLineCount: 1
+    }
   }
 
   Rectangle {
@@ -134,6 +157,10 @@ Item {
     color: closeMouse.containsMouse
       ? Color.menu.selectedBackground : "transparent"
     z: 2
+
+    Accessible.role: Accessible.Button
+    Accessible.name: "Close " + root.titleText
+    Accessible.onPressAction: root.closeRequested(root.toplevel)
 
     DockLucideIcon {
       anchors.centerIn: parent
@@ -152,6 +179,13 @@ Item {
       cursorShape: Qt.PointingHandCursor
       onClicked: root.closeRequested(root.toplevel)
     }
+  }
+
+  MouseArea {
+    anchors.fill: parent
+    anchors.rightMargin: closeButton.width + 10
+    cursorShape: Qt.PointingHandCursor
+    onClicked: root.activateRequested(root.toplevel)
   }
 
   Component.onDestruction: preview.captureSource = null
