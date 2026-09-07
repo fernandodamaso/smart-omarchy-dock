@@ -40,7 +40,7 @@ TestCase {
     })
     verify(indicator)
     compare(indicator.indicatorGeometry.visible, true)
-    compare(indicator.width, 12)
+    compare(indicator.width, 30)
     compare(indicator.height, 4)
     compare(indicator.markerColor, indicator.focusedColor)
   }
@@ -52,16 +52,16 @@ TestCase {
       position: "left"
     })
     verify(indicator)
-    compare(indicator.x, 44)
-    compare(indicator.y, 15)
+    compare(indicator.x, 49)
+    compare(indicator.y, 6)
     compare(indicator.width, 4)
-    compare(indicator.height, 12)
+    compare(indicator.height, 30)
 
     indicator.position = "right"
-    compare(indicator.x, -6)
-    compare(indicator.y, 15)
+    compare(indicator.x, -11)
+    compare(indicator.y, 6)
     compare(indicator.width, 4)
-    compare(indicator.height, 12)
+    compare(indicator.height, 30)
   }
 
   function test_notRunningHidesMarker() {

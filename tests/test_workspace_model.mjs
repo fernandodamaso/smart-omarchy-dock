@@ -32,7 +32,13 @@ assert.deepEqual(Array.from(result.groups, g => g.count), [1, 2])
 assert.equal(result.groups[0].items[0].toplevels[0], windows[0])
 assert.equal(result.groups[1].items[0].toplevels.length, 2)
 assert.notEqual(result.groups[0].items[0].presentationId, result.groups[1].items[0].presentationId)
-assert.equal(result.renderedItems.length, 2, 'closed launcher plus expanded W1')
+assert.equal(result.renderedItems.length, 3, 'both workspace apps plus closed launcher')
+assert.deepEqual(Array.from(result.renderedItems, item => item.presentationId),
+  ['id:1/chrome', 'id:2/chrome', 'global/closed'])
+context.activeWorkspace = 'id:2'
+assert.deepEqual(Array.from(build().renderedItems, item => item.presentationId),
+  ['id:2/chrome', 'id:1/chrome', 'global/closed'], 'active owner precedes other visible workspaces')
+context.activeWorkspace = 'id:1'
 assert.deepEqual(Array.from(result.globalLaunchers, i => i.desktopId), ['closed'])
 assert.equal(build(['chrome']).groups[0].count, 0)
 result = build([], false)
@@ -151,7 +157,9 @@ assert.equal(build(['chrome']).groups[1].urgent, false, 'hiding removes local ur
 const BadgeModel = load('DockBadgeModel')
 assert.equal(BadgeModel.isPrimaryVisibleItem(result.groups[1].items, 0), true)
 assert.equal(BadgeModel.isPrimaryVisibleItem(result.groups[1].items, 1), false)
-assert.equal(result.renderedItems.some(item => item.localUrgent), false, 'collapsed urgent windows cannot own app badges')
+assert.equal(result.renderedItems.some(item => item.localUrgent), true, 'inactive urgent windows remain rendered')
+assert.equal(BadgeModel.isPrimaryVisibleItem(result.renderedItems, 0), true)
+assert.equal(BadgeModel.isPrimaryVisibleItem(result.renderedItems, 1), false)
 handles[2].lastIpcObject.monitor = 1
 assert.equal(build().groups[1].urgent, false, 'move transfers urgency with the same window reference')
 

@@ -430,12 +430,12 @@ function applicationStateIndicatorGeometry(position, iconWidth, iconHeight,
   var thickness = Math.max(3,
     Math.min(5, Math.round(minimumDimension * 0.1)))
   var focusedLength = Math.max(10,
-    Math.min(18, Math.round(minimumDimension * 0.28)))
+    Math.min(72, Math.round(minimumDimension * 0.72)))
   var markerLength = focused ? focusedLength : thickness
   var vertical = edge === "left" || edge === "right"
   var markerWidth = vertical ? thickness : markerLength
   var markerHeight = vertical ? markerLength : thickness
-  var gap = 2
+  var gap = 7
   var x = Math.round((width - markerWidth) / 2)
   var y = Math.round((height - markerHeight) / 2)
 

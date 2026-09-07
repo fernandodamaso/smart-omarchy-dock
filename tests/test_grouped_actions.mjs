@@ -67,4 +67,13 @@ assert.equal(requests.length, 0)
 assert.equal(Object.keys(actions.minimizedOrigins).length, 0, 'no guessed minimize origin')
 assert.equal(actions.minimizeToplevel(windows[0]), true)
 assert.equal(actions.minimizedOrigins['0x1'].workspace, '3')
+
+const cards = [{ active: false }, { active: true, headerWidth: 45 }]
+const revealed = []
+const dock = methods('Dock.qml', {
+  grouped: true, workspaceCards: { count: cards.length, itemAt: i => cards[i] },
+  groupedLayout: { ensureVisible: (card, width) => revealed.push([card, width]) }
+})
+dock.revealActiveWorkspace()
+assert.deepEqual(revealed, [[cards[1], 45]], 'workspace switch reveals the active header')
 console.log('grouped action routes: PASS')

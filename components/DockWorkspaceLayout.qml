@@ -68,7 +68,7 @@ Item {
       id: content
       x: root.contentPadding
       y: root.rowY
-      spacing: 6
+      spacing: 12
       onImplicitWidthChanged: Qt.callLater(root.clampOffset)
       onPositioningComplete: root.viewportChanged()
     }

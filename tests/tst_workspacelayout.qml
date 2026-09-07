@@ -64,7 +64,7 @@ TestCase {
     compare(layout.contentX, 0)
   }
 
-  function test_activeHeaderAndCollapseClamp() {
+  function test_activeHeaderAndWindowRemovalClamp() {
     var layout = makeLayout()
     layout.scrollBy(10000)
     layout.ensureVisible(layout.activeCard, 56)
@@ -79,6 +79,21 @@ TestCase {
     layout.last.visible = false
     wait(30)
     compare(layout.contentX, 0)
+  }
+
+  function test_inactiveAppsStayReachableAfterActiveHeaderReveal() {
+    var layout = makeLayout()
+    // Multiple populated cards exceed the viewport, regardless of focus.
+    layout.last.width = 240
+    wait(30)
+    layout.ensureVisible(layout.activeCard, 56)
+    verify(layout.overflowing)
+    compare(layout.last.width, 240)
+    layout.scrollBy(10000)
+    verify(layout.containsItem(layout.last))
+    layout.ensureVisible(layout.first, 56)
+    verify(layout.containsItem(layout.first))
+    compare(layout.last.width, 240)
   }
 
   function test_smallExtentAndUtilitySpaceChanges() {

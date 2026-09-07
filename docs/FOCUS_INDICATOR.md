@@ -20,7 +20,7 @@ This keeps focus identity tied to the compositor toplevel object while the exist
 
 ## Geometry
 
-`DockModel.applicationStateIndicatorGeometry()` owns marker geometry for all dock edges. At the default 42 px icon size, a running marker is 4×4 px and a focused marker is 12×4 px on top/bottom docks or 4×12 px on left/right docks. Thickness and focused length are bounded for supported icon-size changes.
+`DockModel.applicationStateIndicatorGeometry()` owns marker geometry for all dock edges. At the default 42 px icon size, a running marker is 4×4 px and a focused marker is 30×4 px on top/bottom docks or 4×30 px on left/right docks. The focused underline spans 72% of the icon (10–72 px), with a 7 px gap to clear the tile. Thickness remains bounded for supported icon-size changes.
 
 The reusable `DockApplicationStateIndicator.qml` lives inside the icon container, so existing fullscreen presentation, hover magnification, drag transforms, and reorder transforms move the marker with the application icon instead of maintaining separate screen coordinates.
 

@@ -70,12 +70,12 @@ not duplicate the dot.
 
 With `workspaceLayout: "grouped"`, window urgency comes only from each item's
 actual members. A known live handle urgency value wins over IPC data, including
-live false overriding stale true. Collapsed cards show static urgency; their
-application delegates and reminder timers do not exist.
+live false overriding stale true. Inactive cards keep all their application
+icons visible; off-viewport items suppress reminder motion and popups.
 
 Application notifications, SNI attention, and launcher counts remain app-wide.
 `isPrimaryVisibleItem()` selects one owner from actual rendered items, with the
-active workspace before global launchers and fallback items. Every urgent local
+active workspace first, then other workspaces, global launchers and fallback items. Every urgent local
 member remains marked even when another item owns the app-wide badge. A launcher
 count of 7 does not change a workspace's count of two windows. Clearing either
 notification attention or window urgency leaves the other source intact.
@@ -125,8 +125,9 @@ replayed. Startup and QML reload use the same current-revision priming rule.
 leaving the static urgent indicator and FDM-811 numeric count state unchanged.
 
 Grouped motion reuses the shared tracker's urgency and motion reducers, keyed by
-monitor and logical item identity. Existing state survives collapse/expansion;
-recreating a delegate does not itself request a reminder or reset its cooldown.
+monitor and logical item identity. Existing state survives workspace switches
+and delegate recreation; recreating a delegate does not itself request a
+reminder or reset its cooldown.
 Items removed by close, hiding, or relocation are pruned on presentation refresh.
 The motion regression reproduces both delegate-reset replay and cross-workspace
 revision consumption before checking independent retained state. Clipped items
