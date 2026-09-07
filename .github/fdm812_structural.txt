@@ -1,0 +1,115 @@
+===== tests/check_attention_badges.sh =====
+check_attention_badges: PASS
+exit=0
+===== tests/check_color_picker.sh =====
+Dock color pickers are wired for dock surface and workspace badge colors
+exit=0
+===== tests/check_control_icon_color.sh =====
+Dock Controls glyph keeps its foreground color on hover
+exit=0
+===== tests/check_cross_axis_alignment.sh =====
+Dock icon containers use symmetric cross-axis alignment
+exit=0
+===== tests/check_fdm816_harness.sh =====
+check_fdm816_harness: PASS
+exit=0
+===== tests/check_focus_indicator.sh =====
+check_focus_indicator: PASS
+exit=0
+===== tests/check_hover_glow.sh =====
+exit=0
+===== tests/check_launcher_badge_counts.sh =====
+check_launcher_badge_counts: PASS
+exit=0
+===== tests/check_lucide_menu_assets.sh =====
+Lucide menu assets and controls-menu wiring are present
+exit=0
+===== tests/check_pointer_actions.sh =====
+check_pointer_actions: PASS
+exit=0
+===== tests/check_reserve_space_visibility.sh =====
+Reserve space follows visible (non-auto-hidden) dock state
+exit=0
+===== tests/check_settings_layout.sh =====
+Dock Settings uses a responsive wide layout
+exit=0
+===== tests/check_settings_popup_focus.sh =====
+exit=0
+===== tests/check_settings_visual_system.sh =====
+Dock Settings visual primitives and Lucide assets are present
+exit=0
+===== tests/check_showtrash_reload.sh =====
+Show Trash reload state is explicit and polling is load-gated
+exit=0
+===== tests/check_surface_overrides.sh =====
+exit=0
+===== tests/check_terminal_agent_asset_integrity.sh =====
+check_terminal_agent_asset_integrity: PASS
+exit=0
+===== tests/check_terminal_agent_assets.sh =====
+Installed SmartDock terminal-agent launchers and icons.
+Removed SmartDock terminal-agent launchers and icons.
+Preserved configuration: /tmp/tmp.IzgHxAW8MP/config/smartdock/dock.json
+Autostart enabled: /tmp/tmp.IzgHxAW8MP/config/autostart/smartdock.desktop
+
+SmartDock for Omarchy installed successfully.
+
+Run now:
+  /tmp/tmp.IzgHxAW8MP/bin/smartdock --daemonize
+
+Application launcher:
+  SmartDock for Omarchy
+
+Configure:
+  /tmp/tmp.IzgHxAW8MP/config/smartdock/dock.json
+
+Update later:
+  /tmp/tmp.IzgHxAW8MP/bin/smartdock --update
+
+Note: add /tmp/tmp.IzgHxAW8MP/bin to PATH to run smartdock by name.
+Preserved configuration: /tmp/tmp.IzgHxAW8MP/config/smartdock/dock.json
+Autostart enabled: /tmp/tmp.IzgHxAW8MP/config/autostart/smartdock.desktop
+
+SmartDock for Omarchy installed successfully.
+
+Run now:
+  /tmp/tmp.IzgHxAW8MP/bin/smartdock --daemonize
+
+Application launcher:
+  SmartDock for Omarchy
+
+Configure:
+  /tmp/tmp.IzgHxAW8MP/config/smartdock/dock.json
+
+Update later:
+  /tmp/tmp.IzgHxAW8MP/bin/smartdock --update
+
+Note: add /tmp/tmp.IzgHxAW8MP/bin to PATH to run smartdock by name.
+Removed SmartDock terminal-agent launchers and icons.
+Removed SmartDock for Omarchy. Configuration preserved at:
+  /tmp/tmp.IzgHxAW8MP/config/smartdock/dock.json
+check_terminal_agent_assets: PASS
+exit=0
+===== tests/check_tooltip_popup.sh =====
+exit=0
+===== tests/check_trash_color.sh =====
+Trash glyph remains opaque white on hover
+exit=0
+===== tests/check_urgent_window_motion.sh =====
+check_urgent_window_motion: PASS
+exit=0
+===== tests/check_visible_items_snapshot.sh =====
+check_visible_items_snapshot: fullscreen delayed refresh must schedule visibleItems
+exit=1
+===== tests/check_window_actions.sh =====
+check_window_actions: PASS
+exit=0
+===== tests/check_window_cycling.sh =====
+check_window_cycling: PASS
+exit=0
+===== tests/check_window_previews.sh =====
+check_window_previews: PASS
+exit=0
+===== tests/check_window_scope.sh =====
+window-scope structural checks passed
+exit=0
