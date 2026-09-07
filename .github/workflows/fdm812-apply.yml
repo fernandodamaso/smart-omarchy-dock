@@ -20,7 +20,21 @@ jobs:
           fetch-depth: 0
           ref: recovery/fdm-812-window-scope
       - name: Apply exact recovery patch
-        run: python3 .github/fdm812_apply.py
+        run: |
+          set +e
+          python3 .github/fdm812_apply.py > .github/fdm812_failure.txt 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add .github/fdm812_failure.txt
+            git commit -m 'chore: capture FDM-812 patch failure'
+            git push origin HEAD:recovery/fdm-812-window-scope
+            cat .github/fdm812_failure.txt
+            exit "$status"
+          fi
+          rm -f .github/fdm812_failure.txt
       - name: Commit implementation
         run: |
           set -euo pipefail
