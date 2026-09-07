@@ -316,12 +316,20 @@ function applicationActionOptions() {
   ]
 }
 
+function scrollActionOptions() {
+  return [
+    { value: "none", label: "No action" },
+    { value: "cycle-windows", label: "Cycle windows" }
+  ]
+}
+
 function normalizeApplicationActionConfig(settings) {
   var source = settings || ({})
   return {
     clickAction: normalizeSetting("clickAction", source.clickAction),
     middleClickAction: normalizeSetting(
-      "middleClickAction", source.middleClickAction)
+      "middleClickAction", source.middleClickAction),
+    scrollAction: normalizeSetting("scrollAction", source.scrollAction)
   }
 }
 
@@ -341,11 +349,14 @@ function resolveApplicationPointerAction(config, input, modifiers) {
     return shift ? "none" : actionConfig.clickAction
   if (kind === "middle")
     return shift ? "none" : actionConfig.middleClickAction
+  if (kind === "scroll")
+    return shift ? "none" : actionConfig.scrollAction
   return "none"
 }
 
 function applicationActionCanRun(action, runningCount) {
   var value = String(action === undefined || action === null ? "" : action).trim()
+  if (value === "cycle-windows") return Number(runningCount) >= 2
   if (applicationActionValues().indexOf(value) < 0 || value === "none")
     return false
   if (value === "focus-or-launch") return true
@@ -385,6 +396,7 @@ function settingsDefaults() {
     autoHide: false,
     clickAction: "focus-or-launch",
     middleClickAction: "none",
+    scrollAction: "none",
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
     groupWindows: true
@@ -598,6 +610,11 @@ function normalizeSetting(key, value) {
   case "sortByWorkspace":
   case "groupWindows":
     return typeof value === "boolean" ? value : defaults[key]
+  case "scrollAction": {
+    var scrollAction = String(
+      value === undefined || value === null ? "" : value).trim()
+    return scrollAction === "cycle-windows" ? scrollAction : defaults.scrollAction
+  }
   case "clickAction":
   case "middleClickAction": {
     var action = String(value === undefined || value === null ? "" : value).trim()

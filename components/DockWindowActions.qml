@@ -14,6 +14,7 @@ Item {
   // surface. Dock.qml owns the built-in preview popup and does not create a
   // second window-actions controller.
   property var previewController: null
+  readonly property var activeToplevel: ToplevelManager.activeToplevel
 
   function currentToplevels() {
     return ToplevelManager.toplevels
@@ -164,7 +165,7 @@ Item {
 
   function activeMember(toplevels) {
     return DockWindowModel.activeGroupMember(
-      toplevels, ToplevelManager.activeToplevel, currentToplevels())
+      toplevels, root.activeToplevel, currentToplevels())
   }
 
   function dispatchRequest(request) {
@@ -234,6 +235,33 @@ Item {
   function focusToplevels(toplevels) {
     var member = activeMember(toplevels)
     return member ? activateToplevel(member) : false
+  }
+
+  function cycleToplevels(toplevels, direction, activeToplevel) {
+    var members = liveMembers(toplevels)
+    if (members.length < 2) return false
+
+    var active = activeToplevel === undefined
+      ? root.activeToplevel : activeToplevel
+    var target = DockWindowModel.cycleGroupMember(
+      members, active, currentToplevels(), direction)
+    if (!target) return false
+
+    var address = addressFor(target)
+    if (!address) return false
+
+    if (isMinimized(target)) {
+      if (!restoreToplevel(target)) return false
+      var focusRequest = DockModel.focusWindowRequest(address, Hyprland.usingLua)
+      if (dispatchRequest(focusRequest)) return true
+      if (typeof target.activate === "function") {
+        target.activate()
+        return true
+      }
+      return true
+    }
+
+    return activateToplevel(target)
   }
 
   function minimizeRestoreToplevels(toplevels) {

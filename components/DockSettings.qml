@@ -1080,6 +1080,18 @@ PanelWindow {
                 onChanged: value => root.commit("middleClickAction", value)
               }
 
+              DockActionDropdown {
+                width: parent.width
+                label: "Scroll"
+                value: root.current("scrollAction")
+                options: DockModel.scrollActionOptions()
+                foreground: Color.menu.text
+                background: Color.menu.background
+                popupBorder: Color.menu.border
+                accent: Color.accent
+                onChanged: value => root.commit("scrollAction", value)
+              }
+
             }
           }
 

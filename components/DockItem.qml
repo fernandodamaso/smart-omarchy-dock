@@ -6,6 +6,7 @@ import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
 import "DockBadgeModel.js" as BadgeModel
+import "DockWindowModel.js" as DockWindowModel
 
 Item {
   id: root
@@ -47,6 +48,8 @@ Item {
   property bool previewInteractionActive: false
   property real reorderOffset: 0
   property int lastActivatedToplevel: -1
+  property real wheelRemainder: 0
+  property double lastWheelTimestamp: 0
   signal dragStarted(int itemIndex)
   signal dragMoved(real mainPosition)
   signal dragFinished()
@@ -111,10 +114,14 @@ Item {
       Quickshell.execDetached(["gtk-launch", desktopId + ".desktop"])
   }
 
-  function dispatchApplicationAction(action) {
+  function dispatchApplicationAction(action, options) {
     if (!DockModel.applicationActionCanRun(action, runningCount)) return false
 
+    var request = options || ({})
     switch (action) {
+    case "cycle-windows":
+      return root.windowActions.cycleToplevels(
+        root.runningToplevels, request.direction, root.windowActions.activeToplevel)
     case "minimize-restore":
       return root.windowActions.minimizeRestoreToplevels(root.runningToplevels)
     case "previews":
@@ -139,13 +146,15 @@ Item {
     }
   }
 
-  function dispatchPointerAction(input, modifiers) {
+  function dispatchPointerAction(input, modifiers, options) {
     return dispatchApplicationAction(DockModel.resolveApplicationPointerAction(
-      applicationActions, input, modifiers))
+      applicationActions, input, modifiers), options)
   }
 
   onRunningToplevelsChanged: {
     lastActivatedToplevel = -1
+    wheelRemainder = 0
+    lastWheelTimestamp = 0
     if (runningCount < 2) root.previewDismissRequested()
   }
 
@@ -455,6 +464,36 @@ Item {
     onTapped: {
       root.previewDismissRequested()
       contextMenu.open()
+    }
+  }
+
+  WheelHandler {
+    id: wheelHandler
+
+    enabled: root.runningCount >= 2
+      && root.applicationActions.scrollAction === "cycle-windows"
+    target: null
+    onWheel: event => {
+      event.accepted = false
+
+      var verticalDelta = DockWindowModel.dominantVerticalWheelDelta(
+        event.angleDelta.x, event.angleDelta.y)
+      if (verticalDelta === 0) return
+
+      var now = Date.now()
+      root.wheelRemainder = DockWindowModel.wheelRemainderForTimestamp(
+        root.wheelRemainder, root.lastWheelTimestamp, now, 220)
+      root.lastWheelTimestamp = now
+
+      var accumulated = DockWindowModel.accumulateWheelSteps(
+        root.wheelRemainder, verticalDelta, 120)
+      root.wheelRemainder = accumulated.remainder
+      var direction = DockWindowModel.wheelStepDirection(accumulated.steps)
+      if (direction === 0) return
+
+      var cycled = root.dispatchPointerAction(
+        "scroll", {}, { direction: direction })
+      event.accepted = cycled
     }
   }
 

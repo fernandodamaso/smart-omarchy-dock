@@ -45,12 +45,7 @@ require_pattern 'contextMenu\.open\(\)' components/DockItem.qml
 require_pattern 'DragHandler[[:space:]]*\{' components/DockItem.qml
 require_pattern 'acceptedModifiers:[[:space:]]*Qt\.NoModifier' components/DockItem.qml
 
-reject_pattern 'WheelHandler[[:space:]]*\{' components/DockItem.qml
-reject_pattern 'wheelRemainder|lastWheelTimestamp|accumulateWheelSteps|wheelStepDirection|scrollAction' components/DockItem.qml
 reject_pattern 'pointerModifierState|eventPoint\.modifiers|ShiftModifier' components/DockItem.qml
-reject_pattern 'cycleToplevels|cycle-windows' components/DockItem.qml
-reject_pattern 'cycleToplevels|cycle-windows' components/DockWindowActions.qml
-reject_pattern 'cycleTargetIndex|cycleGroupMember|dominantVerticalWheelDelta|wheelRemainderForTimestamp' components/DockWindowModel.js
 
 require_pattern 'function focusToplevels\(' components/DockWindowActions.qml
 require_pattern 'function minimizeRestoreToplevels\(' components/DockWindowActions.qml
@@ -62,13 +57,13 @@ require_pattern 'DockWindowPreview[[:space:]]*\{' components/Dock.qml
 [[ -f components/DockActionDropdown.qml ]] \
   || fail "components/DockActionDropdown.qml does not exist"
 selector_count="$(grep -Ec '^[[:space:]]*DockActionDropdown[[:space:]]*\{' components/DockSettings.qml || true)"
-[[ "$selector_count" -eq 2 ]] \
-  || fail "Dock Settings must expose exactly two application action selectors (found $selector_count)"
+[[ "$selector_count" -eq 3 ]] \
+  || fail "Dock Settings must expose Left, Middle, and Scroll selectors (found $selector_count)"
 require_pattern 'applicationActionOptions\(\)' components/DockSettings.qml
 require_pattern 'label:[[:space:]]*"Left click"' components/DockSettings.qml
 require_pattern 'label:[[:space:]]*"Middle click"' components/DockSettings.qml
+require_pattern 'label:[[:space:]]*"Scroll"' components/DockSettings.qml
 reject_pattern 'label:[[:space:]]*"Shift \+ left click"' components/DockSettings.qml
-reject_pattern 'label:[[:space:]]*"Scroll"' components/DockSettings.qml
 reject_pattern 'id:[[:space:]]*clickActionGroup' components/DockSettings.qml
 reject_pattern 'label:[[:space:]]*"Focus"' components/DockModel.js
 reject_pattern 'label:[[:space:]]*"Launch"' components/DockModel.js
@@ -81,6 +76,6 @@ reject_pattern 'property var minimizedOrigins' components/DockItem.qml
 
 require_pattern 'Left click' README.md
 require_pattern 'Middle click' README.md
-reject_pattern 'Shift\+left|scrollAction|cycle-windows|Shift\+middle' README.md
+reject_pattern 'Shift\+left|Shift\+middle' README.md
 
 echo "check_pointer_actions: PASS"
