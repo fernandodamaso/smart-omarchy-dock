@@ -30,4 +30,31 @@ require_pattern 'captureFrame\(\)' components/DockWindowPreviewTile.qml
 require_pattern 'function groupedPreviewMembers\(' components/DockWindowPreviewModel.js
 require_pattern 'function previewAnchorOffset\(' components/DockWindowPreviewModel.js
 
+# FDM-810 recovery hardening: overflow must be usable without altering the
+# grouped-window source contract inherited from FDM-812.
+require_pattern 'WheelHandler[[:space:]]*\{' components/DockWindowPreview.qml
+require_pattern 'previewViewport\.contentWidth[[:space:]]*>[[:space:]]*previewViewport\.width' components/DockWindowPreview.qml
+require_pattern 'previewViewport\.contentHeight[[:space:]]*>[[:space:]]*previewViewport\.height' components/DockWindowPreview.qml
+require_pattern 'event\.accepted[[:space:]]*=[[:space:]]*false' components/DockWindowPreview.qml
+require_pattern 'event\.accepted[[:space:]]*=[[:space:]]*true' components/DockWindowPreview.qml
+
+# Popup lifetime must follow the live anchor and monitor rather than leaving an
+# orphan popup after scope/hotplug/destruction changes.
+require_pattern 'onAnchorItemChanged:' components/DockWindowPreview.qml
+require_pattern 'target:[[:space:]]*root\.anchorItem' components/DockWindowPreview.qml
+require_pattern 'target:[[:space:]]*root\.anchorScreen' components/DockWindowPreview.qml
+require_pattern 'function onDestroyed\(\)[[:space:]]*\{[[:space:]]*root\.dismissImmediately\(\)' components/DockWindowPreview.qml
+
+# Capture failure is a supported fallback, not a stuck/blank preview.
+require_pattern 'property bool captureStopped:[[:space:]]*false' components/DockWindowPreviewTile.qml
+require_pattern 'onStopped:[[:space:]]*root\.captureStopped[[:space:]]*=[[:space:]]*true' components/DockWindowPreviewTile.qml
+require_pattern 'root\.captureStopped[[:space:]]*\|\|' components/DockWindowPreviewTile.qml
+
+# Preview tiles and their close affordance must remain keyboard/accessibility
+# discoverable even though the popup itself does not grab keyboard focus.
+require_pattern 'Accessible\.role:[[:space:]]*Accessible\.Button' components/DockWindowPreviewTile.qml
+require_pattern 'Accessible\.name:[[:space:]]*root\.titleText' components/DockWindowPreviewTile.qml
+require_pattern 'Accessible\.description:' components/DockWindowPreviewTile.qml
+require_pattern 'Accessible\.name:[[:space:]]*"Close "[[:space:]]*\+[[:space:]]*root\.titleText' components/DockWindowPreviewTile.qml
+
 printf 'check_window_previews: PASS\n'
