@@ -33,8 +33,16 @@ require_pattern 'function previewAnchorOffset\(' components/DockWindowPreviewMod
 # FDM-810 recovery hardening: overflow must be usable without altering the
 # grouped-window source contract inherited from FDM-812.
 require_pattern 'WheelHandler[[:space:]]*\{' components/DockWindowPreview.qml
-require_pattern 'previewViewport\.contentWidth[[:space:]]*>[[:space:]]*previewViewport\.width' components/DockWindowPreview.qml
-require_pattern 'previewViewport\.contentHeight[[:space:]]*>[[:space:]]*previewViewport\.height' components/DockWindowPreview.qml
+require_pattern 'viewport\.contentWidth[[:space:]]*>[[:space:]]*viewport\.width' components/DockWindowPreview.qml
+require_pattern 'viewport\.contentHeight[[:space:]]*>[[:space:]]*viewport\.height' components/DockWindowPreview.qml
+wheel_handler="$(sed -n '/      WheelHandler {/,/^      }/p' components/DockWindowPreview.qml)"
+for axis in X Y; do
+  grep -Eq "viewport\\.content${axis}[[:space:]]*=" <<<"$wheel_handler" \
+    || fail "wheel handler must update viewport.content${axis}"
+done
+if grep -Eq 'previewViewport\.(contentWidth|contentHeight|contentX|contentY)' <<<"$wheel_handler"; then
+  fail "wheel handler must not use the preview size object as a Flickable"
+fi
 require_pattern 'event\.accepted[[:space:]]*=[[:space:]]*false' components/DockWindowPreview.qml
 require_pattern 'event\.accepted[[:space:]]*=[[:space:]]*true' components/DockWindowPreview.qml
 

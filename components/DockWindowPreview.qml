@@ -230,16 +230,16 @@ PopupWindow {
           if (primary === 0) return
 
           if (root.orientationHorizontal
-              && previewViewport.contentWidth > previewViewport.width) {
-            var maxX = previewViewport.contentWidth - previewViewport.width
-            previewViewport.contentX = Math.max(
-              0, Math.min(maxX, previewViewport.contentX - primary))
+              && viewport.contentWidth > viewport.width) {
+            var maxX = viewport.contentWidth - viewport.width
+            viewport.contentX = Math.max(
+              0, Math.min(maxX, viewport.contentX - primary))
             event.accepted = true
           } else if (!root.orientationHorizontal
-                     && previewViewport.contentHeight > previewViewport.height) {
-            var maxY = previewViewport.contentHeight - previewViewport.height
-            previewViewport.contentY = Math.max(
-              0, Math.min(maxY, previewViewport.contentY - primary))
+                     && viewport.contentHeight > viewport.height) {
+            var maxY = viewport.contentHeight - viewport.height
+            viewport.contentY = Math.max(
+              0, Math.min(maxY, viewport.contentY - primary))
             event.accepted = true
           }
         }
