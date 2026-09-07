@@ -1,9 +1,9 @@
 # SmartDock attention badges
 
 FDM-809 adds application attention indicators without pretending SmartDock
-owns unread-message counts. The badge is always a dot: ordinary attention uses
-Omarchy's accent color and urgent/critical attention uses the urgent color.
-FDM-811 owns application-provided numeric badge counts and their provider.
+owns unread-message counts. Ordinary attention uses Omarchy's accent color and urgent/critical attention
+uses the urgent color. Application-provided numeric badges take precedence
+over dots in automatic count mode; dots-only mode keeps severity indicators.
 
 ## Sources and reduction
 
@@ -68,13 +68,32 @@ grouping is disabled, SmartDock renders the application badge only on the first
 visible item with that exact desktop-entry identity. Other per-window items do
 not duplicate the dot.
 
+With `workspaceLayout: "grouped"`, window urgency comes only from each item's
+actual members. A known live handle urgency value wins over IPC data, including
+live false overriding stale true. Collapsed cards show static urgency; their
+application delegates and reminder timers do not exist.
+
+Application notifications, SNI attention, and launcher counts remain app-wide.
+`isPrimaryVisibleItem()` selects one owner from actual rendered items, with the
+active workspace before global launchers and fallback items. Every urgent local
+member remains marked even when another item owns the app-wide badge. A launcher
+count of 7 does not change a workspace's count of two windows. Clearing either
+notification attention or window urgency leaves the other source intact.
+
+Sticky windows appear once on their monitor's active normal workspace with a
+small outlined marker and tooltip. Minimized windows instead use their validated
+saved origin, retaining a card when its compositor descriptor disappears. Live
+workspace ownership takes precedence over saved monitor metadata, with connector
+names and IPC ids joined against the current monitor inventory. Unresolved
+monitor membership stays in Other windows and never contributes to normal counts.
+
 Set `attentionBadgesEnabled` to `false` to hide attention dots without deleting
 local attention state. Re-enabling the setting resumes rendering from the
 current live/local state.
 
 ## Urgent-window motion
 
-FDM-814 uses the badge's active severity as the motion contract. SNI
+Motion eligibility is reduced from the attention sources independently of the rendered badge token. SNI
 `NeedsAttention`, critical local-notification attention, and Hyprland urgent
 window state can trigger the nudge. A positive launcher count without attention
 never triggers it; a count coexisting with attention still does. A previously
@@ -104,3 +123,19 @@ replayed. Startup and QML reload use the same current-revision priming rule.
 `urgentWindowAnimationEnabled` defaults to `true`. It is effective only while
 `attentionBadgesEnabled` is also enabled. Turning it off disables motion while
 leaving the static urgent indicator and FDM-811 numeric count state unchanged.
+
+Grouped motion reuses the shared tracker's urgency and motion reducers, keyed by
+monitor and logical item identity. Existing state survives collapse/expansion;
+recreating a delegate does not itself request a reminder or reset its cooldown.
+Items removed by close, hiding, or relocation are pruned on presentation refresh.
+The motion regression reproduces both delegate-reset replay and cross-workspace
+revision consumption before checking independent retained state. Clipped items
+dismiss popups and suppress tooltips and motion; hidden docks run no item reminder
+timers. Flat items retain their application-wide source behavior.
+
+Model checks: `node tests/test_workspace_model.mjs`,
+`node tests/test_badge_model.mjs`, and `node tests/test_attention_motion_model.mjs`.
+These synthetic cases do not certify physical monitor reconnect or real
+application urgency delivery. Local checks should use a disposable window that
+sets the Wayland urgent hint and the existing launcher-count provider test input;
+notification attention must not be treated as proof of window-local urgency.

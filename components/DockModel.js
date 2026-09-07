@@ -399,6 +399,7 @@ function settingsDefaults() {
     scrollAction: "none",
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
+    workspaceLayout: "flat",
     groupWindows: true
   }
 }
@@ -601,6 +602,8 @@ function normalizeSetting(key, value) {
     return normalizedColorValue(value)
   case "borderWidth":
     return steppedNumber(value, 0, 8, 1, defaults.borderWidth, 0)
+  case "workspaceLayout":
+    return value === "grouped" ? "grouped" : "flat"
   case "position":
     return ["top", "bottom", "left", "right"].indexOf(value) >= 0
       ? value : defaults.position
@@ -835,6 +838,13 @@ function visibleWorkspaceIds(workspaces, focusedWorkspaceId, handles, counts, co
 
   ids.sort(function(left, right) { return left - right })
   return ids
+}
+
+function focusWorkspaceTargetRequest(workspace, usingLua) {
+  var target = normalizeWorkspaceTarget(workspace)
+  if (!target) return ""
+  if (usingLua) return 'hl.dsp.focus({ workspace = "' + target + '" })'
+  return "workspace " + target
 }
 
 function focusWorkspaceRequest(workspace, usingLua) {
@@ -1200,6 +1210,8 @@ function visibleItemsEqual(current, next) {
     if (!currentItem || !nextItem
         || currentItem.desktopId !== nextItem.desktopId
         || currentItem.pinned !== nextItem.pinned
+        || currentItem.presentationId !== nextItem.presentationId
+        || currentItem.identityToplevel !== nextItem.identityToplevel
         || !Array.isArray(currentItem.toplevels)
         || !Array.isArray(nextItem.toplevels)
         || currentItem.toplevels.length !== nextItem.toplevels.length)

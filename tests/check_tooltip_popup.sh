@@ -38,7 +38,7 @@ for pattern in \
   fi
 done
 
-if ! rg -n 'requestedVisible: mouse\.hovered && !contextMenu\.visible && !root\.previewActive && !dragHandler\.active && root\.reorderOffset === 0' \
+if ! rg -n 'requestedVisible: root\.presentationVisible && mouse\.hovered && !contextMenu\.visible && !root\.previewActive && !dragHandler\.active && root\.reorderOffset === 0' \
     "$plugin_root/components/DockItem.qml" >/dev/null; then
   printf 'DockItem application tooltip must suppress preview/context, drag, and reorder motion\n' >&2
   exit 1

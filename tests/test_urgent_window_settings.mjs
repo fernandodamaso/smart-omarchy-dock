@@ -19,8 +19,8 @@ assert.match(host, /patch\.urgentWindowAnimationEnabled = true/)
 const dock = read("components/Dock.qml")
 assert.match(dock,
   /readonly property bool urgentWindowAnimationEnabled:[\s\S]*?typeof effectiveSetting\("urgentWindowAnimationEnabled"\) === "boolean"[\s\S]*?effectiveSetting\("urgentWindowAnimationEnabled"\) : true/)
-assert.match(dock, /urgentWindowAnimationEnabled: root\.urgentWindowAnimationEnabled/)
-assert.match(dock, /primaryBadgeOwner: root\.primaryBadgeOwnerFor\(index\)/)
+assert.match(dock, /urgentWindowAnimationEnabled: root\.urgentWindowAnimationEnabled\s*\n/)
+assert.match(dock, /primaryBadgeOwner: root\.primaryBadgeOwnerFor\(renderedIndex\)/)
 assert.match(dock, /dockShown: root\.dockShown/)
 
 const settings = read("components/DockSettings.qml")

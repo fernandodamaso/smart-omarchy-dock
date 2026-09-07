@@ -15,11 +15,11 @@ item=components/DockItem.qml
 
 grep -Fq 'function motionAttentionEligible' "$model" \
   || fail 'pure motion source eligibility helper missing'
-grep -Fq 'function motionAttentionFor(desktopId)' "$tracker" \
+grep -Fq 'function motionAttentionFor(desktopId, scope)' "$tracker" \
   || fail 'badge tracker must expose source-specific motion eligibility'
 grep -Fq 'BadgeModel.motionAttentionEligible(' "$tracker" \
   || fail 'tracker must use the pure source eligibility contract'
-grep -Fq 'badgeTracker.motionAttentionFor(desktopId)' "$item" \
+grep -Fq 'badgeTracker.motionAttentionFor(desktopId, attentionScope)' "$item" \
   || fail 'DockItem must consume source-specific motion eligibility'
 
 if grep -Fq 'attentionSeverityFromBadgeToken(attentionBadge)' "$item"; then

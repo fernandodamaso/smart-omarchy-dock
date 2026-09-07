@@ -322,6 +322,7 @@ width when the override is disabled.
 | `borderWidth` | Custom dock border width from `0` to `8` pixels |
 | `position` | Screen edge: `top`, `bottom`, `left`, or `right` |
 | `fullLength` | Fill the screen width, or height for a vertical dock |
+| `workspaceLayout` | `flat` (default) or `grouped` workspace cards; grouped applies to top/bottom and scrolls when crowded |
 | `reserveSpace` | When `true` and `autoHide` is `false`, tiled windows stop beside the visible dock; hidden auto-hide docks do not reserve space |
 | `autoHide` | Hide the dock until the pointer reaches its screen edge; can also be toggled from the right-click menu |
 | `clickAction` | Action for an unmodified Left click; defaults to legacy-compatible `focus-or-launch` |
@@ -523,3 +524,13 @@ This disables cursor warping for all workspace changes, not only dock clicks.
 ## License
 
 [MIT](LICENSE)
+
+### Workspace cards (opt-in)
+
+Choose **Workspace cards** in Dock Settings → Layout, or set `"workspaceLayout": "grouped"` in `${XDG_CONFIG_HOME:-$HOME/.config}/smartdock/dock.json` to enable horizontal workspace cards; live reload applies the change. Set it back to `"flat"` to roll back. Missing/invalid values and Reset use flat. Left/right positions render flat without changing the saved preference. Window scope, workspace sorting and urgent-outside-scope are flat-only controls; their saved values are preserved. Group windows remains available in either layout.
+
+Each monitor expands its own active normal workspace, including when empty. Other registered workspaces remain compact and show local window counts; click a card to switch. Closed pinned launchers and **Other windows** (unknown/special membership) stay outside normal cards. Known windows on another monitor are excluded. Window actions and previews use only the item's members; hide and launcher pinning remain application-wide. Grouped dragging and redundant per-icon workspace labels are disabled.
+
+Grouped minimize/restore requires a validated recorded workspace: an unknown origin never moves a window to a guessed focused workspace. Flat mode retains its fallback. Sticky windows appear once on their monitor’s active normal workspace with a small marker; minimized windows retain their recorded origin. Local urgency marks its workspace and member icons. App-wide notification badges have one visible owner per app per dock, without claiming a notification belongs to a workspace.
+
+Crowded cards scroll inside a bounded horizontal viewport. Use the previous/next buttons with a mouse; app wheel cycling keeps its configured behavior. Control/settings and optional Trash stay fixed. Switching workspaces brings the active header into view, and scrolling a popup’s icon out of view closes the popup. Compact and full-length layouts retain magnification headroom. Real Omarchy visual and interaction acceptance remains pending.

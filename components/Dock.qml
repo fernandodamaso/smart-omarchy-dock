@@ -8,6 +8,8 @@ import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
 import "DockWindowModel.js" as DockWindowModel
+import "DockWindowPreviewModel.js" as PreviewModel
+import "DockWorkspaceModel.js" as WorkspaceModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockTrashModel.js" as TrashModel
 
@@ -233,6 +235,17 @@ PanelWindow {
     scopeRevision)
   readonly property bool fullscreenModeActive: fullscreenOwnerToplevel !== null
   property var visibleItems: []
+  readonly property bool groupedRequested: !vertical
+    && DockModel.normalizeSetting("workspaceLayout", effectiveSetting("workspaceLayout")) === "grouped"
+  property var workspacePresentation: ({ groups: [], globalLaunchers: [], fallbackItems: [], renderedItems: [] })
+  readonly property bool grouped: groupedRequested
+  readonly property var renderedItems: grouped ? workspacePresentation.renderedItems : visibleItems
+  readonly property string activeCardIdentity: {
+    var active = workspacePresentation.groups.find(function(group) { return group.active })
+    return active ? active.identity : ""
+  }
+  onActiveCardIdentityChanged: Qt.callLater(root.revealActiveWorkspace)
+
   readonly property var visibleWorkspaceIds: {
     var revision = scopeRevision + workspaceCountsRevision
     return DockModel.visibleWorkspaceIds(
@@ -246,8 +259,8 @@ PanelWindow {
   readonly property int crossExtent: vertical
     ? Math.ceil(iconSize * magnification + 80) + edgeMargin
     : Math.ceil(iconSize * magnification + 48) + edgeMargin
-  readonly property int appMainExtent: visibleItems.length * itemSize
-  readonly property int workspaceMainExtent: vertical
+  readonly property int appMainExtent: grouped ? groupedLayout.desiredWidth : visibleItems.length * itemSize
+  readonly property int workspaceMainExtent: grouped ? 0 : vertical
     ? Math.max(0, visibleWorkspaceIds.length * 32 + 6)
     : Math.max(0, visibleWorkspaceIds.length * 32 + 6)
   readonly property int trashMainExtent: TrashModel.sectionMainExtent(
@@ -271,6 +284,32 @@ PanelWindow {
   }
 
   function refreshVisibleItems() {
+    if (groupedRequested) {
+      var monitor = dockHyprMonitor
+      var ipc = monitor ? monitor.lastIpcObject || monitor : ({})
+      var records = toplevels.map(function(toplevel) {
+        return Object.assign({ toplevel: toplevel }, DockWindowModel.locationForToplevel(
+          toplevel, hyprToplevels, windowActions ? windowActions.minimizedOriginsSnapshot : ({})))
+      })
+      var nextPresentation = WorkspaceModel.buildWorkspacePresentation(
+        DockModel.buildVisibleItems(pinned, toplevels, applications, hyprToplevels,
+          false, groupWindows, hiddenApplications), records, hyprWorkspaces, {
+          monitor: DockWindowModel.monitorIdentity(monitor),
+          activeWorkspace: DockWindowModel.workspaceIdentity(ipc.activeWorkspace
+            || (monitor ? monitor.activeWorkspace : null)),
+          monitors: hyprMonitors,
+          groupWindows: groupWindows
+        })
+      if (badgeTracker && screen)
+        badgeTracker.syncWorkspaceScopes(screen.name,
+          nextPresentation.groups.reduce(function(items, group) {
+            return items.concat(group.items)
+          }, []).concat(nextPresentation.globalLaunchers, nextPresentation.fallbackItems))
+      if (!WorkspaceModel.presentationsEqual(workspacePresentation, nextPresentation)) {
+        windowPreview.dismissImmediately()
+        workspacePresentation = nextPresentation
+      }
+    }
     var nextItems = DockModel.buildVisibleItems(
       pinned, filteredToplevels, applications, hyprToplevels, sortByWorkspace,
       groupWindows, hiddenApplications)
@@ -283,14 +322,27 @@ PanelWindow {
   }
 
   function primaryBadgeOwnerFor(index) {
-    return BadgeModel.isPrimaryVisibleItem(visibleItems, index)
+    return BadgeModel.isPrimaryVisibleItem(renderedItems, index)
   }
 
   function attentionBadgeFor(item, index) {
     var badgeRevision = badgeStateRevision
     if (!attentionBadgesEnabled || !badgeTracker || !item) return "none"
-    if (!primaryBadgeOwnerFor(index)) return "none"
-    return badgeTracker.badgeFor(item.desktopId)
+    var owner = primaryBadgeOwnerFor(index)
+    if (grouped)
+      return badgeTracker.badgeFor(item.desktopId, { localUrgent: item.localUrgent, primaryOwner: owner })
+    return owner ? badgeTracker.badgeFor(item.desktopId) : "none"
+  }
+
+  function revealActiveWorkspace() {
+    if (!grouped) return
+    for (var i = 0; i < workspaceCards.count; ++i) {
+      var card = workspaceCards.itemAt(i)
+      if (card && card.expanded) {
+        groupedLayout.ensureVisible(card, card.headerWidth)
+        break
+      }
+    }
   }
 
   function previewSetting(key, value) {
@@ -381,6 +433,20 @@ PanelWindow {
   onSettingPreviewsChanged: root.scheduleVisibleItemsRefresh()
   onPinnedChanged: root.scheduleVisibleItemsRefresh()
   onSortByWorkspaceChanged: root.scheduleVisibleItemsRefresh()
+  onGroupedChanged: {
+    windowPreview.dismissImmediately()
+    dragSource = -1
+    dragTarget = -1
+    if (!grouped && badgeTracker && screen) badgeTracker.syncWorkspaceScopes(screen.name, [])
+    if (grouped) Qt.callLater(root.revealActiveWorkspace)
+  }
+  onDockHyprMonitorChanged: root.scheduleVisibleItemsRefresh()
+  onHyprMonitorsChanged: root.scheduleVisibleItemsRefresh()
+  onHyprWorkspacesChanged: root.scheduleVisibleItemsRefresh()
+  Component.onDestruction: {
+    if (badgeTracker && screen) badgeTracker.syncWorkspaceScopes(screen.name, [])
+  }
+  onWorkspaceCountsRevisionChanged: root.scheduleVisibleItemsRefresh()
   onGroupWindowsChanged: root.scheduleVisibleItemsRefresh()
   onHiddenApplicationsChanged: root.scheduleVisibleItemsRefresh()
   onScopeRevisionChanged: {
@@ -391,10 +457,16 @@ PanelWindow {
   Component.onCompleted: root.scheduleVisibleItemsRefresh()
 
   Connections {
+    target: root.windowActions
+    function onMinimizedOriginsSnapshotChanged() { root.scheduleVisibleItemsRefresh() }
+  }
+
+  Connections {
     target: root.badgeTracker
 
     function onRevisionChanged() {
       root.badgeStateRevision++
+      root.scheduleVisibleItemsRefresh()
     }
   }
 
@@ -458,7 +530,7 @@ PanelWindow {
   }
   implicitWidth: vertical
     ? crossExtent
-    : fullLength ? 0 : compactMainExtent
+    : fullLength ? 0 : grouped && screen ? Math.min(screen.width, compactMainExtent) : compactMainExtent
   implicitHeight: vertical
     ? fullLength ? 0 : compactMainExtent
     : crossExtent
@@ -571,6 +643,7 @@ PanelWindow {
 
       Grid {
         id: appGrid
+        visible: !root.grouped
 
         x: root.vertical ? (parent.width - width) / 2 : parent.appStart
         y: root.vertical ? parent.appStart : (parent.height - height) / 2
@@ -578,67 +651,67 @@ PanelWindow {
         rows: root.vertical ? Math.max(1, root.visibleItems.length) : 1
 
         Repeater {
-          model: root.visibleItems
+          model: root.grouped ? [] : root.visibleItems
 
-          DockItem {
-            id: appItem
+          AppIcon {}
+        }
+      }
+
+      DockWorkspaceLayout {
+        id: groupedLayout
+        visible: root.grouped
+        x: dockLayout.appStart
+        width: Math.max(0, Math.min(desiredWidth, dockLayout.trailingStart - x))
+        height: root.crossExtent - root.edgeMargin
+        y: root.position === "top" ? 0 : dockLayout.height - height
+        rowY: root.position === "top" ? (dockLayout.height - root.itemSize - 6) / 2
+          : height - (dockLayout.height + root.itemSize + 6) / 2
+        contentPadding: Math.ceil(root.iconSize * (root.magnification - 1) / 2) + 8
+        foreground: Color.menu.text
+        background: Color.menu.background
+        accent: Color.accent
+        onViewportChanged: windowPreview.refreshAnchorGeometry()
+        Repeater {
+          model: root.groupedRequested ? root.workspacePresentation.globalLaunchers : []
+          AppIcon {}
+        }
+        Repeater {
+          id: workspaceCards
+          model: root.groupedRequested ? root.workspacePresentation.groups : []
+          DockWorkspaceGroup {
+            id: workspaceCard
             required property var modelData
-            required property int index
-
-            desktopId: modelData.desktopId
-            pinnedItem: modelData.pinned
-            runningToplevels: modelData.toplevels
-            focused: root.activeToplevel !== null
-              && modelData.toplevels.indexOf(root.activeToplevel) >= 0
-            windowActions: root.windowActions
-            hyprToplevels: root.hyprToplevels
-            badgeTracker: root.badgeTracker
-            attentionBadge: root.attentionBadgeFor(modelData, index)
-            attentionBadgesEnabled: root.attentionBadgesEnabled
-            urgentWindowAnimationEnabled: root.urgentWindowAnimationEnabled
-            primaryBadgeOwner: root.primaryBadgeOwnerFor(index)
-            dockShown: root.dockShown
-            fullscreenModeActive: root.fullscreenModeActive
-            fullscreenEmphasized:
-              modelData.toplevels.indexOf(root.fullscreenOwnerToplevel) >= 0
-            itemIndex: index
-            slotSize: root.itemSize
-            iconSize: root.iconSize
-            magnification: root.magnification
-            magnificationRadius: root.magnificationRadius
-            hoverGlowEnabled: root.hoverGlowEnabled
-            hoverGlowOpacity: root.hoverGlowOpacity
-            hoverGlowRadius: root.hoverGlowRadius
-            pointerPosition: root.pointerPosition
-              - (root.vertical ? appGrid.y : appGrid.x)
-            applicationActions: root.applicationActions
-            showPreviews: root.showPreviews
-            workspaceBadgeBackgroundColor: root.effectiveWorkspaceBadgeBackgroundColor
-            workspaceBadgeTextColor: root.effectiveWorkspaceBadgeTextColor
-            autoHide: root.autoHide
+            label: modelData.label
+            count: modelData.count
+            urgent: modelData.urgent === true && root.attentionBadgesEnabled
             position: root.position
-            vertical: root.vertical
-            previewActive: windowPreview.anchorItem === appItem
-              && windowPreview.interactionActive
-            reorderOffset: root.reorderOffset(index)
-            onDragStarted: itemIndex => {
-              root.dragSource = itemIndex
-              root.dragTarget = itemIndex
+            viewport: groupedLayout
+            expanded: modelData.active
+            slotSize: root.itemSize
+            onActivated: {
+              var request = DockModel.focusWorkspaceTargetRequest(modelData.activationTarget, Hyprland.usingLua)
+              if (request) Hyprland.dispatch(request)
             }
-            onDragMoved: mainPosition => root.updateDragTarget(mainPosition)
-            onDragFinished: root.finishDrag()
-            onRemoveRequested: desktopId => root.unpinRequested(desktopId)
-            onHideRequested: desktopId => root.hideRequested(desktopId)
-            onPreviewRequested: (anchorItem, desktopId, toplevels, applicationEntry) => {
-              windowPreview.requestPreview(
-                anchorItem, desktopId, toplevels, applicationEntry)
+            Repeater {
+              model: workspaceCard.expanded ? workspaceCard.modelData.items : []
+              AppIcon {}
             }
-            onPreviewReleased: anchorItem => windowPreview.releasePreview(anchorItem)
-            onPreviewDismissRequested: windowPreview.dismissImmediately()
-            onContextMenuVisibilityChanged: visible => {
-              root.openMenuCount = Math.max(0,
-                root.openMenuCount + (visible ? 1 : -1))
-            }
+          }
+        }
+        DockWorkspaceGroup {
+          visible: root.groupedRequested && root.workspacePresentation.fallbackItems.length > 0
+          label: "Other windows"
+          position: root.position
+          viewport: groupedLayout
+          count: root.workspacePresentation.fallbackItems.reduce(function(total, item) {
+            return total + item.toplevels.length
+          }, 0)
+          expanded: true
+          switchable: false
+          slotSize: root.itemSize
+          Repeater {
+            model: root.groupedRequested ? root.workspacePresentation.fallbackItems : []
+            AppIcon {}
           }
         }
       }
@@ -701,6 +774,7 @@ PanelWindow {
 
       DockWorkspaceStrip {
         id: workspaceStrip
+        visible: !root.grouped
 
         x: root.vertical
           ? (parent.width - width) / 2
@@ -732,12 +806,98 @@ PanelWindow {
     }
   }
 
+  component AppIcon: DockItem {
+    id: appItem
+    required property var modelData
+    required property int index
+    originOnly: modelData.presentationId !== undefined
+    scopeRevision: root.scopeRevision
+    presentationId: modelData.presentationId || modelData.desktopId
+    identityToplevel: modelData.identityToplevel || null
+
+    desktopId: modelData.desktopId
+    pinnedItem: modelData.pinned
+    runningToplevels: modelData.toplevels
+    focused: root.activeToplevel !== null
+      && modelData.toplevels.indexOf(root.activeToplevel) >= 0
+    windowActions: root.windowActions
+    hyprToplevels: root.hyprToplevels
+    badgeTracker: root.badgeTracker
+    readonly property int renderedIndex: {
+      if (!originOnly) return index
+      var items = root.renderedItems
+      return items.indexOf(PreviewModel.visiblePreviewTarget(
+        items, presentationId, identityToplevel))
+    }
+    localUrgent: modelData.localUrgent === true
+    sticky: modelData.sticky === true
+    attentionScopeKey: originOnly && root.badgeTracker && root.screen
+      ? root.badgeTracker.workspaceScopeKey(root.screen.name, modelData.presentationId) : ""
+    attentionBadge: root.attentionBadgeFor(modelData, renderedIndex)
+    attentionBadgesEnabled: root.attentionBadgesEnabled
+    urgentWindowAnimationEnabled: root.urgentWindowAnimationEnabled
+    primaryBadgeOwner: root.primaryBadgeOwnerFor(renderedIndex)
+    presentationVisible: !originOnly || groupedLayout.containsItem(appItem)
+    Connections {
+      target: groupedLayout
+      function onViewportChanged() {
+        appItem.presentationVisible = !appItem.originOnly || groupedLayout.containsItem(appItem)
+        if (!appItem.presentationVisible) appItem.dismissPopups()
+        else appItem.refreshPopupGeometry()
+      }
+    }
+    dockShown: root.dockShown
+    fullscreenModeActive: root.fullscreenModeActive
+    fullscreenEmphasized:
+      modelData.toplevels.indexOf(root.fullscreenOwnerToplevel) >= 0
+    itemIndex: index
+    slotSize: root.itemSize
+    iconSize: root.iconSize
+    magnification: root.magnification
+    magnificationRadius: root.magnificationRadius
+    hoverGlowEnabled: root.hoverGlowEnabled
+    hoverGlowOpacity: root.hoverGlowOpacity
+    hoverGlowRadius: root.hoverGlowRadius
+    pointerPosition: !pointer.hovered ? -10000 : root.vertical
+      ? parent.mapFromItem(dockBackground, pointer.point.position.x, pointer.point.position.y).y
+      : parent.mapFromItem(dockBackground, pointer.point.position.x, pointer.point.position.y).x
+    applicationActions: root.applicationActions
+    showPreviews: root.showPreviews
+    workspaceBadgeBackgroundColor: root.effectiveWorkspaceBadgeBackgroundColor
+    workspaceBadgeTextColor: root.effectiveWorkspaceBadgeTextColor
+    autoHide: root.autoHide
+    position: root.position
+    vertical: root.vertical
+    previewActive: windowPreview.anchorItem === appItem
+      && windowPreview.interactionActive
+    reorderOffset: originOnly ? 0 : root.reorderOffset(index)
+    onDragStarted: itemIndex => {
+      root.dragSource = itemIndex
+      root.dragTarget = itemIndex
+    }
+    onDragMoved: mainPosition => root.updateDragTarget(mainPosition)
+    onDragFinished: root.finishDrag()
+    onRemoveRequested: desktopId => root.unpinRequested(desktopId)
+    onHideRequested: desktopId => root.hideRequested(desktopId)
+    onPreviewRequested: (anchorItem, desktopId, toplevels, applicationEntry) => {
+      windowPreview.requestPreview(
+        anchorItem, desktopId, toplevels, applicationEntry)
+    }
+    onPreviewReleased: anchorItem => windowPreview.releasePreview(anchorItem)
+    onPreviewDismissRequested: windowPreview.dismissImmediately()
+    onContextMenuVisibilityChanged: visible => {
+      root.openMenuCount = Math.max(0,
+        root.openMenuCount + (visible ? 1 : -1))
+    }
+  }
+
   DockWindowPreview {
     id: windowPreview
 
     windowActions: root.windowActions
     position: root.position
-    visibleItems: root.visibleItems
+    visibleItems: root.renderedItems
+    clipItem: root.grouped ? groupedLayout : null
   }
 
   DockAppPicker {

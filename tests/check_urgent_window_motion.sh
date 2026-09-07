@@ -88,7 +88,7 @@ grep -Fq 'previewInteractionActive' "$item" || fail 'preview suppression hook mi
 grep -Fq 'mouse.hovered' "$item" || fail 'hover suppression missing'
 grep -Fq 'dragHandler.active' "$item" || fail 'drag suppression missing'
 grep -Fq 'contextMenu.visible' "$item" || fail 'context-menu suppression missing'
-grep -Fq 'motionAttentionFor(desktopId)' "$item" \
+grep -Fq 'motionAttentionFor(desktopId, attentionScope)' "$item" \
   || fail 'DockItem must use source-specific motion eligibility'
 grep -Fq 'readonly property bool attentionActive' "$item" \
   || fail 'DockItem attention-active property missing'

@@ -249,4 +249,57 @@ assert.deepEqual(plainVector("left", 5), { x: 5, y: 0 })
 assert.deepEqual(plainVector("right", 5), { x: -5, y: 0 })
 assert.deepEqual(plainVector("unknown", 3), { x: 0, y: -3 })
 
+
+// Recreating a collapsed delegate must not manufacture an immediate reminder.
+// The old completion/attention-change sequence replays after every expansion.
+const firstExpansion = decision(primeUrgentMotionState(null, 0), {
+  revision: 0, reminder: true, now: 120000
+})
+const recreated = decision(primeUrgentMotionState(null, 0), {
+  revision: 0, reminder: true, now: 124000
+})
+assert.equal(firstExpansion.play && recreated.play, true, 'reproduces delegate-reset replay')
+// Retain the existing reducer state and initialize a new delegate without a reminder.
+const expandedAgain = decision(firstExpansion.state, { revision: 0, now: 124000 })
+assert.equal(expandedAgain.play, false)
+// Sharing app-only state also leaks revisions between independent workspace items.
+const w1 = decision(primeUrgentMotionState(null, 0), { revision: 1, now: 130000 })
+const w2WithSharedState = decision(w1.state, { revision: 1, now: 134000 })
+const w2WithOwnState = decision(primeUrgentMotionState(null, 0), { revision: 1, now: 134000 })
+assert.equal(w2WithSharedState.play, false, 'app-only state consumes another workspace event')
+assert.equal(w2WithOwnState.play, true)
+
+// Exercise the actual shared tracker methods across delegate lifetimes and docks.
+const trackerSource = fs.readFileSync(path.join(here, '..', 'components', 'DockBadgeTracker.qml'), 'utf8')
+const tracker = vm.createContext({ BadgeModel: context, urgentStates: {}, urgentMotionStates: {}, revision: 0 })
+for (const name of ['bumpRevision', 'workspaceScopeKey', 'syncWorkspaceScopes', 'primeUrgentMotion', 'requestUrgentMotion']) {
+  const method = trackerSource.match(new RegExp('^  function ' + name + '\\([^]*?^  }', 'm'))
+  // bumpRevision is the one inline method.
+  vm.runInContext(name === 'bumpRevision' ? 'function bumpRevision() { revision++ }' : method[0], tracker)
+}
+const scopeItem = { presentationId: 'id:2/chrome', urgentAddresses: [] }
+tracker.syncWorkspaceScopes('DP-1', [scopeItem])
+tracker.syncWorkspaceScopes('HDMI-A-1', [scopeItem])
+const scopeKey = tracker.workspaceScopeKey('DP-1', scopeItem.presentationId)
+const otherScopeKey = tracker.workspaceScopeKey('HDMI-A-1', scopeItem.presentationId)
+tracker.syncWorkspaceScopes('DP-1', [{ ...scopeItem, urgentAddresses: ['0xabc'] }])
+assert.equal(tracker.urgentStates[scopeKey].windowUrgentRevision, 1)
+assert.equal(tracker.urgentStates[otherScopeKey].windowUrgent, false)
+const scopedInput = { revision: 1, windowUrgent: true, attentionActive: true,
+  primaryOwner: true, badgesEnabled: true, animationEnabled: true,
+  dockShown: true, interactionActive: false, reminder: false, now: 140000 }
+assert.equal(tracker.requestUrgentMotion('chrome', scopedInput, scopeKey), true)
+// Collapse keeps logical items supplied; expansion primes without overwriting retained state.
+tracker.syncWorkspaceScopes('DP-1', [{ ...scopeItem, urgentAddresses: ['0xabc'] }])
+tracker.primeUrgentMotion('chrome', 1, scopeKey)
+assert.equal(tracker.requestUrgentMotion('chrome', { ...scopedInput, now: 144000 }, scopeKey), false)
+tracker.syncWorkspaceScopes('DP-1', [])
+assert.equal(tracker.urgentStates[scopeKey], undefined)
+assert.equal(tracker.urgentMotionStates[scopeKey], undefined)
+assert.ok(tracker.urgentStates[otherScopeKey], 'pruning one dock preserves the other')
+
+assert.equal(tracker.requestUrgentMotion('chrome', scopedInput, scopeKey), false,
+  'stale delegate cannot recreate a pruned scope')
+assert.equal(tracker.urgentMotionStates[scopeKey], undefined)
+
 console.log("attention motion model tests: PASS")

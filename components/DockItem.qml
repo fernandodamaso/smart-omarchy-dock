@@ -42,6 +42,43 @@ Item {
   required property string position
   required property bool vertical
   required property bool previewActive
+  property bool originOnly: false
+  property bool localUrgent: false
+  property bool sticky: false
+  property string attentionScopeKey: ""
+  property bool presentationVisible: true
+  property bool motionReady: false
+  readonly property var attentionScope: attentionScopeKey
+    ? ({ localUrgent: localUrgent, primaryOwner: primaryBadgeOwner }) : null
+  readonly property bool motionOwner: attentionScopeKey !== "" || primaryBadgeOwner
+
+  function dismissPopups() {
+    contextMenu.dismiss()
+    previewReleased(root)
+  }
+
+  function refreshPopupGeometry() {
+    if (!presentationVisible) return
+    tooltip.scheduleReanchor()
+    if (contextMenu.visible) contextMenu.anchor.updateAnchor()
+  }
+  onPresentationVisibleChanged: if (!presentationVisible) dismissPopups()
+  property int scopeRevision: 0
+  property bool menuOpen: false
+  onScopeRevisionChanged: if (originOnly && contextMenu.visible) contextMenu.dismiss()
+  onVisibleChanged: if (!visible) {
+    contextMenu.dismiss()
+    root.previewReleased(root)
+  }
+  Component.onDestruction: {
+    if (menuOpen) {
+      menuOpen = false
+      root.contextMenuVisibilityChanged(false)
+    }
+    root.previewReleased(root)
+  }
+  property string presentationId: desktopId
+  property var identityToplevel: null
   // Kept as an optional compatibility hook for preview controllers that use
   // the earlier FDM-814 name; the host's previewActive binding remains the
   // canonical source.
@@ -73,7 +110,7 @@ Item {
     ? runningToplevels[0]
     : null
   readonly property int runningCount: runningToplevels.length
-  readonly property string workspaceBadge: DockModel.workspaceBadgeText(
+  readonly property string workspaceBadge: originOnly ? "" : DockModel.workspaceBadgeText(
     runningToplevels, hyprToplevels)
   readonly property int minimizedCount: contextMenu.minimizedCount
   readonly property int visibleWindowCount: contextMenu.visibleWindowCount
@@ -93,15 +130,15 @@ Item {
   readonly property real iconScale: fullscreenPresentation.scale
     * (1 + (magnification - 1) * influence)
   readonly property var urgentBadgeState: badgeTracker
-    ? badgeTracker.urgentStateFor(desktopId, primaryBadgeOwner)
+    ? badgeTracker.urgentStateFor(desktopId, motionOwner, attentionScopeKey)
     : ({ windowUrgent: false, primaryOwner: primaryBadgeOwner,
          windowUrgentRevision: 0 })
   readonly property bool windowUrgent: urgentBadgeState.windowUrgent === true
   readonly property int windowUrgentRevision:
     Number(urgentBadgeState.windowUrgentRevision || 0)
   readonly property bool attentionActive: badgeTracker
-    ? badgeTracker.motionAttentionFor(desktopId) : false
-  readonly property bool urgentMotionSuppressed: mouse.hovered
+    ? badgeTracker.motionAttentionFor(desktopId, attentionScope) : false
+  readonly property bool urgentMotionSuppressed: !presentationVisible || mouse.hovered
     || dragHandler.active || contextMenu.visible
     || previewActive || previewInteractionActive
 
@@ -119,9 +156,9 @@ Item {
     switch (action) {
     case "cycle-windows":
       return root.windowActions.cycleToplevels(
-        root.runningToplevels, request.direction, root.windowActions.activeToplevel)
+        root.runningToplevels, request.direction, root.windowActions.activeToplevel, root.originOnly)
     case "minimize-restore":
-      return root.windowActions.minimizeRestoreToplevels(root.runningToplevels)
+      return root.windowActions.minimizeRestoreToplevels(root.runningToplevels, root.originOnly)
     case "previews":
       if (!root.showPreviews || root.runningCount < 2) return false
       root.previewRequested(root, root.desktopId, root.runningToplevels, root.entry)
@@ -135,7 +172,7 @@ Item {
         root.lastActivatedToplevel = DockModel.nextToplevelIndex(
           root.lastActivatedToplevel, root.runningCount)
         return root.windowActions.activateToplevel(
-          root.runningToplevels[root.lastActivatedToplevel])
+          root.runningToplevels[root.lastActivatedToplevel], root.originOnly)
       }
       root.launch()
       return true
@@ -157,15 +194,15 @@ Item {
   }
 
   function primeUrgentMotion() {
-    if (!badgeTracker || !primaryBadgeOwner) return
-    badgeTracker.ensureUrgentState(desktopId)
-    var state = badgeTracker.urgentStateFor(desktopId, true)
+    if (!badgeTracker || !motionOwner) return
+    if (!attentionScopeKey) badgeTracker.ensureUrgentState(desktopId)
+    var state = badgeTracker.urgentStateFor(desktopId, true, attentionScopeKey)
     badgeTracker.primeUrgentMotion(
-      desktopId, Number(state.windowUrgentRevision || 0))
+      desktopId, Number(state.windowUrgentRevision || 0), attentionScopeKey)
   }
 
   function requestUrgentMotion(reminder) {
-    if (!badgeTracker || !primaryBadgeOwner) return
+    if (!motionReady || !badgeTracker || !motionOwner) return
     if (urgentMotionSuppressed) attentionMotion.stop()
     var play = badgeTracker.requestUrgentMotion(desktopId, {
       revision: windowUrgentRevision,
@@ -175,15 +212,16 @@ Item {
       primaryOwner: true,
       badgesEnabled: attentionBadgesEnabled,
       animationEnabled: urgentWindowAnimationEnabled,
-      dockShown: dockShown,
+      dockShown: dockShown && presentationVisible,
       interactionActive: urgentMotionSuppressed,
       now: Date.now()
-    })
+    }, attentionScopeKey)
     if (play && !urgentMotionSuppressed) attentionMotion.play()
   }
 
   Component.onCompleted: {
     primeUrgentMotion()
+    motionReady = true
     requestUrgentMotion(false)
   }
   onAttentionActiveChanged: {
@@ -221,7 +259,8 @@ Item {
     id: attentionReminderTimer
     interval: 3000
     repeat: true
-    running: root.primaryBadgeOwner && root.attentionActive
+    running: root.motionReady && root.motionOwner && root.attentionActive
+      && root.dockShown && root.presentationVisible
       && root.attentionBadgesEnabled
       && root.urgentWindowAnimationEnabled
     onTriggered: root.requestUrgentMotion(true)
@@ -338,6 +377,18 @@ Item {
       }
 
       Rectangle {
+        visible: root.sticky
+        width: 10
+        height: 10
+        radius: 2
+        x: -3
+        y: iconContainer.height - height + 3
+        color: Color.background
+        border.width: 2
+        border.color: Color.accent
+      }
+
+      Rectangle {
         id: minimizedCountBadge
 
         visible: root.minimizedCount > 0
@@ -405,9 +456,10 @@ Item {
   }
 
   DockToolTip {
+    id: tooltip
     anchorItem: root
     position: root.position
-    requestedVisible: mouse.hovered && !contextMenu.visible && !root.previewActive && !dragHandler.active && root.reorderOffset === 0
+    requestedVisible: root.presentationVisible && mouse.hovered && !contextMenu.visible && !root.previewActive && !dragHandler.active && root.reorderOffset === 0
     text: root.tooltipLabel()
     fontFamily: Style.font.family
     fontSize: Style.font.body
@@ -418,6 +470,7 @@ Item {
     var state = root.focused ? "focused application"
       : root.runningCount > 0 ? "running application" : ""
     var label = state ? name + " — " + state : name
+    if (root.sticky) label += " (sticky on this monitor)"
     if (root.minimizedCount > 0) {
       var word = root.runningCount === 1 ? "window" : "windows"
       return label + " (" + root.runningCount + " " + word
@@ -498,7 +551,7 @@ Item {
   DragHandler {
     id: dragHandler
 
-    enabled: root.pinnedItem
+    enabled: root.pinnedItem && !root.originOnly
     target: null
     acceptedButtons: Qt.LeftButton
     acceptedModifiers: Qt.NoModifier
@@ -528,7 +581,13 @@ Item {
     pinnedItem: root.pinnedItem
     runningToplevels: root.runningToplevels
     windowActions: root.windowActions
-    onVisibleChanged: root.contextMenuVisibilityChanged(visible)
+    originOnly: root.originOnly
+    onVisibleChanged: {
+      if (root.menuOpen !== visible) {
+        root.menuOpen = visible
+        root.contextMenuVisibilityChanged(visible)
+      }
+    }
     onOpenNewWindow: root.launch()
     onAddApplication: root.addApplicationRequested()
     onRemoveFromDock: root.removeRequested(root.desktopId)

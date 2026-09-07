@@ -15,6 +15,10 @@ PopupWindow {
   required property var visibleItems
 
   property Item anchorItem: null
+  property DockWorkspaceLayout clipItem: null
+  property string presentationId: ""
+  property var identityToplevel: null
+  property bool originOnly: false
   property string desktopId: ""
   property var applicationEntry: null
   property var members: []
@@ -58,15 +62,14 @@ PopupWindow {
   }
 
   function visibleTarget() {
-    var items = root.visibleItems || []
-    for (var i = 0; i < items.length; ++i) {
-      if (items[i] && String(items[i].desktopId || "") === root.desktopId)
-        return items[i]
-    }
-    return null
+    return PreviewModel.visiblePreviewTarget(
+      root.visibleItems, root.presentationId, root.identityToplevel)
   }
 
   function clearSession() {
+    root.presentationId = ""
+    root.identityToplevel = null
+    root.originOnly = false
     root.desktopId = ""
     root.applicationEntry = null
     root.members = []
@@ -81,8 +84,21 @@ PopupWindow {
     root.clearSession()
   }
 
+  function refreshAnchorGeometry() {
+    if (!root.anchorItem) return
+    if (!root.anchorItem.visible || (root.clipItem && !root.clipItem.containsItem(root.anchorItem))) {
+      root.dismissImmediately()
+      return
+    }
+    if (root.visible) Qt.callLater(root.reanchor)
+  }
+
   function reanchor() {
     if (!root.anchorItem || !root.anchor.window) return
+    if (root.clipItem && !root.clipItem.containsItem(root.anchorItem)) {
+      root.dismissImmediately()
+      return
+    }
 
     var offset = PreviewModel.previewAnchorOffset(
       root.position, root.anchorItem.width, root.anchorItem.height,
@@ -95,7 +111,8 @@ PopupWindow {
 
   function requestPreview(anchorItem, desktopId, toplevels, applicationEntry) {
     var requested = root.liveMembers(toplevels)
-    if (!anchorItem || requested.length < 2) {
+    if (!anchorItem || requested.length < 2
+        || (root.clipItem && !root.clipItem.containsItem(anchorItem))) {
       if (root.anchorItem === anchorItem) root.dismissImmediately()
       return
     }
@@ -105,6 +122,9 @@ PopupWindow {
     closeTimer.stop()
     root.anchorItem = anchorItem
     root.desktopId = String(desktopId || "")
+    root.presentationId = String(anchorItem.presentationId || root.desktopId)
+    root.identityToplevel = anchorItem.identityToplevel || null
+    root.originOnly = anchorItem.originOnly === true
     root.applicationEntry = applicationEntry || null
     root.members = requested
     root.anchorHovered = true
@@ -130,6 +150,9 @@ PopupWindow {
 
   function refreshFromVisibleItems() {
     if (!root.anchorItem || !root.desktopId) return
+    if (!root.anchorItem.visible || (root.clipItem && !root.clipItem.containsItem(root.anchorItem))) {
+      root.dismissImmediately(); return
+    }
     var target = root.visibleTarget()
     if (!target) {
       root.dismissImmediately()
@@ -146,7 +169,7 @@ PopupWindow {
 
   function activateToplevel(toplevel) {
     if (!root.windowActions
-        || !root.windowActions.activateToplevel(toplevel)) return false
+        || !root.windowActions.activateToplevel(toplevel, root.originOnly)) return false
     root.dismissImmediately()
     return true
   }
@@ -283,6 +306,7 @@ PopupWindow {
   }
 
   onVisibleItemsChanged: root.refreshFromVisibleItems()
+  onClipItemChanged: root.refreshAnchorGeometry()
   onPositionChanged: if (root.visible) Qt.callLater(root.reanchor)
   onMembersChanged: if (root.visible && root.members.length >= 2)
     Qt.callLater(root.reanchor)
@@ -294,6 +318,11 @@ PopupWindow {
   Connections {
     target: root.anchorItem
     function onDestroyed() { root.dismissImmediately() }
+    function onXChanged() { root.refreshAnchorGeometry() }
+    function onYChanged() { root.refreshAnchorGeometry() }
+    function onWidthChanged() { root.refreshAnchorGeometry() }
+    function onHeightChanged() { root.refreshAnchorGeometry() }
+    function onVisibleChanged() { if (root.anchorItem && !root.anchorItem.visible) root.dismissImmediately() }
   }
 
   Connections {

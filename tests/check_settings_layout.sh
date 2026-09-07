@@ -79,3 +79,12 @@ rg -n 'Color\.urgent' "$settings_qml" >/dev/null \
   || { echo "Reset action must use the Omarchy urgent token" >&2; exit 1; }
 
 echo "Dock Settings uses a responsive wide layout"
+
+rg -Fq 'label: "Workspace layout (top / bottom only)"' "$settings_qml" \
+  || { echo "Settings must explain horizontal workspace cards" >&2; exit 1; }
+for method in preview commit; do
+  rg -Fq "root.$method(\"workspaceLayout\", value)" "$settings_qml" \
+    || { echo "Workspace layout must use the settings $method path" >&2; exit 1; }
+done
+rg -Fq 'enabled: !root.groupedEffective' "$settings_qml" \
+  || { echo "Grouped mode must disable flat-only controls" >&2; exit 1; }

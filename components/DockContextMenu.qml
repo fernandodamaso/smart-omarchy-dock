@@ -16,6 +16,8 @@ PopupWindow {
   required property bool pinnedItem
   required property var runningToplevels
   required property var windowActions
+  property bool originOnly: false
+  onRunningToplevelsChanged: if (visible) dismiss()
   property bool controlItem: false
   signal openLauncher()
   signal openSettings()
@@ -63,6 +65,14 @@ PopupWindow {
     visible = false
     page = "windows"
     selectedToplevel = null
+  }
+
+  function minimizeRestoreSelected() {
+    var changed = root.selectedMinimized
+      ? root.windowActions.restoreToplevel(root.selectedToplevel, root.originOnly)
+      : root.windowActions.minimizeToplevel(root.selectedToplevel, root.originOnly)
+    root.dismiss()
+    return changed
   }
 
   function selectWindow(toplevel) {
@@ -582,11 +592,7 @@ PopupWindow {
                   return -1
                 }
                 onTriggered: {
-                  if (root.selectedMinimized)
-                    root.windowActions.restoreToplevel(root.selectedToplevel)
-                  else
-                    root.windowActions.minimizeToplevel(root.selectedToplevel)
-                  root.dismiss()
+                  root.minimizeRestoreSelected()
                 }
               }
 

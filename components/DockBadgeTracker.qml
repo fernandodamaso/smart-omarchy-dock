@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import Quickshell.Services.Notifications
 import Quickshell.Services.SystemTray
 import "DockBadgeModel.js" as BadgeModel
+import "DockWindowModel.js" as DockWindowModel
 
 Item {
   id: root
@@ -84,7 +85,7 @@ Item {
     var addresses = []
     for (var i = 0; i < hyprToplevels.length; ++i) {
       var handle = hyprToplevels[i]
-      if (!handle || handle.urgent !== true) continue
+      if (!DockWindowModel.handleUrgent(handle)) continue
       var ipc = handle.lastIpcObject || ({})
       var wayland = handle.wayland || null
       if (!BadgeModel.strictIdentityMatches(desktopId, entry, [
@@ -92,7 +93,7 @@ Item {
           ipc.class,
           ipc.initialClass
         ], identityAliases)) continue
-      var address = String(ipc.address || "").trim().toLowerCase()
+      var address = DockWindowModel.normalizedAddress(handle.address || ipc.address)
       if (address && addresses.indexOf(address) < 0) addresses.push(address)
     }
     return addresses
@@ -117,10 +118,11 @@ Item {
       if (key) identities[key] = entry.id
     }
     for (var existingKey in urgentStates) {
+      if (existingKey.indexOf("workspace:") === 0) continue
       if (identities[existingKey] === undefined) identities[existingKey] = existingKey
     }
 
-    var next = {}
+    var next = BadgeModel.copyRecords(urgentStates)
     for (var key in identities) {
       var desktopId = identities[key]
       var entryForId = BadgeModel.entryForDesktopId(desktopId, applications)
@@ -136,14 +138,45 @@ Item {
     bumpRevision()
   }
 
-  function urgentStateFor(desktopId, primaryOwner) {
+  function workspaceScopeKey(owner, presentationId) {
+    return "workspace:" + JSON.stringify([String(owner), String(presentationId)])
+  }
+
+  function syncWorkspaceScopes(owner, items) {
+    var prefix = "workspace:" + JSON.stringify([String(owner)]).slice(0, -1) + ","
+    var next = BadgeModel.copyRecords(urgentStates)
+    var motion = BadgeModel.copyRecords(urgentMotionStates)
+    var retained = {}
+    for (var i = 0; i < items.length; ++i) {
+      var item = items[i]
+      var key = workspaceScopeKey(owner, item.presentationId)
+      retained[key] = true
+      next[key] = BadgeModel.reduceWindowUrgencyState(
+        next[key], item.urgentAddresses, true, !next[key])
+      if (!motion[key]) motion[key] = BadgeModel.primeUrgentMotionState(
+        null, next[key].windowUrgentRevision)
+    }
+    for (var key in next) {
+      if (key.indexOf(prefix) === 0 && !retained[key]) {
+        delete next[key]
+        delete motion[key]
+      }
+    }
+    if (JSON.stringify(motion) !== JSON.stringify(urgentMotionStates))
+      urgentMotionStates = motion
+    if (JSON.stringify(next) === JSON.stringify(urgentStates)) return
+    urgentStates = next
+    bumpRevision()
+  }
+
+  function urgentStateFor(desktopId, primaryOwner, scopeKey) {
     var stateRevision = revision
-    var key = BadgeModel.normalizeIdentity(desktopId)
+    var key = scopeKey || BadgeModel.normalizeIdentity(desktopId)
     var state = urgentStates[key]
     if (!state) {
       var entry = BadgeModel.entryForDesktopId(desktopId, applications)
       state = BadgeModel.reduceWindowUrgencyState(
-        null, urgentAddressesFor(desktopId, entry), primaryOwner, true)
+        null, scopeKey ? [] : urgentAddressesFor(desktopId, entry), primaryOwner, true)
     }
     return {
       windowUrgent: state.windowUrgent === true,
@@ -152,18 +185,18 @@ Item {
     }
   }
 
-  function primeUrgentMotion(desktopId, urgentRevision) {
-    var key = BadgeModel.normalizeIdentity(desktopId)
-    if (!key) return
+  function primeUrgentMotion(desktopId, urgentRevision, scopeKey) {
+    var key = scopeKey || BadgeModel.normalizeIdentity(desktopId)
+    if (!key || (scopeKey && (!urgentStates[key] || urgentMotionStates[key]))) return
     var next = BadgeModel.copyRecords(urgentMotionStates)
     next[key] = BadgeModel.primeUrgentMotionState(
       urgentMotionStates[key], urgentRevision)
     urgentMotionStates = next
   }
 
-  function requestUrgentMotion(desktopId, input) {
-    var key = BadgeModel.normalizeIdentity(desktopId)
-    if (!key) return false
+  function requestUrgentMotion(desktopId, input, scopeKey) {
+    var key = scopeKey || BadgeModel.normalizeIdentity(desktopId)
+    if (!key || (scopeKey && !urgentStates[key])) return false
     var reduced = BadgeModel.reduceUrgentMotion(urgentMotionStates[key], input)
     var next = BadgeModel.copyRecords(urgentMotionStates)
     next[key] = reduced.state
@@ -179,26 +212,28 @@ Item {
       counts, desktopId, !!(service && service.available))
   }
 
-  function motionAttentionFor(desktopId) {
+  function motionAttentionFor(desktopId, scope) {
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     var local = BadgeModel.localSeverity(
       persisted.localNotifications, desktopId, entry, identityAliases,
       Date.now(), BadgeModel.LOCAL_ATTENTION_TTL_MS)
     return BadgeModel.motionAttentionEligible(
-      sniNeedsAttentionFor(desktopId, entry),
-      hyprUrgentFor(desktopId, entry), local)
+      (!scope || scope.primaryOwner === true) && sniNeedsAttentionFor(desktopId, entry),
+      scope ? scope.localUrgent === true : hyprUrgentFor(desktopId, entry),
+      !scope || scope.primaryOwner === true ? local : BadgeModel.BADGE_NONE)
   }
 
-  function badgeFor(desktopId) {
+  function badgeFor(desktopId, scope) {
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     var local = BadgeModel.localSeverity(
       persisted.localNotifications, desktopId, entry, identityAliases,
       Date.now(), BadgeModel.LOCAL_ATTENTION_TTL_MS)
-    var severity = BadgeModel.badgeSeverity(
+    var severity = BadgeModel.scopedBadgeSeverity(
       sniNeedsAttentionFor(desktopId, entry),
-      hyprUrgentFor(desktopId, entry), local)
+      hyprUrgentFor(desktopId, entry), local, scope)
     return BadgeModel.applicationBadgeToken(
-      true, launcherBadgeMode, launcherCountFor(desktopId), severity)
+      true, launcherBadgeMode, !scope || scope.primaryOwner === true
+        ? launcherCountFor(desktopId) : null, severity)
   }
 
   function focusedEntry() {

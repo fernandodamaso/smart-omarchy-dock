@@ -60,6 +60,7 @@ Item {
     scrollAction: "none",
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
+    workspaceLayout: "flat",
     groupWindows: true,
     windowScope: "all",
     showUrgentOutsideScope: true,
