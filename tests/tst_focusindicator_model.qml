@@ -26,37 +26,37 @@ TestCase {
       "top", 42, 42, true, false)
     compare(topRunning.visible, true)
     compare(topRunning.x, 19)
-    compare(topRunning.y, -6)
+    compare(topRunning.y, -11)
     compare(topRunning.width, 4)
     compare(topRunning.height, 4)
 
     var topFocused = DockModel.applicationStateIndicatorGeometry(
       "top", 42, 42, true, true)
-    compare(topFocused.x, 15)
-    compare(topFocused.y, -6)
-    compare(topFocused.width, 12)
+    compare(topFocused.x, 6)
+    compare(topFocused.y, -11)
+    compare(topFocused.width, 30)
     compare(topFocused.height, 4)
 
     var bottomFocused = DockModel.applicationStateIndicatorGeometry(
       "bottom", 42, 42, true, true)
-    compare(bottomFocused.x, 15)
-    compare(bottomFocused.y, 44)
-    compare(bottomFocused.width, 12)
+    compare(bottomFocused.x, 6)
+    compare(bottomFocused.y, 49)
+    compare(bottomFocused.width, 30)
     compare(bottomFocused.height, 4)
 
     var leftFocused = DockModel.applicationStateIndicatorGeometry(
       "left", 42, 42, true, true)
-    compare(leftFocused.x, 44)
-    compare(leftFocused.y, 15)
+    compare(leftFocused.x, 49)
+    compare(leftFocused.y, 6)
     compare(leftFocused.width, 4)
-    compare(leftFocused.height, 12)
+    compare(leftFocused.height, 30)
 
     var rightFocused = DockModel.applicationStateIndicatorGeometry(
       "right", 42, 42, true, true)
-    compare(rightFocused.x, -6)
-    compare(rightFocused.y, 15)
+    compare(rightFocused.x, -11)
+    compare(rightFocused.y, 6)
     compare(rightFocused.width, 4)
-    compare(rightFocused.height, 12)
+    compare(rightFocused.height, 30)
   }
 
   function test_hidesMarkerWhenApplicationIsNotRunning() {
@@ -70,12 +70,12 @@ TestCase {
   function test_scalesFocusedMarkerWithinBoundedIconAwareRange() {
     var small = DockModel.applicationStateIndicatorGeometry(
       "bottom", 24, 24, true, true)
-    compare(small.width, 10)
+    compare(small.width, 17)
     compare(small.height, 3)
 
     var large = DockModel.applicationStateIndicatorGeometry(
       "bottom", 96, 96, true, true)
-    compare(large.width, 18)
+    compare(large.width, 69)
     compare(large.height, 5)
   }
 }

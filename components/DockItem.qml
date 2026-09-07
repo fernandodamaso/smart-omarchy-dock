@@ -333,6 +333,15 @@ Item {
         }
       }
 
+      Rectangle {
+        anchors.fill: parent
+        anchors.margins: -4
+        radius: Math.max(10, Style.cornerRadius)
+        color: Util.alpha(Color.background, mouse.hovered ? 0.8 : 0.5)
+        border.width: 1
+        border.color: Util.alpha(Color.foreground, mouse.hovered ? 0.28 : 0.14)
+      }
+
       IconImage {
         anchors.fill: parent
         opacity: root.allWindowsMinimized ? 0.56 : 1.0
@@ -350,10 +359,10 @@ Item {
         visible: root.runningCount > 1
         width: Math.max(16, windowCountText.implicitWidth + 8)
         height: 16
-        radius: Math.min(height / 2, Style.cornerRadius)
+        radius: height / 2
         x: iconContainer.width - width + 5
         y: -5
-        color: Color.urgent
+        color: Color.accent
         border.width: Style.normalBorderWidth
         border.color: Color.background
         z: 3
@@ -363,7 +372,7 @@ Item {
 
           anchors.centerIn: parent
           text: root.runningCount > 99 ? "99+" : String(root.runningCount)
-          color: Color.foreground
+          color: Color.background
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
           font.bold: true

@@ -6,7 +6,7 @@ Rectangle {
 
   required property string label
   required property int count
-  required property bool expanded
+  required property bool active
   required property int slotSize
   property bool switchable: true
   property bool urgent: false
@@ -24,17 +24,23 @@ Rectangle {
   default property alias items: appRow.data
   signal activated()
 
-  width: header.width + (expanded ? appRow.width : 0) + 8
-  height: slotSize + 6
-  radius: Style.cornerRadius
-  color: expanded ? Color.background : "transparent"
-  border.width: expanded ? 2 : 1
-  border.color: urgent ? Color.urgent : expanded ? Color.accent : Color.menu.border
+  width: header.width + appRow.width + (appRow.width > 0 ? 16 : 2)
+  height: slotSize + 18
+  radius: Math.max(14, Style.cornerRadius)
+  color: Util.alpha(Color.background, 0.62)
+  border.width: 1
+  border.color: urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.8) : Util.alpha(Color.foreground, 0.18)
 
-  Item {
+  Rectangle {
     id: header
-    width: Math.min(120, Math.max(56, title.implicitWidth + 20))
-    height: parent.height
+    color: Util.alpha(root.active ? Color.accent : Color.foreground, root.active ? 0.14 : headerHover.hovered ? 0.08 : 0.025)
+    radius: root.radius - 1
+    border.width: activeFocus ? 1 : 0
+    border.color: Color.accent
+    x: 1
+    y: 1
+    width: Math.min(120, Math.max(root.slotSize, title.implicitWidth + 28))
+    height: parent.height - 2
     Accessible.role: Accessible.Button
     Accessible.name: root.label + ", " + root.count + " windows" + (root.urgent ? ", urgent" : "")
     Accessible.onPressAction: if (root.switchable) root.activated()
@@ -43,27 +49,28 @@ Rectangle {
     Keys.onSpacePressed: if (root.switchable) root.activated()
     Text {
       id: title
-      anchors.centerIn: parent
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.verticalCenterOffset: -5
       width: Math.min(implicitWidth, parent.width - 20)
       elide: Text.ElideRight
-      text: root.label + "\n" + root.count
+      text: root.label
       horizontalAlignment: Text.AlignHCenter
-      color: Color.foreground
+      color: root.active ? Color.accent : Color.foreground
       font.family: Style.font.family
-      font.pixelSize: Style.font.bodySmall
-      font.bold: root.expanded
+      font.pixelSize: Math.max(Style.font.body, root.slotSize * 0.32)
+      font.bold: true
     }
     TapHandler { enabled: root.switchable; onTapped: root.activated() }
     HoverHandler { id: headerHover; cursorShape: root.switchable ? Qt.PointingHandCursor : Qt.ArrowCursor }
     Rectangle {
-      anchors.right: parent.right
-      anchors.top: parent.top
-      anchors.margins: 4
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.top: title.bottom
+      anchors.topMargin: 5
       width: 5
       height: 5
       radius: 3
-      visible: root.urgent
-      color: Color.urgent
+      color: root.urgent ? Color.urgent : root.active ? Color.accent : Util.alpha(Color.foreground, 0.32)
     }
     DockToolTip {
       id: headerTooltip
@@ -77,7 +84,8 @@ Rectangle {
   }
   Row {
     id: appRow
-    x: header.width
-    visible: root.expanded
+    x: header.width + 8
+    anchors.verticalCenter: parent.verticalCenter
+    spacing: 6
   }
 }

@@ -252,22 +252,21 @@ PanelWindow {
       hyprWorkspaces, focusedWorkspaceId, hyprToplevels,
       workspaceWindowCounts, workspaceCountsReady)
   }
-  readonly property int itemSize: iconSize + 14
-  readonly property int reservedSize: iconSize + 24 + edgeMargin
-  readonly property int mainPadding: 10
+  readonly property int itemSize: iconSize + 22
+  readonly property int reservedSize: iconSize + (grouped ? 56 : 44) + edgeMargin
+  readonly property int mainPadding: 16
   readonly property int revealThickness: 3
   readonly property int crossExtent: vertical
     ? Math.ceil(iconSize * magnification + 80) + edgeMargin
-    : Math.ceil(iconSize * magnification + 48) + edgeMargin
+    : Math.ceil(iconSize * magnification + 64) + edgeMargin
   readonly property int appMainExtent: grouped ? groupedLayout.desiredWidth : visibleItems.length * itemSize
-  readonly property int workspaceMainExtent: grouped ? 0 : vertical
-    ? Math.max(0, visibleWorkspaceIds.length * 32 + 6)
-    : Math.max(0, visibleWorkspaceIds.length * 32 + 6)
+  readonly property int workspaceMainExtent: grouped ? 0
+    : (vertical ? workspaceStrip.height : workspaceStrip.width) + (showTrash ? 0 : 12)
   readonly property int trashMainExtent: TrashModel.sectionMainExtent(
     showTrash, itemSize, 12)
   readonly property int trailingMainExtent: TrashModel.trailingMainExtent(
     showTrash, itemSize, 12, workspaceMainExtent)
-  readonly property int compactMainExtent: mainPadding * 2 + itemSize
+  readonly property int compactMainExtent: mainPadding * 2 + itemSize + 12
     + appMainExtent + trailingMainExtent
   readonly property bool keepAutoHideOpen: windowPointer.hovered
     || appPicker.visible || dockSettings.visible || openMenuCount > 0
@@ -338,7 +337,7 @@ PanelWindow {
     if (!grouped) return
     for (var i = 0; i < workspaceCards.count; ++i) {
       var card = workspaceCards.itemAt(i)
-      if (card && card.expanded) {
+      if (card && card.active) {
         groupedLayout.ensureVisible(card, card.headerWidth)
         break
       }
@@ -576,9 +575,9 @@ PanelWindow {
     y: root.vertical
       ? 0
       : root.position === "top" ? root.edgeMargin : parent.height - height - root.edgeMargin
-    width: root.vertical ? root.iconSize + 24 : parent.width
-    height: root.vertical ? parent.height : root.iconSize + 24
-    radius: Style.cornerRadius
+    width: root.vertical ? root.iconSize + 44 : parent.width
+    height: root.vertical ? parent.height : root.iconSize + (root.grouped ? 56 : 44)
+    radius: Math.max(18, Style.cornerRadius)
     color: root.dockBackgroundColor
     borderSpec: root.dockBorderSpec
     transform: Translate {
@@ -602,7 +601,7 @@ PanelWindow {
 
       anchors.fill: parent
 
-      readonly property real leadingEnd: root.mainPadding + root.itemSize
+      readonly property real leadingEnd: root.mainPadding + root.itemSize + 12
       readonly property real trailingStart: (root.vertical ? height : width)
         - root.mainPadding - root.trailingMainExtent
       readonly property real trashOffset: root.showTrash
@@ -614,6 +613,17 @@ PanelWindow {
         ? Math.max(leadingEnd, Math.min(centeredAppStart,
             Math.max(leadingEnd, trailingStart - root.appMainExtent)))
         : leadingEnd
+
+      Rectangle {
+        x: controlItem.x + (controlItem.width - width) / 2
+        y: controlItem.y + (controlItem.height - height) / 2
+        width: root.iconSize + 8
+        height: width
+        radius: Math.max(10, Style.cornerRadius)
+        color: Util.alpha(Color.background, 0.5)
+        border.width: 1
+        border.color: Util.alpha(Color.foreground, 0.14)
+      }
 
       DockControlItem {
         id: controlItem
@@ -641,6 +651,14 @@ PanelWindow {
         }
       }
 
+      DockSeparator {
+        x: root.vertical ? (parent.width - width) / 2 : dockLayout.leadingEnd - 12
+        y: root.vertical ? dockLayout.leadingEnd - 12 : (parent.height - height) / 2
+        vertical: root.vertical
+        slotSize: root.itemSize
+        iconSize: root.iconSize
+      }
+
       Grid {
         id: appGrid
         visible: !root.grouped
@@ -664,16 +682,16 @@ PanelWindow {
         width: Math.max(0, Math.min(desiredWidth, dockLayout.trailingStart - x))
         height: root.crossExtent - root.edgeMargin
         y: root.position === "top" ? 0 : dockLayout.height - height
-        rowY: root.position === "top" ? (dockLayout.height - root.itemSize - 6) / 2
-          : height - (dockLayout.height + root.itemSize + 6) / 2
-        contentPadding: Math.ceil(root.iconSize * (root.magnification - 1) / 2) + 8
+        rowY: root.position === "top" ? (dockLayout.height - root.itemSize - 18) / 2
+          : height - (dockLayout.height + root.itemSize + 18) / 2
+        contentPadding: Math.ceil(root.iconSize * (root.magnification - 1) / 2) + 16
         foreground: Color.menu.text
         background: Color.menu.background
         accent: Color.accent
         onViewportChanged: windowPreview.refreshAnchorGeometry()
         Repeater {
           model: root.groupedRequested ? root.workspacePresentation.globalLaunchers : []
-          AppIcon {}
+          AppIcon { y: 6 }
         }
         Repeater {
           id: workspaceCards
@@ -686,14 +704,14 @@ PanelWindow {
             urgent: modelData.urgent === true && root.attentionBadgesEnabled
             position: root.position
             viewport: groupedLayout
-            expanded: modelData.active
+            active: modelData.active
             slotSize: root.itemSize
             onActivated: {
               var request = DockModel.focusWorkspaceTargetRequest(modelData.activationTarget, Hyprland.usingLua)
               if (request) Hyprland.dispatch(request)
             }
             Repeater {
-              model: workspaceCard.expanded ? workspaceCard.modelData.items : []
+              model: workspaceCard.modelData.items
               AppIcon {}
             }
           }
@@ -706,7 +724,7 @@ PanelWindow {
           count: root.workspacePresentation.fallbackItems.reduce(function(total, item) {
             return total + item.toplevels.length
           }, 0)
-          expanded: true
+          active: false
           switchable: false
           slotSize: root.itemSize
           Repeater {
@@ -725,6 +743,18 @@ PanelWindow {
         slotSize: root.itemSize
         iconSize: root.iconSize
         visible: root.showTrash
+      }
+
+      Rectangle {
+        visible: root.showTrash
+        x: trashItem.x + (trashItem.width - width) / 2
+        y: trashItem.y + (trashItem.height - height) / 2
+        width: root.iconSize + 8
+        height: width
+        radius: Math.max(10, Style.cornerRadius)
+        color: Util.alpha(Color.background, 0.5)
+        border.width: 1
+        border.color: Util.alpha(Color.foreground, 0.14)
       }
 
       DockTrashItem {
@@ -762,11 +792,11 @@ PanelWindow {
 
         x: root.vertical
           ? (parent.width - width) / 2
-          : parent.trailingStart + appTrashSeparator.width + trashItem.width
+          : parent.trailingStart + (root.showTrash ? appTrashSeparator.width + trashItem.width : 0)
         y: root.vertical
-          ? parent.trailingStart + appTrashSeparator.height + trashItem.height
+          ? parent.trailingStart + (root.showTrash ? appTrashSeparator.height + trashItem.height : 0)
           : (parent.height - height) / 2
-        visible: root.showTrash
+        visible: !root.grouped
         vertical: root.vertical
         slotSize: root.itemSize
         iconSize: root.iconSize
@@ -778,9 +808,9 @@ PanelWindow {
 
         x: root.vertical
           ? (parent.width - width) / 2
-          : parent.trailingStart + parent.trashOffset
+          : parent.trailingStart + parent.trashOffset + (root.showTrash ? 0 : 12)
         y: root.vertical
-          ? parent.trailingStart + parent.trashOffset
+          ? parent.trailingStart + parent.trashOffset + (root.showTrash ? 0 : 12)
           : (parent.height - height) / 2
         workspaceIds: root.visibleWorkspaceIds
         workspaces: root.hyprWorkspaces

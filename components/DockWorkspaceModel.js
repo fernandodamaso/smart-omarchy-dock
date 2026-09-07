@@ -117,6 +117,9 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
   for (var g = 0; g < groups.length; ++g) {
     if (groups[g].active) renderedItems = renderedItems.concat(groups[g].items)
   }
+  for (var g = 0; g < groups.length; ++g) {
+    if (!groups[g].active) renderedItems = renderedItems.concat(groups[g].items)
+  }
   return { globalLaunchers: globalLaunchers, fallbackItems: fallbackItems,
     groups: groups, renderedItems: renderedItems.concat(globalLaunchers, fallbackItems) }
 }
