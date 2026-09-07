@@ -1,15 +1,8 @@
 .pragma library
+.import "DockWindowModel.js" as DockWindowModel
 
 function groupedPreviewMembers(candidates, liveToplevels) {
-  var values = candidates || []
-  var live = liveToplevels || []
-  var members = []
-
-  for (var i = 0; i < values.length; ++i) {
-    var candidate = values[i]
-    if (candidate && live.indexOf(candidate) >= 0)
-      members.push(candidate)
-  }
+  var members = DockWindowModel.liveGroupMembers(candidates, liveToplevels)
 
   return members.length >= 2 ? members : []
 }

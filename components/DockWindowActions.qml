@@ -9,7 +9,7 @@ Item {
 
   readonly property string minimizedWorkspace: "special:smartdock-minimized"
   property var minimizedOrigins: ({})
-  readonly property var minimizedOriginsSnapshot: copyOrigins(minimizedOrigins)
+  readonly property var minimizedOriginsSnapshot: DockWindowModel.copyOriginSnapshot(minimizedOrigins)
   readonly property var activeToplevel: ToplevelManager.activeToplevel
 
   function currentToplevels() {
@@ -21,28 +21,9 @@ Item {
     return Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
   }
 
-  function copyOrigins(source) {
-    var result = {}
-    var values = source || ({})
-    for (var address in values) {
-      var origin = values[address] || ({})
-      result[address] = {
-        workspace: String(origin.workspace || ""),
-        monitor: String(origin.monitor || "")
-      }
-    }
-    return result
-  }
-
   function handleFor(toplevel) {
     if (!isAlive(toplevel)) return null
-
-    var handles = currentHandles()
-    for (var i = 0; i < handles.length; ++i) {
-      if (handles[i] && handles[i].wayland === toplevel)
-        return handles[i]
-    }
-    return null
+    return DockWindowModel.handleForToplevel(toplevel, currentHandles())
   }
 
   function addressFor(toplevel) {
@@ -105,7 +86,7 @@ Item {
     var normalized = DockModel.normalizeWindowAddress(address)
     if (!normalized || !origin || !origin.workspace) return false
 
-    var origins = copyOrigins(minimizedOrigins)
+    var origins = DockWindowModel.copyOriginSnapshot(minimizedOrigins)
     origins[normalized] = {
       workspace: String(origin.workspace),
       monitor: String(origin.monitor || "")
@@ -118,7 +99,7 @@ Item {
     var address = originAddress(value)
     if (!address || minimizedOrigins[address] === undefined) return false
 
-    var origins = copyOrigins(minimizedOrigins)
+    var origins = DockWindowModel.copyOriginSnapshot(minimizedOrigins)
     delete origins[address]
     minimizedOrigins = origins
     return true
@@ -297,7 +278,7 @@ Item {
     var retained = DockWindowModel.pruneOriginSnapshot(
       minimizedOrigins, currentHandles(), currentToplevels())
     if (JSON.stringify(retained) !== JSON.stringify(minimizedOrigins))
-      minimizedOrigins = copyOrigins(retained)
+      minimizedOrigins = DockWindowModel.copyOriginSnapshot(retained)
   }
 
   Timer {

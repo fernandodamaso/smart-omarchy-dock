@@ -276,6 +276,25 @@ TestCase {
     compare(hidden.length, 0)
   }
 
+  function test_copiesOriginSnapshotWithCanonicalKeysWithoutMutatingSource() {
+    if (!hasFunction("copyOriginSnapshot")) return
+
+    var record = { workspace: "2", monitor: "1" }
+    var source = {
+      "0XBEEF": record,
+      "not-an-address": { workspace: "9", monitor: "9" }
+    }
+    var snapshot = DockWindowModel.copyOriginSnapshot(source)
+
+    compare(Object.keys(snapshot).length, 1)
+    compare(snapshot["0xbeef"].workspace, "2")
+    compare(snapshot["0xbeef"].monitor, "1")
+    verify(snapshot["0xbeef"] !== record)
+    compare(record.workspace, "2")
+    compare(source["0XBEEF"].workspace, "2")
+    verify(snapshot["not-an-address"] === undefined)
+  }
+
   function test_prunesStaleOriginAddressesWithoutLosingLiveOrigins() {
     if (!hasFunction("pruneOriginSnapshot")) return
 
