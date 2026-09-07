@@ -384,7 +384,7 @@ PanelWindow {
   onGroupWindowsChanged: root.scheduleVisibleItemsRefresh()
   onHiddenApplicationsChanged: root.scheduleVisibleItemsRefresh()
   onScopeRevisionChanged: {
-    root.windowPreview.dismissImmediately()
+    if (windowPreview) windowPreview.dismissImmediately()
     root.scheduleVisibleItemsRefresh()
   }
 
