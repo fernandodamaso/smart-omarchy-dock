@@ -223,6 +223,11 @@ function badgeSeverity(sniNeedsAttention, hyprUrgent, localAttention) {
   ])
 }
 
+function motionAttentionEligible(sniNeedsAttention, hyprUrgent, localAttention) {
+  return sniNeedsAttention === true || hyprUrgent === true
+    || localAttention === BADGE_URGENT
+}
+
 function launcherCountState(records, desktopId, providerAvailable) {
   var none = { authoritative: false, count: 0, visible: false }
   if (!providerAvailable) return none

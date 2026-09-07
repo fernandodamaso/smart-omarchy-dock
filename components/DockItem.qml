@@ -99,10 +99,8 @@ Item {
   readonly property bool windowUrgent: urgentBadgeState.windowUrgent === true
   readonly property int windowUrgentRevision:
     Number(urgentBadgeState.windowUrgentRevision || 0)
-  readonly property string attentionSeverity:
-    BadgeModel.attentionSeverityFromBadgeToken(attentionBadge)
-  readonly property bool attentionActive:
-    attentionSeverity !== BadgeModel.BADGE_NONE
+  readonly property bool attentionActive: badgeTracker
+    ? badgeTracker.motionAttentionFor(desktopId) : false
   readonly property bool urgentMotionSuppressed: mouse.hovered
     || dragHandler.active || contextMenu.visible
     || previewActive || previewInteractionActive
