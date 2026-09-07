@@ -85,8 +85,8 @@ replace_once(
     '''grep -Fq 'attentionSeverityFromBadgeToken' "$item" \\
   || fail 'DockItem must derive attention from its badge token'
 grep -Fq 'readonly property bool attentionActive' "$item" \\
-  || fail 'DockItem attention-active property missing' ''',
+  || fail 'DockItem attention-active property missing'\n''',
     '''grep -Fq 'motionAttentionFor(desktopId)' "$item" \\
   || fail 'DockItem must use source-specific motion eligibility'
 grep -Fq 'readonly property bool attentionActive' "$item" \\
-  || fail 'DockItem attention-active property missing' ''')
+  || fail 'DockItem attention-active property missing'\n''')
