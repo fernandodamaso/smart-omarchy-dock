@@ -330,6 +330,8 @@ width when the override is disabled.
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
+| `windowScope` | Running-window visibility: `all`, `workspace`, `monitor`, or `workspace-monitor`; invalid/missing values use `all` |
+| `showUrgentOutsideScope` | When enabled, a true Hyprland-urgent window may bypass a non-`all` scope; notification/SNI attention does not |
 | `attentionBadgesEnabled` | Show application attention badges. FDM-809 dot severity remains the fallback; in automatic mode an authoritative positive visible launcher count may replace that dot. |
 | `urgentWindowAnimationEnabled` | When `true`, active SNI, critical local-notification, or Hyprland urgent attention may nudge the owning application icon, no more than once every 3000 ms while attention remains. A launcher count alone never animates; a count with attention still does. Motion is effective only while `attentionBadgesEnabled` is also enabled; disabling it leaves the static badge intact. |
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
@@ -376,6 +378,22 @@ only for a grouped icon with at least two live windows. High-resolution vertical
 deltas accumulate in 120-unit steps, residual input resets after about 220 ms,
 and minimized targets restore through the shared host-owned window controller
 before focus.
+
+### Window scope filtering
+
+`windowScope` filters individual running windows before grouping. `all` preserves
+existing behavior; `workspace` uses the workspace active on Hyprland's focused
+monitor; `monitor` uses each Dock's own screen/monitor; and
+`workspace-monitor` requires both. Closed pinned launchers stay visible.
+
+When `showUrgentOutsideScope` is enabled, only Hyprland's actual per-window
+urgent state bypasses scope. Explicitly hidden applications still stay hidden.
+SmartDock-minimized windows use the shared host-owned workspace/monitor origin;
+unknown or transient location data fails open so the only restore affordance is
+not lost. Scope refresh is debounced once in `DockHost.qml` for all monitor
+Docks, with no per-Dock `hyprctl` polling.
+
+### Grouped-window wheel cycling
 
 Attention dots deliberately represent **attention state**, not inferred unread
 counts. SmartDock reduces three FDM-809 sources when they are available:

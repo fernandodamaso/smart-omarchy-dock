@@ -51,10 +51,17 @@ grep -Fq 'target: ToplevelManager.toplevels' "$dock" \
 grep -Fq 'target: Hyprland.toplevels' "$dock" \
   || fail 'Hyprland toplevel collection observer missing'
 
-grep -Fq 'root.scheduleVisibleItemsRefresh()' <(sed -n '/id: fullscreenStateRefreshTimer/,/^[[:space:]]*  }/p' "$dock") \
-  || fail 'fullscreen delayed refresh must schedule visibleItems'
-grep -Fq 'root.scheduleVisibleItemsRefresh()' <(sed -n '/id: workspaceStateRefreshTimer/,/^[[:space:]]*  }/p' "$dock") \
-  || fail 'workspace delayed refresh must schedule visibleItems'
+if grep -Fq 'onScopeRevisionChanged:' "$dock"; then
+  scope_handler="$(sed -n '/onScopeRevisionChanged:/,/^  }/p' "$dock")"
+  grep -Fq 'root.scheduleVisibleItemsRefresh()' <<<"$scope_handler" \
+    || fail 'host-owned scope revision must schedule visibleItems'
+else
+  grep -Fq 'root.scheduleVisibleItemsRefresh()' <(sed -n '/id: fullscreenStateRefreshTimer/,/^[[:space:]]*  }/p' "$dock") \
+    || fail 'fullscreen delayed refresh must schedule visibleItems'
+  grep -Fq 'root.scheduleVisibleItemsRefresh()' <(sed -n '/id: workspaceStateRefreshTimer/,/^[[:space:]]*  }/p' "$dock") \
+    || fail 'workspace delayed refresh must schedule visibleItems'
+fi
+
 grep -Fq 'windowtitle' "$dock" \
   || fail 'window-title raw event coverage missing'
 

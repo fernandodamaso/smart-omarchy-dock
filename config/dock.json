@@ -29,6 +29,8 @@
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
+  "windowScope": "all",
+  "showUrgentOutsideScope": true,
   "attentionBadgesEnabled": true,
   "urgentWindowAnimationEnabled": true,
   "launcherBadgeMode": "automatic",

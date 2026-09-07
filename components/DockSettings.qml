@@ -9,6 +9,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockWindowModel.js" as DockWindowModel
 import "DockTrashModel.js" as TrashModel
 
 PanelWindow {
@@ -1020,6 +1021,30 @@ PanelWindow {
                 : behaviorSection.implicitHeight
               title: "Behavior"
               iconName: "mouse-pointer-click"
+
+              DockActionDropdown {
+                width: parent.width
+                label: "Window scope"
+                value: DockWindowModel.normalizeWindowScope(
+                  root.current("windowScope"))
+                options: DockWindowModel.windowScopeOptions()
+                foreground: Color.menu.text
+                background: Color.menu.background
+                popupBorder: Color.menu.border
+                accent: Color.accent
+                onChanged: value => root.commit("windowScope", value)
+              }
+
+              DockSettingsToggleRow {
+                width: parent.width
+                label: "Show urgent outside scope"
+                description: root.current("windowScope") === "all"
+                  ? "All windows are already visible" : "Include truly urgent Hyprland windows from elsewhere"
+                enabled: root.current("windowScope") !== "all"
+                opacity: enabled ? 1 : 0.45
+                checked: root.current("showUrgentOutsideScope") !== false
+                onToggled: root.commit("showUrgentOutsideScope", !checked)
+              }
 
               DockSettingsToggleRow {
                 width: parent.width

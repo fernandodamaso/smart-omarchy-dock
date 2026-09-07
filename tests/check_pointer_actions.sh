@@ -56,9 +56,11 @@ require_pattern 'DockWindowPreview[[:space:]]*\{' components/Dock.qml
 
 [[ -f components/DockActionDropdown.qml ]] \
   || fail "components/DockActionDropdown.qml does not exist"
-selector_count="$(grep -Ec '^[[:space:]]*DockActionDropdown[[:space:]]*\{' components/DockSettings.qml || true)"
-[[ "$selector_count" -eq 3 ]] \
-  || fail "Dock Settings must expose Left, Middle, and Scroll selectors (found $selector_count)"
+for label in "Left click" "Middle click" "Scroll"; do
+  selector_count="$(grep -Ec "label:[[:space:]]*\"${label}\"" components/DockSettings.qml || true)"
+  [[ "$selector_count" -eq 1 ]] \
+    || fail "Dock Settings must expose exactly one ${label} selector (found $selector_count)"
+done
 require_pattern 'applicationActionOptions\(\)' components/DockSettings.qml
 require_pattern 'label:[[:space:]]*"Left click"' components/DockSettings.qml
 require_pattern 'label:[[:space:]]*"Middle click"' components/DockSettings.qml
