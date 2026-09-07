@@ -1,0 +1,86 @@
+===== tests/check_attention_badges.sh =====
+check_attention_badges: PASS
+exit=0
+===== tests/check_color_picker.sh =====
+Dock color pickers are wired for dock surface and workspace badge colors
+exit=0
+===== tests/check_control_icon_color.sh =====
+Dock Controls glyph keeps its foreground color on hover
+exit=0
+===== tests/check_cross_axis_alignment.sh =====
+Dock icon containers use symmetric cross-axis alignment
+exit=0
+===== tests/check_fdm816_harness.sh =====
+check_fdm816_harness: PASS
+exit=0
+===== tests/check_focus_indicator.sh =====
+check_focus_indicator: PASS
+exit=0
+===== tests/check_hover_glow.sh =====
+tests/check_hover_glow.sh: line 12: rg: command not found
+components/DockItem.qml must provide a hover glow behind the icon
+exit=1
+===== tests/check_launcher_badge_counts.sh =====
+check_launcher_badge_counts: PASS
+exit=0
+===== tests/check_lucide_menu_assets.sh =====
+Lucide menu assets and controls-menu wiring are present
+exit=0
+===== tests/check_pointer_actions.sh =====
+check_pointer_actions: Dock Settings must expose Left, Middle, and Scroll selectors (found 4)
+exit=1
+===== tests/check_reserve_space_visibility.sh =====
+Reserve space follows visible (non-auto-hidden) dock state
+exit=0
+===== tests/check_settings_layout.sh =====
+tests/check_settings_layout.sh: line 38: rg: command not found
+Narrow settings controls must stack below 560 px
+exit=1
+===== tests/check_settings_popup_focus.sh =====
+tests/check_settings_popup_focus.sh: line 8: rg: command not found
+DockSettings must use a full-monitor panel surface
+exit=1
+===== tests/check_settings_visual_system.sh =====
+tests/check_settings_visual_system.sh: line 24: rg: command not found
+exit=127
+===== tests/check_showtrash_reload.sh =====
+Show Trash reload state is explicit and polling is load-gated
+exit=0
+===== tests/check_surface_overrides.sh =====
+tests/check_surface_overrides.sh: line 20: rg: command not found
+Surface override setting is missing: backgroundColorEnabled
+exit=1
+===== tests/check_terminal_agent_asset_integrity.sh =====
+tests/check_terminal_agent_asset_integrity.sh: line 19: rg: command not found
+check_terminal_agent_asset_integrity: missing 'https://commons.wikimedia.org/wiki/File:Pi_logo.png' in /home/runner/work/smart-omarchy-dock/smart-omarchy-dock/assets/terminal-agents/ATTRIBUTIONS.md
+exit=1
+===== tests/check_terminal_agent_assets.sh =====
+Installed SmartDock terminal-agent launchers and icons.
+tests/check_terminal_agent_assets.sh: line 32: rg: command not found
+check_terminal_agent_assets: missing 'Type=Application' in /tmp/tmp.GWz59ZMBYS/data/applications/smartdock-agent-pi.desktop
+exit=1
+===== tests/check_tooltip_popup.sh =====
+tests/check_tooltip_popup.sh: line 35: rg: command not found
+DockToolTip must contain ^PopupWindow \{
+exit=1
+===== tests/check_trash_color.sh =====
+Trash glyph remains opaque white on hover
+exit=0
+===== tests/check_urgent_window_motion.sh =====
+check_urgent_window_motion: PASS
+exit=0
+===== tests/check_visible_items_snapshot.sh =====
+tests/check_visible_items_snapshot.sh: line 27: rg: command not found
+exit=127
+===== tests/check_window_actions.sh =====
+check_window_actions: PASS
+exit=0
+===== tests/check_window_cycling.sh =====
+check_window_cycling: PASS
+exit=0
+===== tests/check_window_previews.sh =====
+check_window_previews: PASS
+exit=0
+===== tests/check_window_scope.sh =====
+window-scope structural check failed: scope revisions must schedule the deferred visible-item snapshot
+exit=1
