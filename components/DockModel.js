@@ -913,7 +913,7 @@ function minimizeWindowRequest(address, usingLua) {
 function normalizeWorkspaceTarget(value) {
   var workspace = String(value || "").trim()
   if (/^[1-9][0-9]*$/.test(workspace)) return workspace
-  if (/^name:[a-zA-Z0-9._-]+$/.test(workspace)) return workspace
+  if (/^name:[^,;"\\\r\n\t]+$/.test(workspace)) return workspace
   return ""
 }
 
