@@ -31,6 +31,7 @@
   "workspaceLayout": "flat",
   "workspaceMonitorScope": "all",
   "groupWindows": true,
+  "interfaceAnimationsEnabled": true,
   "windowScope": "all",
   "showUrgentOutsideScope": true,
   "attentionBadgesEnabled": true,

@@ -63,6 +63,7 @@ Item {
     workspaceLayout: "flat",
     workspaceMonitorScope: "all",
     groupWindows: true,
+    interfaceAnimationsEnabled: true,
     windowScope: "all",
     showUrgentOutsideScope: true,
     attentionBadgesEnabled: true,
@@ -96,6 +97,8 @@ Item {
       parsed.urgentWindowAnimationEnabled =
         typeof parsed.urgentWindowAnimationEnabled === "boolean"
           ? parsed.urgentWindowAnimationEnabled : true
+      parsed.interfaceAnimationsEnabled = DockModel.normalizeSetting(
+        "interfaceAnimationsEnabled", parsed.interfaceAnimationsEnabled)
       parsed.launcherBadgeMode = parsed.launcherBadgeMode === "dots-only"
         ? "dots-only" : "automatic"
       showTrashSetting = parsed.showTrash
@@ -161,6 +164,7 @@ Item {
     var patch = DockModel.resetSettingsPatch()
     patch.attentionBadgesEnabled = true
     patch.urgentWindowAnimationEnabled = true
+    patch.interfaceAnimationsEnabled = true
     patch.launcherBadgeMode = "automatic"
     patch.windowScope = "all"
     patch.showUrgentOutsideScope = true

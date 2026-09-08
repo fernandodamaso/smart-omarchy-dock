@@ -23,6 +23,7 @@ Item {
   required property real pointerPosition
   required property string position
   required property bool vertical
+  property bool interfaceAnimationsEnabled: true
   signal openRequested()
   signal emptyRequested()
   signal contextMenuVisibilityChanged(bool visible)
@@ -112,7 +113,7 @@ Item {
 
   TapHandler {
     acceptedButtons: Qt.RightButton
-    onTapped: trashMenu.open()
+    onTapped: trashMenu.beginEntrance()
   }
 
   PopupWindow {
@@ -122,7 +123,7 @@ Item {
 
     function open() {
       confirmingEmpty = false
-      visible = true
+      beginEntrance()
     }
 
     function dismiss() {
@@ -134,6 +135,28 @@ Item {
     implicitHeight: confirmingEmpty ? 190 : 132
     color: "transparent"
     grabFocus: true
+    property real entranceOpacity: 0
+    property real entranceOffset: 0
+    property bool animationsEnabled: root.interfaceAnimationsEnabled
+
+    function beginEntrance() {
+      entranceOpacity = root.interfaceAnimationsEnabled ? 0 : 1
+      entranceOffset = root.interfaceAnimationsEnabled ? 6 : 0
+      visible = true
+      if (root.interfaceAnimationsEnabled) Qt.callLater(function() {
+        if (visible) {
+          entranceOpacity = 1
+          entranceOffset = 0
+        }
+      })
+    }
+
+    onAnimationsEnabledChanged: {
+      if (!animationsEnabled) {
+        entranceOpacity = 1
+        entranceOffset = 0
+      }
+    }
 
     onVisibleChanged: root.contextMenuVisibilityChanged(visible)
 
@@ -182,6 +205,25 @@ Item {
 
     BorderSurface {
       anchors.fill: parent
+      opacity: trashMenu.entranceOpacity
+      transform: Translate {
+        x: root.position === "left" ? -trashMenu.entranceOffset
+          : root.position === "right" ? trashMenu.entranceOffset : 0
+        y: root.position === "top" ? -trashMenu.entranceOffset
+          : root.position === "bottom" ? trashMenu.entranceOffset : 0
+        Behavior on x {
+          enabled: root.interfaceAnimationsEnabled
+          NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+        }
+        Behavior on y {
+          enabled: root.interfaceAnimationsEnabled
+          NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+        }
+      }
+      Behavior on opacity {
+        enabled: root.interfaceAnimationsEnabled
+        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+      }
       focus: true
       radius: Style.cornerRadius
       color: Color.menu.background
