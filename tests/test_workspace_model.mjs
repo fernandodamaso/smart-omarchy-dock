@@ -28,6 +28,15 @@ function build(hidden = [], grouped = true) {
   return result
 }
 let result = build()
+const movingRecords = windows.map((toplevel, i) => ({ toplevel,
+  ...DockWindowModel.locationForToplevel(toplevel, handles, {}),
+  workspace: i === 0 ? 'id:8' : 'id:2' }))
+const movingPresentation = model.buildWorkspacePresentation(
+  DockModel.buildVisibleItems([], windows, [], handles, false, true, []),
+  movingRecords, workspaces, context)
+assert.equal(movingPresentation.fallbackItems.length, 0,
+  'known moved windows must not flash Other windows while workspace discovery catches up')
+assert.equal(movingPresentation.groups.find(group => group.identity === 'id:8')?.count, 1)
 assert.deepEqual(Array.from(result.groups, g => g.count), [1, 2])
 assert.equal(result.groups[0].items[0].toplevels[0], windows[0])
 assert.equal(result.groups[1].items[0].toplevels.length, 2)

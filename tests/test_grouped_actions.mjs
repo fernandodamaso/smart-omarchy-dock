@@ -178,8 +178,11 @@ function dockGeometry(options = {}) {
   const panelWidth = root.fullLength ? root.screen.width
     : binding(dockSource, 'implicitWidth', { ...scope, ...root })
   const parent = { width: panelWidth }
-  const surfaceWidth = binding(backgroundSource, 'width', { root, parent })
-  const surfaceX = binding(backgroundSource, 'x', { root, parent, width: surfaceWidth })
+  const inputSource = dockSource.split('id: interactionArea')[1]
+  const interactionArea = { width: binding(inputSource, 'width', { root, parent }) }
+  interactionArea.x = binding(inputSource, 'x', { parent, ...interactionArea })
+  const surfaceWidth = binding(backgroundSource, 'width', { root, parent, interactionArea })
+  const surfaceX = binding(backgroundSource, 'x', { root, parent, interactionArea, width: surfaceWidth })
   const layoutWidth = layoutSource.trimStart().startsWith('anchors.fill: parent') ? surfaceWidth
     : binding(layoutSource, 'width', { root, parent: { width: surfaceWidth } })
   const dockLayout = { width: layoutWidth, height: 200 }
@@ -188,7 +191,7 @@ function dockGeometry(options = {}) {
   const viewportX = binding(groupedSource, 'x', { dockLayout })
   const viewportWidth = binding(groupedSource, 'width', { dockLayout, x: viewportX,
     desiredWidth: groupedLayout.desiredWidth })
-  return { root, panelWidth, surfaceWidth, surfaceX, layoutWidth, viewportX, viewportWidth,
+  return { root, panelWidth, interactionArea, surfaceWidth, surfaceX, layoutWidth, viewportX, viewportWidth,
     visibleRight: surfaceX + viewportX + groupedLayout.contentPadding + 300,
     desiredWidth: groupedLayout.desiredWidth }
 }
@@ -199,6 +202,8 @@ for (const iconSize of [24, 31, 64, 96]) for (const magnification of [1, 1.2, 2]
     assert.equal(g.surfaceX * 2 + g.surfaceWidth, g.panelWidth, 'visible surface is centered')
     assert.equal(g.layoutWidth, g.root.compactMainExtent, 'logical layout retains its original width')
     assert.equal(g.viewportWidth, g.desiredWidth, 'magnification viewport is not reduced')
+    assert.equal(g.panelWidth, 1920, 'workspace content does not resize the native panel')
+    assert.equal(g.interactionArea.width, g.root.compactPanelExtent, 'transparent sides are click-through')
     assert.ok(g.surfaceX >= 0 && g.surfaceX + g.surfaceWidth <= g.panelWidth)
     assert.ok(g.surfaceX + g.viewportX + g.viewportWidth <= g.panelWidth, 'viewport fits outer panel')
     if (g.root.groupedSurfaceGutter > 0) {
@@ -223,8 +228,8 @@ for (const options of [{ grouped: false }, { showTrash: true },
   { fullLength: true }, { screen: { width: 200 } },
   { iconSize: 96, magnification: 2, screen: { width: 540 } }]) {
   const g = dockGeometry(options)
-  assert.equal(g.surfaceX, 0, 'legacy geometry remains for other modes and screen overflow')
-  assert.equal(g.surfaceWidth, g.panelWidth)
+  assert.equal(g.surfaceX, g.interactionArea.x, 'untrimmed surface follows the input region')
+  assert.equal(g.surfaceWidth, g.interactionArea.width)
   assert.ok(g.viewportWidth >= 0)
 }
 

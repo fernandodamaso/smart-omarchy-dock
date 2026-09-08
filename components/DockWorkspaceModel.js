@@ -60,7 +60,8 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     var resolved = Object.assign({}, record, { monitor: owner, monitorKnown: !!owner,
       workspace: workspace, workspaceKnown: workspace !== "",
       sticky: record.sticky === true && !record.minimized })
-    if (resolved.minimized && owner && (allMonitors || owner === monitor) && resolved.workspaceKnown)
+    // A live window can arrive before its workspace descriptor does.
+    if (owner && (allMonitors || owner === monitor) && resolved.workspaceKnown)
       addWorkspace(workspace)
     return resolved
   })
