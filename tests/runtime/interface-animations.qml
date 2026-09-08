@@ -39,6 +39,7 @@ ShellRoot {
       delegate: Item {
         required property var modelData
         readonly property var appModel: appPresentation
+        readonly property var appRepeater: appDelegates
 
         Components.DockPresentationModel {
           id: appPresentation
@@ -100,6 +101,7 @@ ShellRoot {
         { identity: "group-a", items: [] },
         { identity: "group-b", items: [{ identity: "group-b/app" }] }
       ]
+      moveCheck.start()
       root.stage = 1
       settle.start()
     }
@@ -127,6 +129,20 @@ ShellRoot {
         throw new Error("disabling animations did not settle removals")
       console.log("interface-animations: PASS")
       Qt.quit()
+    }
+  }
+
+  Timer {
+    id: moveCheck
+    interval: 40
+    repeat: false
+    onTriggered: {
+      var sourceSlot = groupDelegates.itemAt(0).appRepeater.itemAt(0)
+      var destinationSlot = groupDelegates.itemAt(1).appRepeater.itemAt(0)
+      if (!sourceSlot || sourceSlot.width <= 0)
+        throw new Error("nested app departure was already collapsed")
+      if (!destinationSlot || destinationSlot.opacity >= 1)
+        throw new Error("nested app arrival skipped its entrance")
     }
   }
 }
