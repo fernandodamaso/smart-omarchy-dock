@@ -29,11 +29,46 @@ ShellRoot {
     scopeRevision: 0
   }
 
+  Components.DockWorkspaceGroup {
+    id: transitionGroup
+    label: "3"
+    count: hasApp ? 1 : 0
+    active: true
+    slotSize: 24
+    property bool hasApp: false
+    Loader {
+      width: transitionGroup.hasApp ? 24 : 0
+      height: 24
+      active: transitionGroup.hasApp
+      sourceComponent: Rectangle { width: 24; height: 24 }
+    }
+  }
+
+  function dividerFor(group) {
+    for (var i = 0; i < group.children.length; ++i) {
+      var child = group.children[i]
+      if (child.width === 1 && child.height >= 18) return child
+    }
+    return null
+  }
+
   Timer {
     interval: 200
     running: true
     onTriggered: {
       settle(dock.contentItem)
+      settle(transitionGroup)
+      var divider = dividerFor(transitionGroup)
+      if (!divider || divider.visible)
+        throw new Error("Empty workspace cards must hide their internal divider")
+      transitionGroup.hasApp = true
+      settle(transitionGroup)
+      if (!divider.visible || divider.x + divider.width > transitionGroup.width)
+        throw new Error("Populated workspace cards must retain an internal divider")
+      transitionGroup.hasApp = false
+      settle(transitionGroup)
+      if (divider.visible)
+        throw new Error("Removing the last app must hide the internal divider")
       var before = dock.implicitWidth
       var groups = []
       for (var i = 1; i <= 8; ++i)
