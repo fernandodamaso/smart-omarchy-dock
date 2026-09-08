@@ -61,6 +61,7 @@ Item {
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
     workspaceLayout: "flat",
+    workspaceMonitorScope: "all",
     groupWindows: true,
     windowScope: "all",
     showUrgentOutsideScope: true,

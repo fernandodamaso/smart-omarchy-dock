@@ -400,6 +400,7 @@ function settingsDefaults() {
     controlCommand: "omarchy-menu toggle apps",
     sortByWorkspace: false,
     workspaceLayout: "flat",
+    workspaceMonitorScope: "all",
     groupWindows: true
   }
 }
@@ -602,6 +603,8 @@ function normalizeSetting(key, value) {
     return normalizedColorValue(value)
   case "borderWidth":
     return steppedNumber(value, 0, 8, 1, defaults.borderWidth, 0)
+  case "workspaceMonitorScope":
+    return value === "current-monitor" ? "current-monitor" : "all"
   case "workspaceLayout":
     return value === "grouped" ? "grouped" : "flat"
   case "position":

@@ -12,9 +12,11 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
   var globalLaunchers = []
   var fallbackItems = []
   var byWorkspace = Object.create(null)
+  var allMonitors = context.monitorScope !== "current-monitor"
   var active = context.activeWorkspace || ""
   var monitor = DockWindowModel.canonicalMonitorIdentity(context.monitor, context.monitors)
   var workspaceMonitors = Object.create(null)
+  var monitorWorkspaces = Object.create(null)
 
   function addWorkspace(identity) {
     var target = activationTarget(identity)
@@ -27,6 +29,16 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     groups.push(group)
   }
 
+  var monitors = context.monitors || []
+  for (var m = 0; m < monitors.length; ++m) {
+    var descriptor = monitors[m]
+    var ipc = descriptor.lastIpcObject || descriptor
+    var owner = DockWindowModel.canonicalMonitorIdentity(descriptor, context.monitors)
+    var workspace = DockWindowModel.workspaceIdentity(ipc.activeWorkspace || descriptor.activeWorkspace)
+    if (owner) monitorWorkspaces[owner] = workspace
+    if (allMonitors) addWorkspace(workspace)
+  }
+
   for (var w = 0; w < workspaces.length; ++w) {
     var descriptor = workspaces[w]
     var ipc = descriptor.lastIpcObject || descriptor
@@ -35,19 +47,20 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
         : ipc.monitor !== undefined ? ipc.monitor : descriptor.monitor, context.monitors)
     var identity = DockWindowModel.workspaceIdentity(descriptor)
     if (owner) workspaceMonitors[identity] = owner
-    if (owner && owner === monitor) addWorkspace(identity)
+    if (allMonitors || owner && owner === monitor) addWorkspace(identity)
   }
   addWorkspace(active)
   // Live workspace ownership wins over a saved minimized-origin connector.
   records = records.map(function(record) {
     var owner = record.minimized && workspaceMonitors[record.workspace]
       || DockWindowModel.canonicalMonitorIdentity(record.monitor, context.monitors)
-    var workspace = record.sticky && !record.minimized && owner && owner === monitor
-      ? active : record.minimized && record.originValid === false ? "" : record.workspace
+    var workspace = record.sticky && !record.minimized
+      ? (allMonitors ? monitorWorkspaces[owner] || "" : owner && owner === monitor ? active : record.workspace)
+      : record.minimized && record.originValid === false ? "" : record.workspace
     var resolved = Object.assign({}, record, { monitor: owner, monitorKnown: !!owner,
       workspace: workspace, workspaceKnown: workspace !== "",
       sticky: record.sticky === true && !record.minimized })
-    if (resolved.minimized && owner && owner === monitor && resolved.workspaceKnown)
+    if (resolved.minimized && owner && (allMonitors || owner === monitor) && resolved.workspaceKnown)
       addWorkspace(workspace)
     return resolved
   })
@@ -75,7 +88,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     for (var t = 0; t < item.toplevels.length; ++t) {
       var toplevel = item.toplevels[t]
       var record = records.find(function(value) { return value.toplevel === toplevel })
-      if (record && record.monitorKnown && record.monitor !== monitor) continue
+      if (!allMonitors && record && record.monitorKnown && record.monitor !== monitor) continue
       var key = record && record.monitorKnown && record.workspaceKnown
         && byWorkspace[record.workspace] ? record.workspace : "other"
       if (!partitions[key]) partitions[key] = []

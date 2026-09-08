@@ -69,7 +69,9 @@ visible item with that exact desktop-entry identity. Other per-window items do
 not duplicate the dot.
 
 With `workspaceLayout: "grouped"`, window urgency comes only from each item's
-actual members. A known live handle urgency value wins over IPC data, including
+actual members. The default `workspaceMonitorScope: "all"` mirrors workspaces
+and the globally focused workspace highlight on every dock; `"current-monitor"`
+restores monitor-local membership and active highlighting. A known live handle urgency value wins over IPC data, including
 live false overriding stale true. Inactive cards keep all their application
 icons visible; off-viewport items suppress reminder motion and popups.
 

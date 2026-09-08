@@ -17,7 +17,7 @@ const windows = [1, 2, 3].map(id => ({ appId: 'chrome', id }))
 const handles = windows.map((wayland, i) => ({ wayland, address: String(i + 1),
   lastIpcObject: { workspace: { id: i ? 2 : 1 }, monitor: 0 } }))
 const workspaces = [2, 1].map(id => ({ id, monitorID: 0 }))
-const context = { monitor: 'id:0', activeWorkspace: 'id:1', groupWindows: true }
+const context = { monitorScope: 'current-monitor', monitor: 'id:0', activeWorkspace: 'id:1', groupWindows: true }
 function build(hidden = [], grouped = true) {
   const apps = DockModel.buildVisibleItems(['closed', 'chrome'], windows, [], handles, false, grouped, hidden)
   const records = windows.map(toplevel => ({ toplevel,
@@ -173,5 +173,77 @@ assert.equal(DockWindowModel.monitorIdentity(-1), '')
 assert.equal(DockWindowModel.canonicalMonitorIdentity('DP-1', [monitors[1]]), '')
 assert.equal(stickyPresentation(savedOrigin, [], { ...scopedContext, monitors: [monitors[1]] })
   .fallbackItems.length, 1, 'removed connector remains unresolved fallback')
+
+
+// Mirrored docks share membership and global active-first badge ownership.
+monitors[0].focused = false
+monitors[0].activeWorkspace = { id: 1 }
+monitors[1].lastIpcObject = { id: 1, name: 'HDMI-A-1', activeWorkspace: { id: 3 }, focused: true }
+const mirrorWindows = [0, 1, 2, 3, 4].map(id => ({ appId: 'chrome', id }))
+const mirrorRecords = mirrorWindows.map((toplevel, i) => ({
+  toplevel, address: String(i + 10), monitor: i === 0 ? 'DP-1' : 'id:1',
+  workspace: i === 0 ? 'id:1' : 'id:3', monitorKnown: true, workspaceKnown: true
+}))
+mirrorRecords[1].sticky = true
+mirrorRecords[1].workspace = 'id:2'
+mirrorRecords[2] = { ...mirrorRecords[2], minimized: true, sticky: true,
+  workspace: 'name:Retained', originValid: true }
+mirrorRecords[3].workspace = 'special:scratch'
+mirrorRecords[4].monitor = ''
+const mirrorDescriptors = [{ id: 10, monitorID: 0 }, { name: 'Design', monitorID: 1 },
+  { id: 2, monitorID: 1 }, { name: 'special:scratch', monitorID: 0 }]
+function mirrored(monitor, scope = 'all', grouped = true, hidden = []) {
+  const apps = DockModel.buildVisibleItems(['closed', 'chrome'], mirrorWindows, [], [], false, grouped, hidden)
+  const owner = monitors.find(value => DockWindowModel.canonicalMonitorIdentity(value, monitors)
+    === DockWindowModel.canonicalMonitorIdentity(monitor, monitors))
+  return model.buildWorkspacePresentation(apps, mirrorRecords, mirrorDescriptors, {
+    monitors, monitor, monitorScope: scope, groupWindows: grouped,
+    activeWorkspace: scope === 'current-monitor'
+      ? DockWindowModel.workspaceIdentity((owner.lastIpcObject || owner).activeWorkspace)
+      : DockWindowModel.focusedWorkspaceIdentity(monitors, null)
+  })
+}
+let left = mirrored('DP-1')
+let right = mirrored('HDMI-A-1')
+assert.equal(model.presentationsEqual(left, right), true)
+assert.deepEqual(Array.from(left.groups, g => g.identity),
+  ['id:1', 'id:2', 'id:3', 'id:10', 'name:Design', 'name:Retained'])
+assert.equal(left.groups.find(g => g.identity === 'id:10').count, 0)
+assert.equal(left.groups.find(g => g.identity === 'id:3').items[0].toplevels[0], mirrorWindows[1],
+  'sticky follows owner active workspace, once')
+assert.equal(left.groups.find(g => g.identity === 'name:Retained').items[0].sticky, false)
+assert.equal(left.fallbackItems[0].toplevels.length, 2)
+for (const scope of [undefined, null, '', 'invalid']) {
+  const defaulted = scope === undefined
+    ? model.buildWorkspacePresentation(
+      DockModel.buildVisibleItems(['closed', 'chrome'], mirrorWindows, [], [], false, true, []),
+      mirrorRecords, mirrorDescriptors, { monitors, monitor: 'DP-1', activeWorkspace: 'id:3' })
+    : mirrored('DP-1', scope)
+  assert.equal(model.presentationsEqual(left, defaulted), true, 'missing/invalid scope mirrors')
+}
+const local = mirrored('DP-1', 'current-monitor')
+assert.equal(local.groups.find(g => g.active).identity, 'id:1')
+assert.equal(local.groups.some(g => g.identity === 'id:3'), false, 'no empty remote active card')
+assert.equal(local.groups.some(g => g.identity === 'name:Retained'), false)
+assert.equal(local.renderedItems.some(item => item.toplevels.includes(mirrorWindows[1])), false)
+assert.equal(left.renderedItems[0].presentationId, 'id:3/chrome')
+monitors[0].focused = true
+monitors[1].lastIpcObject.focused = false
+right = mirrored('HDMI-A-1')
+assert.equal(right.renderedItems[0].presentationId, 'id:1/chrome', 'global focus transfers badge owner')
+assert.equal(right.groups.find(g => g.identity === 'id:3').count, 1,
+  'global focus does not relocate sticky membership')
+assert.equal(model.presentationsEqual(right, mirrored('DP-1')), true)
+assert.equal(BadgeModel.isPrimaryVisibleItem(right.renderedItems, 0), true)
+assert.equal(Array.from(right.renderedItems, (_, i) =>
+  BadgeModel.isPrimaryVisibleItem(right.renderedItems, i)).filter(Boolean).length, 2,
+  'one owner per app including closed pin')
+assert.equal(mirrored('DP-1', 'all', true, ['chrome']).groups.every(g => g.count === 0), true)
+assert.equal(model.presentationsEqual(mirrored('DP-1', 'all', false),
+  mirrored('HDMI-A-1', 'all', false)), true)
+mirrorRecords[0].workspace = 'id:2'
+assert.equal(mirrored('DP-1').groups.find(g => g.identity === 'id:2').count, 1, 'live move updates card')
+monitors[1].lastIpcObject.activeWorkspace = { id: 4 }
+assert.equal(mirrored('DP-1').groups.find(g => g.identity === 'id:4').count, 1, 'topology updates sticky card')
 
 console.log('workspace model: PASS')
