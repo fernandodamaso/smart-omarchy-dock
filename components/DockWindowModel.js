@@ -15,14 +15,6 @@ function liveGroupMembers(candidates, liveToplevels) {
   return result
 }
 
-function activeGroupMember(candidates, activeToplevel, liveToplevels) {
-  var live = liveGroupMembers(candidates, liveToplevels)
-  if (live.length === 0) return null
-  if (activeToplevel && live.indexOf(activeToplevel) >= 0)
-    return activeToplevel
-  return live[0]
-}
-
 function cycleTargetIndex(count, originIndex, direction) {
   var size = Math.floor(Number(count))
   var value = Number(originIndex)
@@ -201,12 +193,6 @@ function windowScopeContext(scope, focusedWorkspace, dockMonitor,
   }
 }
 
-function normalizedAddress(value) {
-  var address = String(value || "").trim().toLowerCase()
-  if (address.slice(0, 2) === "0x") address = address.slice(2)
-  return /^[0-9a-f]+$/.test(address) ? "0x" + address : ""
-}
-
 function handleForToplevel(toplevel, handles) {
   var values = handles || []
   for (var i = 0; i < values.length; ++i) {
@@ -232,7 +218,7 @@ function locationForToplevel(toplevel, handles, originSnapshot) {
   }
 
   var ipc = handle.lastIpcObject || ({})
-  var address = normalizedAddress(handle.address || ipc.address)
+  var address = DockModel.normalizeWindowAddress(handle.address || ipc.address)
   var ipcWorkspace = workspaceIdentity(ipc.workspace)
   // Quickshell resolves toplevel workspaces by name, so blank-name handles can alias.
   var liveWorkspaceIsBlank = handle.workspace === undefined || handle.workspace === null
@@ -328,7 +314,7 @@ function copyOriginSnapshot(origins) {
   var result = {}
   var values = origins || ({})
   for (var address in values) {
-    var normalized = normalizedAddress(address)
+    var normalized = DockModel.normalizeWindowAddress(address)
     if (!normalized) continue
     var origin = values[address] || ({})
     result[normalized] = {
@@ -352,7 +338,7 @@ function pruneOriginSnapshot(origins, handles, liveToplevels) {
   for (var i = 0; i < handleValues.length; ++i) {
     var handle = handleValues[i]
     if (!handle || !handle.wayland || live.indexOf(handle.wayland) < 0) continue
-    var address = normalizedAddress(handle.address
+    var address = DockModel.normalizeWindowAddress(handle.address
       || (handle.lastIpcObject || ({})).address)
     if (!address || source[address] === undefined) continue
     retained[address] = source[address]

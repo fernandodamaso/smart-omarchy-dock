@@ -20,7 +20,6 @@ agent_ids=(
   smartdock-agent-kilo-code
   smartdock-agent-cline
 )
-agent_commands=(pi omp commandcode cursor-agent claude kilo cline)
 agent_extensions=(png svg svg svg svg svg svg)
 
 usage() {

@@ -41,8 +41,6 @@ grep -Fq 'function reduceUrgentMotion' "$model" \
   || fail 'pure urgent motion decision reducer missing'
 grep -Fq 'function urgentMotionVector' "$model" \
   || fail 'position-aware vector helper missing'
-grep -Fq 'function attentionSeverityFromBadgeToken' "$model" \
-  || fail 'badge-token attention severity helper missing'
 grep -Fq 'attentionActive' "$model" \
   || fail 'attention-active reducer gate missing'
 grep -Fq 'pendingReminder' "$model" \

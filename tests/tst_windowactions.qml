@@ -17,28 +17,4 @@ TestCase {
     compare(members[0], first)
     compare(members[1], second)
   }
-
-  function test_resolvesActiveGroupMemberFromActualActiveToplevel() {
-    var first = { title: "First" }
-    var second = { title: "Second" }
-
-    compare(
-      DockWindowModel.activeGroupMember([first, second], second, [first, second]),
-      second)
-  }
-
-  function test_fallsBackToFirstLiveGroupMember() {
-    var first = { title: "First" }
-    var second = { title: "Second" }
-    var stale = { title: "Stale" }
-
-    compare(
-      DockWindowModel.activeGroupMember(
-        [stale, first, second], stale, [first, second]),
-      first)
-    compare(
-      DockWindowModel.activeGroupMember([stale], stale, [first, second]), null)
-    compare(DockWindowModel.activeGroupMember([], null, [first, second]), null)
-    compare(DockWindowModel.activeGroupMember(null, null, null), null)
-  }
 }

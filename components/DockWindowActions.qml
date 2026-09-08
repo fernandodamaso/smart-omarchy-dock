@@ -9,11 +9,7 @@ Item {
 
   readonly property string minimizedWorkspace: "special:smartdock-minimized"
   property var minimizedOrigins: ({})
-  readonly property var minimizedOriginsSnapshot: copyOrigins(minimizedOrigins)
-  // Kept as a compatibility hook for callers that provide their own preview
-  // surface. Dock.qml owns the built-in preview popup and does not create a
-  // second window-actions controller.
-  property var previewController: null
+  readonly property var minimizedOriginsSnapshot: DockWindowModel.copyOriginSnapshot(minimizedOrigins)
   readonly property var activeToplevel: ToplevelManager.activeToplevel
 
   function currentToplevels() {
@@ -25,28 +21,9 @@ Item {
     return Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
   }
 
-  function copyOrigins(source) {
-    var result = {}
-    var values = source || ({})
-    for (var address in values) {
-      var origin = values[address] || ({})
-      result[address] = {
-        workspace: String(origin.workspace || ""),
-        monitor: String(origin.monitor || "")
-      }
-    }
-    return result
-  }
-
   function handleFor(toplevel) {
     if (!isAlive(toplevel)) return null
-
-    var handles = currentHandles()
-    for (var i = 0; i < handles.length; ++i) {
-      if (handles[i] && handles[i].wayland === toplevel)
-        return handles[i]
-    }
-    return null
+    return DockWindowModel.handleForToplevel(toplevel, currentHandles())
   }
 
   function addressFor(toplevel) {
@@ -109,7 +86,7 @@ Item {
     var normalized = DockModel.normalizeWindowAddress(address)
     if (!normalized || !origin || !origin.workspace) return false
 
-    var origins = copyOrigins(minimizedOrigins)
+    var origins = DockWindowModel.copyOriginSnapshot(minimizedOrigins)
     origins[normalized] = {
       workspace: String(origin.workspace),
       monitor: String(origin.monitor || "")
@@ -122,7 +99,7 @@ Item {
     var address = originAddress(value)
     if (!address || minimizedOrigins[address] === undefined) return false
 
-    var origins = copyOrigins(minimizedOrigins)
+    var origins = DockWindowModel.copyOriginSnapshot(minimizedOrigins)
     delete origins[address]
     minimizedOrigins = origins
     return true
@@ -167,9 +144,12 @@ Item {
     return DockWindowModel.liveGroupMembers(toplevels, currentToplevels())
   }
 
-  function activeMember(toplevels) {
-    return DockWindowModel.activeGroupMember(
-      toplevels, root.activeToplevel, currentToplevels())
+  function focusToplevels(toplevels, originOnly) {
+    var members = liveMembers(toplevels)
+    if (members.length === 0) return false
+    var member = root.activeToplevel && members.indexOf(root.activeToplevel) >= 0
+      ? root.activeToplevel : members[0]
+    return activateToplevel(member, originOnly)
   }
 
   function dispatchRequest(request) {
@@ -241,11 +221,6 @@ Item {
     return false
   }
 
-  function focusToplevels(toplevels, originOnly) {
-    var member = activeMember(toplevels)
-    return member ? activateToplevel(member, originOnly) : false
-  }
-
   function cycleToplevels(toplevels, direction, activeToplevel, originOnly) {
     var members = liveMembers(toplevels)
     if (members.length < 2) return false
@@ -307,21 +282,11 @@ Item {
     return true
   }
 
-  function showToplevelPreviews(desktopId, toplevels, originOnly) {
-    var members = liveMembers(toplevels)
-    if (members.length === 0 || !previewController
-        || typeof previewController.showApplicationPreviews !== "function")
-      return false
-
-    previewController.showApplicationPreviews(String(desktopId || ""), members, originOnly === true)
-    return true
-  }
-
   function pruneOrigins() {
     var retained = DockWindowModel.pruneOriginSnapshot(
       minimizedOrigins, currentHandles(), currentToplevels())
     if (JSON.stringify(retained) !== JSON.stringify(minimizedOrigins))
-      minimizedOrigins = copyOrigins(retained)
+      minimizedOrigins = DockWindowModel.copyOriginSnapshot(retained)
   }
 
   Timer {

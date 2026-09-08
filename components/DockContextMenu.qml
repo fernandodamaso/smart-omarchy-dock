@@ -124,12 +124,6 @@ PopupWindow {
     dismiss()
   }
 
-  function selectedTitle() {
-    if (!selectedToplevel) return "Window"
-    var title = String(selectedToplevel.title || "").trim()
-    return title || String(selectedToplevel.appId || "Window")
-  }
-
   property int activeMenuIndex: -1
 
   function currentPageColumn() {

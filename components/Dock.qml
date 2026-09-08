@@ -949,6 +949,7 @@ PanelWindow {
     anchorItem: controlItem
     position: root.position
     settings: root.settings
+    themeColorTokens: root.themeColorTokens
     onVisibleChanged: if (!visible) root.clearSettingPreviews()
     onSettingPreviewed: (key, value) => root.previewSetting(key, value)
     onSettingCommitted: (key, value) => {

@@ -42,37 +42,9 @@ PanelWindow {
   readonly property bool wideLayout: panelWidth >= 720
   readonly property bool compactControls: panelWidth < 560
   property bool advancedExpanded: false
-  readonly property bool groupedEffective: current("workspaceLayout") === "grouped"
-    && position !== "left" && position !== "right"
-  // The values are symbolic references to Omarchy's live Color singleton.
-  // Persisting the reference (rather than a snapshot hex value) keeps a
-  // selected preset synchronized when the active theme changes.
-  readonly property var themeColorTokens: ({
-    "background": Color.background,
-    "foreground": Color.foreground,
-    "accent": Color.accent,
-    "muted": Color.muted,
-    "urgent": Color.urgent,
-    "bar.background": Color.bar.background,
-    "bar.text": Color.bar.text,
-    "bar.active": Color.bar.active,
-    "popups.background": Color.popups.background,
-    "popups.text": Color.popups.text,
-    "popups.border": Color.popups.border,
-    "tooltip.background": Color.tooltip.background,
-    "tooltip.text": Color.tooltip.text,
-    "tooltip.border": Color.tooltip.border,
-    "menu.background": Color.menu.background,
-    "menu.text": Color.menu.text,
-    "menu.border": Color.menu.border,
-    "menu.selected-background": Color.menu.selectedBackground,
-    "menu.selected-text": Color.menu.selectedText,
-    "menu.selected-border": Color.menu.selectedBorder,
-    "notifications.background": Color.notifications.background,
-    "notifications.text": Color.notifications.text,
-    "notifications.border": Color.notifications.border,
-    "notifications.countdown": Color.notifications.countdown
-  })
+  // Theme token map is owned live by Dock; this binding keeps symbolic
+  // references synchronized when the active theme changes.
+  required property var themeColorTokens
   readonly property var themeColorOptions: [
     { value: "@background", label: "Omarchy · Background", color: Color.background },
     { value: "@foreground", label: "Omarchy · Foreground", color: Color.foreground },
