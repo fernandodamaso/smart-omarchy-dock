@@ -2,6 +2,8 @@
 set -euo pipefail
 
 component="components/DockActionDropdown.qml"
+local_test="tests/omarchy/tst_action_dropdown_settings.qml"
+local_runner="tests/run_action_dropdown_settings.sh"
 
 if ! rg -q '^[[:space:]]*Dropdown[[:space:]]*\{' "$component"; then
   echo "DockActionDropdown must compose qs.Ui.Dropdown" >&2
@@ -28,5 +30,8 @@ for obsolete in \
     exit 1
   fi
 done
+
+test -f "$local_test"
+bash -n "$local_runner"
 
 echo "Native action-dropdown structural guard passed."
