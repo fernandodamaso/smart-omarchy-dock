@@ -24,20 +24,21 @@ Rectangle {
   default property alias items: appRow.data
   signal activated()
 
-  width: header.width + appRow.width + (appRow.width > 0 ? 10 : 2)
+  width: header.width + appRow.width + (appRow.width > 0 ? 16 : 2)
   height: slotSize + 10
-  radius: Math.max(14, Style.cornerRadius)
-  color: active ? Util.alpha(Color.accent, 0.08) : Util.alpha(Color.background, 0.32)
+  radius: Math.max(12, Style.cornerRadius - 4)
+  color: active ? Util.alpha(Color.accent, workspaceHover.hovered ? 0.13 : 0.10) : Util.alpha(Color.background, workspaceHover.hovered ? 0.42 : 0.26)
   border.width: 1
-  border.color: urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.32) : Util.alpha(Color.foreground, 0.09)
+  border.color: urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.50) : Util.alpha(Color.foreground, workspaceHover.hovered ? 0.14 : 0.07)
   Behavior on color { ColorAnimation { duration: 140 } }
   Behavior on border.color { ColorAnimation { duration: 140 } }
+  HoverHandler { id: workspaceHover }
 
   Rectangle {
     id: header
-    color: Util.alpha(Color.foreground, headerHover.hovered ? 0.06 : 0)
+    color: Util.alpha(Color.foreground, headerHover.hovered ? 0.055 : 0)
     Behavior on color { ColorAnimation { duration: 140 } }
-    radius: root.radius - 1
+    radius: Math.max(10, root.radius - 2)
     border.width: activeFocus ? 1 : 0
     border.color: Color.accent
     x: 1
@@ -85,9 +86,20 @@ Rectangle {
       fontSize: Style.font.body
     }
   }
+
+  Rectangle {
+    id: groupDivider
+    x: header.width + 5
+    anchors.verticalCenter: parent.verticalCenter
+    width: 1
+    height: Math.max(18, parent.height * 0.48)
+    radius: 1
+    color: Util.alpha(Color.foreground, root.active ? 0.13 : 0.09)
+  }
+
   Row {
     id: appRow
-    x: header.width + 4
+    x: header.width + 10
     anchors.verticalCenter: parent.verticalCenter
     spacing: 6
   }
