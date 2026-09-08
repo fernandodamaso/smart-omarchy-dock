@@ -20,6 +20,7 @@ TestCase {
     x: 20
     y: 20
     width: 320
+    height: implicitHeight
     label: "Action"
     value: testCase.settingsValue
     options: [
