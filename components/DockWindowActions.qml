@@ -144,6 +144,14 @@ Item {
     return DockWindowModel.liveGroupMembers(toplevels, currentToplevels())
   }
 
+  function focusToplevels(toplevels, originOnly) {
+    var members = liveMembers(toplevels)
+    if (members.length === 0) return false
+    var member = root.activeToplevel && members.indexOf(root.activeToplevel) >= 0
+      ? root.activeToplevel : members[0]
+    return activateToplevel(member, originOnly)
+  }
+
   function dispatchRequest(request) {
     if (!request) return false
     Hyprland.dispatch(request)
@@ -213,7 +221,7 @@ Item {
     return false
   }
 
-  function cycleToplevels(toplevels, direction, activeToplevel) {
+  function cycleToplevels(toplevels, direction, activeToplevel, originOnly) {
     var members = liveMembers(toplevels)
     if (members.length < 2) return false
 
