@@ -689,7 +689,9 @@ PanelWindow {
         y: root.position === "top" ? 0 : dockLayout.height - height
         rowY: root.position === "top" ? (dockLayout.height - root.itemSize - 10) / 2
           : height - (dockLayout.height + root.itemSize + 10) / 2
-        contentPadding: Math.ceil(root.iconSize * (root.magnification - 1) / 2) + 8
+        contentPadding: Math.ceil(root.iconSize * (root.magnification
+          * DockModel.fullscreenIconPresentation(
+            root.fullscreenModeActive, root.fullscreenModeActive, false).scale - 1) / 2) + 1
         foreground: Color.menu.text
         background: Color.menu.background
         accent: Color.accent
