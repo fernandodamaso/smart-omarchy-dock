@@ -22,11 +22,9 @@ function reconcile(previous, values, keyProperty, animationsEnabled) {
   var nextToken = oldState.nextToken
   var incoming = values || []
   var oldByKey = Object.create(null)
-  var oldIndexByKey = Object.create(null)
   for (var i = 0; i < oldState.entries.length; ++i) {
     var old = oldState.entries[i]
     oldByKey[old.key] = old
-    oldIndexByKey[old.key] = i
   }
 
   var used = Object.create(null)
@@ -51,9 +49,9 @@ function reconcile(previous, values, keyProperty, animationsEnabled) {
   if (Boolean(animationsEnabled)) {
     for (var o = 0; o < oldState.entries.length; ++o) {
       var departed = oldState.entries[o]
-      if (used[departed.key] || !departed.present) continue
+      if (used[departed.key]) continue
       var retained = copyEntry(departed, undefined, false, false,
-        departed.exitRevision + 1)
+        departed.exitRevision + (departed.present ? 1 : 0))
       var insertAt = Math.min(o, nextEntries.length)
       nextEntries.splice(insertAt, 0, retained)
     }

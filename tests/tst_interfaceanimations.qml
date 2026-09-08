@@ -37,7 +37,6 @@ TestCase {
     var slot = createTemporaryObject(slotComponent, testCase, {
       present: false, exitRevision: 1, animationsEnabled: true
     })
-    slot.exitRevision = 2
     wait(40)
     verify(slot.width > 0)
     tryCompare(slot, "width", 0, 500)

@@ -14,6 +14,7 @@ Item {
   property real trailingGap: 0
   property real occupiedProgress: 1
   property real opacityProgress: 1
+  property bool motionReady: false
   default property alias content: content.data
   signal exitFinished(int exitRevision)
 
@@ -23,11 +24,16 @@ Item {
   clip: root.occupiedProgress < 1 || root.opacityProgress < 1
 
   function settle() {
+    finishTimer.stop()
+    var wasReady = motionReady
+    motionReady = false
     occupiedProgress = present ? 1 : 0
     opacityProgress = present ? 1 : 0
+    motionReady = wasReady
   }
 
   function retarget() {
+    if (!motionReady) return
     finishTimer.stop()
     if (!animationsEnabled) {
       settle()
@@ -38,43 +44,31 @@ Item {
     opacityProgress = present ? 1 : 0
   }
 
-  function animateExitIfNeeded() {
-    if (!animationsEnabled || present || exitRevision <= 0) return
-    if (occupiedProgress <= 0) {
-      occupiedProgress = 1
-      opacityProgress = 1
-    }
-    Qt.callLater(retarget)
-  }
-
   Component.onCompleted: {
     if (animationsEnabled && ((present && animateEntrance)
         || (!present && exitRevision > 0))) {
       occupiedProgress = present ? 0 : 1
       opacityProgress = present ? 0 : 1
+      motionReady = true
       Qt.callLater(retarget)
     } else {
       settle()
+      motionReady = true
     }
   }
 
-  onPresentChanged: {
-    if (!present && exitRevision > 0) animateExitIfNeeded()
-    else retarget()
-  }
-  onExitRevisionChanged: animateExitIfNeeded()
+  onPresentChanged: retarget()
   onAnimationsEnabledChanged: {
     if (!animationsEnabled) settle()
     else retarget()
   }
-  onOccupiedProgressChanged: if (!present && occupiedProgress <= 0) finishTimer.restart()
 
   Behavior on occupiedProgress {
-    enabled: root.animationsEnabled
+    enabled: root.motionReady && root.animationsEnabled
     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
   }
   Behavior on opacityProgress {
-    enabled: root.animationsEnabled
+    enabled: root.motionReady && root.animationsEnabled
     NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
   }
 

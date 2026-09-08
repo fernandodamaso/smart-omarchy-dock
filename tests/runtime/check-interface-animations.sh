@@ -13,4 +13,8 @@ QT_QPA_PLATFORM=wayland QML2_IMPORT_PATH="$test_dir/imports" \
     cat "$test_dir/output"
     exit 1
   }
+if grep -Eq 'WARN scene:|ERROR|Error:' "$test_dir/output"; then
+  cat "$test_dir/output"
+  exit 1
+fi
 grep 'interface-animations: PASS' "$test_dir/output"

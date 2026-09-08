@@ -29,6 +29,9 @@ assert.equal(next.entries[2].animateEntrance, true)
 assert.equal(next.entries[1].present, false)
 const bToken = next.entries[1].token
 const bRevision = next.entries[1].exitRevision
+const refreshed = model.reconcile(next, [item("a", "updated"), item("x"), item("c")], "identity", true)
+assert.equal(keys(refreshed), keys(next))
+assert.equal(refreshed.entries[1].exitRevision, bRevision)
 
 let cancelled = model.reconcile(next, [item("a"), item("b"), item("x"), item("c")], "identity", true)
 assert.equal(keys(cancelled), JSON.stringify(["a:in", "b:in", "x:in", "c:in"]))
