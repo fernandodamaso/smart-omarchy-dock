@@ -24,22 +24,25 @@ Rectangle {
   default property alias items: appRow.data
   signal activated()
 
-  width: header.width + appRow.width + (appRow.width > 0 ? 16 : 2)
-  height: slotSize + 18
+  width: header.width + appRow.width + (appRow.width > 0 ? 10 : 2)
+  height: slotSize + 10
   radius: Math.max(14, Style.cornerRadius)
-  color: Util.alpha(Color.background, 0.62)
+  color: active ? Util.alpha(Color.accent, 0.08) : Util.alpha(Color.background, 0.32)
   border.width: 1
-  border.color: urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.8) : Util.alpha(Color.foreground, 0.18)
+  border.color: urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.32) : Util.alpha(Color.foreground, 0.09)
+  Behavior on color { ColorAnimation { duration: 140 } }
+  Behavior on border.color { ColorAnimation { duration: 140 } }
 
   Rectangle {
     id: header
-    color: Util.alpha(root.active ? Color.accent : Color.foreground, root.active ? 0.14 : headerHover.hovered ? 0.08 : 0.025)
+    color: Util.alpha(Color.foreground, headerHover.hovered ? 0.06 : 0)
+    Behavior on color { ColorAnimation { duration: 140 } }
     radius: root.radius - 1
     border.width: activeFocus ? 1 : 0
     border.color: Color.accent
     x: 1
     y: 1
-    width: Math.min(120, Math.max(root.slotSize, title.implicitWidth + 28))
+    width: Math.min(80, Math.max(30, title.implicitWidth + 12))
     height: parent.height - 2
     Accessible.role: Accessible.Button
     Accessible.name: root.label + ", " + root.count + " windows" + (root.urgent ? ", urgent" : "")
@@ -52,7 +55,7 @@ Rectangle {
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.verticalCenter: parent.verticalCenter
       anchors.verticalCenterOffset: -5
-      width: Math.min(implicitWidth, parent.width - 20)
+      width: Math.min(implicitWidth, parent.width - 8)
       elide: Text.ElideRight
       text: root.label
       horizontalAlignment: Text.AlignHCenter
@@ -84,7 +87,7 @@ Rectangle {
   }
   Row {
     id: appRow
-    x: header.width + 8
+    x: header.width + 4
     anchors.verticalCenter: parent.verticalCenter
     spacing: 6
   }

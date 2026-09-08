@@ -254,9 +254,9 @@ PanelWindow {
       hyprWorkspaces, focusedWorkspaceId, hyprToplevels,
       workspaceWindowCounts, workspaceCountsReady)
   }
-  readonly property int itemSize: iconSize + 22
-  readonly property int reservedSize: iconSize + (grouped ? 56 : 44) + edgeMargin
-  readonly property int mainPadding: 16
+  readonly property int itemSize: iconSize + (grouped ? 14 : 22)
+  readonly property int reservedSize: iconSize + (grouped ? 32 : 44) + edgeMargin
+  readonly property int mainPadding: grouped ? 8 : 16
   readonly property int revealThickness: 3
   readonly property int crossExtent: vertical
     ? Math.ceil(iconSize * magnification + 80) + edgeMargin
@@ -582,7 +582,7 @@ PanelWindow {
       ? 0
       : root.position === "top" ? root.edgeMargin : parent.height - height - root.edgeMargin
     width: root.vertical ? root.iconSize + 44 : parent.width
-    height: root.vertical ? parent.height : root.iconSize + (root.grouped ? 56 : 44)
+    height: root.vertical ? parent.height : root.iconSize + (root.grouped ? 32 : 44)
     radius: Math.max(18, Style.cornerRadius)
     color: root.dockBackgroundColor
     borderSpec: root.dockBorderSpec
@@ -602,6 +602,16 @@ PanelWindow {
       Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
     }
 
+    Rectangle {
+      x: dockBackground.radius
+      y: Math.max(1, Border.top(root.dockBorderSpec))
+      width: Math.max(0, parent.width - x * 2)
+      height: 1
+      visible: !root.borderColorEnabled && !root.borderWidthEnabled
+      color: Qt.rgba(root.dockBorderColor.r, root.dockBorderColor.g,
+        root.dockBorderColor.b, root.dockBorderColor.a * root.dockBackgroundColor.a * 0.12)
+    }
+
     Item {
       id: dockLayout
 
@@ -619,17 +629,6 @@ PanelWindow {
         ? Math.max(leadingEnd, Math.min(centeredAppStart,
             Math.max(leadingEnd, trailingStart - root.appMainExtent)))
         : leadingEnd
-
-      Rectangle {
-        x: controlItem.x + (controlItem.width - width) / 2
-        y: controlItem.y + (controlItem.height - height) / 2
-        width: root.iconSize + 8
-        height: width
-        radius: Math.max(10, Style.cornerRadius)
-        color: Util.alpha(Color.background, 0.5)
-        border.width: 1
-        border.color: Util.alpha(Color.foreground, 0.14)
-      }
 
       DockControlItem {
         id: controlItem
@@ -688,16 +687,16 @@ PanelWindow {
         width: Math.max(0, Math.min(desiredWidth, dockLayout.trailingStart - x))
         height: root.crossExtent - root.edgeMargin
         y: root.position === "top" ? 0 : dockLayout.height - height
-        rowY: root.position === "top" ? (dockLayout.height - root.itemSize - 18) / 2
-          : height - (dockLayout.height + root.itemSize + 18) / 2
-        contentPadding: Math.ceil(root.iconSize * (root.magnification - 1) / 2) + 16
+        rowY: root.position === "top" ? (dockLayout.height - root.itemSize - 10) / 2
+          : height - (dockLayout.height + root.itemSize + 10) / 2
+        contentPadding: Math.ceil(root.iconSize * (root.magnification - 1) / 2) + 8
         foreground: Color.menu.text
         background: Color.menu.background
         accent: Color.accent
         onViewportChanged: windowPreview.refreshAnchorGeometry()
         Repeater {
           model: root.groupedRequested ? root.workspacePresentation.globalLaunchers : []
-          AppIcon { y: 6 }
+          AppIcon { y: 2 }
         }
         Repeater {
           id: workspaceCards
@@ -749,18 +748,6 @@ PanelWindow {
         slotSize: root.itemSize
         iconSize: root.iconSize
         visible: root.showTrash
-      }
-
-      Rectangle {
-        visible: root.showTrash
-        x: trashItem.x + (trashItem.width - width) / 2
-        y: trashItem.y + (trashItem.height - height) / 2
-        width: root.iconSize + 8
-        height: width
-        radius: Math.max(10, Style.cornerRadius)
-        color: Util.alpha(Color.background, 0.5)
-        border.width: 1
-        border.color: Util.alpha(Color.foreground, 0.14)
       }
 
       DockTrashItem {

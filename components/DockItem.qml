@@ -329,7 +329,7 @@ Item {
         z: -1
 
         Behavior on opacity {
-          NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+          NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
         }
       }
 
@@ -337,9 +337,11 @@ Item {
         anchors.fill: parent
         anchors.margins: -4
         radius: Math.max(10, Style.cornerRadius)
-        color: Util.alpha(Color.background, mouse.hovered ? 0.8 : 0.5)
+        color: Util.alpha(Color.background, mouse.hovered ? 0.36 : 0)
         border.width: 1
-        border.color: Util.alpha(Color.foreground, mouse.hovered ? 0.28 : 0.14)
+        border.color: Util.alpha(Color.foreground, mouse.hovered ? 0.14 : 0)
+        Behavior on color { ColorAnimation { duration: 140 } }
+        Behavior on border.color { ColorAnimation { duration: 140 } }
       }
 
       IconImage {
@@ -454,6 +456,12 @@ Item {
     DockApplicationStateIndicator {
       id: applicationStateIndicator
 
+      // Grouped cards keep the marker on the slot, within the compact edge inset.
+      // Flat/vertical docks retain their existing magnified marker presentation.
+      parent: root.originOnly ? root : iconContainer
+      x: indicatorGeometry.x + (root.originOnly ? iconContainer.x : 0)
+      y: indicatorGeometry.y + (root.originOnly ? iconContainer.y : 0)
+      opacity: root.originOnly ? iconContainer.opacity : 1
       position: root.position
       iconWidth: iconContainer.width
       iconHeight: iconContainer.height
