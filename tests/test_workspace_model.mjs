@@ -183,6 +183,43 @@ assert.equal(DockWindowModel.canonicalMonitorIdentity('DP-1', [monitors[1]]), ''
 assert.equal(stickyPresentation(savedOrigin, [], { ...scopedContext, monitors: [monitors[1]] })
   .fallbackItems.length, 1, 'removed connector remains unresolved fallback')
 
+// Blank workspace names alias Quickshell handles; per-client IPC ids and monitors win.
+for (const sharedId of [1, 2]) {
+  const sharedBlankWorkspace = { id: sharedId, name: '' }
+  const sharedMonitor = { id: sharedId === 1 ? 1 : 0,
+    name: sharedId === 1 ? 'HDMI-A-1' : 'DP-1' }
+  const herdrWindow = { appId: 'herdr' }
+  const gameWindow = { appId: 'game' }
+  const blankHandles = [
+    { wayland: herdrWindow, address: 'herdr', workspace: sharedBlankWorkspace,
+      monitor: sharedMonitor,
+      lastIpcObject: { workspace: { id: 2, name: '' }, monitor: 0 } },
+    { wayland: gameWindow, address: 'game', workspace: sharedBlankWorkspace,
+      monitor: sharedMonitor,
+      lastIpcObject: { workspace: { id: 1, name: '' }, monitor: 1 } }
+  ]
+  const blankRecords = [herdrWindow, gameWindow].map(toplevel => ({ toplevel,
+    ...DockWindowModel.locationForToplevel(toplevel, blankHandles, {}) }))
+  assert.deepEqual(Array.from(blankRecords, record => [record.workspace, record.monitor]),
+    [['id:2', 'id:0'], ['id:1', 'id:1']],
+    'blank-name clients use per-client IPC location')
+  const blankPresentation = model.buildWorkspacePresentation(
+    [{ desktopId: 'herdr', pinned: false, toplevels: [herdrWindow] },
+      { desktopId: 'game', pinned: false, toplevels: [gameWindow] }],
+    blankRecords,
+    [{ id: 1, name: '', monitorID: 1 }, { id: 2, name: '', monitorID: 0 }],
+    { monitorScope: 'all', activeWorkspace: 'id:1', groupWindows: true,
+      monitors: [{ id: 0, name: 'DP-1', activeWorkspace: { id: 2, name: '' } },
+        { id: 1, name: 'HDMI-A-1', activeWorkspace: { id: 1, name: '' } }] })
+  assert.equal(blankPresentation.groups.find(group => group.identity === 'id:1').items[0]
+    .toplevels[0], gameWindow, 'game is placed in IPC workspace 1')
+  assert.equal(blankPresentation.groups.find(group => group.identity === 'id:2').items[0]
+    .toplevels[0], herdrWindow, 'Herdr is placed in IPC workspace 2')
+  blankHandles[0].workspace = { name: 'special:smartdock-minimized' }
+  const minimized = DockWindowModel.locationForToplevel(herdrWindow, blankHandles, {})
+  assert.equal(minimized.minimized, true, 'live minimized workspace beats stale blank IPC data')
+}
+
 
 // Mirrored docks share membership and global active-first badge ownership.
 monitors[0].focused = false

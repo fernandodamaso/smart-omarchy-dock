@@ -900,7 +900,7 @@ PanelWindow {
     hoverGlowEnabled: root.hoverGlowEnabled
     hoverGlowOpacity: root.hoverGlowOpacity
     hoverGlowRadius: root.hoverGlowRadius
-    pointerPosition: !pointer.hovered ? -10000 : root.vertical
+    pointerPosition: !pointer.hovered || !parent ? -10000 : root.vertical
       ? parent.mapFromItem(dockBackground, pointer.point.position.x, pointer.point.position.y).y
       : parent.mapFromItem(dockLayout, pointer.point.position.x, pointer.point.position.y).x
     applicationActions: root.applicationActions
