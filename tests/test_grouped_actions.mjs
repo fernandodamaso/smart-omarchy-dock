@@ -130,4 +130,15 @@ for (const iconSize of [24, 31, 64, 96]) for (const position of ['top', 'bottom'
   }
   assert.equal(markerBinding('opacity', 1, scope), 0.4, 'reparented marker retains fullscreen opacity')
 }
-console.log('grouped action routes and compact marker bounds: PASS')
+// Trailing whitespace stays compact, while fullscreen emphasis still fits at
+// maximum magnification. Evaluate the host binding rather than a copied formula.
+const paddingExpression = read('Dock.qml').split('id: groupedLayout')[1]
+  .match(/contentPadding: ([\s\S]*?)\n        foreground:/)[1]
+const paddingFor = root => vm.runInNewContext(paddingExpression, { root, DockModel })
+assert.ok(paddingFor({ iconSize: 24, magnification: 1.2, fullscreenModeActive: false }) <= 3,
+  'default grouped spacing must not add redundant viewport padding')
+const largeOwnerScale = DockModel.fullscreenIconPresentation(true, true, false).scale * 2
+const largeOwnerOverhang = 96 * (largeOwnerScale - 1) / 2
+assert.ok(paddingFor({ iconSize: 96, magnification: 2, fullscreenModeActive: true }) + 13 >= largeOwnerOverhang,
+  'fullscreen artwork fits the trailing card inset plus viewport allowance')
+console.log('grouped action routes and compact geometry: PASS')
