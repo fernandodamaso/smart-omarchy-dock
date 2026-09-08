@@ -42,6 +42,10 @@ GitHub-hosted Ubuntu runners execute only checks that are meaningful without Oma
 
 The following remain local/physical gates because a stock GitHub runner does not provide the real host environment: standalone Quickshell smoke tests, `omarchy plugin validate .`, Omarchy-shell-aware `qmllint`, Hyprland interaction, live plugin reload, screen/hotplug behavior, and other issue-specific physical acceptance.
 
+For grouped workspace geometry changes, run `bash tests/runtime/check-workspace-resize.sh`
+in an Omarchy Wayland session. It exercises the real dock without showing a window,
+checking that workspace updates preserve the native panel size and compact input region.
+
 ## Stacked branches
 
 When a branch depends on another unmerged branch:

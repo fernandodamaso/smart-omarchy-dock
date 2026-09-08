@@ -543,7 +543,7 @@ PanelWindow {
   }
   implicitWidth: vertical
     ? crossExtent
-    : fullLength ? 0 : grouped && screen ? Math.min(screen.width, compactPanelExtent) : compactPanelExtent
+    : fullLength ? 0 : grouped && screen ? screen.width : compactPanelExtent
   implicitHeight: vertical
     ? fullLength ? 0 : compactMainExtent
     : crossExtent
@@ -568,15 +568,21 @@ PanelWindow {
   Item {
     id: interactionArea
 
-    anchors.fill: parent
+    // Keep the grouped native surface stable while cards resize inside it.
+    // The compact input region leaves the transparent sides click-through.
+    width: root.grouped && !root.fullLength
+      ? Math.min(parent.width, root.compactPanelExtent) : parent.width
+    height: parent.height
+    x: (parent.width - width) / 2
   }
 
   Item {
     id: revealStrip
 
-    x: root.position === "right" ? parent.width - width : 0
+    x: root.vertical ? (root.position === "right" ? parent.width - width : 0)
+      : interactionArea.x
     y: root.position === "bottom" ? parent.height - height : 0
-    width: root.vertical ? root.revealThickness : parent.width
+    width: root.vertical ? root.revealThickness : interactionArea.width
     height: root.vertical ? parent.height : root.revealThickness
   }
 
@@ -585,12 +591,12 @@ PanelWindow {
 
     x: root.vertical
       ? root.position === "left" ? root.edgeMargin : parent.width - width - root.edgeMargin
-      : root.compactGroupedSurface ? root.groupedSurfaceGutter : 0
+      : interactionArea.x + (root.compactGroupedSurface ? root.groupedSurfaceGutter : 0)
     y: root.vertical
       ? 0
       : root.position === "top" ? root.edgeMargin : parent.height - height - root.edgeMargin
     width: root.vertical ? root.iconSize + 44
-      : parent.width - (root.compactGroupedSurface ? root.groupedSurfaceGutter * 2 : 0)
+      : interactionArea.width - (root.compactGroupedSurface ? root.groupedSurfaceGutter * 2 : 0)
     height: root.vertical ? parent.height : root.iconSize + (root.grouped ? 32 : 44)
     radius: Math.max(18, Style.cornerRadius)
     color: root.dockBackgroundColor
@@ -969,5 +975,6 @@ PanelWindow {
 
   HoverHandler {
     id: windowPointer
+    parent: interactionArea
   }
 }

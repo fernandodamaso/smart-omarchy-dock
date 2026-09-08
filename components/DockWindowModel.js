@@ -227,7 +227,7 @@ function locationForToplevel(toplevel, handles, originSnapshot) {
 
   var ipc = handle.lastIpcObject || ({})
   var address = normalizedAddress(handle.address || ipc.address)
-  var workspace = workspaceIdentity(ipc.workspace || handle.workspace)
+  var workspace = workspaceIdentity(handle.workspace || ipc.workspace)
   var minimized = workspace === "special:smartdock-minimized"
   var urgent = handleUrgent(handle)
 
@@ -256,7 +256,7 @@ function locationForToplevel(toplevel, handles, originSnapshot) {
   }
 
   var monitor = monitorIdentity(
-    ipc.monitor !== undefined ? ipc.monitor : handle.monitor)
+    handle.monitor !== undefined && handle.monitor !== null ? handle.monitor : ipc.monitor)
   return {
     address: address,
     workspace: workspace,

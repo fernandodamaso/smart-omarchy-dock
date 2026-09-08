@@ -104,6 +104,23 @@ TestCase {
     compare(minimizedLocation.minimized, true)
   }
 
+  function test_liveLocationWinsDuringWorkspaceMove() {
+    var app = window("demo")
+    var moving = handle(app, "0xaaa", 1, "1", 0, false)
+    moving.workspace = { id: 2, name: "2" }
+    moving.monitor = { id: 1, name: "MON-1" }
+    var location = DockWindowModel.locationForToplevel(app, [moving], {})
+    compare(location.workspace, "id:2")
+    compare(location.monitor, "id:1")
+
+    moving.workspace = { id: -99, name: "special:smartdock-minimized" }
+    location = DockWindowModel.locationForToplevel(app, [moving], {
+      "0xaaa": { workspace: "2", monitor: "1" }
+    })
+    compare(location.minimized, true)
+    compare(location.workspace, "id:2")
+  }
+
   function test_unknownNewAndMinimizedLocationsFailOpen() {
     if (!hasFunction("locationForToplevel")) return
     if (!hasFunction("locationMatchesContext")) return
