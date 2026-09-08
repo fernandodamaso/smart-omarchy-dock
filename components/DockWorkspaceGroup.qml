@@ -36,8 +36,7 @@ Rectangle {
 
   Rectangle {
     id: header
-    color: Util.alpha(Color.foreground, headerHover.hovered ? 0.055 : 0)
-    Behavior on color { ColorAnimation { duration: 140 } }
+    color: "transparent"
     radius: Math.max(10, root.radius - 2)
     border.width: activeFocus ? 1 : 0
     border.color: Color.accent
@@ -55,27 +54,17 @@ Rectangle {
       id: title
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.verticalCenter: parent.verticalCenter
-      anchors.verticalCenterOffset: -5
       width: Math.min(implicitWidth, parent.width - 8)
       elide: Text.ElideRight
       text: root.label
       horizontalAlignment: Text.AlignHCenter
       color: root.active ? Color.accent : Color.foreground
       font.family: Style.font.family
-      font.pixelSize: Math.max(Style.font.body, root.slotSize * 0.32)
+      font.pixelSize: Math.max(Style.font.body, root.slotSize * 0.38)
       font.bold: true
     }
     TapHandler { enabled: root.switchable; onTapped: root.activated() }
     HoverHandler { id: headerHover; cursorShape: root.switchable ? Qt.PointingHandCursor : Qt.ArrowCursor }
-    Rectangle {
-      anchors.horizontalCenter: parent.horizontalCenter
-      anchors.top: title.bottom
-      anchors.topMargin: 5
-      width: 5
-      height: 5
-      radius: 3
-      color: root.urgent ? Color.urgent : root.active ? Color.accent : Util.alpha(Color.foreground, 0.32)
-    }
     DockToolTip {
       id: headerTooltip
       anchorItem: header

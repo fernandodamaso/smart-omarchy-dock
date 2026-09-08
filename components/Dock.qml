@@ -268,7 +268,7 @@ PanelWindow {
     showTrash, itemSize, 12)
   readonly property int trailingMainExtent: TrashModel.trailingMainExtent(
     showTrash, itemSize, 12, workspaceMainExtent)
-  readonly property int compactMainExtent: mainPadding * 2 + itemSize + 12
+  readonly property int compactMainExtent: mainPadding * 2 + itemSize
     + appMainExtent + trailingMainExtent
   // Keep magnification space transparent, without shrinking the logical viewport.
   readonly property int groupedSurfaceTrim: mainPadding + groupedLayout.contentPadding - 4
@@ -633,7 +633,7 @@ PanelWindow {
       width: parent.width + (root.compactGroupedSurface ? root.groupedSurfaceTrim : 0)
       height: parent.height
 
-      readonly property real leadingEnd: root.mainPadding + root.itemSize + 12
+      readonly property real leadingEnd: root.mainPadding + root.itemSize
       readonly property real trailingStart: (root.vertical ? height : width)
         - root.mainPadding - root.trailingMainExtent
       readonly property real trashOffset: root.showTrash
@@ -670,14 +670,6 @@ PanelWindow {
         onContextMenuVisibilityChanged: visible => {
           root.openMenuCount = Math.max(0, root.openMenuCount + (visible ? 1 : -1))
         }
-      }
-
-      DockSeparator {
-        x: root.vertical ? (parent.width - width) / 2 : dockLayout.leadingEnd - 12
-        y: root.vertical ? dockLayout.leadingEnd - 12 : (parent.height - height) / 2
-        vertical: root.vertical
-        slotSize: root.itemSize
-        iconSize: root.iconSize
       }
 
       Grid {
