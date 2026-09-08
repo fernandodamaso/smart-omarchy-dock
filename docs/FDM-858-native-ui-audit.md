@@ -47,7 +47,7 @@ No additional follow-up issue is created from this audit because the remaining v
 
 ## Host-dependent validation handoff
 
-The settings-binding regression intentionally lives in `tests/omarchy/`, outside headless CI discovery. On the Omarchy machine, run:
+The settings-binding regression intentionally lives in `local-tests/`, outside the headless CI `tests/` tree. On the Omarchy machine, run:
 
 ```bash
 bash tests/run_action_dropdown_settings.sh
