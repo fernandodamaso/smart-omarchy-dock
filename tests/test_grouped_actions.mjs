@@ -144,3 +144,92 @@ const largeOwnerOverhang = 96 * (largeOwnerScale - 1) / 2
 assert.ok(paddingFor({ iconSize: 96, magnification: 2, fullscreenModeActive: true }) + 13 >= largeOwnerOverhang,
   'fullscreen artwork fits the trailing card inset plus viewport allowance')
 console.log('grouped action routes and compact geometry: PASS')
+
+// Execute the geometry bindings from QML. This catches trimming the logical
+// layout with the surface, which silently reintroduces the trailing gap.
+function binding(block, name, scope) {
+  const expression = block.match(new RegExp(`^( *)${name}: ([^\\n]*(?:\\n\\1 +[^\\n]+)*)`, 'm'))?.[2]
+  assert.ok(expression, `missing binding ${name}`)
+  return vm.runInNewContext(expression, scope)
+}
+const dockSource = read('Dock.qml')
+const backgroundSource = dockSource.split('id: dockBackground')[1]
+const layoutSource = dockSource.split('id: dockLayout')[1]
+const groupedSource = dockSource.split('id: groupedLayout')[1]
+function dockGeometry(options = {}) {
+  const root = { iconSize: 24, magnification: 1.2, fullscreenModeActive: false,
+    grouped: true, vertical: false, fullLength: false, showTrash: false,
+    screen: { width: 1920 }, ...options }
+  const groupedLayout = { contentPadding: paddingFor(root) }
+  groupedLayout.desiredWidth = binding(read('DockWorkspaceLayout.qml'),
+    'readonly property real desiredWidth', { content: { implicitWidth: 300 }, ...groupedLayout })
+  Object.assign(root, { itemSize: root.iconSize + (root.grouped ? 14 : 22),
+    mainPadding: root.grouped ? 8 : 16, appMainExtent: groupedLayout.desiredWidth,
+    trailingMainExtent: root.showTrash ? 70 : root.grouped ? 0 : 90, crossExtent: 200 })
+  const scope = { root, groupedLayout, ...root }
+  root.compactMainExtent = binding(dockSource, 'readonly property int compactMainExtent', scope)
+  // Bind any surface geometry properties in source order, as QML dependencies.
+  for (const name of ['groupedSurfaceTrim', 'groupedSurfaceGutter', 'compactGroupedSurface', 'compactPanelExtent']) {
+    const declaration = `readonly property ${name === 'compactGroupedSurface' ? 'bool' : 'int'} ${name}`
+    if (dockSource.includes(declaration)) {
+      root[name] = binding(dockSource, declaration, { ...scope, ...root })
+    }
+  }
+  const panelWidth = root.fullLength ? root.screen.width
+    : binding(dockSource, 'implicitWidth', { ...scope, ...root })
+  const parent = { width: panelWidth }
+  const surfaceWidth = binding(backgroundSource, 'width', { root, parent })
+  const surfaceX = binding(backgroundSource, 'x', { root, parent, width: surfaceWidth })
+  const layoutWidth = layoutSource.trimStart().startsWith('anchors.fill: parent') ? surfaceWidth
+    : binding(layoutSource, 'width', { root, parent: { width: surfaceWidth } })
+  const dockLayout = { width: layoutWidth, height: 200 }
+  for (const name of ['leadingEnd', 'trailingStart', 'centeredAppStart', 'appStart'])
+    dockLayout[name] = binding(layoutSource, `readonly property real ${name}`, { root, ...dockLayout })
+  const viewportX = binding(groupedSource, 'x', { dockLayout })
+  const viewportWidth = binding(groupedSource, 'width', { dockLayout, x: viewportX,
+    desiredWidth: groupedLayout.desiredWidth })
+  return { root, panelWidth, surfaceWidth, surfaceX, layoutWidth, viewportX, viewportWidth,
+    visibleRight: surfaceX + viewportX + groupedLayout.contentPadding + 300,
+    desiredWidth: groupedLayout.desiredWidth }
+}
+for (const iconSize of [24, 31, 64, 96]) for (const magnification of [1, 1.2, 2])
+  for (const fullscreenModeActive of [false, true]) {
+    const g = dockGeometry({ iconSize, magnification, fullscreenModeActive })
+    assert.equal(g.surfaceX + g.surfaceWidth - g.visibleRight, 4, 'visible right inset is exactly 4px')
+    assert.equal(g.surfaceX * 2 + g.surfaceWidth, g.panelWidth, 'visible surface is centered')
+    assert.equal(g.layoutWidth, g.root.compactMainExtent, 'logical layout retains its original width')
+    assert.equal(g.viewportWidth, g.desiredWidth, 'magnification viewport is not reduced')
+    assert.ok(g.surfaceX >= 0 && g.surfaceX + g.surfaceWidth <= g.panelWidth)
+    assert.ok(g.surfaceX + g.viewportX + g.viewportWidth <= g.panelWidth, 'viewport fits outer panel')
+    if (g.root.groupedSurfaceGutter > 0) {
+      const dockLayout = { x: g.surfaceX, width: g.layoutWidth }
+      const dockBackground = { x: g.surfaceX, width: g.surfaceWidth }
+      const pointerParent = binding(dockSource.split('id: pointer')[1], 'parent',
+        { root: g.root, dockLayout, dockBackground })
+      const pointX = g.viewportX + g.viewportWidth - 1
+      const pointer = { hovered: pointX < pointerParent.width,
+        point: { position: { x: pointX, y: 30 } } }
+      assert.ok(pointer.hovered, 'tracking covers transparent magnification allowance')
+      assert.equal(binding(dockSource, 'readonly property real pointerPosition',
+        { pointer, vertical: false }), pointX, 'control pointer retains logical origin')
+      const appParentX = g.surfaceX + g.viewportX + paddingFor(g.root)
+      const parent = { mapFromItem: (source, x, y) => ({ x: source.x + x - appParentX, y }) }
+      assert.equal(binding(dockSource.split('component AppIcon:')[1], 'pointerPosition',
+        { pointer, root: g.root, parent, dockLayout, dockBackground }),
+      g.viewportWidth - paddingFor(g.root) - 1, 'app pointer mapping includes gutter exactly once')
+    }
+  }
+for (const options of [{ grouped: false }, { showTrash: true },
+  { fullLength: true }, { screen: { width: 200 } },
+  { iconSize: 96, magnification: 2, screen: { width: 540 } }]) {
+  const g = dockGeometry(options)
+  assert.equal(g.surfaceX, 0, 'legacy geometry remains for other modes and screen overflow')
+  assert.equal(g.surfaceWidth, g.panelWidth)
+  assert.ok(g.viewportWidth >= 0)
+}
+
+const verticalBackground = {}
+assert.equal(binding(dockSource.split('id: pointer')[1], 'parent',
+  { root: { vertical: true }, dockBackground: verticalBackground, dockLayout: {} }), verticalBackground,
+'Vertical pointer parent is unchanged')
+console.log('grouped visible surface and magnification bounds: PASS')

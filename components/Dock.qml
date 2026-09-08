@@ -270,6 +270,14 @@ PanelWindow {
     showTrash, itemSize, 12, workspaceMainExtent)
   readonly property int compactMainExtent: mainPadding * 2 + itemSize + 12
     + appMainExtent + trailingMainExtent
+  // Keep magnification space transparent, without shrinking the logical viewport.
+  readonly property int groupedSurfaceTrim: mainPadding + groupedLayout.contentPadding - 4
+  readonly property int groupedSurfaceGutter: Math.max(0, groupedLayout.contentPadding - 4)
+  readonly property bool compactGroupedSurface: grouped && !vertical && !fullLength && !showTrash
+    && (!screen || Math.max(compactMainExtent,
+      compactMainExtent - groupedSurfaceTrim + groupedSurfaceGutter * 2) <= screen.width)
+  readonly property int compactPanelExtent: compactGroupedSurface
+    ? compactMainExtent - groupedSurfaceTrim + groupedSurfaceGutter * 2 : compactMainExtent
   readonly property bool keepAutoHideOpen: windowPointer.hovered
     || appPicker.visible || dockSettings.visible || openMenuCount > 0
     || dragSource >= 0 || windowPreview.interactionActive
@@ -535,7 +543,7 @@ PanelWindow {
   }
   implicitWidth: vertical
     ? crossExtent
-    : fullLength ? 0 : grouped && screen ? Math.min(screen.width, compactMainExtent) : compactMainExtent
+    : fullLength ? 0 : grouped && screen ? Math.min(screen.width, compactPanelExtent) : compactPanelExtent
   implicitHeight: vertical
     ? fullLength ? 0 : compactMainExtent
     : crossExtent
@@ -577,11 +585,12 @@ PanelWindow {
 
     x: root.vertical
       ? root.position === "left" ? root.edgeMargin : parent.width - width - root.edgeMargin
-      : 0
+      : root.compactGroupedSurface ? root.groupedSurfaceGutter : 0
     y: root.vertical
       ? 0
       : root.position === "top" ? root.edgeMargin : parent.height - height - root.edgeMargin
-    width: root.vertical ? root.iconSize + 44 : parent.width
+    width: root.vertical ? root.iconSize + 44
+      : parent.width - (root.compactGroupedSurface ? root.groupedSurfaceGutter * 2 : 0)
     height: root.vertical ? parent.height : root.iconSize + (root.grouped ? 32 : 44)
     radius: Math.max(18, Style.cornerRadius)
     color: root.dockBackgroundColor
@@ -615,7 +624,8 @@ PanelWindow {
     Item {
       id: dockLayout
 
-      anchors.fill: parent
+      width: parent.width + (root.compactGroupedSurface ? root.groupedSurfaceTrim : 0)
+      height: parent.height
 
       readonly property real leadingEnd: root.mainPadding + root.itemSize + 12
       readonly property real trailingStart: (root.vertical ? height : width)
@@ -828,6 +838,7 @@ PanelWindow {
 
     HoverHandler {
       id: pointer
+      parent: root.vertical ? dockBackground : dockLayout
     }
   }
 
@@ -885,7 +896,7 @@ PanelWindow {
     hoverGlowRadius: root.hoverGlowRadius
     pointerPosition: !pointer.hovered ? -10000 : root.vertical
       ? parent.mapFromItem(dockBackground, pointer.point.position.x, pointer.point.position.y).y
-      : parent.mapFromItem(dockBackground, pointer.point.position.x, pointer.point.position.y).x
+      : parent.mapFromItem(dockLayout, pointer.point.position.x, pointer.point.position.y).x
     applicationActions: root.applicationActions
     showPreviews: root.showPreviews
     workspaceBadgeBackgroundColor: root.effectiveWorkspaceBadgeBackgroundColor
