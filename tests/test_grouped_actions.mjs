@@ -101,4 +101,33 @@ for (const usingLua of [false, true]) {
 }
 assert.equal(read('Dock.qml').includes('indexOf(modelData)'), false)
 assert.equal(read('Dock.qml').includes('workspaceScopeKey(root.screen.name, modelData.presentationId)'), true)
-console.log('grouped action routes: PASS')
+// Evaluate the production marker bindings: grouped magnification must not push
+// the focus underline outside the compact surface, even with zero edge margin.
+const markerBlock = read('DockItem.qml').split('id: applicationStateIndicator')[1].split('\n    }')[0]
+function markerBinding(name, fallback, scope) {
+  const expression = markerBlock.match(new RegExp(`^      ${name}: (.+)$`, 'm'))?.[1]
+  return expression ? vm.runInNewContext(expression, scope) : fallback
+}
+for (const iconSize of [24, 31, 64, 96]) for (const position of ['top', 'bottom']) {
+  const slot = { originOnly: true }
+  const iconContainer = { x: 7, y: 10, opacity: 0.4 }
+  const geometry = DockModel.applicationStateIndicatorGeometry(position, iconSize, iconSize, true, true)
+  const scope = { root: slot, iconContainer, indicatorGeometry: geometry }
+  const markerParent = markerBinding('parent', iconContainer, scope)
+  const markerY = markerBinding('y', geometry.y, scope)
+  for (const magnification of [1, 2]) {
+    const scale = markerParent === iconContainer ? magnification : 1
+    const origin = position === 'bottom' ? iconSize : 0
+    const top = markerParent === iconContainer
+      ? iconContainer.y + origin + (markerY - origin) * scale : markerY
+    // Actual source surface height; the item has six extra cross-axis pixels.
+    const backgroundHeight = vm.runInNewContext(read('Dock.qml').split('id: dockBackground')[1].match(/height: root.vertical \? parent.height : (.+)/)[1],
+      { root: { iconSize, grouped: true } })
+    const itemHeight = iconSize + 20
+    assert.ok(top + (backgroundHeight - itemHeight) / 2 >= 0, 'top marker fits compact surface')
+    assert.ok(top + geometry.height * scale <= (backgroundHeight + itemHeight) / 2,
+      'bottom marker fits compact surface')
+  }
+  assert.equal(markerBinding('opacity', 1, scope), 0.4, 'reparented marker retains fullscreen opacity')
+}
+console.log('grouped action routes and compact marker bounds: PASS')
