@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import Quickshell.Services.Notifications
 import Quickshell.Services.SystemTray
 import "DockBadgeModel.js" as BadgeModel
+import "DockModel.js" as DockModel
 import "DockWindowModel.js" as DockWindowModel
 
 Item {
@@ -93,7 +94,7 @@ Item {
           ipc.class,
           ipc.initialClass
         ], identityAliases)) continue
-      var address = DockWindowModel.normalizedAddress(handle.address || ipc.address)
+      var address = DockModel.normalizeWindowAddress(handle.address || ipc.address)
       if (address && addresses.indexOf(address) < 0) addresses.push(address)
     }
     return addresses

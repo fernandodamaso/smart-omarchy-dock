@@ -20,5 +20,7 @@ assert.match(read("DockHost.qml"), /interfaceAnimationsEnabled:\s*true/)
 assert.match(read("components/Dock.qml"), /readonly property bool interfaceAnimationsEnabled/)
 assert.match(read("components/DockSettings.qml"), /label: "Interface animations"/)
 assert.match(read("README.md"), /`interfaceAnimationsEnabled`/)
+assert.match(read("components/DockBadgeTracker.qml"), /DockModel\.normalizeWindowAddress\(handle\.address \|\| ipc\.address\)/)
+assert.doesNotMatch(read("components/DockBadgeTracker.qml"), /DockWindowModel\.normalizedAddress/)
 
 console.log("interface animation settings: PASS")
