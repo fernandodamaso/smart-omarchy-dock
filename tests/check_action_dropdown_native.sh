@@ -33,5 +33,11 @@ done
 
 test -f "$local_test"
 bash -n "$local_runner"
+test -f tests/stubs/Quickshell/qmldir
+test -f tests/stubs/Quickshell/Io/FileView.qml
+test -f tests/stubs/Quickshell/Io/Process.qml
+test -f tests/stubs/Quickshell/Io/StdioCollector.qml
+rg -q 'tests/stubs' "$local_runner"
+rg -q 'OMARCHY_PATH:-/usr/share/omarchy' "$local_runner"
 
 echo "Native action-dropdown structural guard passed."

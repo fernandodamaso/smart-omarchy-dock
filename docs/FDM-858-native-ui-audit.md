@@ -50,8 +50,10 @@ No additional follow-up issue is created from this audit because the remaining v
 The settings-binding regression intentionally lives in `local-tests/`, outside the headless CI `tests/` tree. On the Omarchy machine, run:
 
 ```bash
-bash tests/run_action_dropdown_settings.sh
+OMARCHY_PATH=/usr/share/omarchy bash tests/run_action_dropdown_settings.sh
 ```
+
+The runner imports real Omarchy `shell/Commons` and `shell/Ui` and prepends `tests/stubs/Quickshell` so `qmltestrunner` can resolve Quickshell symbols that only exist inside the `qs` binary on this distro.
 
 Exercise all six `DockActionDropdown` call sites through their existing settings paths: **Workspace layout**, **Workspaces from**, **Window scope**, **Left click**, **Middle click**, and **Scroll**. `Position` already uses native `ButtonGroup` and is not part of this refactor.
 

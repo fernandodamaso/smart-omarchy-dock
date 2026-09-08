@@ -8,7 +8,7 @@ TestCase {
   name: "DockActionDropdownSettings"
   when: windowShown
   width: 420
-  height: 180
+  height: 220
 
   property string settingsValue: "one"
   property int commitCount: 0
@@ -45,66 +45,81 @@ TestCase {
     wait(0)
   }
 
-  function openDropdown() {
-    mouseClick(dropdown, dropdown.width / 2,
-      dropdown.height - dropdown.rowHeight / 2)
-    wait(20)
+  function nativeDropdown() {
+    for (var i = 0; i < dropdown.children.length; ++i) {
+      var child = dropdown.children[i]
+      if (child && typeof child.open === "function"
+          && child.popupOpen !== undefined)
+        return child
+    }
+    return null
   }
 
-  function selectWithKey(key) {
-    keyClick(key)
-    keyClick(Qt.Key_Return)
-    wait(20)
+  function selectNativeValue(nextValue) {
+    var native = nativeDropdown()
+    verify(native !== null)
+
+    // Open through the real Omarchy Dropdown so its onOpened path syncs
+    // currentIndex from the settings-driven value.
+    native.open()
+    tryCompare(native, "popupOpen", true, 1000)
+    wait(0)
+    compare(native.value, settingsValue)
+
+    // Mirror Omarchy Dropdown.selectCurrent(): assign value then emit
+    // changed(). That is the exact path that clears the child's declarative
+    // binding and requires DockActionDropdown's Qt.binding restore.
+    native.value = nextValue
+    native.changed(nextValue)
+    native.close()
+    tryCompare(native, "popupOpen", false, 1000)
+    wait(0)
   }
 
   function test_settingsRemainAuthoritativeAfterNativeSelections() {
     resetHarness()
     compare(dropdown.value, "one")
 
-    // User picks a non-default value.
-    openDropdown()
-    selectWithKey(Qt.Key_Down)
+    selectNativeValue("two")
     compare(settingsValue, "two")
     compare(commitCount, 1)
     compare(committedValues[0], "two")
+    compare(dropdown.value, "two")
 
     // External config update must re-drive the native child without a commit.
     settingsValue = "three"
     wait(0)
     compare(dropdown.value, "three")
+    compare(nativeDropdown().value, "three")
     compare(commitCount, 1)
 
-    // The native popup must have synchronized to "three": Up therefore picks
-    // "two". A broken child binding would still be on "two" and pick "one".
-    openDropdown()
-    selectWithKey(Qt.Key_Up)
+    // Selecting again after an external update must still commit once and
+    // leave settings authoritative for later reloads.
+    selectNativeValue("two")
     compare(settingsValue, "two")
     compare(commitCount, 2)
     compare(committedValues[1], "two")
+    compare(nativeDropdown().value, "two")
 
-    // Reset the same settings instance, then select again.
     settingsValue = "one"
     wait(0)
     compare(dropdown.value, "one")
     compare(commitCount, 2)
 
-    openDropdown()
-    selectWithKey(Qt.Key_Down)
+    selectNativeValue("two")
     compare(settingsValue, "two")
     compare(commitCount, 3)
     compare(committedValues[2], "two")
 
-    // A second external update after multiple selections must still win and
-    // must not produce a synchronization commit.
     settingsValue = "three"
     wait(0)
     compare(dropdown.value, "three")
     compare(commitCount, 3)
 
-    openDropdown()
-    selectWithKey(Qt.Key_Up)
+    selectNativeValue("two")
     compare(settingsValue, "two")
     compare(commitCount, 4)
     compare(committedValues[3], "two")
+    compare(nativeDropdown().value, "two")
   }
 }

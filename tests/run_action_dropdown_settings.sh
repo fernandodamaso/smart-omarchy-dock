@@ -2,8 +2,10 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-omarchy_path="${OMARCHY_PATH:-$HOME/.local/share/omarchy}"
+# Match scripts/run: Omarchy lives at /usr/share/omarchy on this distro.
+omarchy_path="${OMARCHY_PATH:-/usr/share/omarchy}"
 shell_root="$omarchy_path/shell"
+stubs_root="$repo_root/tests/stubs"
 
 for module in Commons Ui; do
   if [[ ! -d "$shell_root/$module" ]]; then
@@ -15,6 +17,11 @@ done
 
 if [[ ! -f "$shell_root/Ui/Dropdown.qml" ]]; then
   echo "Installed Omarchy does not expose shell/Ui/Dropdown.qml" >&2
+  exit 2
+fi
+
+if [[ ! -f "$stubs_root/Quickshell/qmldir" ]]; then
+  echo "Missing Quickshell stubs at $stubs_root/Quickshell" >&2
   exit 2
 fi
 
@@ -34,7 +41,10 @@ ln -s "$shell_root/Commons" "$module_root/qs/Commons"
 ln -s "$shell_root/Ui" "$module_root/qs/Ui"
 
 cd "$repo_root"
+# Stub Quickshell wins over the incomplete system QML module (core plugin is
+# embedded in qs only). Real Omarchy Commons/Ui stay on the import path.
 QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}" \
+  QML2_IMPORT_PATH="$stubs_root${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
   "$qml_test_runner" \
   -input local-tests \
   -import "$module_root" \
