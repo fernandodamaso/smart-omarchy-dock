@@ -27,7 +27,8 @@ Rectangle {
   default property alias items: appRow.data
   signal activated()
 
-  width: header.width + appRow.width + (appRow.width > 0 ? 16 : 2)
+  readonly property real appOccupancy: Math.min(1, appRow.width / Math.max(1, slotSize))
+  width: header.width + appRow.width + 2 + 14 * appOccupancy
   height: slotSize + 10
   radius: Math.max(12, Style.cornerRadius - 4)
   color: active ? Util.alpha(Color.accent, workspaceHover.hovered ? 0.13 : 0.10) : Util.alpha(Color.background, workspaceHover.hovered ? 0.42 : 0.26)
@@ -92,7 +93,8 @@ Rectangle {
   Rectangle {
     id: groupDivider
     x: header.width + 5
-    visible: appRow.width > 0
+    visible: root.appOccupancy > 0
+    opacity: root.appOccupancy
     anchors.verticalCenter: parent.verticalCenter
     width: 1
     height: Math.max(18, parent.height * 0.48)

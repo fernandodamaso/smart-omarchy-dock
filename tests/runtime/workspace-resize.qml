@@ -36,8 +36,9 @@ ShellRoot {
     active: true
     slotSize: 24
     property bool hasApp: false
+    property real appWidth: 24
     Loader {
-      width: transitionGroup.hasApp ? 24 : 0
+      width: transitionGroup.hasApp ? transitionGroup.appWidth : 0
       height: 24
       active: transitionGroup.hasApp
       sourceComponent: Rectangle { width: 24; height: 24 }
@@ -61,10 +62,20 @@ ShellRoot {
       var divider = dividerFor(transitionGroup)
       if (!divider || divider.visible)
         throw new Error("Empty workspace cards must hide their internal divider")
+      var emptyWidth = transitionGroup.width
       transitionGroup.hasApp = true
       settle(transitionGroup)
       if (!divider.visible || divider.x + divider.width > transitionGroup.width)
         throw new Error("Populated workspace cards must retain an internal divider")
+      var fullWidth = transitionGroup.width
+      transitionGroup.appWidth = 0.01
+      settle(transitionGroup)
+      if (transitionGroup.width - emptyWidth > 0.1)
+        throw new Error("First icon added padding discontinuously")
+      transitionGroup.appWidth = 12
+      settle(transitionGroup)
+      if (Math.abs(transitionGroup.width - (emptyWidth + fullWidth) / 2) > 0.1)
+        throw new Error("Workspace padding must follow icon occupancy")
       transitionGroup.hasApp = false
       settle(transitionGroup)
       if (divider.visible)

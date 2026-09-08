@@ -21,7 +21,6 @@ Item {
   width: Math.max(0, (root.naturalWidth + root.trailingGap) * root.occupiedProgress)
   height: root.naturalHeight
   opacity: root.opacityProgress
-  clip: root.occupiedProgress < 1 || root.opacityProgress < 1
 
   function settle() {
     finishTimer.stop()
@@ -65,22 +64,24 @@ Item {
 
   Behavior on occupiedProgress {
     enabled: root.motionReady && root.animationsEnabled
-    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+    NumberAnimation { duration: 260; easing.type: Easing.InOutCubic }
   }
   Behavior on opacityProgress {
     enabled: root.motionReady && root.animationsEnabled
-    NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+    NumberAnimation { duration: 260; easing.type: Easing.InOutCubic }
   }
 
   Item {
     id: content
+    x: (root.width - root.trailingGap * root.occupiedProgress - width) / 2
+    scale: 0.7 + 0.3 * root.occupiedProgress
     width: root.naturalWidth
     height: root.naturalHeight
   }
 
   Timer {
     id: finishTimer
-    interval: 190
+    interval: 280
     repeat: false
     onTriggered: {
       if (!root.present && root.occupiedProgress <= 0)
