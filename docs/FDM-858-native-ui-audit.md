@@ -53,4 +53,6 @@ The settings-binding regression intentionally lives in `tests/omarchy/`, outside
 bash tests/run_action_dropdown_settings.sh
 ```
 
+Exercise all six `DockActionDropdown` call sites through their existing settings paths: **Workspace layout**, **Workspaces from**, **Window scope**, **Left click**, **Middle click**, and **Scroll**. `Position` already uses native `ButtonGroup` and is not part of this refactor.
+
 Then perform the FDM-858 physical smoke matrix on the exact PR head: mouse selection; Tab focus; Enter/Space open; arrow and `j`/`k` navigation; Escape dismissal; grouped-layout disabled dropdowns; label typography/spacing; Reset; external config reload without reopening Settings; and both standalone/overlay entry points. Record the installed Omarchy revision and exact PR head in the PR before moving it out of Draft.
