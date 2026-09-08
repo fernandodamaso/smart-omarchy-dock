@@ -338,10 +338,7 @@ Item {
         anchors.margins: -4
         radius: Math.max(10, Style.cornerRadius)
         color: Util.alpha(Color.background, mouse.hovered ? 0.36 : 0)
-        border.width: 1
-        border.color: Util.alpha(Color.foreground, mouse.hovered ? 0.14 : 0)
         Behavior on color { ColorAnimation { duration: 140 } }
-        Behavior on border.color { ColorAnimation { duration: 140 } }
       }
 
       IconImage {
