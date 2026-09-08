@@ -2,7 +2,7 @@
 set -euo pipefail
 
 component="components/DockActionDropdown.qml"
-local_test="tests/omarchy/tst_action_dropdown_settings.qml"
+local_test="local-tests/tst_action_dropdown_settings.qml"
 local_runner="tests/run_action_dropdown_settings.sh"
 
 if ! rg -q '^[[:space:]]*Dropdown[[:space:]]*\{' "$component"; then
