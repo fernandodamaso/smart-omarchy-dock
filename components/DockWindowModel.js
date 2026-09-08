@@ -219,7 +219,14 @@ function locationForToplevel(toplevel, handles, originSnapshot) {
 
   var ipc = handle.lastIpcObject || ({})
   var address = DockModel.normalizeWindowAddress(handle.address || ipc.address)
-  var workspace = workspaceIdentity(ipc.workspace || handle.workspace)
+  var ipcWorkspace = workspaceIdentity(ipc.workspace)
+  // Quickshell resolves toplevel workspaces by name, so blank-name handles can alias.
+  var liveWorkspaceIsBlank = handle.workspace === undefined || handle.workspace === null
+    || isBlankNamedWorkspace(handle.workspace)
+  var aliasedWorkspace = liveWorkspaceIsBlank && isBlankNamedWorkspace(ipc.workspace)
+    && ipcWorkspace.indexOf("id:") === 0
+  var workspace = workspaceIdentity(aliasedWorkspace ? ipc.workspace
+    : handle.workspace || ipc.workspace)
   var minimized = workspace === "special:smartdock-minimized"
   var urgent = handleUrgent(handle)
 
