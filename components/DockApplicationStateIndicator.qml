@@ -16,6 +16,7 @@ Item {
     DockModel.applicationStateIndicatorGeometry(
       position, iconWidth, iconHeight, running, focused)
   readonly property color markerColor: focused ? focusedColor : runningColor
+  readonly property real markerOpacity: focused ? 1.0 : 0.46
 
   visible: indicatorGeometry.visible
   x: indicatorGeometry.x
@@ -28,6 +29,6 @@ Item {
     anchors.fill: parent
     radius: root.indicatorGeometry.radius
     color: root.markerColor
-    opacity: root.focused ? 1.0 : 0.72
+    opacity: root.markerOpacity
   }
 }

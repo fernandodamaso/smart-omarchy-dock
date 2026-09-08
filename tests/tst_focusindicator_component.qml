@@ -31,6 +31,7 @@ TestCase {
     compare(indicator.width, 4)
     compare(indicator.height, 4)
     compare(indicator.markerColor, indicator.runningColor)
+    compare(indicator.markerOpacity, 0.46)
   }
 
   function test_focusedUsesDistinctLongMarker() {
@@ -43,6 +44,7 @@ TestCase {
     compare(indicator.width, 30)
     compare(indicator.height, 4)
     compare(indicator.markerColor, indicator.focusedColor)
+    compare(indicator.markerOpacity, 1.0)
   }
 
   function test_positionChangeReorientsFocusedMarker() {
