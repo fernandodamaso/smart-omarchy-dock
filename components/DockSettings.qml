@@ -1005,6 +1005,22 @@ PanelWindow {
                 }
               }
 
+              DockActionDropdown {
+                width: parent.width
+                label: "Workspaces from"
+                value: root.current("workspaceMonitorScope")
+                enabled: root.groupedEffective
+                opacity: enabled ? 1 : 0.45
+                options: [
+                  { value: "all", label: "All monitors" },
+                  { value: "current-monitor", label: "This monitor only" }
+                ]
+                onChanged: value => {
+                  root.preview("workspaceMonitorScope", value)
+                  root.commit("workspaceMonitorScope", value)
+                }
+              }
+
               DockSettingsToggleRow {
                 width: parent.width
                 label: "Full length"

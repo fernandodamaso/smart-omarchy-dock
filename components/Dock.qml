@@ -178,6 +178,8 @@ PanelWindow {
     "fullLength", effectiveSetting("fullLength"))
   readonly property bool sortByWorkspace: DockModel.normalizeSetting(
     "sortByWorkspace", effectiveSetting("sortByWorkspace"))
+  readonly property string workspaceMonitorScope: DockModel.normalizeSetting(
+    "workspaceMonitorScope", effectiveSetting("workspaceMonitorScope"))
   readonly property bool groupWindows: DockModel.normalizeSetting(
     "groupWindows", effectiveSetting("groupWindows"))
   readonly property string windowScope: DockWindowModel.normalizeWindowScope(
@@ -294,7 +296,9 @@ PanelWindow {
         DockModel.buildVisibleItems(pinned, toplevels, applications, hyprToplevels,
           false, groupWindows, hiddenApplications), records, hyprWorkspaces, {
           monitor: DockWindowModel.monitorIdentity(monitor),
-          activeWorkspace: DockWindowModel.workspaceIdentity(ipc.activeWorkspace
+          monitorScope: workspaceMonitorScope,
+          activeWorkspace: workspaceMonitorScope === "all" ? focusedScopeWorkspace
+            : DockWindowModel.workspaceIdentity(ipc.activeWorkspace
             || (monitor ? monitor.activeWorkspace : null)),
           monitors: hyprMonitors,
           groupWindows: groupWindows
@@ -431,6 +435,8 @@ PanelWindow {
   onSettingsChanged: root.scheduleVisibleItemsRefresh()
   onSettingPreviewsChanged: root.scheduleVisibleItemsRefresh()
   onPinnedChanged: root.scheduleVisibleItemsRefresh()
+  onWorkspaceMonitorScopeChanged: root.scheduleVisibleItemsRefresh()
+  onFocusedScopeWorkspaceChanged: root.scheduleVisibleItemsRefresh()
   onSortByWorkspaceChanged: root.scheduleVisibleItemsRefresh()
   onGroupedChanged: {
     windowPreview.dismissImmediately()

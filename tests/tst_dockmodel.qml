@@ -5,6 +5,24 @@ import "../components/DockModel.js" as DockModel
 TestCase {
   name: "DockModel"
 
+  function test_workspaceMonitorScopeDefaultsRoundtripAndReset() {
+    for (var invalid of [undefined, null, "invalid", "monitor", false, 7])
+      compare(DockModel.normalizeSetting("workspaceMonitorScope", invalid), "all")
+    compare(DockModel.settingsDefaults().workspaceMonitorScope, "all")
+    var original = { pinned: ["chrome"], windowScope: "monitor", position: "left" }
+    for (var scope of ["all", "current-monitor"]) {
+      compare(DockModel.normalizeSetting("workspaceMonitorScope", scope), scope)
+      var settings = DockModel.mergeSettings(original, { workspaceMonitorScope: scope })
+      var loaded = JSON.parse(JSON.stringify(settings))
+      compare(loaded.workspaceMonitorScope, scope)
+      compare(loaded.windowScope, "monitor")
+      compare(loaded.position, "left")
+      compare(DockModel.mergeSettings(loaded,
+        DockModel.resetSettingsPatch()).workspaceMonitorScope, "all")
+    }
+    verify(original.workspaceMonitorScope === undefined)
+  }
+
   function test_workspaceLayoutDefaultsRoundtripAndReset() {
     compare(DockModel.normalizeSetting("workspaceLayout", undefined), "flat")
     compare(DockModel.normalizeSetting("workspaceLayout", "invalid"), "flat")

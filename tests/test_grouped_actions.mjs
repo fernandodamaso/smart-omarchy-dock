@@ -76,4 +76,29 @@ const dock = methods('Dock.qml', {
 })
 dock.revealActiveWorkspace()
 assert.deepEqual(revealed, [[cards[1], 45]], 'workspace switch reveals the active header')
+
+// Mirrored header and app routes focus the remote target without relocating it.
+preview.dismissImmediately = () => {}
+item.runningToplevels = [windows[0]]
+item.runningCount = 1
+actions.minimizedOrigins = {}
+const headerBody = read('Dock.qml').match(/onActivated: \{([\s\S]*?)\n            }/)[1]
+for (const usingLua of [false, true]) {
+  requests.length = 0
+  vm.runInNewContext(headerBody, { DockModel,
+    modelData: { activationTarget: 'name:Design work' },
+    Hyprland: { usingLua, dispatch: request => requests.push(request) } })
+  assert.equal(requests.pop(), usingLua
+    ? 'hl.dsp.focus({ workspace = "name:Design work" })' : 'workspace name:Design work')
+  actions.Hyprland.usingLua = usingLua
+  handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+  requests.length = 0
+  assert.equal(item.dispatchApplicationAction('focus-or-launch'), true)
+  assert.equal(preview.activateToplevel(windows[0]), true)
+  assert.equal(requests.length, 2)
+  assert.equal(requests.every(request => request === (usingLua
+    ? 'hl.dsp.focus({ window = "address:0x1" })' : 'focuswindow address:0x1')), true)
+}
+assert.equal(read('Dock.qml').includes('indexOf(modelData)'), false)
+assert.equal(read('Dock.qml').includes('workspaceScopeKey(root.screen.name, modelData.presentationId)'), true)
 console.log('grouped action routes: PASS')
