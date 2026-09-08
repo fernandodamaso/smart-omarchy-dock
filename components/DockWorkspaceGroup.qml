@@ -90,6 +90,7 @@ Rectangle {
   Rectangle {
     id: groupDivider
     x: header.width + 5
+    visible: appRow.width > 0
     anchors.verticalCenter: parent.verticalCenter
     width: 1
     height: Math.max(18, parent.height * 0.48)

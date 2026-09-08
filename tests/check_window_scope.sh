@@ -37,14 +37,25 @@ assert_contains components/DockSettings.qml \
   'enabled: !root.groupedEffective && root.current("windowScope") !== "all"' \
   'urgent exception must disable when scope is all'
 
-assert_contains DockHost.qml 'property int scopeRevision: 0' \
-  'DockHost must own shared scope revision state'
-assert_contains DockHost.qml 'id: scopeRefreshTimer' \
-  'DockHost must own the debounced scope refresh timer'
+assert_contains DockHost.qml \
+  'property int scopeRevision: scopeRefreshController.revision' \
+  'DockHost must expose the shared controller revision'
+assert_contains DockHost.qml 'id: scopeRefreshController' \
+  'DockHost must own the shared scope refresh controller'
 assert_contains DockHost.qml 'scopeRevision: root.scopeRevision' \
   'DockHost must pass one shared scope revision to each Dock'
 assert_contains DockHost.qml 'DockWindowModel.shouldRefreshWindowScope' \
   'DockHost must route relevant Hyprland events to scope refresh'
+assert_contains components/DockScopeRefreshController.qml 'interval: 80' \
+  'scope controller must debounce refresh requests'
+assert_contains components/DockScopeRefreshController.qml 'onTriggered: root.refresh()' \
+  'scope controller must own refresh execution'
+assert_contains components/DockScopeRefreshController.qml \
+  'function onWorkspaceChanged()' \
+  'scope controller must observe per-toplevel workspace changes'
+assert_contains components/DockScopeRefreshController.qml \
+  'function onWaylandHandleChanged()' \
+  'scope controller must observe late Wayland mappings'
 
 assert_contains components/Dock.qml 'import "DockWindowModel.js" as DockWindowModel' \
   'Dock must import the pure scope model'
@@ -81,10 +92,10 @@ assert_contains components/DockWindowActions.qml \
   'stale minimized origins must use the pure pruning path'
 
 assert_count 1 'DockWindowActions {' DockHost.qml components/*.qml
-assert_count 1 'id: scopeRefreshTimer' DockHost.qml components/*.qml
-assert_count 1 'Hyprland.refreshMonitors()' DockHost.qml components/Dock.qml
-assert_count 1 'Hyprland.refreshWorkspaces()' DockHost.qml components/Dock.qml
-assert_count 1 'Hyprland.refreshToplevels()' DockHost.qml components/Dock.qml
+assert_count 1 'DockScopeRefreshController {' DockHost.qml
+if grep -Fq 'Hyprland.refresh' DockHost.qml components/Dock.qml; then
+  fail 'refresh calls must stay behind the shared scope controller'
+fi
 
 if grep -Fq 'id: scopeRefreshTimer' components/Dock.qml; then
   fail 'scope refresh timer must not be duplicated per monitor'

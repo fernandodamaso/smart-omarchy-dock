@@ -25,7 +25,7 @@ Item {
   property bool workspaceCountsReady: false
   property int workspaceCountsRevision: 0
   property bool workspaceCountsRefreshPending: false
-  property int scopeRevision: 0
+  property int scopeRevision: scopeRefreshController.revision
   readonly property var windowActions: windowActionsController
   readonly property var badgeTracker: badgeTrackerController
   readonly property bool showTrash: showTrashSetting
@@ -190,6 +190,14 @@ Item {
     if (!trashEmptyProcess.running) trashEmptyProcess.running = true
   }
 
+  DockScopeRefreshController {
+    id: scopeRefreshController
+    toplevelModel: Hyprland.toplevels
+    monitorModel: Hyprland.monitors
+    workspaceModel: Hyprland.workspaces
+    refreshSource: Hyprland
+  }
+
   onShowTrashChanged: {
     if (!settingsLoaded || !showTrash) return
     trashStateKnown = false
@@ -198,7 +206,7 @@ Item {
 
   Component.onCompleted: {
     refreshWorkspaceCounts()
-    scopeRefreshTimer.restart()
+    scopeRefreshController.requestRefresh()
   }
 
   Timer {
@@ -216,19 +224,6 @@ Item {
     onTriggered: root.refreshWorkspaceCounts()
   }
 
-  Timer {
-    id: scopeRefreshTimer
-
-    interval: 80
-    repeat: false
-    onTriggered: {
-      Hyprland.refreshMonitors()
-      Hyprland.refreshWorkspaces()
-      Hyprland.refreshToplevels()
-      root.scopeRevision++
-    }
-  }
-
   Connections {
     target: Hyprland
 
@@ -237,13 +232,16 @@ Item {
       if (DockModel.shouldRefreshWorkspaceState(name))
         workspaceCountsRefreshTimer.restart()
       if (DockWindowModel.shouldRefreshWindowScope(name))
-        scopeRefreshTimer.restart()
+        scopeRefreshController.requestRefresh()
     }
   }
 
   Connections {
     target: ToplevelManager.toplevels
-    function onValuesChanged() { scopeRefreshTimer.restart() }
+    function onValuesChanged() {
+      scopeRefreshController.invalidate()
+      scopeRefreshController.requestRefresh()
+    }
   }
 
   Connections {
