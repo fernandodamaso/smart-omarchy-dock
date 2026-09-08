@@ -215,6 +215,12 @@ function handleForToplevel(toplevel, handles) {
   return null
 }
 
+function isBlankNamedWorkspace(workspace) {
+  if (!workspace || typeof workspace !== "object") return false
+  var ipc = workspace.lastIpcObject || workspace
+  return ipc.name !== undefined && String(ipc.name).trim() === ""
+}
+
 function locationForToplevel(toplevel, handles, originSnapshot) {
   var handle = handleForToplevel(toplevel, handles)
   if (!handle) {
@@ -227,7 +233,14 @@ function locationForToplevel(toplevel, handles, originSnapshot) {
 
   var ipc = handle.lastIpcObject || ({})
   var address = normalizedAddress(handle.address || ipc.address)
-  var workspace = workspaceIdentity(handle.workspace || ipc.workspace)
+  var ipcWorkspace = workspaceIdentity(ipc.workspace)
+  // Quickshell resolves toplevel workspaces by name, so blank-name handles can alias.
+  var liveWorkspaceIsBlank = handle.workspace === undefined || handle.workspace === null
+    || isBlankNamedWorkspace(handle.workspace)
+  var aliasedWorkspace = liveWorkspaceIsBlank && isBlankNamedWorkspace(ipc.workspace)
+    && ipcWorkspace.indexOf("id:") === 0
+  var workspace = workspaceIdentity(aliasedWorkspace ? ipc.workspace
+    : handle.workspace || ipc.workspace)
   var minimized = workspace === "special:smartdock-minimized"
   var urgent = handleUrgent(handle)
 
@@ -256,7 +269,8 @@ function locationForToplevel(toplevel, handles, originSnapshot) {
   }
 
   var monitor = monitorIdentity(
-    handle.monitor !== undefined && handle.monitor !== null ? handle.monitor : ipc.monitor)
+    aliasedWorkspace ? ipc.monitor
+      : handle.monitor !== undefined && handle.monitor !== null ? handle.monitor : ipc.monitor)
   return {
     address: address,
     workspace: workspace,
