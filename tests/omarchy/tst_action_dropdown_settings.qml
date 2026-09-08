@@ -48,13 +48,13 @@ TestCase {
   function openDropdown() {
     mouseClick(dropdown, dropdown.width / 2,
       dropdown.height - dropdown.rowHeight / 2)
-    wait(0)
+    wait(20)
   }
 
   function selectWithKey(key) {
     keyClick(key)
     keyClick(Qt.Key_Return)
-    wait(0)
+    wait(20)
   }
 
   function test_settingsRemainAuthoritativeAfterNativeSelections() {
