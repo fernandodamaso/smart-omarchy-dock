@@ -36,6 +36,6 @@ ln -s "$shell_root/Ui" "$module_root/qs/Ui"
 cd "$repo_root"
 QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}" \
   "$qml_test_runner" \
-  -input tests/omarchy \
+  -input local-tests \
   -import "$module_root" \
   -import components
