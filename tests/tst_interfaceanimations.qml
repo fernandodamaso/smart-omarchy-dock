@@ -33,6 +33,17 @@ TestCase {
     tryCompare(slot, "width", 0, 500)
   }
 
+  function test_slotCreatedForExitAnimatesOut() {
+    var slot = createTemporaryObject(slotComponent, testCase, {
+      present: false, exitRevision: 1, animationsEnabled: true
+    })
+    slot.exitRevision = 2
+    wait(40)
+    verify(slot.width > 0)
+    tryCompare(slot, "width", 0, 500)
+    compare(slot.opacityProgress, 0)
+  }
+
   function test_slotDisablingMotionSettlesImmediately() {
     var slot = createTemporaryObject(slotComponent, testCase, {
       present: true, animateEntrance: true, animationsEnabled: true

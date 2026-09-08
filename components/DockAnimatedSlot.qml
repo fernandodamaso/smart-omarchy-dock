@@ -38,17 +38,31 @@ Item {
     opacityProgress = present ? 1 : 0
   }
 
+  function animateExitIfNeeded() {
+    if (!animationsEnabled || present || exitRevision <= 0) return
+    if (occupiedProgress <= 0) {
+      occupiedProgress = 1
+      opacityProgress = 1
+    }
+    Qt.callLater(retarget)
+  }
+
   Component.onCompleted: {
-    if (present && animateEntrance && animationsEnabled) {
-      occupiedProgress = 0
-      opacityProgress = 0
+    if (animationsEnabled && ((present && animateEntrance)
+        || (!present && exitRevision > 0))) {
+      occupiedProgress = present ? 0 : 1
+      opacityProgress = present ? 0 : 1
       Qt.callLater(retarget)
     } else {
       settle()
     }
   }
 
-  onPresentChanged: retarget()
+  onPresentChanged: {
+    if (!present && exitRevision > 0) animateExitIfNeeded()
+    else retarget()
+  }
+  onExitRevisionChanged: animateExitIfNeeded()
   onAnimationsEnabledChanged: {
     if (!animationsEnabled) settle()
     else retarget()
