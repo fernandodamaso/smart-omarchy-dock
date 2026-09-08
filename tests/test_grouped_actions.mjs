@@ -135,8 +135,10 @@ for (const iconSize of [24, 31, 64, 96]) for (const position of ['top', 'bottom'
 const paddingExpression = read('Dock.qml').split('id: groupedLayout')[1]
   .match(/contentPadding: ([\s\S]*?)\n        foreground:/)[1]
 const paddingFor = root => vm.runInNewContext(paddingExpression, { root, DockModel })
-assert.ok(paddingFor({ iconSize: 24, magnification: 1.2, fullscreenModeActive: false }) <= 3,
+assert.ok(paddingFor({ iconSize: 24, magnification: 1.2, fullscreenModeActive: false }) <= 4,
   'default grouped spacing must not add redundant viewport padding')
+assert.ok(paddingFor({ iconSize: 24, magnification: 2, fullscreenModeActive: false }) + 7 >= 12 + 8,
+  'global launcher hover tile fits its slot inset plus viewport allowance')
 const largeOwnerScale = DockModel.fullscreenIconPresentation(true, true, false).scale * 2
 const largeOwnerOverhang = 96 * (largeOwnerScale - 1) / 2
 assert.ok(paddingFor({ iconSize: 96, magnification: 2, fullscreenModeActive: true }) + 13 >= largeOwnerOverhang,
