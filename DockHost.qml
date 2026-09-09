@@ -7,6 +7,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import "components"
 import "components/DockModel.js" as DockModel
+import "components/DockIconModel.js" as DockIconModel
 import "components/DockWindowModel.js" as DockWindowModel
 import "components/DockTrashModel.js" as TrashModel
 
@@ -19,6 +20,7 @@ Item {
 
   property int trashItemCount: 0
   property bool trashStateKnown: false
+  property int iconReloadRevision: 0
   property bool settingsLoaded: false
   property bool showTrashSetting: true
   property var workspaceWindowCounts: ({})
@@ -31,6 +33,7 @@ Item {
   readonly property bool showTrash: showTrashSetting
 
   property var settings: ({
+    iconOverrides: {},
     iconSize: 42,
     magnification: 1.2,
     magnificationRadius: 95,
@@ -101,6 +104,12 @@ Item {
         "interfaceAnimationsEnabled", parsed.interfaceAnimationsEnabled)
       parsed.launcherBadgeMode = parsed.launcherBadgeMode === "dots-only"
         ? "dots-only" : "automatic"
+      parsed.iconOverrides = DockIconModel.normalizeOverrides(parsed.iconOverrides)
+      var previous = DockIconModel.normalizeOverrides(settings.iconOverrides)
+      var keys = Object.keys(parsed.iconOverrides)
+      var iconsChanged = keys.length !== Object.keys(previous).length
+        || keys.some(function(key) { return parsed.iconOverrides[key] !== previous[key] })
+      if (iconsChanged) iconReloadRevision++
       showTrashSetting = parsed.showTrash
       settings = parsed
     } catch (error) {
@@ -139,6 +148,17 @@ Item {
   function hideApplication(desktopId) {
     var hiddenApplications = DockModel.addHiddenApplication(settings.hiddenApplications, desktopId)
     saveSetting("hiddenApplications", hiddenApplications)
+  }
+
+  function saveIconOverride(desktopId, sourceUrl) {
+    var source = sourceUrl === "" ? null : sourceUrl
+    var result = DockIconModel.applyOverride(settings.iconOverrides, desktopId, source)
+    if (!result.ok) return result
+    if (source !== null || result.changed) {
+      saveSettings({ iconOverrides: result.overrides })
+      iconReloadRevision++
+    }
+    return result
   }
 
   function savePinned(pinned) {
