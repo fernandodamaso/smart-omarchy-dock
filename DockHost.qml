@@ -21,6 +21,8 @@ Item {
   property int trashItemCount: 0
   property bool trashStateKnown: false
   property int iconReloadRevision: 0
+  property string settingsWriteState: "idle"
+  property string settingsWriteError: ""
   property bool settingsLoaded: false
   property bool showTrashSetting: true
   property var workspaceWindowCounts: ({})
@@ -177,7 +179,24 @@ Item {
     updated.showTrash = TrashModel.normalizeShowTrash(updated.showTrash)
     showTrashSetting = updated.showTrash
     settings = updated
-    configFile.setText(JSON.stringify(updated, null, 2) + "\n")
+    writeSettings()
+  }
+
+  function writeSettings() {
+    var text = JSON.stringify(settings, null, 2) + "\n"
+    // FileView suppresses identical text, including bytes cached by a failed
+    // write. One optional blank line forces a real attempt without changing
+    // JSON values, reloading old disk state, or growing the payload on Retry.
+    if (text === configFile.cachedText) text += "\n"
+    // blockWrites stays enabled: completion can fire inside setText(). Keep
+    // outcomes in its handlers, never infer success from returning here.
+    settingsWriteState = "saving"
+    configFile.setText(text)
+  }
+
+  function retrySettingsWrite() {
+    // Serialize current complete settings, even if Restore removed the row.
+    writeSettings()
   }
 
   function resetSettings() {
@@ -307,7 +326,7 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        root.trashItemCount = DockModel.trashItemCount(text)
+        root.trashItemCount = TrashModel.trashItemCount(text)
         root.trashStateKnown = true
       }
     }
@@ -331,6 +350,7 @@ Item {
   FileView {
     id: configFile
 
+    readonly property string cachedText: text()
     path: root.configPath
     watchChanges: true
     printErrors: false
@@ -339,7 +359,17 @@ Item {
     // FileView.text() is still stale inside onFileChanged. Reload first and
     // parse the fresh contents when onLoaded fires.
     onFileChanged: reload()
-    onSaveFailed: error => console.warn("Dock: could not save " + root.configPath + ":", error)
+    onSaved: {
+      // Results describe the complete configuration, never an editor target.
+      root.settingsWriteError = ""
+      root.settingsWriteState = "saved"
+    }
+    onSaveFailed: error => {
+      root.settingsWriteError = "Settings changed for this session, but could not be saved. "
+        + "Retry before restarting. " + FileViewError.toString(error)
+      root.settingsWriteState = "error"
+      console.warn("Dock: could not save " + root.configPath + ":", error)
+    }
   }
 
   DockWindowActions {
