@@ -7,7 +7,6 @@ import Quickshell.Wayland
 import Quickshell.Services.Notifications
 import Quickshell.Services.SystemTray
 import "DockBadgeModel.js" as BadgeModel
-import "DockModel.js" as DockModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockModel.js" as DockModel
 
