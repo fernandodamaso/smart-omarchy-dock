@@ -5,6 +5,7 @@ Rectangle {
   id: root
 
   required property string label
+  readonly property string displayLabel: /^[0-9]+$/.test(root.label) ? root.label : "*"
   required property int count
   required property bool active
   required property int slotSize
@@ -66,7 +67,7 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       width: Math.min(implicitWidth, parent.width - 8)
       elide: Text.ElideRight
-      text: root.label
+      text: root.displayLabel
       horizontalAlignment: Text.AlignHCenter
       color: root.active ? Color.accent : Color.foreground
       Behavior on color {

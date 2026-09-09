@@ -45,6 +45,30 @@ ShellRoot {
     }
   }
 
+  function checkCompactLabels() {
+    var originalLabel = transitionGroup.label
+    transitionGroup.label = "*"
+    settle(transitionGroup)
+    var starHeaderWidth = transitionGroup.headerWidth
+    var cases = [
+      ["1", "1"], ["2", "2"], ["12", "12"], ["01", "01"], ["0", "0"],
+      ["Design work", "*"], ["Notes", "*"], ["日本語", "*"],
+      ["Other windows", "*"], ["special:scratchpad", "*"],
+      ["1:dev", "*"], ["1.5", "*"], ["", "*"], ["3", "3"]
+    ]
+    for (var i = 0; i < cases.length; ++i) {
+      transitionGroup.label = cases[i][0]
+      settle(transitionGroup)
+      if (transitionGroup.displayLabel !== cases[i][1]
+          || transitionGroup.label !== cases[i][0])
+        throw new Error("Workspace display label mismatch: " + cases[i][0])
+      if (cases[i][1] === "*" && transitionGroup.headerWidth !== starHeaderWidth)
+        throw new Error("Non-numeric header retained expanded width: " + cases[i][0])
+    }
+    transitionGroup.label = originalLabel
+    settle(transitionGroup)
+  }
+
   function dividerFor(group) {
     for (var i = 0; i < group.children.length; ++i) {
       var child = group.children[i]
@@ -59,6 +83,7 @@ ShellRoot {
     onTriggered: {
       settle(dock.contentItem)
       settle(transitionGroup)
+      checkCompactLabels()
       var divider = dividerFor(transitionGroup)
       if (!divider || divider.visible)
         throw new Error("Empty workspace cards must hide their internal divider")
