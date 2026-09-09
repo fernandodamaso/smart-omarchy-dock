@@ -26,6 +26,8 @@ PanelWindow {
   required property bool workspaceCountsReady
   required property int workspaceCountsRevision
   required property int scopeRevision
+  property var iconOverrides: ({})
+  property int iconReloadRevision: 0
   signal reorderRequested(string sourceDesktopId, string targetDesktopId)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
@@ -906,6 +908,8 @@ PanelWindow {
     identityToplevel: modelData.identityToplevel || null
 
     desktopId: modelData.desktopId
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
     pinnedItem: modelData.pinned
     runningToplevels: modelData.toplevels
     focused: root.activeToplevel !== null

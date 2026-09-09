@@ -362,6 +362,8 @@ Item {
         required property var modelData
         screen: modelData
         settings: root.settings
+        iconOverrides: root.settings.iconOverrides || ({})
+        iconReloadRevision: root.iconReloadRevision
         showTrash: root.showTrash
         windowActions: root.windowActions
         badgeTracker: root.badgeTracker

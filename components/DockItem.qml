@@ -43,6 +43,8 @@ Item {
   required property bool vertical
   required property bool previewActive
   required property bool interfaceAnimationsEnabled
+  property var iconOverrides: ({})
+  property int iconReloadRevision: 0
   property bool presentationActive: true
   property bool originOnly: false
   property bool localUrgent: false
@@ -351,13 +353,13 @@ Item {
         Behavior on color { ColorAnimation { duration: 140 } }
       }
 
-      IconImage {
+      DockAppIcon {
         anchors.fill: parent
         opacity: root.allWindowsMinimized ? 0.56 : 1.0
-        source: root.entry && root.entry.icon
-          ? Quickshell.iconPath(root.entry.icon, true)
-          : Quickshell.iconPath("application-x-executable", true)
-        asynchronous: true
+        desktopId: root.desktopId
+        desktopIcon: root.entry && root.entry.icon ? root.entry.icon : ""
+        iconOverrides: root.iconOverrides
+        reloadRevision: root.iconReloadRevision
 
         Behavior on opacity { NumberAnimation { duration: 140 } }
       }
