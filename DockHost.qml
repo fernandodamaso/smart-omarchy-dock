@@ -326,7 +326,7 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        root.trashItemCount = TrashModel.trashItemCount(text)
+        root.trashItemCount = DockModel.trashItemCount(text)
         root.trashStateKnown = true
       }
     }
