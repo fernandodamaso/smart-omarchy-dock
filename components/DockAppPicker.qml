@@ -12,6 +12,8 @@ PopupWindow {
   required property Item anchorItem
   required property string position
   required property var pinned
+  property var iconOverrides: ({})
+  property int iconReloadRevision: 0
   signal applicationSelected(string desktopId)
 
   readonly property var applications: DesktopEntries.applications.values || []
@@ -217,7 +219,7 @@ PopupWindow {
           ? Border.controlSpec("selected", Color.menu.text, Color.accent)
           : Border.none()
 
-        IconImage {
+        DockAppIcon {
           anchors {
             verticalCenter: parent.verticalCenter
             left: parent.left
@@ -225,10 +227,10 @@ PopupWindow {
           }
           width: 30
           height: 30
-          source: applicationRow.modelData.icon
-            ? Quickshell.iconPath(applicationRow.modelData.icon, true)
-            : Quickshell.iconPath("application-x-executable", true)
-          asynchronous: true
+          desktopId: applicationRow.modelData.id
+          desktopIcon: applicationRow.modelData.icon || ""
+          iconOverrides: root.iconOverrides
+          reloadRevision: root.iconReloadRevision
         }
 
         Column {

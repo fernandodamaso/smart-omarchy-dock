@@ -13,6 +13,8 @@ PopupWindow {
   required property var windowActions
   required property string position
   required property var visibleItems
+  property var iconOverrides: ({})
+  property int iconReloadRevision: 0
 
   property Item anchorItem: null
   property DockWorkspaceLayout clipItem: null
@@ -288,6 +290,9 @@ PopupWindow {
             toplevel: modelData
             windowActions: root.windowActions
             applicationEntry: root.applicationEntry
+            desktopId: root.desktopId
+            iconOverrides: root.iconOverrides
+            iconReloadRevision: root.iconReloadRevision
             captureEnabled: root.visible
             previewWidth: root.tileWidth - 16
             previewHeight: root.tilePreviewHeight

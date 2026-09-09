@@ -224,7 +224,7 @@ preserved in this repository.
 
 Installed copies use `~/.config/smartdock/dock.json`. When running from the repository, edit [`config/dock.json`](config/dock.json):
 
-The same settings are available graphically: click or right-click the first
+Appearance and behavior settings are also available graphically: click or right-click the first
 sliders icon and choose **Dock Settings…**. Slider changes preview while dragging and
 are saved when released; switches and choices save immediately.
 
@@ -255,6 +255,7 @@ width when the override is disabled.
 
 ```json
 {
+  "iconOverrides": {},
   "iconSize": 42,
   "magnification": 1.2,
   "magnificationRadius": 95,
@@ -302,6 +303,7 @@ width when the override is disabled.
 
 | Option | Description |
 | --- | --- |
+| `iconOverrides` | App-wide, SmartDock-only local PNG/SVG artwork by desktop-entry ID; defaults to `{}` |
 | `iconSize` | Base icon size in pixels |
 | `magnification` | Maximum icon scale under the pointer |
 | `magnificationRadius` | Distance over which nearby icons magnify |
@@ -342,6 +344,52 @@ width when the override is disabled.
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
+
+### Application icon overrides (configuration)
+
+`iconOverrides` defaults to `{}` and is currently configured in JSON, not an
+icon editor. Each mapping applies app-wide inside SmartDock: main dock icons,
+preview metadata icons, app-picker rows, and Hidden Applications rows use the
+same artwork. It does not change system icons, desktop launchers, application
+identity, launch commands, or window grouping. Preview screenshots, badges,
+Trash, and action glyphs are unaffected.
+
+Merge this **configuration fragment** into your existing `dock.json`; do not
+replace the full configuration or discard other entries in `iconOverrides`:
+
+```json
+{
+  "iconOverrides": {
+    "chatgpt": "file:///home/admin/Pictures/Dock%20Icons/chatgpt.svg"
+  }
+}
+```
+
+Use the dock item's resolved desktop-entry ID. `chatgpt` is only an example,
+not a guaranteed ID on every installation. Lookup keys are trimmed,
+case-insensitive, and may omit the `.desktop` suffix. A browser tab represented
+as Chrome remains a Chrome item; artwork overrides do not split browser groups.
+
+Only local static PNG/SVG files are supported. Use an absolute local path or a
+local `file:///` URL; spaces in URLs are encoded as `%20`. Relative paths, `~`,
+environment-variable expansion, remote URLs, and other override formats are
+not supported. Files are referenced **in place**, not copied or imported. Keep
+them in a stable location outside the plugin checkout so updates do not remove
+the artwork.
+
+The bounded fallback chain is **custom file → original desktop icon →
+`application-x-executable` → bundled, theme-tinted `app-window` glyph**. Custom
+artwork is never tinted. Missing or corrupt files fall back without deleting
+the mapping. Replace its value to choose another image, or remove only that
+application's key to restore its original artwork. Appearance **Reset to
+defaults** preserves `iconOverrides`, as do pin/unpin and hide/show actions.
+
+Saving a changed override map uses the existing live configuration reload and
+updates the artwork bindings across SmartDock. There is **no continuous
+artwork-file watching**: replacing bytes at the same path is not automatically
+noticed. Restart SmartDock after an in-place image edit, or use an explicit
+reload-revision request from the existing host API. Re-saving an identical
+JSON map alone does not request new image bytes.
 
 ### Application pointer actions
 

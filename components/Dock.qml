@@ -994,6 +994,8 @@ PanelWindow {
     position: root.position
     visibleItems: root.renderedItems
     clipItem: root.grouped ? groupedLayout : null
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
   }
 
   DockAppPicker {
@@ -1002,6 +1004,8 @@ PanelWindow {
     anchorItem: dockBackground
     position: root.position
     pinned: root.pinned
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
     onApplicationSelected: desktopId => root.pinRequested(desktopId)
   }
 
@@ -1011,6 +1015,8 @@ PanelWindow {
     anchorItem: controlItem
     position: root.position
     settings: root.settings
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
     themeColorTokens: root.themeColorTokens
     onVisibleChanged: if (!visible) root.clearSettingPreviews()
     onSettingPreviewed: (key, value) => root.previewSetting(key, value)
