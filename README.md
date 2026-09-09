@@ -234,7 +234,8 @@ and custom hex modes without leaving disabled inputs visible, and Layout and
 Behavior share a compact row. Layout includes the persistent **Show Trash**
 switch. Behavior includes application action selectors for Left click and
 Middle click. **Application Badges** contains the persistent attention-badge
-switch and the separate urgent-window motion switch. Advanced launcher settings
+switch and the separate urgent-window motion switch. Behavior contains the
+interface-animation switch for workspace and context-menu transitions. Advanced launcher settings
 expand on demand; Reset and Close remain fixed at the bottom. On narrow screens
 the card grid stacks and the middle content area scrolls while the header and
 footer remain visible. The centered panel leaves the dock's edge strip
@@ -284,6 +285,7 @@ width when the override is disabled.
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
   "groupWindows": true,
+  "interfaceAnimationsEnabled": true,
   "attentionBadgesEnabled": true,
   "urgentWindowAnimationEnabled": true,
   "launcherBadgeMode": "automatic",
@@ -332,6 +334,7 @@ width when the override is disabled.
 | `controlCommand` | Shell command run by **Open App Launcher** in the first icon's controls menu; defaults to the stock `SUPER + ALT + SPACE` apps menu |
 | `sortByWorkspace` | When `true`, group open apps by workspace number; closed pinned apps stay first |
 | `groupWindows` | When `true`, combine an app's open windows into one dock icon; when `false`, show one icon per window |
+| `interfaceAnimationsEnabled` | Animate workspace focus, card/icon insertion and removal, window moves, and context-menu opening; defaults to `true` |
 | `windowScope` | Running-window visibility: `all`, `workspace`, `monitor`, or `workspace-monitor`; invalid/missing values use `all` |
 | `showUrgentOutsideScope` | When enabled, a true Hyprland-urgent window may bypass a non-`all` scope; notification/SNI attention does not |
 | `attentionBadgesEnabled` | Show application attention badges. FDM-809 dot severity remains the fallback; in automatic mode an authoritative positive visible launcher count may replace that dot. |

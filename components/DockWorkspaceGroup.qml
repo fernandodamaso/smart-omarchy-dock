@@ -12,6 +12,9 @@ Rectangle {
   property bool urgent: false
   property string position: "bottom"
   property bool presentationVisible: true
+  property bool animationsEnabled: true
+  property var applicationModel: null
+  property Component applicationDelegate: null
   property DockWorkspaceLayout viewport: null
   Connections {
     target: root.viewport
@@ -24,14 +27,21 @@ Rectangle {
   default property alias items: appRow.data
   signal activated()
 
-  width: header.width + appRow.width + (appRow.width > 0 ? 16 : 2)
+  readonly property real appOccupancy: Math.min(1, appRow.width / Math.max(1, slotSize))
+  width: header.width + appRow.width + 2 + 14 * appOccupancy
   height: slotSize + 10
   radius: Math.max(12, Style.cornerRadius - 4)
   color: active ? Util.alpha(Color.accent, workspaceHover.hovered ? 0.13 : 0.10) : Util.alpha(Color.background, workspaceHover.hovered ? 0.42 : 0.26)
   border.width: 1
   border.color: urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.50) : Util.alpha(Color.foreground, workspaceHover.hovered ? 0.14 : 0.07)
-  Behavior on color { ColorAnimation { duration: 140 } }
-  Behavior on border.color { ColorAnimation { duration: 140 } }
+  Behavior on color {
+    enabled: root.animationsEnabled
+    ColorAnimation { duration: 160 }
+  }
+  Behavior on border.color {
+    enabled: root.animationsEnabled
+    ColorAnimation { duration: 160 }
+  }
   HoverHandler { id: workspaceHover }
 
   Rectangle {
@@ -59,6 +69,10 @@ Rectangle {
       text: root.label
       horizontalAlignment: Text.AlignHCenter
       color: root.active ? Color.accent : Color.foreground
+      Behavior on color {
+        enabled: root.animationsEnabled
+        ColorAnimation { duration: 160 }
+      }
       font.family: Style.font.family
       font.pixelSize: Math.max(Style.font.body, root.slotSize * 0.38)
       font.bold: true
@@ -79,7 +93,8 @@ Rectangle {
   Rectangle {
     id: groupDivider
     x: header.width + 5
-    visible: appRow.width > 0
+    visible: root.appOccupancy > 0
+    opacity: root.appOccupancy
     anchors.verticalCenter: parent.verticalCenter
     width: 1
     height: Math.max(18, parent.height * 0.48)
@@ -91,6 +106,11 @@ Rectangle {
     id: appRow
     x: header.width + 10
     anchors.verticalCenter: parent.verticalCenter
-    spacing: 6
+    spacing: 0
+
+    Repeater {
+      model: root.applicationModel
+      delegate: root.applicationDelegate
+    }
   }
 }

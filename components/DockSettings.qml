@@ -1073,6 +1073,14 @@ PanelWindow {
 
               DockSettingsToggleRow {
                 width: parent.width
+                label: "Interface animations"
+                description: "Animate workspace changes and context menu opening"
+                checked: root.current("interfaceAnimationsEnabled") !== false
+                onToggled: root.commit("interfaceAnimationsEnabled", !checked)
+              }
+
+              DockSettingsToggleRow {
+                width: parent.width
                 label: "Auto-hide"
                 checked: root.current("autoHide")
                 onToggled: root.commit("autoHide", !checked)

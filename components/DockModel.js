@@ -401,7 +401,8 @@ function settingsDefaults() {
     sortByWorkspace: false,
     workspaceLayout: "flat",
     workspaceMonitorScope: "all",
-    groupWindows: true
+    groupWindows: true,
+    interfaceAnimationsEnabled: true
   }
 }
 
@@ -583,6 +584,7 @@ function normalizeSetting(key, value) {
   case "workspaceBadgeBackgroundColorEnabled":
   case "workspaceBadgeTextColorEnabled":
   case "borderWidthEnabled":
+  case "interfaceAnimationsEnabled":
     return typeof value === "boolean" ? value : defaults[key]
   case "backgroundColor":
   case "borderColor":

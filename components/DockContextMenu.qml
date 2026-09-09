@@ -16,6 +16,7 @@ PopupWindow {
   required property bool pinnedItem
   required property var runningToplevels
   required property var windowActions
+  property bool interfaceAnimationsEnabled: true
   property bool originOnly: false
   onRunningToplevelsChanged: if (visible) dismiss()
   property bool controlItem: false
@@ -29,6 +30,8 @@ PopupWindow {
 
   property string page: "windows"
   property var selectedToplevel: null
+  property real entranceOpacity: 0
+  property real entranceOffset: 0
   readonly property var selectedHandle:
     root.windowActions.handleFor(selectedToplevel)
   readonly property var selectedInfo: selectedHandle
@@ -56,13 +59,23 @@ PopupWindow {
     page = "windows"
     selectedToplevel = root.runningToplevels.length > 0
       ? root.runningToplevels[0] : null
+    entranceOpacity = interfaceAnimationsEnabled ? 0 : 1
+    entranceOffset = interfaceAnimationsEnabled ? 6 : 0
     visible = true
+    if (interfaceAnimationsEnabled) Qt.callLater(function() {
+      if (visible) {
+        entranceOpacity = 1
+        entranceOffset = 0
+      }
+    })
     resetActiveMenuIndex()
     if (menuSurface) menuSurface.forceActiveFocus()
   }
 
   function dismiss() {
     visible = false
+    entranceOpacity = 0
+    entranceOffset = 0
     page = "windows"
     selectedToplevel = null
   }
@@ -174,6 +187,12 @@ PopupWindow {
   }
 
   onPageChanged: resetActiveMenuIndex()
+  onInterfaceAnimationsEnabledChanged: {
+    if (!interfaceAnimationsEnabled) {
+      entranceOpacity = 1
+      entranceOffset = 0
+    }
+  }
 
   implicitWidth: root.page === "windows" && !root.controlItem
     && root.runningToplevels.length > 0 ? 400 : 200
@@ -219,6 +238,25 @@ PopupWindow {
     id: menuSurface
 
     anchors.fill: parent
+    opacity: root.entranceOpacity
+    transform: Translate {
+      x: root.position === "left" ? -root.entranceOffset
+        : root.position === "right" ? root.entranceOffset : 0
+      y: root.position === "top" ? -root.entranceOffset
+        : root.position === "bottom" ? root.entranceOffset : 0
+      Behavior on x {
+        enabled: root.interfaceAnimationsEnabled
+        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+      }
+      Behavior on y {
+        enabled: root.interfaceAnimationsEnabled
+        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+      }
+    }
+    Behavior on opacity {
+      enabled: root.interfaceAnimationsEnabled
+      NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+    }
     focus: true
     radius: Style.cornerRadius
     color: Color.menu.background

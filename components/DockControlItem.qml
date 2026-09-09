@@ -23,6 +23,7 @@ Item {
   required property bool autoHide
   required property string position
   required property bool vertical
+  required property bool interfaceAnimationsEnabled
   signal settingsRequested()
   signal addApplicationRequested()
   signal autoHideToggled(bool enabled)
@@ -162,6 +163,7 @@ Item {
     pinnedItem: false
     runningToplevels: []
     windowActions: root.windowActions
+    interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
     controlItem: true
     onVisibleChanged: root.contextMenuVisibilityChanged(visible)
     onOpenLauncher: {

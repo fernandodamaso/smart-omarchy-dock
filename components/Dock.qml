@@ -193,6 +193,8 @@ PanelWindow {
   readonly property bool urgentWindowAnimationEnabled:
     typeof effectiveSetting("urgentWindowAnimationEnabled") === "boolean"
       ? effectiveSetting("urgentWindowAnimationEnabled") : true
+  readonly property bool interfaceAnimationsEnabled: DockModel.normalizeSetting(
+    "interfaceAnimationsEnabled", effectiveSetting("interfaceAnimationsEnabled"))
   readonly property var pinned: settings.pinned || []
   readonly property var hiddenApplications: DockModel.normalizeSetting(
     "hiddenApplications", effectiveSetting("hiddenApplications"))
@@ -664,6 +666,7 @@ PanelWindow {
         autoHide: root.autoHide
         position: root.position
         vertical: root.vertical
+        interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
         onSettingsRequested: dockSettings.open()
         onAddApplicationRequested: appPicker.open()
         onAutoHideToggled: enabled => root.autoHideRequested(enabled)
@@ -703,32 +706,83 @@ PanelWindow {
         foreground: Color.menu.text
         background: Color.menu.background
         accent: Color.accent
+        animationsEnabled: root.interfaceAnimationsEnabled
         onViewportChanged: windowPreview.refreshAnchorGeometry()
+        DockPresentationModel {
+          id: workspacePresentationModel
+          sourceItems: root.groupedRequested ? root.workspacePresentation.groups : []
+          keyProperty: "identity"
+          animationsEnabled: root.interfaceAnimationsEnabled
+        }
         Repeater {
           model: root.groupedRequested ? root.workspacePresentation.globalLaunchers : []
           AppIcon { y: 2 }
         }
         Repeater {
           id: workspaceCards
-          model: root.groupedRequested ? root.workspacePresentation.groups : []
-          DockWorkspaceGroup {
-            id: workspaceCard
+          model: workspacePresentationModel.model
+          DockAnimatedSlot {
+            id: workspaceCardSlot
             required property var modelData
-            label: modelData.label
-            count: modelData.count
-            urgent: modelData.urgent === true && root.attentionBadgesEnabled
-            position: root.position
-            viewport: groupedLayout
-            active: modelData.active
-            slotSize: root.itemSize
+            required property int index
+            present: modelData.present
+            animateEntrance: modelData.animateEntrance
+            animationsEnabled: root.interfaceAnimationsEnabled
+            exitRevision: modelData.exitRevision
+            naturalWidth: workspaceCard.width
+            naturalHeight: workspaceCard.height
+            trailingGap: 0
+            onExitFinished: revision => workspacePresentationModel.completeRemoval(
+              modelData.token, revision)
+
+            DockWorkspaceGroup {
+              id: workspaceCard
+              animationsEnabled: root.interfaceAnimationsEnabled
+              modelData: workspaceCardSlot.modelData.item
+              property var modelData
+              label: modelData.label
+              count: modelData.count
+              urgent: modelData.urgent === true && root.attentionBadgesEnabled
+              position: root.position
+              viewport: groupedLayout
+              active: modelData.active
+              slotSize: root.itemSize
+              applicationModel: appPresentationModel.model
+              applicationDelegate: Component {
+                DockAnimatedSlot {
+                  id: appSlot
+                  required property var modelData
+                  required property int index
+                  present: modelData.present
+                  animateEntrance: modelData.animateEntrance
+                  animationsEnabled: root.interfaceAnimationsEnabled
+                  exitRevision: modelData.exitRevision
+                  naturalWidth: root.itemSize
+                  naturalHeight: root.itemSize + 6
+                  trailingGap: index < appPresentationModel.entries.length - 1 ? 6 : 0
+                  onExitFinished: revision => appPresentationModel.completeRemoval(
+                    modelData.token, revision)
+                  AppIcon {
+                    modelData: appSlot.modelData.item
+                    index: appSlot.index
+                    presentationActive: appSlot.modelData.present
+                      && workspaceCardSlot.modelData.present
+                  }
+                }
+              }
             onActivated: {
               var request = DockModel.focusWorkspaceTargetRequest(modelData.activationTarget, Hyprland.usingLua)
               if (request) Hyprland.dispatch(request)
             }
-            Repeater {
-              model: workspaceCard.modelData.items
-              AppIcon {}
             }
+
+            DockPresentationModel {
+              id: appPresentationModel
+              sourceItems: workspaceCard.modelData.items
+              keyProperty: "presentationId"
+              animationsEnabled: root.interfaceAnimationsEnabled
+            }
+
           }
         }
         DockWorkspaceGroup {
@@ -782,6 +836,7 @@ PanelWindow {
         hoverGlowRadius: root.hoverGlowRadius
         pointerPosition: root.pointerPosition
         position: root.position
+        interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
         vertical: root.vertical
         onOpenRequested: root.openTrashRequested()
         onEmptyRequested: root.emptyTrashRequested()
@@ -826,6 +881,7 @@ PanelWindow {
         slotSize: root.itemSize
         iconSize: root.iconSize
         position: root.position
+        animationsEnabled: root.interfaceAnimationsEnabled
         onWorkspaceRequested: workspaceId => {
           var request = DockModel.focusWorkspaceRequest(
             workspaceId, Hyprland.usingLua)
@@ -870,6 +926,8 @@ PanelWindow {
     attentionBadge: root.attentionBadgeFor(modelData, renderedIndex)
     attentionBadgesEnabled: root.attentionBadgesEnabled
     urgentWindowAnimationEnabled: root.urgentWindowAnimationEnabled
+    interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
+    presentationActive: true
     primaryBadgeOwner: root.primaryBadgeOwnerFor(renderedIndex)
     presentationVisible: !originOnly || groupedLayout.containsItem(appItem)
     Connections {

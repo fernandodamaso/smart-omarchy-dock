@@ -42,6 +42,8 @@ Item {
   required property string position
   required property bool vertical
   required property bool previewActive
+  required property bool interfaceAnimationsEnabled
+  property bool presentationActive: true
   property bool originOnly: false
   property bool localUrgent: false
   property bool sticky: false
@@ -140,7 +142,7 @@ Item {
     ? badgeTracker.motionAttentionFor(desktopId, attentionScope) : false
   readonly property bool urgentMotionSuppressed: !presentationVisible || mouse.hovered
     || dragHandler.active || contextMenu.visible
-    || previewActive || previewInteractionActive
+    || previewActive || previewInteractionActive || !presentationActive
 
   function launch() {
     if (entry)
@@ -191,6 +193,14 @@ Item {
     wheelRemainder = 0
     lastWheelTimestamp = 0
     if (runningCount < 2) root.previewDismissRequested()
+  }
+
+  onPresentationActiveChanged: {
+    if (!presentationActive) {
+      dismissPopups()
+      attentionReminderTimer.stop()
+      attentionMotion.stop()
+    }
   }
 
   function primeUrgentMotion() {
@@ -511,18 +521,21 @@ Item {
   }
 
   TapHandler {
+    enabled: root.presentationActive
     acceptedButtons: Qt.LeftButton
     acceptedModifiers: Qt.NoModifier
     onTapped: root.dispatchPointerAction("left", {})
   }
 
   TapHandler {
+    enabled: root.presentationActive
     acceptedButtons: Qt.MiddleButton
     acceptedModifiers: Qt.NoModifier
     onTapped: root.dispatchPointerAction("middle", {})
   }
 
   TapHandler {
+    enabled: root.presentationActive
     acceptedButtons: Qt.RightButton
     // Right click owns the context menu regardless of keyboard modifiers.
     acceptedModifiers: Qt.KeyboardModifierMask
@@ -535,7 +548,7 @@ Item {
   WheelHandler {
     id: wheelHandler
 
-    enabled: root.runningCount >= 2
+    enabled: root.presentationActive && root.runningCount >= 2
       && root.applicationActions.scrollAction === "cycle-windows"
     target: null
     onWheel: event => {
@@ -565,7 +578,7 @@ Item {
   DragHandler {
     id: dragHandler
 
-    enabled: root.pinnedItem && !root.originOnly
+    enabled: root.presentationActive && root.pinnedItem && !root.originOnly
     target: null
     acceptedButtons: Qt.LeftButton
     acceptedModifiers: Qt.NoModifier
@@ -593,8 +606,9 @@ Item {
     position: root.position
     autoHide: root.autoHide
     pinnedItem: root.pinnedItem
-    runningToplevels: root.runningToplevels
+    runningToplevels: root.presentationActive ? root.runningToplevels : []
     windowActions: root.windowActions
+    interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
     originOnly: root.originOnly
     onVisibleChanged: {
       if (root.menuOpen !== visible) {

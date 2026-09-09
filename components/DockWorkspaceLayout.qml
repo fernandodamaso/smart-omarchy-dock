@@ -13,6 +13,7 @@ Item {
   property color foreground: "white"
   property color background: "#303030"
   property color accent: "#808080"
+  property bool animationsEnabled: true
   readonly property real desiredWidth: content.implicitWidth + contentPadding * 2
   readonly property bool overflowing: desiredWidth > width
   readonly property real navigationWidth: overflowing ? Math.min(buttonSize, width / 3) : 0
