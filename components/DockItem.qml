@@ -5,6 +5,7 @@ import Quickshell.Widgets
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockIconModel.js" as DockIconModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockWindowModel.js" as DockWindowModel
 
@@ -52,6 +53,10 @@ Item {
   property string attentionScopeKey: ""
   property bool presentationVisible: true
   property bool motionReady: false
+  readonly property string customizableDesktopId: DockIconModel.normalizeKey(root.desktopId)
+  readonly property bool hasIconOverride: root.customizableDesktopId !== ""
+    && Object.prototype.hasOwnProperty.call(
+      root.iconOverrides || ({}), root.customizableDesktopId)
   readonly property var attentionScope: attentionScopeKey
     ? ({ localUrgent: localUrgent, primaryOwner: primaryBadgeOwner }) : null
   readonly property bool motionOwner: attentionScopeKey !== "" || primaryBadgeOwner
@@ -97,6 +102,8 @@ Item {
   signal addApplicationRequested()
   signal removeRequested(string desktopId)
   signal hideRequested(string desktopId)
+  signal changeIconRequested(string desktopId)
+  signal restoreIconRequested(string desktopId)
   signal autoHideToggled(bool enabled)
   signal contextMenuVisibilityChanged(bool visible)
   signal previewRequested(var anchorItem, string desktopId, var toplevels, var applicationEntry)
@@ -612,6 +619,8 @@ Item {
     windowActions: root.windowActions
     interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
     originOnly: root.originOnly
+    canCustomizeIcon: root.customizableDesktopId !== ""
+    hasIconOverride: root.hasIconOverride
     onVisibleChanged: {
       if (root.menuOpen !== visible) {
         root.menuOpen = visible
@@ -622,6 +631,18 @@ Item {
     onAddApplication: root.addApplicationRequested()
     onRemoveFromDock: root.removeRequested(root.desktopId)
     onHideFromDock: root.hideRequested(root.desktopId)
+    onChangeIcon: {
+      var targetId = root.customizableDesktopId
+      if (!targetId) return
+      contextMenu.dismiss()
+      root.changeIconRequested(targetId)
+    }
+    onRestoreIcon: {
+      var targetId = root.customizableDesktopId
+      if (!targetId || !root.hasIconOverride) return
+      contextMenu.dismiss()
+      root.restoreIconRequested(targetId)
+    }
     onToggleAutoHide: root.autoHideToggled(!root.autoHide)
   }
 }
