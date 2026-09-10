@@ -201,6 +201,7 @@ Item {
     settingsLoadedText = settingsWriteText
     settingsLoadState = "loaded"
     settingsLoadError = ""
+    settingsDefaultsInUse = false
     settingsPersisted = true
     reloadSettingsIfPending()
   }
