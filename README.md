@@ -30,7 +30,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
   Hyprland-style minimize/restore, focus, and close
 - Drag-to-reorder with persistent pinned-app order
 - Context-menu hiding with persistent restoration controls in Dock Settings
-- Right-click actions to launch, close, pin, or unpin applications
+- Right-click actions to launch, close, pin/unpin, and **Change icon…** / **Restore default icon** for applications
 - Fuzzy application search for adding dock items
 - Configurable dock background transparency
 - Omarchy theme-aware surfaces, borders, corner radius, typography, and hover states
@@ -226,7 +226,8 @@ Installed copies use `~/.config/smartdock/dock.json`. When running from the repo
 
 Appearance and behavior settings are also available graphically: click or right-click the first
 sliders icon and choose **Dock Settings…**. Slider changes preview while dragging and
-are saved when released; switches and choices save immediately.
+are saved when released; switches and choices save immediately. Application icon
+changes use their own preview-and-Apply workflow described below.
 
 Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
 effects sit side by side, Dock surface exposes Theme default, Omarchy token,
@@ -234,13 +235,15 @@ and custom hex modes without leaving disabled inputs visible, and Layout and
 Behavior share a compact row. Layout includes the persistent **Show Trash**
 switch. Behavior includes application action selectors for Left click and
 Middle click. **Application Badges** contains the persistent attention-badge
-switch and the separate urgent-window motion switch. Behavior contains the
-interface-animation switch for workspace and context-menu transitions. Advanced launcher settings
-expand on demand; Reset and Close remain fixed at the bottom. On narrow screens
-the card grid stacks and the middle content area scrolls while the header and
-footer remain visible. The centered panel leaves the dock's edge strip
-interactive, so moving over dock icons continues to preview magnification and
-hover glow while you adjust settings.
+switch and the separate urgent-window motion switch. **Application icons**
+lists configured icon overrides and provides Change/Restore controls. Behavior
+contains the interface-animation switch for workspace and context-menu
+transitions. Advanced launcher settings expand on demand; Reset and Close
+remain fixed at the bottom. On narrow screens the card grid stacks and the
+middle content area scrolls while the header and footer remain visible. The
+centered panel leaves the dock's edge strip interactive, so moving over dock
+icons continues to preview magnification and hover glow while you adjust
+settings.
 
 Background, border, and workspace badge color overrides use a progressive
 control: choose **Theme default**, pick an Omarchy token (for example
@@ -345,17 +348,61 @@ width when the override is disabled.
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
-### Application icon overrides (configuration)
+### Application icon overrides
 
-`iconOverrides` defaults to `{}` and is currently configured in JSON, not an
-icon editor. Each mapping applies app-wide inside SmartDock: main dock icons,
-preview metadata icons, app-picker rows, and Hidden Applications rows use the
-same artwork. It does not change system icons, desktop launchers, application
-identity, launch commands, or window grouping. Preview screenshots, badges,
+The normal workflow is graphical. Right-click the **actual application item** in
+SmartDock and choose **Change icon…**. SmartDock opens Dock Settings →
+**Application icons** for that resolved desktop-entry ID. Choose a local PNG or
+SVG, verify the preview, then press **Apply**; choosing a file is preview only
+and does not persist anything by itself. If the application already has an
+override, **Restore default icon** opens/focuses the same Settings section before
+removing the mapping so save status remains visible.
+
+`iconOverrides` defaults to `{}`. Each mapping applies app-wide inside SmartDock:
+main dock icons, preview metadata icons, app-picker rows, and Hidden Applications
+rows use the same artwork. This is SmartDock-only artwork: it does **not** change
+system icons, global desktop launchers, application identity, launch commands,
+window grouping, or artwork outside SmartDock. Preview screenshots, badges,
 Trash, and action glyphs are unaffected.
 
-Merge this **configuration fragment** into your existing `dock.json`; do not
-replace the full configuration or discard other entries in `iconOverrides`:
+The right-click action uses the dock item's resolved desktop-entry ID, never a
+selected window title or raw transient app ID. `chatgpt` below is only an
+example, not a guaranteed ID on every installation. Lookup keys are trimmed,
+case-insensitive, and may omit the `.desktop` suffix. A browser tab represented
+as Chrome remains a Chrome item; artwork overrides do not split browser groups
+or attempt browser-tab detection.
+
+Only local static PNG/SVG files are supported. Files are referenced **in place**,
+not copied or imported, and the editor reminds you that the selected file stays
+at its current location. Keep artwork in a stable location outside the plugin
+checkout so updates do not remove it. Absolute local paths and `file:///` URLs
+are accepted; relative paths, `~`, environment-variable expansion, remote URLs,
+and other image formats are rejected.
+
+The preview uses a raw image decode instead of SmartDock's fallback renderer, so
+a missing or corrupt selection cannot be applied. Canceling, closing Settings,
+changing the target app, or an external change to that app's current mapping
+invalidates the draft. The bounded display fallback remains **custom file →
+original desktop icon → `application-x-executable` → bundled, theme-tinted
+`app-window` glyph**; custom artwork is never tinted and a previously persisted
+missing/corrupt mapping is retained until explicitly changed or restored.
+
+To replace image bytes at the **same path**, choose **Change icon…**, select that
+same file again, wait for the fresh preview, and press **Apply**. SmartDock uses
+a fresh uncached validation probe and advances its icon reload revision, so this
+explicit same-path workflow requests new bytes. There is no continuous artwork
+file watching.
+
+Appearance **Reset to defaults** preserves `iconOverrides`, as do pin/unpin and
+hide/show actions. Settings writes are optimistic for the running session but
+are reported honestly: durable success is shown only after the existing writer
+completes. If saving fails, the session keeps the current choice and Dock
+Settings shows the error plus **Retry save**; retry writes the latest complete
+settings rather than replaying an old editor snapshot.
+
+Manual JSON remains supported for scripted/config-driven setups. Merge this
+**configuration fragment** into your existing `dock.json`; do not replace the
+full configuration or discard other entries in `iconOverrides`:
 
 ```json
 {
@@ -364,32 +411,6 @@ replace the full configuration or discard other entries in `iconOverrides`:
   }
 }
 ```
-
-Use the dock item's resolved desktop-entry ID. `chatgpt` is only an example,
-not a guaranteed ID on every installation. Lookup keys are trimmed,
-case-insensitive, and may omit the `.desktop` suffix. A browser tab represented
-as Chrome remains a Chrome item; artwork overrides do not split browser groups.
-
-Only local static PNG/SVG files are supported. Use an absolute local path or a
-local `file:///` URL; spaces in URLs are encoded as `%20`. Relative paths, `~`,
-environment-variable expansion, remote URLs, and other override formats are
-not supported. Files are referenced **in place**, not copied or imported. Keep
-them in a stable location outside the plugin checkout so updates do not remove
-the artwork.
-
-The bounded fallback chain is **custom file → original desktop icon →
-`application-x-executable` → bundled, theme-tinted `app-window` glyph**. Custom
-artwork is never tinted. Missing or corrupt files fall back without deleting
-the mapping. Replace its value to choose another image, or remove only that
-application's key to restore its original artwork. Appearance **Reset to
-defaults** preserves `iconOverrides`, as do pin/unpin and hide/show actions.
-
-Saving a changed override map uses the existing live configuration reload and
-updates the artwork bindings across SmartDock. There is **no continuous
-artwork-file watching**: replacing bytes at the same path is not automatically
-noticed. Restart SmartDock after an in-place image edit, or use an explicit
-reload-revision request from the existing host API. Re-saving an identical
-JSON map alone does not request new image bytes.
 
 ### Application pointer actions
 
