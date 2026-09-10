@@ -121,6 +121,11 @@ check('failed Apply retains optimistic settings and the existing diagnostic', ()
   assert.deepEqual(f.warnings, [[`Dock: could not save ${f.host.configPath}:`, 3]])
 })
 
+check('FileView reload cannot erase failed session settings before Retry', () => {
+  assert.match(writerSource,
+    /onFileChanged: \{[\s\S]*root\.settingsWriteState === "saving"[\s\S]*root\.settingsWriteState === "error"[\s\S]*reload\(\)/)
+})
+
 check('failed Restore can retry even after its only override row disappears', () => {
   const f = fixture()
   f.load(JSON.stringify(plain(f.host.settings), null, 2) + '\n')

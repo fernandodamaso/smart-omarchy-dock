@@ -357,8 +357,14 @@ Item {
     blockWrites: true
     onLoaded: root.loadSettings(text())
     // FileView.text() is still stale inside onFileChanged. Reload first and
-    // parse the fresh contents when onLoaded fires.
-    onFileChanged: reload()
+    // parse the fresh contents when onLoaded fires, unless a write is in
+    // flight or failed: that event can expose the old disk state and erase
+    // the session value that Retry must persist.
+    onFileChanged: {
+      if (root.settingsWriteState === "saving"
+          || root.settingsWriteState === "error") return
+      reload()
+    }
     onSaved: {
       // Results describe the complete configuration, never an editor target.
       root.settingsWriteError = ""
