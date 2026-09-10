@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Removed the graphical Dock Settings page, its menu route, temporary preference
+  previews, exclusive controls and editor-only helpers. Configuration and icon
+  editing now use `smartdock config`, `smartdock apps` and `smartdock icons`.
+- Retained ordinary window previews, the app picker, dock menus, auto-hide,
+  pinned-app dragging, workspace/window actions, Trash and live theme bindings.
+- Preserved existing configuration, application identities, pin order, hidden
+  membership and custom icons through the existing host-owned settings writer.
+  Restore hidden applications with `smartdock apps show ID` or `apps show --all`.
+- Updated active configuration instructions and split mixed regression suites so
+  runtime behavior remains covered without depending on removed UI components.
+
+The CLI-first migration remains an unreleased candidate. Remote checks do not
+replace the final Omarchy focus, auto-hide, FileView and image/cache qualification.
+Historical entries below describe earlier versions and are not current UI routes.
+
 ## 2.1.0 - 2026-09-01
 
 ### Changed

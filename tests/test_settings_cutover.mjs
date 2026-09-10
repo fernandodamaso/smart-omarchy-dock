@@ -17,11 +17,11 @@ function files(directory) {
     return entry.isDirectory() ? files(name) : [name];
   });
 }
-// Audit executable sources, including mixed tests and runtime fixtures. This
-// guard excludes itself (it must name removed components) and historical docs.
+// Audit executable sources, including mixed tests and runtime fixtures. The two
+// removal audits name forbidden components as test data, not executable imports.
 const active = ['DockHost.qml', 'shell.qml', 'Overlay.qml', ...files('components'),
   ...files('scripts'), ...files('tests')].filter(name =>
-  /\.(qml|js|mjs|py|sh)$/.test(name) && !name.endsWith('/test_settings_cutover.mjs'));
+  /\.(qml|js|mjs|py|sh)$/.test(name) && !/\/test_settings_(cutover|helpers)\.mjs$/.test(name));
 const references = active.flatMap(name => read(name).split('\n').flatMap((line, index) =>
   obsolete.test(line) ? [`${name}:${index + 1}: ${line.trim()}`] : []));
 if (references.length) console.log('Settings cutover reference audit:\n' + references.join('\n'));
