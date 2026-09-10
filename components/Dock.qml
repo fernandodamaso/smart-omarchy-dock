@@ -28,6 +28,8 @@ PanelWindow {
   required property int scopeRevision
   property var iconOverrides: ({})
   property int iconReloadRevision: 0
+  property string settingsWriteState: "idle"
+  property string settingsWriteError: ""
   signal reorderRequested(string sourceDesktopId, string targetDesktopId)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
@@ -35,6 +37,8 @@ PanelWindow {
   signal autoHideRequested(bool enabled)
   signal settingChanged(string key, var value)
   signal settingsPatchRequested(var patch)
+  signal iconOverrideRequested(string desktopId, string sourceUrl)
+  signal settingsWriteRetryRequested()
   signal resetSettingsRequested()
   signal openTrashRequested()
   signal emptyTrashRequested()
@@ -1017,6 +1021,8 @@ PanelWindow {
     settings: root.settings
     iconOverrides: root.iconOverrides
     iconReloadRevision: root.iconReloadRevision
+    settingsWriteState: root.settingsWriteState
+    settingsWriteError: root.settingsWriteError
     themeColorTokens: root.themeColorTokens
     onVisibleChanged: if (!visible) root.clearSettingPreviews()
     onSettingPreviewed: (key, value) => root.previewSetting(key, value)
@@ -1028,6 +1034,10 @@ PanelWindow {
       root.settingsPatchRequested(patch)
       for (var key in patch) root.clearSettingPreview(key)
     }
+    onIconOverrideRequested: (desktopId, sourceUrl) => {
+      root.iconOverrideRequested(desktopId, sourceUrl)
+    }
+    onSettingsWriteRetryRequested: root.settingsWriteRetryRequested()
     onResetRequested: {
       root.clearSettingPreviews()
       root.resetSettingsRequested()
