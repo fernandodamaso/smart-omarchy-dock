@@ -26,7 +26,7 @@ reject_pattern() {
 
 # Compatibility-safe setting: scrolling remains disabled unless explicitly enabled.
 require_pattern '"scrollAction"[[:space:]]*:[[:space:]]*"none"' config/dock.json
-require_pattern 'scrollAction:[[:space:]]*"none"' DockHost.qml
+require_pattern 'property var settings: dockControl\.defaults' DockHost.qml
 require_pattern 'scrollAction:[[:space:]]*normalizeSetting\(' components/DockModel.js
 require_pattern 'scrollAction:[[:space:]]*effectiveSetting\("scrollAction"\)' components/Dock.qml
 require_pattern 'function scrollActionOptions\(\)' components/DockModel.js

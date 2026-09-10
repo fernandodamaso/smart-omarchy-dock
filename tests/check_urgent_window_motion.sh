@@ -117,8 +117,8 @@ fi
 # Settings default on, explicit disable control, effective only with badge display enabled.
 grep -Fq '"urgentWindowAnimationEnabled": true' "$config" \
   || fail 'config default missing'
-grep -Fq 'urgentWindowAnimationEnabled: true' DockHost.qml \
-  || fail 'host fallback default missing'
+grep -Fq 'property var settings: dockControl.defaults' DockHost.qml \
+  || fail 'host fallback must use declared defaults (including urgent motion)'
 grep -Fq 'patch.urgentWindowAnimationEnabled = true' DockHost.qml \
   || fail 'reset default missing'
 grep -Fq 'title: "Application Badges"' "$settings" \

@@ -23,9 +23,9 @@ reject_pattern() {
   fi
 }
 
+require_pattern 'property var settings: dockControl\.defaults' DockHost.qml
 for key in clickAction middleClickAction; do
   require_pattern "\"${key}\"" config/dock.json
-  require_pattern "${key}:" DockHost.qml
   require_pattern "${key}:" components/DockModel.js
   require_pattern "${key}" README.md
   require_pattern "root\.current\(\"${key}\"\)" components/DockSettings.qml
