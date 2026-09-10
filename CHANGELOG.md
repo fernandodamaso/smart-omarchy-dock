@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added app-wide **Change icon…** and **Restore default icon** actions to application context menus, routed through Dock Settings and the existing SmartDock icon-override writer.
+- Added graphical PNG/SVG icon management in Dock Settings with stale-safe preview/Apply, configured-override listing, save-failure feedback, and Retry.
+
+### Changed
+
+- Custom application artwork now has an end-to-end SmartDock UI workflow while preserving local-file-in-place semantics, same-path reload support, and Reset preservation.
+
 ## 2.1.0 - 2026-09-01
 
 ### Changed
