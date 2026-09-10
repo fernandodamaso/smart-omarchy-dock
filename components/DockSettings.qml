@@ -18,6 +18,8 @@ PanelWindow {
   required property Item anchorItem
   required property string position
   required property var settings
+  property var iconOverrides: ({})
+  property int iconReloadRevision: 0
   property bool outsideClickDismissal: true
   // Prime layer-shell focus briefly on open so keyboard navigation works, then
   // settle on OnDemand so Hyprland does not route every pointer event to this
@@ -1207,6 +1209,8 @@ PanelWindow {
                 desktopId: modelData.id
                 applicationName: modelData.name
                 applicationIcon: modelData.icon
+                iconOverrides: root.iconOverrides
+                iconReloadRevision: root.iconReloadRevision
                 onShowRequested: root.commitPatch({
                   hiddenApplications: DockModel.removeHiddenApplication(
                     root.current("hiddenApplications"), desktopId)

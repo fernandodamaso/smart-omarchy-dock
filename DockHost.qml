@@ -18,6 +18,8 @@ Item {
   required property string runtimeMode
   property var notificationService: null
   property var launcherBadgeService: null
+  readonly property var applications: DesktopEntries.applications.values || []
+  property int iconReloadRevision: 0
 
   property int trashItemCount: 0
   property bool trashStateKnown: false
@@ -59,6 +61,7 @@ Item {
       })
       Object.keys(parsed).forEach(function(key) { requested[key] = parsed[key] })
       showTrashSetting = TrashModel.normalizeShowTrash(parsed.showTrash)
+      if (ConfigModel.iconsChanged(settings.iconOverrides, requested.iconOverrides)) iconReloadRevision++
       if (JSON.stringify(settings) !== JSON.stringify(requested)) settingsRevision++
       settings = requested
       settingsLoadState = "loaded"
@@ -84,23 +87,55 @@ Item {
   }
 
   function pinApplication(desktopId) {
-    if (!desktopId || settings.pinned.indexOf(desktopId) >= 0) return
-    var pinned = settings.pinned.slice()
-    pinned.push(desktopId)
-    return savePinned(pinned)
+    return changeApplication("pin", { id: desktopId })
   }
 
   function unpinApplication(desktopId) {
-    var index = settings.pinned.indexOf(desktopId)
-    if (index < 0) return
-    var pinned = settings.pinned.slice()
-    pinned.splice(index, 1)
-    return savePinned(pinned)
+    return changeApplication("unpin", { id: desktopId })
   }
 
   function hideApplication(desktopId) {
-    var hiddenApplications = DockModel.addHiddenApplication(settings.hiddenApplications, desktopId)
-    return saveSetting("hiddenApplications", hiddenApplications)
+    return changeApplication("hide", { id: desktopId })
+  }
+
+  function changeApplication(action, args) {
+    var blocked = mutationBlocked()
+    if (blocked) return blocked
+    return commitSettings(ConfigModel.applicationIntent(settings, applications, action, args), false)
+  }
+
+  function iconResult(reply, reloaded) {
+    reply.data.iconReloadRevision = iconReloadRevision
+    reply.data.reloaded = reloaded
+    reply.data.renderVerified = false
+    reply.warnings.push("Artwork is referenced in place. Saving or requesting a reload does not verify decoding or rendering.")
+    return reply
+  }
+
+  function saveIconOverride(desktopId, sourceUrl) {
+    var blocked = mutationBlocked()
+    if (blocked) return iconResult(blocked, false)
+    var source = sourceUrl === "" ? null : sourceUrl
+    var result = ConfigModel.iconIntent(settings, desktopId, source)
+    var revision = iconReloadRevision
+    var reply = commitSettings(result, false)
+    // Same-path Apply deliberately reloads bytes, but never creates a redundant
+    // config write. Failed persistence still leaves the accepted live intent.
+    if (result.ok && source !== null && iconReloadRevision === revision) iconReloadRevision++
+    return iconResult(reply, iconReloadRevision !== revision)
+  }
+
+  function reloadIcon(desktopId) {
+    var blocked = mutationBlocked()
+    if (blocked) return iconResult(blocked, false)
+    var key = ConfigModel.canonicalApplicationId(desktopId)
+    var configured = ConfigModel.effectiveIcons(settings.iconOverrides)
+    if (!key || !Object.prototype.hasOwnProperty.call(configured, key))
+      return iconResult(dockControl.failure("E_VALIDATION", "Reload requires an existing local icon mapping."), false)
+    // The retained renderer uses one host revision; other mapped icons can also
+    // refresh. No file watch, settings revision or persistence write is involved.
+    iconReloadRevision++
+    return iconResult(mutationOutcome(dockControl.mutationData(settings, settings, [], false, false)), true)
   }
 
   function savePinned(pinned) {
@@ -134,8 +169,13 @@ Item {
   function saveSettings(patch, dryRun) {
     var blocked = mutationBlocked()
     if (blocked) return blocked
+    return commitSettings(ConfigModel.applyPatch(settings, patch, dockControl.metadata), dryRun)
+  }
+
+  // Only validated config/app/icon model results reach this common live commit.
+  // IPC never accepts a prevalidated result or a full replacement snapshot.
+  function commitSettings(result, dryRun) {
     var before = settings
-    var result = ConfigModel.applyPatch(before, patch, dockControl.metadata)
     if (!result.ok) {
       var rejected = dockControl.mutationData(before, before, [], false, false)
       rejected.validationErrors = result.errors
@@ -147,6 +187,7 @@ Item {
     if (result.changedKeys.length === 0)
       return mutationOutcome(dockControl.mutationData(before, before, [], false, false))
     showTrashSetting = TrashModel.normalizeShowTrash(result.settings.showTrash)
+    if (ConfigModel.iconsChanged(before.iconOverrides, result.settings.iconOverrides)) iconReloadRevision++
     settings = result.settings
     settingsRevision++
     settingsDefaultsInUse = false
@@ -397,6 +438,8 @@ Item {
         required property var modelData
         screen: modelData
         settings: root.settings
+        iconOverrides: root.settings.iconOverrides || ({})
+        iconReloadRevision: root.iconReloadRevision
         showTrash: root.showTrash
         windowActions: root.windowActions
         badgeTracker: root.badgeTracker

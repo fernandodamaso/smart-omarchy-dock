@@ -32,6 +32,7 @@ function functions(name, state) {
 
 const shared = {
   console: { warn() {} },
+  ConfigModel: loadModel('DockConfigModel.js'),
   DockModel: loadModel('DockModel.js'),
   DockWindowModel: loadModel('DockWindowModel.js'),
   TrashModel: loadModel('DockTrashModel.js'),
@@ -40,7 +41,7 @@ let deferred = 0;
 const host = functions('DockHost.qml', {
   ...shared, dockControl: { defaults }, Qt: { callLater() { deferred++; } },
   runtimeMode: 'plugin', configPath: '/actual host/dock.json',
-  settings: plain(defaults), settingsRevision: 0, settingsLoaded: false,
+  settings: plain(defaults), settingsRevision: 0, settingsLoaded: false, iconReloadRevision: 0,
   settingsLoadState: 'missing', settingsLoadError: '', settingsReloadPending: false,
   settingsWriteState: 'idle', settingsWriteError: '', settingsPersisted: false,
   settingsDefaultsInUse: true, showTrashSetting: true, showTrash: true,

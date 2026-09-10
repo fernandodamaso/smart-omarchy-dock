@@ -12,19 +12,23 @@ Item {
   required property string desktopId
   required property string applicationName
   required property string applicationIcon
+  property var iconOverrides: ({})
+  property int iconReloadRevision: 0
   signal showRequested()
 
   implicitHeight: Style.space(56)
 
-  IconImage {
+  DockAppIcon {
     id: applicationIconImage
 
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
     width: Style.space(36)
     height: width
-    source: Quickshell.iconPath(root.applicationIcon, true)
-    asynchronous: true
+    desktopId: root.desktopId
+    desktopIcon: root.applicationIcon
+    iconOverrides: root.iconOverrides
+    reloadRevision: root.iconReloadRevision
   }
 
   Column {

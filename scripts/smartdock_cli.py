@@ -5,6 +5,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -34,9 +35,25 @@ Live configuration (the selected host is the only writer):
   config apply (--stdin | --file PATH) [--dry-run]
                                Validate one atomic JSON object patch
   config reset (KEY | --preferences)
-                               Reset one key, or preferences without pins/hidden/margin
+                               Reset one key, or preferences without pins/hidden/margin/icons
   config retry                 Save the complete current live snapshot again
   config export --output PATH  Save a NEW snapshot, never overwrite a file or live config
+
+Applications (exact desktop IDs, not fuzzy application names):
+  apps list [--query TEXT | --pinned | --hidden]
+                               Discover host applications, including unavailable stored IDs
+  apps pin ID | apps unpin ID  Change pinned membership without changing hidden state
+  apps hide ID                Hide without unpinning or closing windows
+  apps show (ID | --all)       Clear hidden membership, preserving pins and their order
+  apps move ID (--before OTHER | --after OTHER)
+                               Move one pinned ID relative to another, including hidden pins
+
+Artwork (SmartDock-only; local static PNG/SVG files referenced in place):
+  icons list                  Read requested/effective mappings, not rendering success
+  icons set ID PATH           Resolve a local relative path and send one host intent
+  icons reset ID              Remove only this application's mapping
+  icons reload ID             Refresh an existing mapping after same-path file replacement
+                               Reload uses the global artwork revision; never writes config
 
 Options may appear before or after the command:
   --json                       Emit one versioned JSON object on stdout
@@ -150,6 +167,42 @@ def validate_mutation(reply, instance):
                 or data['writeState'] in ('saving', 'error') and not data.get('dryRun')
                 or data['applied'] and not data['persisted']):
             raise CliError('E_PROTOCOL', 'Mutation response is incomplete or claims success before saving.')
+    return reply
+
+
+def validate_applications(reply, instance):
+    if not reply['ok']:
+        return reply
+    validate_status(reply, instance)
+    rows = reply['data'].get('applications')
+    if not isinstance(rows, list):
+        raise CliError('E_PROTOCOL', 'Expected application rows from the selected host.')
+    for row in rows:
+        if (not isinstance(row, dict) or not isinstance(row.get('id'), str) or not row['id']
+                or not isinstance(row.get('name'), str)
+                or any(type(row.get(key)) is not bool for key in ('available', 'pinned', 'hidden'))
+                or 'pinnedIndex' not in row
+                or (row['pinned'] and (type(row['pinnedIndex']) is not int or row['pinnedIndex'] < 0))
+                or (not row['pinned'] and row['pinnedIndex'] is not None)):
+            raise CliError('E_PROTOCOL', 'Application identity or membership fields are incomplete.')
+    return reply
+
+
+def validate_icons(reply, instance, action):
+    if not reply['ok']:
+        return reply
+    if action == 'list':
+        validate_status(reply, instance)
+        if not isinstance(reply['data'].get('overrides'), dict):
+            raise CliError('E_PROTOCOL', 'Expected the configured icon override map.')
+    else:
+        validate_mutation(reply, instance)
+        if type(reply['data'].get('reloaded')) is not bool:
+            raise CliError('E_PROTOCOL', 'Missing icon reload acknowledgement.')
+    data = reply['data']
+    if (data.get('renderVerified') is not False
+            or type(data.get('iconReloadRevision')) is not int or data['iconReloadRevision'] < 0):
+        raise CliError('E_PROTOCOL', 'Icon acknowledgement cannot establish rendering success.')
     return reply
 
 
@@ -292,6 +345,28 @@ def build_parser():
     child_parser(actions, 'retry')
     child = child_parser(actions, 'export')
     child.add_argument('--output', required=True)
+    apps = child_parser(commands, 'apps').add_subparsers(dest='action')
+    listing = child_parser(apps, 'list')
+    filters = listing.add_mutually_exclusive_group()
+    filters.add_argument('--query')
+    filters.add_argument('--pinned', action='store_true')
+    filters.add_argument('--hidden', action='store_true')
+    for name in ('pin', 'unpin', 'hide', 'show', 'move'):
+        child = child_parser(apps, name)
+        child.add_argument('id', nargs='?' if name == 'show' else None)
+        if name == 'show':
+            child.add_argument('--all', action='store_true')
+        if name == 'move':
+            placement = child.add_mutually_exclusive_group(required=True)
+            placement.add_argument('--before')
+            placement.add_argument('--after')
+    icons = child_parser(commands, 'icons').add_subparsers(dest='action')
+    child_parser(icons, 'list')
+    for name in ('set', 'reset', 'reload'):
+        child = child_parser(icons, name)
+        child.add_argument('id')
+        if name == 'set':
+            child.add_argument('source')
     return parser
 
 
@@ -392,6 +467,42 @@ def export_snapshot(reply, output):
                     reply['warnings'])
 
 
+def app_icon_request(transport, instance, args):
+    """Send a primitive intent. The host owns IDs, validation and latest-state edits."""
+    arguments = {}
+    if args.group == 'apps' and args.action == 'list':
+        for key in ('query', 'pinned', 'hidden'):
+            value = getattr(args, key)
+            if value is not None and value is not False:
+                arguments[key] = value
+    elif args.action != 'list':
+        if args.group == 'apps' and args.action == 'show' and args.all:
+            arguments['all'] = True
+        else:
+            arguments['id'] = args.id
+        if args.group == 'apps' and args.action == 'move':
+            key = 'before' if args.before is not None else 'after'
+            arguments[key] = getattr(args, key)
+        if args.group == 'icons' and args.action == 'set':
+            source = args.source
+            if not source:
+                raise CliError('E_VALIDATION', 'Select a local PNG or SVG file.')
+            # URL acceptance belongs to DockIconModel. Preserve schemes as-is,
+            # including unsupported ones, so they cannot become local filenames.
+            if not re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*:', source):
+                try:
+                    source = os.path.abspath(source)
+                except (OSError, ValueError) as error:
+                    raise CliError('E_VALIDATION', 'Cannot resolve local artwork path: ' + str(error)) from error
+            arguments['source'] = source
+    reply = transport.request(instance, args.group + '.' + args.action, arguments)
+    if args.group == 'icons':
+        return validate_icons(reply, instance, args.action)
+    if args.action == 'list':
+        return validate_applications(reply, instance)
+    return validate_mutation(reply, instance)
+
+
 def execute(args):
     if getattr(args, 'help_requested', False) or args.group in (None, 'help'):
         return envelope({'text': HELP})
@@ -400,10 +511,12 @@ def execute(args):
             return envelope({'text': (BUNDLE / 'docs/AGENT_CONFIGURATION.md').read_text(encoding='utf-8')})
         except (OSError, UnicodeError) as error:
             raise CliError('E_PROTOCOL', 'Bundled agent guide is unavailable: ' + str(error)) from error
-    if args.group == 'config' and args.action is None:
-        raise CliError('E_USAGE', 'config requires a subcommand. Run smartdock help.')
+    if args.group in ('config', 'apps', 'icons') and args.action is None:
+        raise CliError('E_USAGE', args.group + ' requires a subcommand. Run smartdock help.')
     if args.group == 'config' and args.action == 'reset' and (args.key is None) == (not args.preferences):
         raise CliError('E_USAGE', 'Reset requires either KEY or --preferences, not both.')
+    if args.group == 'apps' and args.action == 'show' and (args.id is None) == (not args.all):
+        raise CliError('E_USAGE', 'Show requires either ID or --all, not both.')
     # Read only an explicitly supplied input, before starting the IPC deadline.
     patch = read_patch(args) if args.group == 'config' and args.action == 'apply' else None
     runtime = getattr(args, 'runtime', 'auto')
@@ -431,6 +544,8 @@ def execute(args):
             if status['data']['writeState'] == 'error':
                 raise CliError('E_PERSISTENCE', status['data']['writeError'], status['data'])
         return status
+    if args.group in ('apps', 'icons'):
+        return app_icon_request(transport, instance, args)
     if args.action in ('schema', 'get'):
         arguments = {} if args.key is None else {'key': args.key}
         if args.action == 'get':

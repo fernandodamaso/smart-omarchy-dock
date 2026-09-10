@@ -70,6 +70,7 @@ Item {
       var value = requested[key] === undefined ? root.defaults[key] : requested[key]
       result[key] = DockModel.normalizeSetting(key, value)
     }
+    result.iconOverrides = ConfigModel.effectiveIcons(requested.iconOverrides)
     result.showTrash = TrashModel.normalizeShowTrash(requested.showTrash)
     result.windowScope = DockWindowModel.normalizeWindowScope(requested.windowScope)
     result.showUrgentOutsideScope = DockWindowModel.normalizeShowUrgentOutsideScope(requested.showUrgentOutsideScope)
@@ -112,6 +113,67 @@ Item {
     return data
   }
 
+  function readWarnings() {
+    var warnings = []
+    if (root.host.settingsLoadState === "invalid") warnings.push("Invalid disk config; showing last-good live settings.")
+    if (!root.host.settingsLoaded || root.host.settingsReloadPending) warnings.push("Settings load/readback is pending.")
+    if (!root.statusData().persisted) warnings.push("Live settings are not confirmed persisted.")
+    return warnings
+  }
+
+  function applicationCommand(command, args) {
+    var action = command.slice(5)
+    var allowed = action === "list" ? ["query", "pinned", "hidden"]
+      : action === "move" ? ["id", "before", "after"]
+      : action === "show" ? ["id", "all"]
+      : ["pin", "unpin", "hide"].indexOf(action) >= 0 ? ["id"] : null
+    if (!allowed || Object.keys(args).some(function(key) { return allowed.indexOf(key) < 0 }))
+      return root.failure("E_USAGE", "Unsupported application command or arguments: " + command)
+    if (action === "list") {
+      if (Object.keys(args).length > 1
+          || (args.query !== undefined && typeof args.query !== "string")
+          || (args.pinned !== undefined && args.pinned !== true)
+          || (args.hidden !== undefined && args.hidden !== true))
+        return root.failure("E_USAGE", "Use at most one of query, pinned=true or hidden=true.")
+      var data = root.statusData()
+      data.applications = ConfigModel.applicationRows(root.host.settings, root.host.applications, args)
+      return root.success(data, root.readWarnings())
+    }
+    if (action === "show" && args.all !== undefined) {
+      if (args.all !== true || args.id !== undefined)
+        return root.failure("E_USAGE", "Show requires one ID or all=true, not both.")
+    } else if (typeof args.id !== "string")
+      return root.failure("E_USAGE", "An exact application ID is required.")
+    if (action === "move" && ((args.before === undefined) === (args.after === undefined)
+        || (args.before !== undefined && typeof args.before !== "string")
+        || (args.after !== undefined && typeof args.after !== "string")))
+      return root.failure("E_USAGE", "Move requires exactly one before or after ID.")
+    return root.host.changeApplication(action, args)
+  }
+
+  function iconCommand(command, args) {
+    var action = command.slice(6)
+    var allowed = action === "list" ? [] : action === "set" ? ["id", "source"]
+      : action === "reset" || action === "reload" ? ["id"] : null
+    if (!allowed || Object.keys(args).some(function(key) { return allowed.indexOf(key) < 0 }))
+      return root.failure("E_USAGE", "Unsupported icon command or arguments: " + command)
+    if (action === "list") {
+      var data = root.statusData()
+      data.overrides = ConfigModel.isObject(root.host.settings.iconOverrides) ? root.host.settings.iconOverrides : {}
+      data.effectiveOverrides = ConfigModel.effectiveIcons(root.host.settings.iconOverrides)
+      data.iconReloadRevision = root.host.iconReloadRevision
+      data.renderVerified = false
+      return root.success(data, root.readWarnings())
+    }
+    if (typeof args.id !== "string" || (action === "set" && typeof args.source !== "string"))
+      return root.failure("E_USAGE", "An exact application ID and, for set, a source string are required.")
+    if (action === "reload") return root.host.reloadIcon(args.id)
+    // An empty set is invalid. Only the explicit reset command removes artwork.
+    if (action === "set" && args.source === "")
+      return root.failure("E_VALIDATION", "Select a local PNG or SVG file.")
+    return root.host.saveIconOverride(args.id, action === "reset" ? "" : args.source)
+  }
+
   function handle(payload) {
     var request
     try {
@@ -125,6 +187,8 @@ Item {
       return root.failure("E_PROTOCOL", "Expected apiVersion=1, command and arguments object.")
     var args = request.arguments
     var command = request.command
+    if (command.indexOf("apps.") === 0) return root.applicationCommand(command, args)
+    if (command.indexOf("icons.") === 0) return root.iconCommand(command, args)
     var allowed = command === "config.get" ? ["key", "effective"]
       : command === "config.schema" ? ["key"]
       : command === "config.apply" ? ["patch", "dryRun"]

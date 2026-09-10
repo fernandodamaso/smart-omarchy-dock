@@ -13,6 +13,9 @@ Item {
   required property var windowActions
   required property var applicationEntry
   required property bool captureEnabled
+  property string desktopId: ""
+  property var iconOverrides: ({})
+  property int iconReloadRevision: 0
   property int previewWidth: 216
   property int previewHeight: 122
   property bool captureStopped: false
@@ -30,10 +33,6 @@ Item {
       ? String(root.applicationEntry.name) : "Window"
   }
   readonly property string statusText: PreviewModel.previewStatus(windowState)
-  readonly property string iconSource: root.applicationEntry
-    && root.applicationEntry.icon
-      ? Quickshell.iconPath(root.applicationEntry.icon, true)
-      : Quickshell.iconPath("application-x-executable", true)
 
   implicitWidth: 232
   implicitHeight: 176
@@ -101,15 +100,18 @@ Item {
     }
   }
 
-  IconImage {
+  DockAppIcon {
     id: appIcon
 
     x: 10
     y: previewFrame.y + previewFrame.height + 10
     width: 26
     height: 26
-    source: root.iconSource
-    asynchronous: true
+    desktopId: root.desktopId
+    desktopIcon: root.applicationEntry && root.applicationEntry.icon
+      ? root.applicationEntry.icon : ""
+    iconOverrides: root.iconOverrides
+    reloadRevision: root.iconReloadRevision
   }
 
   Item {

@@ -26,6 +26,8 @@ PanelWindow {
   required property bool workspaceCountsReady
   required property int workspaceCountsRevision
   required property int scopeRevision
+  property var iconOverrides: ({})
+  property int iconReloadRevision: 0
   signal reorderRequested(string sourceDesktopId, string targetDesktopId)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
@@ -906,6 +908,8 @@ PanelWindow {
     identityToplevel: modelData.identityToplevel || null
 
     desktopId: modelData.desktopId
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
     pinnedItem: modelData.pinned
     runningToplevels: modelData.toplevels
     focused: root.activeToplevel !== null
@@ -990,6 +994,8 @@ PanelWindow {
     position: root.position
     visibleItems: root.renderedItems
     clipItem: root.grouped ? groupedLayout : null
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
   }
 
   DockAppPicker {
@@ -998,6 +1004,8 @@ PanelWindow {
     anchorItem: dockBackground
     position: root.position
     pinned: root.pinned
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
     onApplicationSelected: desktopId => root.pinRequested(desktopId)
   }
 
@@ -1007,6 +1015,8 @@ PanelWindow {
     anchorItem: controlItem
     position: root.position
     settings: root.settings
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
     themeColorTokens: root.themeColorTokens
     onVisibleChanged: if (!visible) root.clearSettingPreviews()
     onSettingPreviewed: (key, value) => root.previewSetting(key, value)

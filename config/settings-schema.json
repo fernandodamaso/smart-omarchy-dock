@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
-  "commands": ["help", "agent-guide", "status", "doctor", "config.schema", "config.get", "config.set", "config.apply", "config.reset", "config.retry", "config.export"],
+  "commands": ["help", "agent-guide", "status", "doctor", "config.schema", "config.get", "config.set", "config.apply", "config.reset", "config.retry", "config.export", "apps.list", "apps.pin", "apps.unpin", "apps.hide", "apps.show", "apps.move", "icons.list", "icons.set", "icons.reset", "icons.reload"],
   "settings": {
+    "iconOverrides": {"type":"object","format":"icon-overrides","resetWithPreferences":false,"description":"SmartDock-only local PNG/SVG artwork by desktop ID. Prefer icons set/reset for single-app edits; no rendering verification is implied."},
     "iconSize": {"type":"integer","minimum":24,"maximum":96,"description":"Base application icon size in logical pixels."},
     "magnification": {"type":"number","minimum":1,"maximum":2,"effectiveStep":0.05,"description":"Hover icon scale; requested fractions are retained."},
     "magnificationRadius": {"type":"number","minimum":40,"maximum":240,"effectiveStep":5,"description":"Hover influence radius in logical pixels."},
