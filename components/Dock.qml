@@ -979,6 +979,11 @@ PanelWindow {
     onDragFinished: root.finishDrag()
     onRemoveRequested: desktopId => root.unpinRequested(desktopId)
     onHideRequested: desktopId => root.hideRequested(desktopId)
+    onChangeIconRequested: desktopId => dockSettings.openIconEditor(desktopId)
+    onRestoreIconRequested: desktopId => {
+      if (!dockSettings.openIconEditor(desktopId)) return
+      root.iconOverrideRequested(desktopId, "")
+    }
     onPreviewRequested: (anchorItem, desktopId, toplevels, applicationEntry) => {
       windowPreview.requestPreview(
         anchorItem, desktopId, toplevels, applicationEntry)
