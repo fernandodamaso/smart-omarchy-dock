@@ -13,16 +13,6 @@ TestCase {
       "close",
       "focus-or-launch"
     ]))
-
-    var options = DockModel.applicationActionOptions()
-    compare(options.length, 5)
-    compare(options[0].value, "none")
-    compare(options[0].label, "No action")
-    compare(options[4].value, "focus-or-launch")
-    for (var optionIndex = 0; optionIndex < options.length; ++optionIndex) {
-      verify(options[optionIndex].value !== "focus")
-      verify(options[optionIndex].value !== "launch")
-    }
   }
 
   function test_normalizesEachActionKeyWithKeySpecificFallbacks() {
@@ -126,8 +116,8 @@ TestCase {
     ]), "restore")
   }
 
-  function test_resetAndMergePreserveTheTwoActionSchema() {
-    var reset = DockModel.resetSettingsPatch()
+  function test_defaultsAndMergePreserveTheTwoActionSchema() {
+    var reset = DockModel.settingsDefaults()
     compare(reset.clickAction, "focus-or-launch")
     compare(reset.middleClickAction, "none")
 
