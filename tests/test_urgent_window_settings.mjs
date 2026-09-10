@@ -11,9 +11,9 @@ const config = JSON.parse(read("config/dock.json"))
 assert.equal(config.urgentWindowAnimationEnabled, true)
 
 const host = read("DockHost.qml")
-assert.match(host, /urgentWindowAnimationEnabled:\s*true/)
-assert.match(host,
-  /typeof parsed\.urgentWindowAnimationEnabled === "boolean"[\s\S]*?parsed\.urgentWindowAnimationEnabled : true/)
+assert.match(host, /property var settings: dockControl\.defaults/)
+assert.match(read("components/DockControl.qml"),
+  /typeof requested\.urgentWindowAnimationEnabled === "boolean"[\s\S]*?requested\.urgentWindowAnimationEnabled : true/)
 assert.match(host, /patch\.urgentWindowAnimationEnabled = true/)
 
 const dock = read("components/Dock.qml")
