@@ -9,6 +9,7 @@ import "components"
 import "components/DockModel.js" as DockModel
 import "components/DockWindowModel.js" as DockWindowModel
 import "components/DockTrashModel.js" as TrashModel
+import "components/DockConfigModel.js" as ConfigModel
 
 Item {
   id: root
@@ -42,8 +43,8 @@ Item {
   readonly property var badgeTracker: badgeTrackerController
   readonly property bool showTrash: showTrashSetting
 
-  // The installed/repository default file is shared with the CLI metadata.
-  // No discovery command creates a user configuration or persists defaults.
+  // Shared with the read-only CLI metadata; defaults are never persisted merely
+  // by discovery or by loading a host whose user configuration does not exist.
   property var settings: dockControl.defaults
 
   function loadSettings(raw) {
@@ -56,7 +57,6 @@ Item {
       Object.keys(dockControl.defaults).forEach(function(key) {
         requested[key] = dockControl.defaults[key]
       })
-      // Null-prototype storage preserves extension keys without invoking setters.
       Object.keys(parsed).forEach(function(key) { requested[key] = parsed[key] })
       showTrashSetting = TrashModel.normalizeShowTrash(parsed.showTrash)
       if (JSON.stringify(settings) !== JSON.stringify(requested)) settingsRevision++
@@ -79,17 +79,15 @@ Item {
   }
 
   function reorderPinned(sourceDesktopId, targetDesktopId) {
-    var pinned = DockModel.reorderPinnedById(
-      settings.pinned, sourceDesktopId, targetDesktopId)
-    if (JSON.stringify(pinned) === JSON.stringify(settings.pinned)) return
-    savePinned(pinned)
+    var pinned = DockModel.reorderPinnedById(settings.pinned, sourceDesktopId, targetDesktopId)
+    return savePinned(pinned)
   }
 
   function pinApplication(desktopId) {
     if (!desktopId || settings.pinned.indexOf(desktopId) >= 0) return
     var pinned = settings.pinned.slice()
     pinned.push(desktopId)
-    savePinned(pinned)
+    return savePinned(pinned)
   }
 
   function unpinApplication(desktopId) {
@@ -97,45 +95,80 @@ Item {
     if (index < 0) return
     var pinned = settings.pinned.slice()
     pinned.splice(index, 1)
-    savePinned(pinned)
+    return savePinned(pinned)
   }
 
   function hideApplication(desktopId) {
     var hiddenApplications = DockModel.addHiddenApplication(settings.hiddenApplications, desktopId)
-    saveSetting("hiddenApplications", hiddenApplications)
+    return saveSetting("hiddenApplications", hiddenApplications)
   }
 
   function savePinned(pinned) {
-    saveSetting("pinned", pinned)
+    return saveSetting("pinned", pinned)
   }
 
   function saveSetting(key, value) {
-    var patch = {}
+    var patch = Object.create(null)
     patch[key] = value
-    saveSettings(patch)
+    return saveSettings(patch, false)
   }
 
-  function saveSettings(patch) {
-    if (!settingsLoaded || settingsReloadPending || settingsWriteState === "saving"
-        || settingsLoadState === "invalid") {
-      console.warn("Dock: settings are busy or invalid; change was not applied")
-      return
+  function mutationBlocked() {
+    var data = dockControl.mutationData(settings, settings, [], false, false)
+    if (!settingsLoaded || settingsReloadPending || settingsWriteState === "saving")
+      return dockControl.failure("E_BUSY", "Settings are loading or saving. Read status before retrying.", data)
+    if (settingsLoadState === "invalid")
+      return dockControl.failure("E_CONFIG_INVALID", "Repair the invalid existing config externally before changing settings: " + settingsLoadError, data)
+    return null
+  }
+
+  function mutationOutcome(data) {
+    if (settingsWriteState === "error")
+      return dockControl.failure("E_PERSISTENCE", settingsWriteError, data)
+    if (settingsWriteState === "saving" || settingsReloadPending)
+      return dockControl.failure("E_BUSY", "Live intent accepted; save/readback has not completed. Read status before retrying.", data)
+    var warnings = data.persisted ? [] : ["Live settings are not confirmed persisted."]
+    return dockControl.success(data, warnings)
+  }
+
+  function saveSettings(patch, dryRun) {
+    var blocked = mutationBlocked()
+    if (blocked) return blocked
+    var before = settings
+    var result = ConfigModel.applyPatch(before, patch, dockControl.metadata)
+    if (!result.ok) {
+      var rejected = dockControl.mutationData(before, before, [], false, false)
+      rejected.validationErrors = result.errors
+      return dockControl.failure("E_VALIDATION", "Patch rejected; no values were changed.", rejected)
     }
-    var updated = Object.create(null)
-    Object.keys(settings).forEach(function(key) { updated[key] = settings[key] })
-    Object.keys(patch).forEach(function(key) { updated[key] = patch[key] })
-    if (JSON.stringify(updated) === JSON.stringify(settings)) return
-    showTrashSetting = TrashModel.normalizeShowTrash(updated.showTrash)
-    settings = updated
+    if (dryRun === true)
+      return dockControl.success(dockControl.mutationData(before, result.settings, result.changedKeys, true, false),
+        ["Dry run only. Theme-owned/token colors and theme-owned border width are unresolved null values."])
+    if (result.changedKeys.length === 0)
+      return mutationOutcome(dockControl.mutationData(before, before, [], false, false))
+    showTrashSetting = TrashModel.normalizeShowTrash(result.settings.showTrash)
+    settings = result.settings
     settingsRevision++
     settingsDefaultsInUse = false
     settingsPersisted = false
     writeSettings()
+    return mutationOutcome(dockControl.mutationData(before, settings, result.changedKeys, false, true))
+  }
+
+  function retrySettings() {
+    var blocked = mutationBlocked()
+    if (blocked) return blocked
+    if (settingsPersisted)
+      return dockControl.success(dockControl.mutationData(settings, settings, [], false, false))
+    // Retry persists the complete current snapshot, including later successful
+    // intents. It does not replay a stale failed patch or create another revision.
+    writeSettings()
+    return mutationOutcome(dockControl.mutationData(settings, settings, [], false, true))
   }
 
   // Retained FDM-881 writer behavior from PR #43 @7473a23: actual saved/error
-  // completion, bounded retry bytes and failed-write echo protection. The
-  // Settings editor and icon stack are deliberately not imported here.
+  // completion, bounded retry bytes and failed-write echo protection. One write
+  // path is shared by CLI and existing menu/Settings intents.
   function writeSettings() {
     var text = JSON.stringify(settings, null, 2) + "\n"
     settingsWriteBaseText = settingsLoadedText
@@ -145,11 +178,46 @@ Item {
     configFile.setText(text)
   }
 
+  function settingsFileLoaded(raw) {
+    if (settingsReloadPending) {
+      settingsReloadPending = false
+      if (settingsWriteState === "error" && raw === settingsWriteBaseText) return
+    }
+    loadSettings(raw)
+  }
+
+  function settingsLoadFailed(error) {
+    settingsReloadPending = false
+    settingsLoaded = true
+    settingsPersisted = false
+    settingsLoadState = error === FileViewError.FileNotFound ? "missing" : "invalid"
+    settingsLoadError = error === FileViewError.FileNotFound ? "" : FileViewError.toString(error)
+    if (showTrash) Qt.callLater(root.refreshTrash)
+  }
+
+  function settingsSaved() {
+    settingsWriteError = ""
+    settingsWriteState = "saved"
+    settingsLoadedText = settingsWriteText
+    settingsLoadState = "loaded"
+    settingsLoadError = ""
+    settingsPersisted = true
+    reloadSettingsIfPending()
+  }
+
+  function settingsSaveFailed(error) {
+    settingsWriteError = "Settings changed for this session, but could not be saved. "
+      + "Retry before restarting. " + FileViewError.toString(error)
+    settingsWriteState = "error"
+    settingsPersisted = false
+    console.warn("Dock: could not save " + configPath + ":", error)
+    reloadSettingsIfPending()
+  }
+
   function reloadSettingsIfPending() {
     if (!settingsReloadPending || settingsWriteState === "saving") return
     Qt.callLater(function() {
-      if (root.settingsReloadPending && root.settingsWriteState !== "saving")
-        configFile.reload()
+      if (root.settingsReloadPending && root.settingsWriteState !== "saving") configFile.reload()
     })
   }
 
@@ -161,12 +229,11 @@ Item {
     patch.launcherBadgeMode = "automatic"
     patch.windowScope = "all"
     patch.showUrgentOutsideScope = true
-    saveSettings(patch)
+    return saveSettings(patch, false)
   }
 
   function refreshTrash() {
-    if (!TrashModel.shouldRefresh(showTrash, trashListProcess.running,
-        settingsLoaded)) return
+    if (!TrashModel.shouldRefresh(showTrash, trashListProcess.running, settingsLoaded)) return
     trashListProcess.running = true
   }
 
@@ -229,10 +296,8 @@ Item {
     target: Hyprland
     function onRawEvent(event) {
       var name = event ? event.name : ""
-      if (DockModel.shouldRefreshWorkspaceState(name))
-        workspaceCountsRefreshTimer.restart()
-      if (DockWindowModel.shouldRefreshWindowScope(name))
-        scopeRefreshController.requestRefresh()
+      if (DockModel.shouldRefreshWorkspaceState(name)) workspaceCountsRefreshTimer.restart()
+      if (DockWindowModel.shouldRefreshWindowScope(name)) scopeRefreshController.requestRefresh()
     }
   }
 
@@ -266,11 +331,8 @@ Item {
       }
     }
     onExited: function(exitCode) {
-      if (exitCode !== 0)
-        console.warn("Dock: could not read workspace counts (hyprctl exited "
-          + exitCode + ")")
-      if (root.workspaceCountsRefreshPending)
-        Qt.callLater(root.refreshWorkspaceCounts)
+      if (exitCode !== 0) console.warn("Dock: could not read workspace counts (hyprctl exited " + exitCode + ")")
+      if (root.workspaceCountsRefreshPending) Qt.callLater(root.refreshWorkspaceCounts)
     }
   }
 
@@ -285,8 +347,7 @@ Item {
       }
     }
     onExited: function(exitCode) {
-      if (exitCode !== 0)
-        console.warn("Dock: could not inspect Trash (gio exited " + exitCode + ")")
+      if (exitCode !== 0) console.warn("Dock: could not inspect Trash (gio exited " + exitCode + ")")
     }
   }
 
@@ -294,8 +355,7 @@ Item {
     id: trashEmptyProcess
     command: ["gio", "trash", "--empty"]
     onExited: function(exitCode) {
-      if (exitCode !== 0)
-        console.warn("Dock: could not empty Trash (gio exited " + exitCode + ")")
+      if (exitCode !== 0) console.warn("Dock: could not empty Trash (gio exited " + exitCode + ")")
       root.refreshTrash()
     }
   }
@@ -308,44 +368,14 @@ Item {
     printErrors: false
     blockWrites: true
     atomicWrites: true
-    onLoaded: {
-      var raw = text()
-      if (root.settingsReloadPending) {
-        root.settingsReloadPending = false
-        if (root.settingsWriteState === "error" && raw === root.settingsWriteBaseText)
-          return
-      }
-      root.loadSettings(raw)
-    }
-    onLoadFailed: error => {
-      root.settingsReloadPending = false
-      root.settingsLoaded = true
-      root.settingsPersisted = false
-      root.settingsLoadState = error === FileViewError.FileNotFound ? "missing" : "invalid"
-      root.settingsLoadError = error === FileViewError.FileNotFound ? "" : FileViewError.toString(error)
-      if (root.showTrash) Qt.callLater(root.refreshTrash)
-    }
+    onLoaded: root.settingsFileLoaded(text())
+    onLoadFailed: error => root.settingsLoadFailed(error)
     onFileChanged: {
       root.settingsReloadPending = true
       root.reloadSettingsIfPending()
     }
-    onSaved: {
-      root.settingsWriteError = ""
-      root.settingsWriteState = "saved"
-      root.settingsLoadedText = root.settingsWriteText
-      root.settingsLoadState = "loaded"
-      root.settingsLoadError = ""
-      root.settingsPersisted = true
-      root.reloadSettingsIfPending()
-    }
-    onSaveFailed: error => {
-      root.settingsWriteError = "Settings changed for this session, but could not be saved. "
-        + "Retry before restarting. " + FileViewError.toString(error)
-      root.settingsWriteState = "error"
-      root.settingsPersisted = false
-      console.warn("Dock: could not save " + root.configPath + ":", error)
-      root.reloadSettingsIfPending()
-    }
+    onSaved: root.settingsSaved()
+    onSaveFailed: error => root.settingsSaveFailed(error)
   }
 
   DockWindowActions {
@@ -356,8 +386,7 @@ Item {
     id: badgeTrackerController
     notificationService: root.notificationService
     launcherBadgeService: root.launcherBadgeService
-    launcherBadgeMode: root.settings.launcherBadgeMode === "dots-only"
-      ? "dots-only" : "automatic"
+    launcherBadgeMode: root.settings.launcherBadgeMode === "dots-only" ? "dots-only" : "automatic"
   }
 
   Variants {
@@ -376,15 +405,13 @@ Item {
         workspaceCountsReady: root.workspaceCountsReady
         workspaceCountsRevision: root.workspaceCountsRevision
         scopeRevision: root.scopeRevision
-        onReorderRequested: (sourceDesktopId, targetDesktopId) => {
-          root.reorderPinned(sourceDesktopId, targetDesktopId)
-        }
+        onReorderRequested: (sourceDesktopId, targetDesktopId) => root.reorderPinned(sourceDesktopId, targetDesktopId)
         onPinRequested: desktopId => root.pinApplication(desktopId)
         onUnpinRequested: desktopId => root.unpinApplication(desktopId)
         onHideRequested: desktopId => root.hideApplication(desktopId)
         onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
         onSettingChanged: (key, value) => root.saveSetting(key, value)
-        onSettingsPatchRequested: patch => root.saveSettings(patch)
+        onSettingsPatchRequested: patch => root.saveSettings(patch, false)
         onResetSettingsRequested: root.resetSettings()
         onOpenTrashRequested: root.openTrash()
         onEmptyTrashRequested: root.emptyTrash()

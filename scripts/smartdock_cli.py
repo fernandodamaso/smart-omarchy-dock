@@ -2,6 +2,8 @@
 """SmartDock's stdlib-only IPC client. Never starts a host or edits its config."""
 import argparse
 import json
+import math
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -26,6 +28,15 @@ Read-only commands (never launch or restart the dock):
   config schema [KEY]          Describe settings; bundled fallback when offline
   config get [KEY] [--effective]
                                Read requested or normalized live settings
+
+Live configuration (the selected host is the only writer):
+  config set KEY VALUE         Parse VALUE using the live setting's declared type
+  config apply (--stdin | --file PATH) [--dry-run]
+                               Validate one atomic JSON object patch
+  config reset (KEY | --preferences)
+                               Reset one key, or preferences without pins/hidden/margin
+  config retry                 Save the complete current live snapshot again
+  config export --output PATH  Save a NEW snapshot, never overwrite a file or live config
 
 Options may appear before or after the command:
   --json                       Emit one versioned JSON object on stdout
@@ -54,12 +65,32 @@ def envelope(data, warnings=None):
             'warnings': [] if warnings is None else warnings}
 
 
-def decode_json(text, origin):
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError('Duplicate JSON key: ' + key)
+        result[key] = value
+    return result
+
+
+def finite_float(text):
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError('Non-finite JSON number: ' + text)
+    return value
+
+
+def decode_json(text, origin, code='E_PROTOCOL'):
     try:
-        return json.loads(text, parse_constant=lambda value: (_ for _ in ()).throw(
-            ValueError('Non-finite JSON number: ' + value)))
-    except (ValueError, RecursionError) as error:
-        raise CliError('E_PROTOCOL', origin + ' did not return valid JSON: ' + str(error)) from error
+        value = json.loads(text, object_pairs_hook=unique_object, parse_float=finite_float,
+                           parse_constant=lambda token: (_ for _ in ()).throw(
+                               ValueError('Non-finite JSON number: ' + token)))
+        # Ensure escaped unpaired surrogates cannot later break clean UTF-8 IPC/output.
+        json.dumps(value, ensure_ascii=False, allow_nan=False).encode('utf-8')
+        return value
+    except (ValueError, UnicodeError, RecursionError) as error:
+        raise CliError(code, origin + ' did not contain valid JSON: ' + str(error)) from error
 
 
 def validate_response(text):
@@ -92,6 +123,34 @@ def validate_status(reply, instance):
             or type(data.get('defaultsInUse')) is not bool):
         raise CliError('E_PROTOCOL', 'Host status is incomplete or does not match the selected process.')
     runtime['quickshellId'] = instance['id']
+
+
+def validate_read(reply, action, key=None):
+    if reply['ok']:
+        data = reply['data']
+        if (not isinstance(data.get('settings'), dict)
+                or (key is not None and set(data['settings']) != {key})):
+            raise CliError('E_PROTOCOL', 'Expected a keyed settings object from the selected host.')
+        if action == 'schema' and (type(data.get('schemaVersion')) is not int
+                                   or data['schemaVersion'] != 1
+                                   or not isinstance(data.get('commands'), list)):
+            raise CliError('E_PROTOCOL', 'Expected versioned schema and command metadata.')
+    return reply
+
+
+def validate_mutation(reply, instance):
+    if reply['ok']:
+        validate_status(reply, instance)
+        data = reply['data']
+        if (type(data.get('applied')) is not bool or type(data.get('noop')) is not bool
+                or not isinstance(data.get('changedKeys'), list)
+                or any(not isinstance(key, str) for key in data['changedKeys'])
+                or not isinstance(data.get('requested'), dict)
+                or not isinstance(data.get('effective'), dict)
+                or data['writeState'] in ('saving', 'error') and not data.get('dryRun')
+                or data['applied'] and not data['persisted']):
+            raise CliError('E_PROTOCOL', 'Mutation response is incomplete or claims success before saving.')
+    return reply
 
 
 class Transport:
@@ -134,7 +193,6 @@ class Transport:
 
     def instances(self):
         text = self.run(['qs', 'list', '--all', '--json'])
-        # Upstream emits this diagnostic (or only stderr) rather than [] for zero.
         if text in ('', 'No running instances.'):
             return []
         values = decode_json(text, 'qs list --all --json')
@@ -152,10 +210,14 @@ class Transport:
         return values
 
     def request(self, instance, command, arguments=None, probe=False):
-        payload = json.dumps({'apiVersion': 1, 'command': command,
-                              'arguments': {} if arguments is None else arguments},
-                             ensure_ascii=False, allow_nan=False, separators=(',', ':'))
-        if len(payload.encode('utf-8')) > 65536:
+        try:
+            payload = json.dumps({'apiVersion': 1, 'command': command,
+                                  'arguments': {} if arguments is None else arguments},
+                                 ensure_ascii=False, allow_nan=False, separators=(',', ':'))
+            size = len(payload.encode('utf-8'))
+        except (ValueError, UnicodeError, RecursionError) as error:
+            raise CliError('E_VALIDATION', 'Request is not finite UTF-8 JSON: ' + str(error)) from error
+        if size > 65536:
             raise CliError('E_VALIDATION', 'Request exceeds the 64 KiB IPC request limit.')
         text = self.run(['qs', 'ipc', '--pid', str(instance['pid']), 'call', '--',
                          'smartdock', 'request', payload])
@@ -166,8 +228,7 @@ class Transport:
     def select(self, runtime='auto', instance_id=None):
         instances = self.instances()
         if instance_id is not None:
-            instances = [item for item in instances
-                         if instance_id in (item['id'], str(item['pid']))]
+            instances = [item for item in instances if instance_id in (item['id'], str(item['pid']))]
         candidates = []
         for item in instances:
             reply = self.request(item, 'status', probe=True)
@@ -182,8 +243,7 @@ class Transport:
             raise CliError('E_RUNTIME_NOT_FOUND',
                            'No matching SmartDock host. Enable the plugin explicitly or select the correct --runtime/--instance.')
         if len(candidates) != 1:
-            raise CliError('E_RUNTIME_AMBIGUOUS',
-                           'More than one SmartDock host. Repeat with an exact --instance ID.',
+            raise CliError('E_RUNTIME_AMBIGUOUS', 'More than one SmartDock host. Repeat with an exact --instance ID.',
                            {'candidates': [reply['data']['runtime'] for _, reply in candidates]})
         return candidates[0]
 
@@ -200,22 +260,38 @@ def add_globals(parser):
     parser.add_argument('-h', '--help', dest='help_requested', action='store_true', default=argparse.SUPPRESS)
 
 
+def child_parser(commands, name):
+    child = commands.add_parser(name, add_help=False, allow_abbrev=False)
+    add_globals(child)
+    return child
+
+
 def build_parser():
     parser = Parser(prog='smartdock', add_help=False, allow_abbrev=False)
     add_globals(parser)
     commands = parser.add_subparsers(dest='group')
     for name in ('help', 'agent-guide', 'status', 'doctor'):
-        child = commands.add_parser(name, add_help=False, allow_abbrev=False)
-        add_globals(child)
-    config = commands.add_parser('config', add_help=False, allow_abbrev=False)
-    add_globals(config)
+        child_parser(commands, name)
+    config = child_parser(commands, 'config')
     actions = config.add_subparsers(dest='action')
-    for name in ('schema', 'get'):
-        child = actions.add_parser(name, add_help=False, allow_abbrev=False)
-        add_globals(child)
+    for name in ('schema', 'get', 'reset'):
+        child = child_parser(actions, name)
         child.add_argument('key', nargs='?')
         if name == 'get':
             child.add_argument('--effective', action='store_true')
+        if name == 'reset':
+            child.add_argument('--preferences', action='store_true')
+    child = child_parser(actions, 'set')
+    child.add_argument('key')
+    child.add_argument('value')
+    child = child_parser(actions, 'apply')
+    sources = child.add_mutually_exclusive_group(required=True)
+    sources.add_argument('--stdin', action='store_true')
+    sources.add_argument('--file')
+    child.add_argument('--dry-run', action='store_true')
+    child_parser(actions, 'retry')
+    child = child_parser(actions, 'export')
+    child.add_argument('--output', required=True)
     return parser
 
 
@@ -229,12 +305,91 @@ def bundled_schema(key=None):
         if key is not None and key not in settings:
             raise CliError('E_VALIDATION', 'Unknown setting: ' + key)
         selected = settings if key is None else {key: settings[key]}
-        return envelope({'source': 'bundled', 'schemaVersion': 1,
-                         'commands': metadata['commands'],
+        return envelope({'source': 'bundled', 'schemaVersion': 1, 'commands': metadata['commands'],
                          'settings': {name: dict(spec, default=defaults[name]) for name, spec in selected.items()}},
                         ['Bundled metadata only; this is not the running configuration.'])
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise CliError('E_PROTOCOL', 'Bundled schema is unavailable or inconsistent: ' + str(error)) from error
+
+
+def scalar_value(text, spec):
+    kind = spec.get('type') if isinstance(spec, dict) else None
+    if kind == 'string':
+        return text
+    if kind not in ('boolean', 'integer', 'number', 'array', 'object'):
+        raise CliError('E_PROTOCOL', 'Live schema returned an unsupported value type.')
+    value = decode_json(text, 'Setting value', 'E_VALIDATION')
+    numeric = type(value) in (int, float)
+    try:
+        numeric = numeric and math.isfinite(value)
+    except OverflowError:
+        numeric = False
+    valid = (kind == 'boolean' and type(value) is bool
+             or kind in ('integer', 'number') and numeric
+             or kind == 'array' and isinstance(value, list)
+             or kind == 'object' and isinstance(value, dict))
+    if not valid:
+        raise CliError('E_VALIDATION', 'Value must have the declared type: ' + kind)
+    return value
+
+
+def read_patch(args):
+    try:
+        if args.stdin:
+            raw = sys.stdin.buffer.read(65537)
+        else:
+            with open(args.file, 'rb') as source:
+                raw = source.read(65537)
+        if len(raw) > 65536:
+            raise CliError('E_VALIDATION', 'Patch exceeds the 64 KiB input limit.')
+        return decode_json(raw.decode('utf-8'), 'Patch input', 'E_VALIDATION')
+    except (OSError, UnicodeError) as error:
+        raise CliError('E_VALIDATION', 'Cannot read the explicit UTF-8 patch input: ' + str(error)) from error
+
+
+def export_snapshot(reply, output):
+    """Create an owner-only NEW file. Never replace a target, including on error."""
+    data = reply['data']
+    fd = None
+    owned_stat = None
+    destination = None
+    try:
+        source_text = data.get('configPath')
+        if not output or not isinstance(source_text, str) or not Path(source_text).is_absolute():
+            raise CliError('E_EXPORT', 'Export requires an output path and an absolute authoritative host config path.')
+        destination = Path(os.path.abspath(os.path.expanduser(output)))
+        live = Path(source_text)
+        # Resolving parents also protects a nonexistent live target through a
+        # directory-symlink alias. O_EXCL is the final no-overwrite protection.
+        if destination.resolve() == live.resolve():
+            raise CliError('E_EXPORT', 'Refusing to export onto the live configuration or an alias of it.')
+        if os.path.lexists(destination):
+            raise CliError('E_EXPORT', 'Export destination already exists (files and symlinks are never overwritten).')
+        text = json.dumps(data['settings'], ensure_ascii=False, allow_nan=False, indent=2) + '\n'
+        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        owned_stat = os.fstat(fd)
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            fd = None
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except (OSError, ValueError, KeyError, RuntimeError, CliError) as error:
+        if fd is not None:
+            os.close(fd)
+        if owned_stat is not None:
+            try:
+                current = destination.lstat()
+                if (current.st_dev, current.st_ino) == (owned_stat.st_dev, owned_stat.st_ino):
+                    destination.unlink()
+            except OSError:
+                pass
+        if isinstance(error, CliError):
+            raise
+        raise CliError('E_EXPORT', 'Snapshot could not be written: ' + str(error)) from error
+    return envelope({'exportWritten': True, 'exportPath': str(destination),
+                     'sourcePersisted': data['persisted'], 'sourceRevision': data['revision'],
+                     'sourceRuntime': data['runtime'], 'configPath': data['configPath'], 'applied': False},
+                    reply['warnings'])
 
 
 def execute(args):
@@ -247,6 +402,10 @@ def execute(args):
             raise CliError('E_PROTOCOL', 'Bundled agent guide is unavailable: ' + str(error)) from error
     if args.group == 'config' and args.action is None:
         raise CliError('E_USAGE', 'config requires a subcommand. Run smartdock help.')
+    if args.group == 'config' and args.action == 'reset' and (args.key is None) == (not args.preferences):
+        raise CliError('E_USAGE', 'Reset requires either KEY or --preferences, not both.')
+    # Read only an explicitly supplied input, before starting the IPC deadline.
+    patch = read_patch(args) if args.group == 'config' and args.action == 'apply' else None
     runtime = getattr(args, 'runtime', 'auto')
     instance_id = getattr(args, 'instance', None)
     if instance_id == '':
@@ -272,19 +431,30 @@ def execute(args):
             if status['data']['writeState'] == 'error':
                 raise CliError('E_PERSISTENCE', status['data']['writeError'], status['data'])
         return status
-    arguments = {} if args.key is None else {'key': args.key}
-    if args.action == 'get':
-        arguments['effective'] = args.effective
-    reply = transport.request(instance, 'config.' + args.action, arguments)
-    if reply['ok']:
-        data = reply['data']
-        if (not isinstance(data.get('settings'), dict)
-                or (args.key is not None and set(data['settings']) != {args.key})):
-            raise CliError('E_PROTOCOL', 'Expected a keyed settings object from the selected host.')
-        if args.action == 'schema' and (data.get('schemaVersion') != 1
-                                       or not isinstance(data.get('commands'), list)):
-            raise CliError('E_PROTOCOL', 'Expected versioned schema and command metadata.')
-    return reply
+    if args.action in ('schema', 'get'):
+        arguments = {} if args.key is None else {'key': args.key}
+        if args.action == 'get':
+            arguments['effective'] = args.effective
+        return validate_read(transport.request(instance, 'config.' + args.action, arguments), args.action, args.key)
+    if args.action == 'export':
+        reply = validate_read(transport.request(instance, 'config.get', {'effective': False}), 'get')
+        if not reply['ok']:
+            return reply
+        validate_status(reply, instance)
+        return export_snapshot(reply, args.output)
+    if args.action == 'set':
+        reply = validate_read(transport.request(instance, 'config.schema', {'key': args.key}), 'schema', args.key)
+        if not reply['ok']:
+            return reply
+        patch = {args.key: scalar_value(args.value, reply['data']['settings'][args.key])}
+    command = 'config.' + args.action
+    arguments = {}
+    if args.action in ('apply', 'set'):
+        command = 'config.apply'
+        arguments = {'patch': patch, 'dryRun': getattr(args, 'dry_run', False)}
+    if args.action == 'reset':
+        arguments = {'preferences': True} if args.preferences else {'key': args.key}
+    return validate_mutation(transport.request(instance, command, arguments), instance)
 
 
 def main(argv=None):
@@ -293,8 +463,7 @@ def main(argv=None):
     try:
         reply = execute(build_parser().parse_args(argv))
     except CliError as error:
-        reply = {'apiVersion': 1, 'ok': False,
-                 'error': {'code': error.code, 'message': str(error)},
+        reply = {'apiVersion': 1, 'ok': False, 'error': {'code': error.code, 'message': str(error)},
                  'data': error.data, 'warnings': []}
     if as_json:
         print(json.dumps(reply, ensure_ascii=False, allow_nan=False, separators=(',', ':')))

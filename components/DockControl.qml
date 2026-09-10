@@ -6,6 +6,7 @@ import Quickshell.Io
 import "DockModel.js" as DockModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockTrashModel.js" as TrashModel
+import "DockConfigModel.js" as ConfigModel
 
 // Exactly one host-owned target, never one target per screen/Variants delegate.
 Item {
@@ -44,21 +45,19 @@ Item {
       revision: root.host.settingsRevision,
       writeState: root.host.settingsWriteState,
       writeError: root.host.settingsWriteError,
-      persisted: root.host.settingsPersisted,
+      persisted: root.host.settingsPersisted && !root.host.settingsReloadPending,
       defaultsInUse: root.host.settingsDefaultsInUse
     }
   }
 
   function schemaSettings(key) {
-    var result = {}
+    var result = Object.create(null)
     var keys = key === undefined ? Object.keys(root.metadata.settings) : [key]
     for (var i = 0; i < keys.length; ++i) {
       var name = keys[i]
       if (!Object.prototype.hasOwnProperty.call(root.metadata.settings, name))
         throw new Error("Unknown setting: " + name)
-      result[name] = Object.assign({}, root.metadata.settings[name], {
-        default: root.defaults[name]
-      })
+      result[name] = Object.assign({}, root.metadata.settings[name], { default: root.defaults[name] })
     }
     return result
   }
@@ -73,8 +72,7 @@ Item {
     }
     result.showTrash = TrashModel.normalizeShowTrash(requested.showTrash)
     result.windowScope = DockWindowModel.normalizeWindowScope(requested.windowScope)
-    result.showUrgentOutsideScope = DockWindowModel.normalizeShowUrgentOutsideScope(
-      requested.showUrgentOutsideScope)
+    result.showUrgentOutsideScope = DockWindowModel.normalizeShowUrgentOutsideScope(requested.showUrgentOutsideScope)
     result.attentionBadgesEnabled = typeof requested.attentionBadgesEnabled === "boolean"
       ? requested.attentionBadgesEnabled : true
     result.urgentWindowAnimationEnabled = typeof requested.urgentWindowAnimationEnabled === "boolean"
@@ -95,6 +93,25 @@ Item {
     return result
   }
 
+  function mutationData(before, requested, changedKeys, dryRun, applied) {
+    var data = root.statusData()
+    data.changedKeys = changedKeys
+    data.requested = requested
+    data.effective = root.effectiveSettings(requested)
+    data.diff = Object.create(null)
+    for (var i = 0; i < changedKeys.length; ++i) {
+      var key = changedKeys[i]
+      data.diff[key] = { from: before[key] === undefined ? null : before[key], to: requested[key] }
+    }
+    data.dryRun = dryRun
+    data.noop = changedKeys.length === 0
+    data.applied = applied
+    data.sourcePersisted = data.persisted
+    if (dryRun) data.persisted = false
+    data.themeResolution = "not-reported"
+    return data
+  }
+
   function handle(payload) {
     var request
     try {
@@ -109,19 +126,36 @@ Item {
     var args = request.arguments
     var command = request.command
     var allowed = command === "config.get" ? ["key", "effective"]
-      : command === "config.schema" ? ["key"] : []
+      : command === "config.schema" ? ["key"]
+      : command === "config.apply" ? ["patch", "dryRun"]
+      : command === "config.reset" ? ["key", "preferences"] : []
     if (Object.keys(args).some(function(key) { return allowed.indexOf(key) < 0 })
         || (args.key !== undefined && typeof args.key !== "string")
-        || (args.effective !== undefined && typeof args.effective !== "boolean"))
+        || (args.effective !== undefined && typeof args.effective !== "boolean")
+        || (args.dryRun !== undefined && typeof args.dryRun !== "boolean"))
       return root.failure("E_USAGE", "Invalid arguments for " + command)
-    if (command === "status" || command === "doctor")
-      return root.success(root.statusData())
+    if (command === "status" || command === "doctor") return root.success(root.statusData())
+    if (command === "config.apply") return root.host.saveSettings(args.patch, args.dryRun === true)
+    if (command === "config.retry") return root.host.retrySettings()
+    if (command === "config.reset") {
+      if ((args.key === undefined) === (args.preferences !== true)
+          || (args.preferences !== undefined && args.preferences !== true))
+        return root.failure("E_USAGE", "Reset requires either one key or preferences=true.")
+      var patch = Object.create(null)
+      if (args.preferences === true) patch = ConfigModel.preferenceResetPatch(root.defaults, root.metadata)
+      else {
+        if (!Object.prototype.hasOwnProperty.call(root.metadata.settings, args.key))
+          return root.failure("E_VALIDATION", "Unknown setting: " + args.key)
+        patch[args.key] = root.defaults[args.key]
+      }
+      return root.host.saveSettings(patch, false)
+    }
     if (command !== "config.schema" && command !== "config.get")
       return root.failure("E_USAGE", "Unsupported command: " + command)
     var data = root.statusData()
-    data.source = "runtime"
     if (command === "config.schema") {
       try {
+        data.source = "runtime"
         data.schemaVersion = root.metadata.schemaVersion
         data.commands = root.metadata.commands
         data.settings = root.schemaSettings(args.key)
@@ -133,14 +167,15 @@ Item {
     if (args.key !== undefined && !Object.prototype.hasOwnProperty.call(root.host.settings, args.key))
       return root.failure("E_VALIDATION", "Unknown setting: " + args.key, data)
     var values = args.effective ? root.effectiveSettings(root.host.settings) : root.host.settings
-    data.view = args.effective ? "effective" : "requested"
-    data.settings = args.key === undefined ? values : ({})
+    data.source = args.effective ? "effective" : "requested"
+    data.view = data.source
+    data.settings = args.key === undefined ? values : Object.create(null)
     if (args.key !== undefined) data.settings[args.key] = values[args.key]
     data.themeResolution = "not-reported"
     var warnings = args.effective
       ? ["Theme-owned/token colors and theme-owned border width are null, not resolved by this headless host."] : []
     if (root.host.settingsLoadState === "invalid") warnings.push("Invalid disk config; showing last-good live settings.")
-    if (!root.host.settingsPersisted) warnings.push("Live settings are not confirmed persisted.")
+    if (!data.persisted) warnings.push("Live settings are not confirmed persisted.")
     return root.success(data, warnings)
   }
 

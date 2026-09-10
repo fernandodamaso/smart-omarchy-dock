@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "commands": ["help", "agent-guide", "status", "doctor", "config.schema", "config.get"],
+  "commands": ["help", "agent-guide", "status", "doctor", "config.schema", "config.get", "config.set", "config.apply", "config.reset", "config.retry", "config.export"],
   "settings": {
     "iconSize": {"type":"integer","minimum":24,"maximum":96,"description":"Base application icon size in logical pixels."},
     "magnification": {"type":"number","minimum":1,"maximum":2,"effectiveStep":0.05,"description":"Hover icon scale; requested fractions are retained."},
