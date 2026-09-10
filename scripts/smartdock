@@ -2,50 +2,48 @@
 set -euo pipefail
 
 app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/smartdock"
+client_dir="${XDG_DATA_HOME:-$HOME/.local/share}/smartdock-cli"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
-config_file="$config_home/smartdock/dock.json"
+config_file="${SMARTDOCK_CONFIG:-$config_home/smartdock/dock.json}"
 autostart_file="$config_home/autostart/smartdock.desktop"
 launcher_path="$(cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")"
 
-# Standalone launches need the same `qs.*` import mapping that the Omarchy
-# shell provides to hosted plugins. Keep the alias in the user's cache and
-# leave the packaged Omarchy files untouched.
+# Control commands, bare invocation and unknown words always go through the
+# parser. Only explicit lifecycle words below can reach standalone startup.
+case "${1:-}" in
+  launch|--daemonize|-d|restart|--restart|stop|--stop|update|--update|uninstall|--uninstall|autostart) ;;
+  *)
+    for adapter in "$(dirname -- "$launcher_path")/smartdock_cli.py" \
+      "$client_dir/scripts/smartdock_cli.py" "$app_dir/scripts/smartdock_cli.py"; do
+      if [[ -f "$adapter" ]]; then
+        if command -v python3 >/dev/null 2>&1; then
+          exec python3 -B "$adapter" "$@"
+        fi
+        break
+      fi
+    done
+    for argument in "$@"; do
+      if [[ "$argument" == --json ]]; then
+        printf '%s\n' '{"apiVersion":1,"ok":false,"error":{"code":"E_TRANSPORT","message":"CLI adapter or Python 3 unavailable; run install.sh --cli-only."},"data":{},"warnings":[]}'
+        exit 5
+      fi
+    done
+    echo 'smartdock: CLI adapter or Python 3 unavailable; run install.sh --cli-only.' >&2
+    exit 5
+    ;;
+esac
+
+# Standalone launches alone need the qs.* import mapping. Discovery and help
+# must not create this cache or modify packaged Omarchy files.
 ensure_omarchy_qml_imports() {
   local omarchy_shell="${OMARCHY_PATH:-/usr/share/omarchy}/shell"
   [[ -d "$omarchy_shell/Commons" && -d "$omarchy_shell/Ui" ]] || return 0
-
   local import_root="${XDG_CACHE_HOME:-$HOME/.cache}/smartdock/qml-imports"
   install -d "$import_root"
   if [[ ! -e "$import_root/qs" ]]; then
     ln -s "$omarchy_shell" "$import_root/qs"
   fi
   export QML2_IMPORT_PATH="$import_root${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
-}
-
-ensure_omarchy_qml_imports
-
-print_help() {
-  cat <<'EOF'
-SmartDock for Omarchy - a theme-aware application, window, and workspace dock
-
-Usage:
-  smartdock [QUICKSHELL OPTIONS]
-  smartdock <COMMAND> [OPTION]
-
-Commands:
-  help                         Show this help
-  autostart enable             Start the dock when the desktop session starts
-  autostart disable            Disable automatic startup
-  autostart status             Show whether automatic startup is enabled
-  update                       Refresh the installed copy from its local source
-  restart                      Restart the dock in the background
-  stop                         Stop the running dock
-  uninstall [--purge]          Uninstall; --purge also removes configuration
-
-Options such as --daemonize and --no-color are passed through to Quickshell
-when no command is given.
-EOF
-  printf '\nConfiguration:\n  %s\n' "$config_file"
 }
 
 enable_autostart() {
@@ -63,62 +61,39 @@ EOF
   echo "Autostart enabled: $autostart_file"
 }
 
-disable_autostart() {
-  rm -f -- "$autostart_file"
-  echo "Autostart disabled."
-}
-
 autostart() {
   case "${1:-status}" in
     enable) enable_autostart ;;
-    disable) disable_autostart ;;
+    disable) rm -f -- "$autostart_file"; echo 'Autostart disabled.' ;;
     status)
       if [[ -f "$autostart_file" ]]; then
         echo "Autostart is enabled: $autostart_file"
       else
-        echo "Autostart is disabled."
+        echo 'Autostart is disabled.'
       fi
       ;;
-    help|--help|-h)
-      cat <<'EOF'
-Usage: smartdock autostart <enable|disable|status>
-
-Manage the XDG autostart entry for SmartDock for Omarchy.
-EOF
-      ;;
-    *)
-      echo "Unknown autostart action: $1" >&2
-      echo "Usage: smartdock autostart <enable|disable|status>" >&2
-      exit 2
-      ;;
+    help|--help|-h) echo 'Usage: smartdock autostart <enable|disable|status>' ;;
+    *) echo "Unknown autostart action: $1" >&2; exit 2 ;;
   esac
 }
 
 case "${1:-}" in
-  help|--help|-h)
-    print_help
-    exit
-    ;;
   autostart)
+    [[ $# -le 2 ]] || { echo 'Too many autostart arguments.' >&2; exit 2; }
     autostart "${2:-status}"
     exit
     ;;
   update|--update)
-    # Refresh from the source checkout recorded by the installer. Remote
-    # source control still belongs to the user's own SmartDock repository.
+    [[ $# -eq 1 ]] || { echo 'Usage: smartdock update' >&2; exit 2; }
     source_file="$app_dir/.source-dir"
     if [[ ! -f "$source_file" ]]; then
-      echo "smartdock: source checkout record not found at $source_file" >&2
-      echo "Run install.sh from your SmartDock source tree." >&2
+      echo "smartdock: standalone source checkout record not found at $source_file" >&2
+      echo 'For a client-only update, run install.sh --cli-only from its source checkout.' >&2
       exit 1
     fi
     source_dir="$(<"$source_file")"
     installer="$source_dir/install.sh"
-    if [[ ! -f "$installer" ]]; then
-      echo "smartdock: source installer not found at $installer" >&2
-      echo "Run install.sh from your SmartDock source tree." >&2
-      exit 1
-    fi
+    [[ -f "$installer" ]] || { echo "smartdock: source installer not found at $installer" >&2; exit 1; }
     if [[ -f "$autostart_file" ]]; then
       bash "$installer"
     else
@@ -127,23 +102,33 @@ case "${1:-}" in
     exit
     ;;
   stop|--stop)
+    [[ $# -eq 1 ]] || { echo 'Usage: smartdock stop' >&2; exit 2; }
     qs kill -p "$app_dir" --any-display >/dev/null 2>&1 || true
     exit
     ;;
-  restart|--restart)
-    qs kill -p "$app_dir" --any-display >/dev/null 2>&1 || true
-    shift
-    exec env SMARTDOCK_CONFIG="$config_file" qs -n -d -p "$app_dir" "$@"
-    ;;
   uninstall|--uninstall)
     shift
-    exec "$app_dir/uninstall.sh" "$@"
+    if [[ "${1:-}" == --cli-only && -f "$client_dir/uninstall.sh" ]]; then
+      exec bash "$client_dir/uninstall.sh" "$@"
+    fi
+    [[ -f "$app_dir/uninstall.sh" ]] || { echo 'Standalone uninstaller not found; run source uninstall.sh --cli-only for client-only removal.' >&2; exit 1; }
+    exec bash "$app_dir/uninstall.sh" "$@"
     ;;
 esac
 
 if [[ ! -f "$app_dir/shell.qml" ]]; then
-  echo "smartdock: application files not found; run the installer again" >&2
+  echo 'smartdock: standalone application files not found; run the full installer explicitly' >&2
   exit 1
 fi
 
+case "$1" in
+  restart|--restart)
+    shift
+    ensure_omarchy_qml_imports
+    qs kill -p "$app_dir" --any-display >/dev/null 2>&1 || true
+    exec env SMARTDOCK_CONFIG="$config_file" qs -n -d -p "$app_dir" "$@"
+    ;;
+  launch) shift ;;
+esac
+ensure_omarchy_qml_imports
 exec env SMARTDOCK_CONFIG="$config_file" qs -n -p "$app_dir" "$@"

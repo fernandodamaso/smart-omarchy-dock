@@ -14,6 +14,7 @@ Item {
   id: root
 
   required property string configPath
+  required property string runtimeMode
   property var notificationService: null
   property var launcherBadgeService: null
 
@@ -21,6 +22,17 @@ Item {
   property bool trashStateKnown: false
   property bool settingsLoaded: false
   property bool showTrashSetting: true
+  property string settingsLoadState: "missing"
+  property string settingsLoadError: ""
+  property int settingsRevision: 0
+  property bool settingsDefaultsInUse: true
+  property bool settingsPersisted: false
+  property string settingsWriteState: "idle"
+  property string settingsWriteError: ""
+  property bool settingsReloadPending: false
+  property string settingsLoadedText: ""
+  property string settingsWriteBaseText: ""
+  property string settingsWriteText: ""
   property var workspaceWindowCounts: ({})
   property bool workspaceCountsReady: false
   property int workspaceCountsRevision: 0
@@ -30,83 +42,38 @@ Item {
   readonly property var badgeTracker: badgeTrackerController
   readonly property bool showTrash: showTrashSetting
 
-  property var settings: ({
-    iconSize: 42,
-    magnification: 1.2,
-    magnificationRadius: 95,
-    hoverGlowEnabled: true,
-    hoverGlowOpacity: 0.72,
-    hoverGlowRadius: 28,
-    showPreviews: true,
-    showTrash: true,
-    margin: 10,
-    backgroundOpacity: 0.88,
-    backgroundColorEnabled: false,
-    backgroundColor: "",
-    borderColorEnabled: false,
-    borderColor: "",
-    workspaceBadgeBackgroundColorEnabled: false,
-    workspaceBadgeBackgroundColor: "",
-    workspaceBadgeTextColorEnabled: false,
-    workspaceBadgeTextColor: "",
-    borderWidthEnabled: false,
-    borderWidth: 2,
-    position: "bottom",
-    fullLength: false,
-    reserveSpace: true,
-    autoHide: false,
-    clickAction: "focus-or-launch",
-    middleClickAction: "none",
-    scrollAction: "none",
-    controlCommand: "omarchy-menu toggle apps",
-    sortByWorkspace: false,
-    workspaceLayout: "flat",
-    workspaceMonitorScope: "all",
-    groupWindows: true,
-    interfaceAnimationsEnabled: true,
-    windowScope: "all",
-    showUrgentOutsideScope: true,
-    attentionBadgesEnabled: true,
-    urgentWindowAnimationEnabled: true,
-    launcherBadgeMode: "automatic",
-    hiddenApplications: [],
-    pinned: [
-      "org.gnome.Nautilus",
-      "com.mitchellh.ghostty",
-      "com.google.Chrome",
-      "code",
-      "obsidian",
-      "chatgpt"
-    ]
-  })
+  // The installed/repository default file is shared with the CLI metadata.
+  // No discovery command creates a user configuration or persists defaults.
+  property var settings: dockControl.defaults
 
   function loadSettings(raw) {
     try {
       var parsed = JSON.parse(raw)
-      if (!parsed.pinned || !Array.isArray(parsed.pinned))
-        throw new Error("'pinned' must be an array")
-      parsed.showTrash = TrashModel.normalizeShowTrash(parsed.showTrash)
-      parsed.hiddenApplications = DockModel.normalizeSetting(
-        "hiddenApplications", parsed.hiddenApplications)
-      parsed.windowScope = DockWindowModel.normalizeWindowScope(parsed.windowScope)
-      parsed.showUrgentOutsideScope =
-        DockWindowModel.normalizeShowUrgentOutsideScope(
-          parsed.showUrgentOutsideScope)
-      parsed.attentionBadgesEnabled = typeof parsed.attentionBadgesEnabled === "boolean"
-        ? parsed.attentionBadgesEnabled : true
-      parsed.urgentWindowAnimationEnabled =
-        typeof parsed.urgentWindowAnimationEnabled === "boolean"
-          ? parsed.urgentWindowAnimationEnabled : true
-      parsed.interfaceAnimationsEnabled = DockModel.normalizeSetting(
-        "interfaceAnimationsEnabled", parsed.interfaceAnimationsEnabled)
-      parsed.launcherBadgeMode = parsed.launcherBadgeMode === "dots-only"
-        ? "dots-only" : "automatic"
-      showTrashSetting = parsed.showTrash
-      settings = parsed
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)
+          || !Array.isArray(parsed.pinned))
+        throw new Error("Configuration must be an object with a 'pinned' array")
+      var requested = Object.create(null)
+      Object.keys(dockControl.defaults).forEach(function(key) {
+        requested[key] = dockControl.defaults[key]
+      })
+      // Null-prototype storage preserves extension keys without invoking setters.
+      Object.keys(parsed).forEach(function(key) { requested[key] = parsed[key] })
+      showTrashSetting = TrashModel.normalizeShowTrash(parsed.showTrash)
+      if (JSON.stringify(settings) !== JSON.stringify(requested)) settingsRevision++
+      settings = requested
+      settingsLoadState = "loaded"
+      settingsLoadError = ""
+      settingsLoadedText = raw
+      settingsDefaultsInUse = false
+      settingsPersisted = true
+      settingsWriteState = "idle"
+      settingsWriteError = ""
     } catch (error) {
+      settingsLoadState = "invalid"
+      settingsLoadError = String(error)
+      settingsPersisted = false
       console.warn("Dock: could not load " + configPath + ":", error)
     }
-
     settingsLoaded = true
     if (showTrash) Qt.callLater(root.refreshTrash)
   }
@@ -115,13 +82,11 @@ Item {
     var pinned = DockModel.reorderPinnedById(
       settings.pinned, sourceDesktopId, targetDesktopId)
     if (JSON.stringify(pinned) === JSON.stringify(settings.pinned)) return
-
     savePinned(pinned)
   }
 
   function pinApplication(desktopId) {
     if (!desktopId || settings.pinned.indexOf(desktopId) >= 0) return
-
     var pinned = settings.pinned.slice()
     pinned.push(desktopId)
     savePinned(pinned)
@@ -130,7 +95,6 @@ Item {
   function unpinApplication(desktopId) {
     var index = settings.pinned.indexOf(desktopId)
     if (index < 0) return
-
     var pinned = settings.pinned.slice()
     pinned.splice(index, 1)
     savePinned(pinned)
@@ -152,12 +116,41 @@ Item {
   }
 
   function saveSettings(patch) {
-    var updated = DockModel.mergeSettings(settings, patch)
-
-    updated.showTrash = TrashModel.normalizeShowTrash(updated.showTrash)
-    showTrashSetting = updated.showTrash
+    if (!settingsLoaded || settingsReloadPending || settingsWriteState === "saving"
+        || settingsLoadState === "invalid") {
+      console.warn("Dock: settings are busy or invalid; change was not applied")
+      return
+    }
+    var updated = Object.create(null)
+    Object.keys(settings).forEach(function(key) { updated[key] = settings[key] })
+    Object.keys(patch).forEach(function(key) { updated[key] = patch[key] })
+    if (JSON.stringify(updated) === JSON.stringify(settings)) return
+    showTrashSetting = TrashModel.normalizeShowTrash(updated.showTrash)
     settings = updated
-    configFile.setText(JSON.stringify(updated, null, 2) + "\n")
+    settingsRevision++
+    settingsDefaultsInUse = false
+    settingsPersisted = false
+    writeSettings()
+  }
+
+  // Retained FDM-881 writer behavior from PR #43 @7473a23: actual saved/error
+  // completion, bounded retry bytes and failed-write echo protection. The
+  // Settings editor and icon stack are deliberately not imported here.
+  function writeSettings() {
+    var text = JSON.stringify(settings, null, 2) + "\n"
+    settingsWriteBaseText = settingsLoadedText
+    if (text === configFile.cachedText) text += "\n"
+    settingsWriteText = text
+    settingsWriteState = "saving"
+    configFile.setText(text)
+  }
+
+  function reloadSettingsIfPending() {
+    if (!settingsReloadPending || settingsWriteState === "saving") return
+    Qt.callLater(function() {
+      if (root.settingsReloadPending && root.settingsWriteState !== "saving")
+        configFile.reload()
+    })
   }
 
   function resetSettings() {
@@ -194,6 +187,11 @@ Item {
     if (!trashEmptyProcess.running) trashEmptyProcess.running = true
   }
 
+  DockControl {
+    id: dockControl
+    host: root
+  }
+
   DockScopeRefreshController {
     id: scopeRefreshController
     toplevelModel: Hyprland.toplevels
@@ -222,7 +220,6 @@ Item {
 
   Timer {
     id: workspaceCountsRefreshTimer
-
     interval: 100
     repeat: false
     onTriggered: root.refreshWorkspaceCounts()
@@ -230,7 +227,6 @@ Item {
 
   Connections {
     target: Hyprland
-
     function onRawEvent(event) {
       var name = event ? event.name : ""
       if (DockModel.shouldRefreshWorkspaceState(name))
@@ -250,7 +246,6 @@ Item {
 
   Connections {
     target: Hyprland.toplevels
-
     function onValuesChanged() {
       workspaceCountsRefreshTimer.restart()
     }
@@ -258,7 +253,6 @@ Item {
 
   Process {
     id: workspaceCountsProcess
-
     command: ["hyprctl", "workspaces", "-j"]
     stdout: StdioCollector {
       waitForEnd: true
@@ -282,7 +276,6 @@ Item {
 
   Process {
     id: trashListProcess
-
     command: ["gio", "trash", "--list"]
     stdout: StdioCollector {
       waitForEnd: true
@@ -299,7 +292,6 @@ Item {
 
   Process {
     id: trashEmptyProcess
-
     command: ["gio", "trash", "--empty"]
     onExited: function(exitCode) {
       if (exitCode !== 0)
@@ -310,16 +302,50 @@ Item {
 
   FileView {
     id: configFile
-
+    readonly property string cachedText: text()
     path: root.configPath
     watchChanges: true
     printErrors: false
     blockWrites: true
-    onLoaded: root.loadSettings(text())
-    // FileView.text() is still stale inside onFileChanged. Reload first and
-    // parse the fresh contents when onLoaded fires.
-    onFileChanged: reload()
-    onSaveFailed: error => console.warn("Dock: could not save " + root.configPath + ":", error)
+    atomicWrites: true
+    onLoaded: {
+      var raw = text()
+      if (root.settingsReloadPending) {
+        root.settingsReloadPending = false
+        if (root.settingsWriteState === "error" && raw === root.settingsWriteBaseText)
+          return
+      }
+      root.loadSettings(raw)
+    }
+    onLoadFailed: error => {
+      root.settingsReloadPending = false
+      root.settingsLoaded = true
+      root.settingsPersisted = false
+      root.settingsLoadState = error === FileViewError.FileNotFound ? "missing" : "invalid"
+      root.settingsLoadError = error === FileViewError.FileNotFound ? "" : FileViewError.toString(error)
+      if (root.showTrash) Qt.callLater(root.refreshTrash)
+    }
+    onFileChanged: {
+      root.settingsReloadPending = true
+      root.reloadSettingsIfPending()
+    }
+    onSaved: {
+      root.settingsWriteError = ""
+      root.settingsWriteState = "saved"
+      root.settingsLoadedText = root.settingsWriteText
+      root.settingsLoadState = "loaded"
+      root.settingsLoadError = ""
+      root.settingsPersisted = true
+      root.reloadSettingsIfPending()
+    }
+    onSaveFailed: error => {
+      root.settingsWriteError = "Settings changed for this session, but could not be saved. "
+        + "Retry before restarting. " + FileViewError.toString(error)
+      root.settingsWriteState = "error"
+      root.settingsPersisted = false
+      console.warn("Dock: could not save " + root.configPath + ":", error)
+      root.reloadSettingsIfPending()
+    }
   }
 
   DockWindowActions {
@@ -336,7 +362,6 @@ Item {
 
   Variants {
     model: Quickshell.screens
-
     delegate: Component {
       Dock {
         required property var modelData
