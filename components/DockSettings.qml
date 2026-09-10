@@ -9,6 +9,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockIconModel.js" as DockIconModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockTrashModel.js" as TrashModel
 
@@ -20,6 +21,9 @@ PanelWindow {
   required property var settings
   property var iconOverrides: ({})
   property int iconReloadRevision: 0
+  property string settingsWriteState: "idle"
+  property string settingsWriteError: ""
+  property string iconEditorDesktopId: ""
   property bool outsideClickDismissal: true
   // Prime layer-shell focus briefly on open so keyboard navigation works, then
   // settle on OnDemand so Hyprland does not route every pointer event to this
@@ -28,6 +32,8 @@ PanelWindow {
   signal settingPreviewed(string key, var value)
   signal settingCommitted(string key, var value)
   signal settingsPatchCommitted(var patch)
+  signal iconOverrideRequested(string desktopId, string sourceUrl)
+  signal settingsWriteRetryRequested()
   signal resetRequested()
 
   readonly property var anchorWindow: anchorItem ? anchorItem.QsWindow.window : null
@@ -76,6 +82,9 @@ PanelWindow {
   readonly property var applicationEntries: DesktopEntries.applications.values || []
   readonly property var hiddenApplicationRows: DockModel.hiddenApplicationRows(
     current("hiddenApplications"), applicationEntries)
+  readonly property var iconOverrideRows: buildIconOverrideRows()
+  readonly property string iconEditorApplicationName:
+    applicationNameForId(iconEditorDesktopId)
   readonly property point panelOrigin: DockModel.centeredPopupAnchor(
     position,
     panelScreenWidth,
@@ -99,6 +108,78 @@ PanelWindow {
     if (key === "showTrash")
       return TrashModel.normalizeShowTrash(settings ? settings[key] : undefined)
     return DockModel.normalizeSetting(key, settings ? settings[key] : undefined)
+  }
+
+  function applicationEntryForId(desktopId) {
+    var key = DockIconModel.normalizeKey(desktopId)
+    if (!key) return null
+    var entries = root.applicationEntries || []
+    for (var i = 0; i < entries.length; ++i) {
+      var entry = entries[i]
+      if (entry && DockIconModel.normalizeKey(String(entry.id || "")) === key)
+        return entry
+    }
+    return null
+  }
+
+  function applicationNameForId(desktopId) {
+    var key = DockIconModel.normalizeKey(desktopId)
+    if (!key) return ""
+    var entry = applicationEntryForId(key)
+    var name = entry ? String(entry.name || "").trim() : ""
+    return name || key
+  }
+
+  function currentIconSource(desktopId) {
+    var key = DockIconModel.normalizeKey(desktopId)
+    if (!key) return ""
+    var overrides = root.iconOverrides || ({})
+    return DockIconModel.normalizeSource(overrides[key])
+  }
+
+  function buildIconOverrideRows() {
+    var overrides = root.iconOverrides || ({})
+    return Object.keys(overrides).sort().map(function(rawKey) {
+      var key = DockIconModel.normalizeKey(rawKey)
+      var source = key ? DockIconModel.normalizeSource(overrides[rawKey]) : ""
+      if (!key || !source) return null
+      var entry = root.applicationEntryForId(key)
+      var name = entry ? String(entry.name || "").trim() : ""
+      var icon = entry ? String(entry.icon || "").trim() : ""
+      return {
+        id: key,
+        name: name || key,
+        icon: icon || "application-x-executable",
+        source: source
+      }
+    }).filter(function(row) { return row !== null })
+  }
+
+  function focusIconEditorSection() {
+    if (!root.visible || root.iconEditorDesktopId === "") return
+    var maximum = Math.max(0,
+      settingsContent.contentHeight - settingsContent.height)
+    settingsContent.contentY = Math.max(0, Math.min(
+      applicationIconsSection.y - Style.spacing.md, maximum))
+    applicationIconsSection.forceActiveFocus()
+  }
+
+  function openIconEditor(desktopId) {
+    var key = DockIconModel.normalizeKey(desktopId)
+    if (!key) return false
+    if (iconFileDialog.visible) iconFileDialog.close()
+    iconOverrideEditor.cancelDraft()
+    iconEditorDesktopId = key
+    open()
+    return true
+  }
+
+  function chooseIconFile() {
+    var key = DockIconModel.normalizeKey(iconEditorDesktopId)
+    if (!key) return
+    iconFileDialog.capturedDesktopId = key
+    iconFileDialog.capturedCurrentSource = currentIconSource(key)
+    iconFileDialog.open()
   }
 
   function colorForSetting(key) {
@@ -210,7 +291,10 @@ PanelWindow {
     commandInput.text = current("controlCommand")
     syncAppearanceInputs()
     visible = true
-    Qt.callLater(() => positionGroup.forceActiveFocus())
+    Qt.callLater(function() {
+      if (root.iconEditorDesktopId !== "") root.focusIconEditorSection()
+      else positionGroup.forceActiveFocus()
+    })
   }
 
   function beginFocusPrime() {
@@ -219,7 +303,10 @@ PanelWindow {
 
   function close() {
     if (commandInput.activeFocus) commitControlCommand()
+    if (iconFileDialog.visible) iconFileDialog.close()
     if (colorDialog.visible) colorDialog.close()
+    iconOverrideEditor.cancelDraft()
+    iconEditorDesktopId = ""
     visible = false
   }
 
@@ -235,6 +322,7 @@ PanelWindow {
     : WlrKeyboardFocus.None
 
   onBackingWindowVisibleChanged: beginFocusPrime()
+  onPopupScreenChanged: if (visible && !popupScreen) root.close()
 
   onVisibleChanged: {
     if (visible) {
@@ -243,6 +331,10 @@ PanelWindow {
     } else {
       focusPrimeTimer.stop()
       focusPrimed = false
+      if (iconFileDialog.visible) iconFileDialog.close()
+      if (colorDialog.visible) colorDialog.close()
+      iconOverrideEditor.cancelDraft()
+      iconEditorDesktopId = ""
     }
   }
 
@@ -269,6 +361,39 @@ PanelWindow {
     onAccepted: root.commitColorValue(settingKey, selectedColor)
   }
 
+  FileDialog {
+    id: iconFileDialog
+
+    property string capturedDesktopId: ""
+    property string capturedCurrentSource: ""
+    title: "Choose application icon"
+    fileMode: FileDialog.OpenFile
+    nameFilters: [
+      "PNG and SVG images (*.png *.svg)",
+      "PNG images (*.png)",
+      "SVG images (*.svg)"
+    ]
+    parentWindow: root.QsWindow.contentItem
+      ? root.QsWindow.contentItem.window : null
+    popupType: QQC.Popup.Item
+    options: FileDialog.DontUseNativeDialog | FileDialog.ReadOnly
+    onAccepted: {
+      var targetId = capturedDesktopId
+      var targetSource = capturedCurrentSource
+      capturedDesktopId = ""
+      capturedCurrentSource = ""
+      if (!targetId
+          || targetId !== DockIconModel.normalizeKey(root.iconEditorDesktopId)
+          || targetSource !== root.currentIconSource(targetId))
+        return
+      iconOverrideEditor.selectFile(selectedFile)
+    }
+    onRejected: {
+      capturedDesktopId = ""
+      capturedCurrentSource = ""
+    }
+  }
+
   anchors {
     top: true
     bottom: true
@@ -284,12 +409,14 @@ PanelWindow {
 
   Shortcut {
     sequence: "Esc"
+    enabled: root.visible && !colorDialog.visible && !iconFileDialog.visible
     onActivated: root.close()
   }
 
   MouseArea {
     anchors.fill: parent
     enabled: root.visible && root.outsideClickDismissal
+      && !colorDialog.visible && !iconFileDialog.visible
     onClicked: if (!panelHover.hovered) root.close()
   }
 
@@ -359,7 +486,7 @@ PanelWindow {
           }
 
           Text {
-            text: "✓  Changes apply immediately"
+            text: "✓  Most changes apply immediately · icon previews require Apply"
             color: Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
@@ -1161,6 +1288,167 @@ PanelWindow {
               opacity: enabled ? 1 : 0.45
               checked: root.current("urgentWindowAnimationEnabled") !== false
               onToggled: root.commit("urgentWindowAnimationEnabled", !checked)
+            }
+          }
+
+          DockSettingsSection {
+            id: applicationIconsSection
+            objectName: "applicationIconsSection"
+            width: parent.width
+            activeFocusOnTab: true
+            title: "Application icons"
+            description: "Custom PNG/SVG artwork used throughout SmartDock"
+            iconName: "app-window"
+
+            Column {
+              width: parent.width
+              spacing: Style.spacing.sm
+              visible: root.settingsWriteState !== "idle"
+
+              Text {
+                width: parent.width
+                visible: root.settingsWriteState === "saving"
+                text: "Saving settings…"
+                color: Util.alpha(Color.menu.text, 0.62)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
+
+              Text {
+                width: parent.width
+                visible: root.settingsWriteState === "saved"
+                text: "Settings saved."
+                color: Color.accent
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
+
+              Text {
+                width: parent.width
+                visible: root.settingsWriteState === "error"
+                text: root.settingsWriteError
+                color: Color.urgent
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
+
+              Button {
+                visible: root.settingsWriteState === "error"
+                text: "Retry save"
+                focusable: true
+                bordered: true
+                foreground: Color.menu.text
+                background: "transparent"
+                accent: Color.accent
+                onClicked: root.settingsWriteRetryRequested()
+              }
+            }
+
+            Text {
+              width: parent.width
+              visible: root.iconOverrideRows.length === 0
+                && root.iconEditorDesktopId === ""
+              text: "Right-click an app in the dock to change its icon."
+              color: Util.alpha(Color.menu.text, 0.52)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+              wrapMode: Text.WordWrap
+            }
+
+            Column {
+              id: applicationIconsList
+
+              width: parent.width
+              visible: root.iconOverrideRows.length > 0
+              spacing: Style.spacing.xs
+
+              Repeater {
+                model: root.iconOverrideRows
+
+                delegate: BorderSurface {
+                  required property var modelData
+
+                  width: applicationIconsList.width
+                  implicitHeight: iconOverrideRowContent.implicitHeight
+                    + Style.spacing.md * 2
+                  height: implicitHeight
+                  radius: Style.cornerRadius
+                  color: Util.alpha(Color.menu.text, 0.02)
+                  borderSpec: Border.controlSpec(
+                    "normal", Color.menu.text, Color.accent)
+
+                  Column {
+                    id: iconOverrideRowContent
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: Style.spacing.md
+                    spacing: Style.spacing.xs
+
+                    Text {
+                      width: parent.width
+                      text: modelData.name
+                      color: Color.menu.text
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.body
+                      font.bold: true
+                      elide: Text.ElideRight
+                    }
+
+                    Text {
+                      width: parent.width
+                      text: modelData.id
+                      color: Util.alpha(Color.menu.text, 0.52)
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.caption
+                      elide: Text.ElideMiddle
+                    }
+
+                    Flow {
+                      width: parent.width
+                      spacing: Style.spacing.sm
+
+                      Button {
+                        text: "Change"
+                        focusable: true
+                        bordered: true
+                        foreground: Color.menu.text
+                        background: "transparent"
+                        accent: Color.accent
+                        onClicked: root.openIconEditor(modelData.id)
+                      }
+
+                      Button {
+                        text: "Restore"
+                        focusable: true
+                        bordered: true
+                        foreground: Color.urgent
+                        background: "transparent"
+                        accent: Color.urgent
+                        onClicked: root.iconOverrideRequested(modelData.id, "")
+                      }
+                    }
+                  }
+                }
+              }
+            }
+
+            DockIconOverrideEditor {
+              id: iconOverrideEditor
+              objectName: "iconOverrideEditor"
+
+              width: parent.width
+              visible: root.iconEditorDesktopId !== ""
+              desktopId: root.iconEditorDesktopId
+              applicationName: root.iconEditorApplicationName
+              currentSource: root.currentIconSource(root.iconEditorDesktopId)
+              onChooseFileRequested: root.chooseIconFile()
+              onApplyRequested: (desktopId, sourceUrl) => {
+                root.iconOverrideRequested(desktopId, sourceUrl)
+              }
+              onRestoreRequested: desktopId => root.iconOverrideRequested(desktopId, "")
             }
           }
 
