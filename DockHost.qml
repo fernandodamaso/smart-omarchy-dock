@@ -23,6 +23,9 @@ Item {
   property int iconReloadRevision: 0
   property string settingsWriteState: "idle"
   property string settingsWriteError: ""
+  property bool settingsReloadPending: false
+  property string settingsLoadedText: ""
+  property string settingsWriteBaseText: ""
   property bool settingsLoaded: false
   property bool showTrashSetting: true
   property var workspaceWindowCounts: ({})
@@ -184,6 +187,7 @@ Item {
 
   function writeSettings() {
     var text = JSON.stringify(settings, null, 2) + "\n"
+    settingsWriteBaseText = settingsLoadedText
     // FileView suppresses identical text, including bytes cached by a failed
     // write. One optional blank line forces a real attempt without changing
     // JSON values, reloading old disk state, or growing the payload on Retry.
@@ -197,6 +201,15 @@ Item {
   function retrySettingsWrite() {
     // Serialize current complete settings, even if Restore removed the row.
     writeSettings()
+  }
+
+  function reloadSettingsIfPending() {
+    if (!settingsReloadPending || settingsWriteState === "saving") return
+    Qt.callLater(function() {
+      if (root.settingsReloadPending
+          && root.settingsWriteState !== "saving")
+        configFile.reload()
+    })
   }
 
   function resetSettings() {
@@ -355,26 +368,31 @@ Item {
     watchChanges: true
     printErrors: false
     blockWrites: true
-    onLoaded: root.loadSettings(text())
-    // FileView.text() is still stale inside onFileChanged. Reload first and
-    // parse the fresh contents when onLoaded fires, unless a write is in
-    // flight or failed: that event can expose the old disk state and erase
-    // the session value that Retry must persist.
+    onLoaded: {
+      var raw = text()
+      if (root.settingsReloadPending) {
+        root.settingsReloadPending = false
+        if (raw === root.settingsWriteBaseText) return
+      }
+      root.settingsLoadedText = raw
+      root.loadSettings(raw)
+    }
     onFileChanged: {
-      if (root.settingsWriteState === "saving"
-          || root.settingsWriteState === "error") return
-      reload()
+      root.settingsReloadPending = true
+      root.reloadSettingsIfPending()
     }
     onSaved: {
       // Results describe the complete configuration, never an editor target.
       root.settingsWriteError = ""
       root.settingsWriteState = "saved"
+      root.reloadSettingsIfPending()
     }
     onSaveFailed: error => {
       root.settingsWriteError = "Settings changed for this session, but could not be saved. "
         + "Retry before restarting. " + FileViewError.toString(error)
       root.settingsWriteState = "error"
       console.warn("Dock: could not save " + root.configPath + ":", error)
+      root.reloadSettingsIfPending()
     }
   }
 

@@ -23,8 +23,10 @@ function fixture() {
   const attempts = []
   const warnings = []
   const outcomes = []
+  const later = []
   let cached = ''
   let disk = ''
+  let reloads = 0
   let pending = null
   const host = vm.createContext({
     DockModel, DockIconModel,
@@ -34,7 +36,8 @@ function fixture() {
     settings: { pinned: ['code'], showTrash: false, iconSize: 42,
       iconOverrides: { code: 'file:///tmp/code.png' }, unrelated: { keep: true } },
     configPath: '/disposable-test-config/dock.json', showTrash: false,
-    Qt: { callLater() {} }, console: { warn: (...args) => warnings.push(args) }
+    Qt: { callLater: callback => later.push(callback) },
+    console: { warn: (...args) => warnings.push(args) }
   })
   host.root = host
   for (const match of hostSource.matchAll(/^  property (?:string|int|bool) (\w+): ("[^"\n]*"|true|false|\d+)\s*$/gm))
@@ -49,6 +52,7 @@ function fixture() {
   const saved = signal('onSaved')
   const failed = signal('onSaveFailed', 'error')
   const loaded = signal('onLoaded')
+  const fileChanged = signal('onFileChanged')
   function complete(error = null) {
     assert.ok(pending, 'a completion must belong to an accepted write')
     cached = pending.text
@@ -59,6 +63,11 @@ function fixture() {
   }
   const writer = {
     text: () => cached,
+    reload() {
+      reloads++
+      cached = disk
+      loaded()
+    },
     setText(text) {
       calls.push(text)
       if (text === cached) return // Native FileView emits no signal for this.
@@ -78,8 +87,12 @@ function fixture() {
   host.text = writer.text // FileView-local name used by its binding/loaded handler.
   return {
     host, calls, attempts, warnings, outcomes, complete,
+    reloads: () => reloads,
+    fileChanged,
+    flush() { while (later.length) later.shift()() },
     disk: () => disk,
-    load(text) { cached = disk = text; loaded() }
+    load(text) { cached = disk = text; loaded() },
+    external(text) { disk = text; fileChanged() }
   }
 }
 
@@ -121,9 +134,45 @@ check('failed Apply retains optimistic settings and the existing diagnostic', ()
   assert.deepEqual(f.warnings, [[`Dock: could not save ${f.host.configPath}:`, 3]])
 })
 
-check('FileView reload cannot erase failed session settings before Retry', () => {
-  assert.match(writerSource,
-    /onFileChanged: \{[\s\S]*root\.settingsWriteState === "saving"[\s\S]*root\.settingsWriteState === "error"[\s\S]*reload\(\)/)
+check('FileView changes distinguish stale writer reloads from external edits', () => {
+  const self = fixture()
+  self.load(JSON.stringify(plain(self.host.settings), null, 2) + '\n')
+  self.host.saveIconOverride('chatgpt', '/tmp/chatgpt.svg')
+  const session = plain(self.host.settings)
+  self.fileChanged()
+  self.complete(3)
+  assert.equal(self.reloads(), 0, 'the writer event waits for FileView to settle')
+  self.flush()
+  assert.equal(self.reloads(), 1, 'the writer event is reloaded before it is classified')
+  assert.deepEqual(plain(self.host.settings), session,
+    'the failed writer reload must not erase optimistic settings')
+
+  const saving = fixture()
+  saving.load(JSON.stringify(plain(saving.host.settings), null, 2) + '\n')
+  saving.host.saveIconOverride('chatgpt', '/tmp/chatgpt.svg')
+  const externalDuringSave = plain(saving.host.settings)
+  externalDuringSave.iconOverrides = { code: 'file:///tmp/external-save.png' }
+  saving.external(JSON.stringify(externalDuringSave, null, 2) + '\n')
+  assert.equal(saving.reloads(), 0, 'saving defers watcher reload until completion')
+  saving.complete(3)
+  saving.flush()
+  assert.deepEqual(plain(saving.host.settings), externalDuringSave,
+    'an external edit during saving must be loaded after failure settles')
+
+  const error = fixture()
+  error.load(JSON.stringify(plain(error.host.settings), null, 2) + '\n')
+  error.host.saveIconOverride('chatgpt', '/tmp/chatgpt.svg')
+  error.complete(3)
+  const externalDuringError = plain(error.host.settings)
+  externalDuringError.iconOverrides = { code: 'file:///tmp/external-error.png' }
+  error.external(JSON.stringify(externalDuringError, null, 2) + '\n')
+  assert.equal(error.reloads(), 0, 'error defers watcher reload to the event loop')
+  error.flush()
+  assert.deepEqual(plain(error.host.settings), externalDuringError,
+    'an external edit during error must be loaded')
+  error.host.retrySettingsWrite()
+  assert.deepEqual(JSON.parse(error.attempts.at(-1).text), externalDuringError,
+    'Retry must persist the latest loaded session map')
 })
 
 check('failed Restore can retry even after its only override row disappears', () => {

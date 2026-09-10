@@ -62,6 +62,7 @@ const host = vm.createContext({
   DockWindowModel: model('DockWindowModel', { DockModel }), TrashModel: model('DockTrashModel'),
   settings: { pinned: ['code'], iconOverrides: original, customSetting: 'retained' },
   iconReloadRevision: 0, settingsLoaded: false, showTrash: false,
+  settingsLoadedText: '', settingsWriteBaseText: '', settingsReloadPending: false,
   configFile: { setText: text => writes.push(JSON.parse(text)) },
   Qt: { callLater() {} }, console, configPath: '/unused'
 })
