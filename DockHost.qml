@@ -394,6 +394,8 @@ Item {
         settings: root.settings
         iconOverrides: root.settings.iconOverrides || ({})
         iconReloadRevision: root.iconReloadRevision
+        settingsWriteState: root.settingsWriteState
+        settingsWriteError: root.settingsWriteError
         showTrash: root.showTrash
         windowActions: root.windowActions
         badgeTracker: root.badgeTracker
@@ -412,6 +414,10 @@ Item {
         onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
         onSettingChanged: (key, value) => root.saveSetting(key, value)
         onSettingsPatchRequested: patch => root.saveSettings(patch)
+        onIconOverrideRequested: (desktopId, sourceUrl) => {
+          root.saveIconOverride(desktopId, sourceUrl)
+        }
+        onSettingsWriteRetryRequested: root.retrySettingsWrite()
         onResetSettingsRequested: root.resetSettings()
         onOpenTrashRequested: root.openTrash()
         onEmptyTrashRequested: root.emptyTrash()
