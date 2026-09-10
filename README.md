@@ -22,6 +22,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
   applications, and auto-hide
 - Bundled Lucide SVG artwork for the Trash icon and dock context-menu actions
 - Theme-aware graphical settings panel with live previews and persistent changes
+- Host-owned CLI configuration, app management, and local PNG/SVG icon overrides
 - Optional dynamic Trash icon with item count, open, and confirmed empty actions
 - Compact trailing workspace switcher that mirrors the Omarchy top-bar visibility rule
 - Minimized-window markers, counts, tooltip summaries, and per-window status labels
@@ -43,6 +44,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 
 - Hyprland
 - Quickshell 0.3 or newer
+- Python 3 for the configuration CLI (standard library only)
 - GLib's `gio` command for optional Trash integration
 - A working freedesktop icon theme
 - Optional numeric launcher counts: CMake, a C++20 compiler, and Qt 6.6+ Core/DBus development files to build the native provider
@@ -222,11 +224,31 @@ preserved in this repository.
 
 ## Configure
 
-Installed copies use `~/.config/smartdock/dock.json`. When running from the repository, edit [`config/dock.json`](config/dock.json):
+Use the selected running host through the CLI rather than editing a live
+`dock.json`. Install just the client from a source checkout without starting a
+second dock:
 
-The same settings are available graphically: click or right-click the first
+```bash
+bash ./install.sh --cli-only
+smartdock status --json
+smartdock config schema --json
+smartdock config get --json
+smartdock config set iconSize 48 --json
+smartdock agent-guide
+```
+
+The host reports its authoritative `data.configPath`; do not infer that path
+from the working directory. Choose `--runtime plugin|standalone` and an exact
+`--instance ID` when discovery needs disambiguation. No command silently starts
+or restarts a host. Read the [agent configuration guide](docs/AGENT_CONFIGURATION.md)
+for atomic patches, dry runs, persistence errors, reset scope and safe exports.
+[`config/dock.json`](config/dock.json) contains bundled defaults, not necessarily
+the running configuration.
+
+Appearance and behavior settings are also available graphically: click or right-click the first
 sliders icon and choose **Dock Settings…**. Slider changes preview while dragging and
-are saved when released; switches and choices save immediately.
+are saved when released; switches and choices save immediately. Settings remains
+available during the CLI migration; there is no graphical icon editor.
 
 Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
 effects sit side by side, Dock surface exposes Theme default, Omarchy token,
@@ -255,6 +277,7 @@ width when the override is disabled.
 
 ```json
 {
+  "iconOverrides": {},
   "iconSize": 42,
   "magnification": 1.2,
   "magnificationRadius": 95,
@@ -302,6 +325,7 @@ width when the override is disabled.
 
 | Option | Description |
 | --- | --- |
+| `iconOverrides` | App-wide, SmartDock-only local PNG/SVG artwork by desktop ID; defaults to `{}`; use `icons set/reset/reload` |
 | `iconSize` | Base icon size in pixels |
 | `magnification` | Maximum icon scale under the pointer |
 | `magnificationRadius` | Distance over which nearby icons magnify |
@@ -342,6 +366,60 @@ width when the override is disabled.
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
+
+### Application and icon commands
+
+```bash
+smartdock apps list --query 'Editor' --json
+smartdock apps list --pinned --json
+smartdock apps list --hidden --json
+smartdock apps pin code --json
+smartdock apps move code --before org.gnome.Nautilus --json
+smartdock apps move code --after org.gnome.Nautilus --json
+smartdock apps hide code --json
+smartdock apps show code --json
+smartdock apps show --all --json
+smartdock apps unpin code --json
+smartdock icons list --json
+smartdock icons set code "$HOME/Pictures/Dock Icons/Ícone.svg" --json
+smartdock icons reload code --json
+smartdock icons reset code --json
+```
+
+Use actual IDs from `apps list`; the examples are not guaranteed installed IDs.
+Discovery uses the host's native desktop-entry catalog and keeps unavailable
+stored pins/hidden IDs visible in its output. IDs match exactly after case
+folding and optional `.desktop` removal, never by fuzzy name. Pinning does not
+unhide an app; hiding does not unpin it or close windows. Show only clears hidden
+membership. Move requires two different pinned IDs and preserves the relative
+order of all other entries, including hidden and unavailable pins. Repeating a
+membership command is a no-op rather than another settings write.
+
+`iconOverrides` defaults to `{}` and changes only SmartDock artwork. Each entry
+applies across main icons, preview metadata, app-picker rows and retained Hidden
+Applications rows. It never changes `.desktop` files, launch identity, window
+grouping, screenshots, badges, Trash or action glyphs. A browser tab grouped as
+Chrome remains a Chrome item; custom artwork does not split browser groups.
+
+Only local static PNG/SVG files are accepted. Ordinary relative paths supplied
+to the CLI are resolved from its current directory; the host accepts absolute
+local paths and local `file:///` URLs, preserving spaces and Unicode. Remote
+URLs and other formats are rejected. Files are referenced in place, not copied,
+so keep them outside the plugin checkout. Per-app set/reset preserves unrelated
+map entries. Preference reset also preserves `iconOverrides`.
+
+The bounded fallback is **custom file → original desktop icon →
+`application-x-executable` → bundled theme-tinted `app-window` glyph**. Custom
+artwork is not tinted. Missing or corrupt images retain the requested mapping
+and fall back instead of being silently removed.
+
+There is no continuous artwork-file watch. After replacing bytes at the same
+path, use `icons reload ID`; it bumps the global artwork revision without writing
+settings, and other mapped icons may refresh too. Setting an equivalent source
+also requests a reload without a redundant save. Every successful icon response
+reports `renderVerified: false`: persistence and reload requests do not prove
+image decoding or a visible redraw. Real rendering/cache behavior is reserved
+for local Omarchy qualification, not claimed by headless tests.
 
 ### Application pointer actions
 
@@ -463,12 +541,10 @@ the freedesktop `trash:///` location and can be removed from the dock with
 query. Workspace buttons always include 1 and 2, then add any focused or
 occupied workspace through 10; clicking a number focuses it.
 
-Pinned values are desktop-entry filenames without the `.desktop` suffix. List available IDs with:
+Pinned values are desktop-entry IDs. List the authoritative running host's IDs with:
 
 ```bash
-find /usr/share/applications ~/.local/share/applications \
-  -type f -name '*.desktop' 2>/dev/null \
-  | sed 's#.*/##; s/\.desktop$//' | sort -u
+smartdock apps list --json
 ```
 
 Right-click any application in the dock and choose **Hide from Dock** to hide
@@ -480,7 +556,7 @@ reloads. Open **Dock Settings** to review hidden applications: each row's
 Restoring an application returns it to its existing pinned position; it does
 not pin or unpin anything. **Reset to defaults** resets the general dock
 settings but intentionally preserves `hiddenApplications`; use **Show All** or
-set the option to `[]` when you also want to reset hidden applications.
+`smartdock apps show --all` to clear hidden membership explicitly.
 
 The configuration file is watched and updates automatically. Drag a dock icon to another slot to reorder it; the new `pinned` order is written back to this file. Reserved space follows visibility: while auto-hide is off, the `reserveSpace` option decides whether tiled windows keep a clear dock-sized area; while auto-hide is on, the hidden dock never reserves space.
 

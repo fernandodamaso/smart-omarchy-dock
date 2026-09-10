@@ -53,6 +53,48 @@ smartdock config get --json
 
 Use retry only after inspecting a failed save. It saves the complete current live snapshot, not an old patch, and does not increment the setting revision. Pending loads/writes are refused. If completion has not been observed, the response is busy rather than falsely successful. A timeout has unknown applied/persisted outcome: read status and the affected values before deciding whether another mutation is necessary.
 
+## Manage applications without Settings
+
+```sh
+smartdock apps list --query 'Editor' --json
+smartdock apps list --pinned --json
+smartdock apps list --hidden --json
+smartdock apps pin code --json
+smartdock apps move code --before org.gnome.Nautilus --json
+smartdock apps move code --after org.gnome.Nautilus --json
+smartdock apps hide code --json
+smartdock apps show code --json
+smartdock apps show --all --json
+smartdock apps unpin code --json
+```
+
+IDs above are examples: use the actual `id` returned by the selected host. Discovery reads that host's `DesktopEntries.applications.values`; do not scan desktop files or introduce another application registry. Query matches ID or display-name text, but mutations match only exact IDs after trimming, case folding and optional `.desktop` removal. Display names and fuzzy matches never select a mutation target. Empty, control/path-containing, placeholder and prototype-reserved IDs are rejected.
+
+`apps list` returns `data.applications` rows with `id`, `name`, `available`, `pinned`, `hidden` and `pinnedIndex` (zero-based, null when unpinned). Choose at most one filter: `--query`, `--pinned` or `--hidden`. Pinned/hidden lists preserve configured order and include unavailable stored IDs rather than silently deleting them. Existing configured spelling/order is preserved; an otherwise unknown safe ID can be pinned for an application not currently installed. The CLI does not launch or validate installation of that application.
+
+Membership commands are idempotent. Pinning does not show a hidden app; hiding does not unpin it or close its windows; unpinning does not hide a running application. Show removes hidden membership without changing pins; `--all` only clears hidden membership. Move requires two different pinned IDs and exactly one `--before`/`--after` flag. It moves the existing entry in the complete pinned list, including hidden/unavailable entries, preserving the other entries' relative order. These are primitive host intents, not stale client-side array replacements.
+
+## Set and reload local artwork
+
+```sh
+smartdock icons list --json
+smartdock icons set code './Pictures/My Ícone.svg' --json
+smartdock icons set code "$HOME/Pictures/Dock Icons/code.png" --json
+smartdock icons reload code --json
+smartdock icons reset code --json
+smartdock config get iconOverrides --json
+```
+
+Use a stable local PNG/SVG path outside the plugin checkout. The client resolves an ordinary relative path against its current directory; the shared host model validates local absolute paths and `file:///` URLs and preserves spaces/Unicode through URL encoding. Unsupported schemes, remote URLs, invalid local URLs and other formats are rejected by the host. No downloads, copying, importing, `.desktop` edits or theme writes occur. Shell expansion of unquoted `~`/`$HOME` is separate from file-URL parsing.
+
+`iconOverrides` defaults to `{}`. Set/reset affect one canonical app key using the host's latest map; unrelated entries, including untouched legacy values, survive. `icons list` exposes requested `data.overrides`, normalized `effectiveOverrides`, `iconReloadRevision` and `renderVerified: false`. A bulk `config apply` replacement of `iconOverrides` validates the entire supplied map and rejects duplicate canonical IDs; use per-app commands for a narrow change. Preference reset preserves the map.
+
+Artwork is SmartDock-only and app-wide: main icons, preview metadata, app-picker rows and retained Hidden Applications rows share the mapping. Identity, launch command, window grouping, screenshots, badges, Trash and action glyphs do not change. The bounded fallback is custom file → original desktop icon → `application-x-executable` → bundled theme-tinted `app-window` glyph. Custom artwork is not tinted. Missing/unreadable/corrupt files retain the requested mapping and fall back.
+
+After replacing bytes at the same path, use `icons reload ID`. It requires an existing valid local mapping, bumps the global artwork revision, and writes no settings; other mapped icons may refresh too. There is no continuous artwork watch. Setting an already-configured equivalent source also requests fresh bytes without a redundant settings write. A repeated reset is a true no-op. `reloaded: true` means a reload was requested, not completed image decoding. `applied` and `noop` refer to settings changes, so reload reports `applied: false` even when `reloaded: true`.
+
+Every successful icon response reports `renderVerified: false`. Accepted configuration, successful persistence and a reload request are separate from image decoding/rendering. Headless tests cannot prove real Omarchy cache invalidation, multi-monitor redraw or visual fallback; those checks belong to the consolidated local CLI-06/FDM-885 handoff. Do not restart a host just to replace an icon.
+
 ## Reset and export deliberately
 
 ```sh
@@ -69,7 +111,7 @@ Export reads the selected host's requested settings, including unsaved live valu
 
 `--json` emits exactly one object with `apiVersion: 1`, `ok`, `data`, `warnings`, and `error.code/message` on failure. Subprocess diagnostics go to stderr. IPC uses one host-owned `smartdock.request(string): string` endpoint, outside screen delegates. Requests carry `apiVersion`, `command` and an `arguments` object.
 
-Exit codes: 0 success; 2 usage/validation; 3 absent/ambiguous host; 4 persistence/export failure; 5 transport/protocol/timeout; 6 busy/invalid existing configuration. CLI set maps to a minimal `config.apply` host intent; export reads `config.get` and only writes the separate new snapshot. Commands and metadata describe the currently implemented surface. App/icon intents are added by the next ordered migration slice; Settings remains available until those replacements are verified.
+Exit codes: 0 success; 2 usage/validation; 3 absent/ambiguous host; 4 persistence/export failure; 5 transport/protocol/timeout; 6 busy/invalid existing configuration. CLI set maps to a minimal `config.apply` host intent; export reads `config.get` and only writes the separate new snapshot. App/icon commands send primitive IDs and placement/source arguments. Commands and metadata describe the currently implemented surface. Settings remains available until its deletion in the next ordered migration slice; no graphical icon editor is introduced.
 
 ## Install only the client
 
