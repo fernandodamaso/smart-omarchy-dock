@@ -134,6 +134,21 @@ check('failed Apply retains optimistic settings and the existing diagnostic', ()
   assert.deepEqual(f.warnings, [[`Dock: could not save ${f.host.configPath}:`, 3]])
 })
 
+check('external rollback to pre-write bytes loads after a successful save', () => {
+  const f = fixture()
+  const original = JSON.stringify(plain(f.host.settings), null, 2) + '\n'
+  f.load(original)
+  const baseline = plain(f.host.settings)
+  f.host.saveIconOverride('chatgpt', '/tmp/chatgpt.svg')
+  f.complete()
+  f.fileChanged()
+  f.flush()
+  assert.equal(f.host.settings.iconOverrides.chatgpt, 'file:///tmp/chatgpt.svg')
+  f.external(original)
+  f.flush()
+  assert.deepEqual(plain(f.host.settings), baseline)
+})
+
 check('FileView changes distinguish stale writer reloads from external edits', () => {
   const self = fixture()
   self.load(JSON.stringify(plain(self.host.settings), null, 2) + '\n')

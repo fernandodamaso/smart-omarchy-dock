@@ -372,7 +372,10 @@ Item {
       var raw = text()
       if (root.settingsReloadPending) {
         root.settingsReloadPending = false
-        if (raw === root.settingsWriteBaseText) return
+        // Only suppress the failed-write echo of pre-write bytes. After a
+        // successful save, an external rollback to those same bytes must load.
+        if (root.settingsWriteState === "error"
+            && raw === root.settingsWriteBaseText) return
       }
       root.settingsLoadedText = raw
       root.loadSettings(raw)
