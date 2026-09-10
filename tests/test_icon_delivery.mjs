@@ -17,8 +17,8 @@ assert.deepEqual(plain(h.host.settings.pinned), ['Friendly Editor']);
 assert.deepEqual(plain(h.host.settings.hiddenApplications), ['Exact.App'], 'Menu and CLI intents share canonical identities');
 assert.deepEqual(h.request('apps.list', { pinned: true }).data.applications.map(a => a.pinnedIndex), [0]);
 
-// Guard artwork-only forwarding, including both dock layouts and optional rows.
-for (const file of ['DockItem.qml', 'DockWindowPreviewTile.qml', 'DockAppPicker.qml', 'DockHiddenApplicationRow.qml']) {
+// Guard artwork-only forwarding in both dock layouts, preview metadata and picker rows.
+for (const file of ['DockItem.qml', 'DockWindowPreviewTile.qml', 'DockAppPicker.qml']) {
   const source = read('components/' + file);
   assert.match(source, /DockAppIcon\s*\{/, file);
   assert.match(source, /property var iconOverrides: \(\{\}\)/, file);
@@ -29,8 +29,6 @@ assert.match(read('DockHost.qml'), /iconOverrides: root\.settings\.iconOverrides
 assert.match(read('DockHost.qml'), /iconReloadRevision: root\.iconReloadRevision/);
 assert.match(read('components/Dock.qml'), /iconOverrides: root\.iconOverrides/);
 assert.match(read('components/DockWindowPreview.qml'), /iconOverrides: root\.iconOverrides/);
-assert.match(read('components/DockSettings.qml'), /iconOverrides: root\.iconOverrides/);
-assert.doesNotMatch(read('components/DockSettings.qml'), /DockIconEditor|saveIconOverride|iconOverrideRequested/);
 const schema = JSON.parse(read('config/settings-schema.json'));
 const guide = read('docs/AGENT_CONFIGURATION.md');
 const client = read('scripts/smartdock_cli.py');

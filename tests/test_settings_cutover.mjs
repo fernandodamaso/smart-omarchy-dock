@@ -3,13 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { hostHarness, loadModel, plain } from './host_harness.mjs';
 
 const base = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = name => fs.readFileSync(path.join(base, name), 'utf8');
 const removed = ['DockSettings', 'DockSettingSlider', 'DockSettingsSection',
   'DockSettingsToggleRow', 'DockColorTokenDropdown', 'DockColorSwatch',
   'DockActionDropdown', 'DockHiddenApplicationRow'];
-const obsolete = /DockSettings|dockSettings|settingPreviews|SettingsRequested|settingsRequested|smartdock-settings|openIconEditor|DockSettingSlider|DockColorTokenDropdown|DockColorSwatch|DockActionDropdown|DockHiddenApplicationRow/;
+const obsolete = /DockSettings|dockSettings|settingPreviews|SettingsRequested|settingsRequested|smartdock-settings|openIconEditor|openSettings|DockSettingSlider|DockColorTokenDropdown|DockColorSwatch|DockActionDropdown|DockHiddenApplicationRow/;
 function files(directory) {
   return fs.readdirSync(path.join(base, directory), { withFileTypes: true }).flatMap(entry => {
     const name = path.posix.join(directory, entry.name);
@@ -43,8 +44,10 @@ for (const token of ['"accent": Color.accent', '"menu.background": Color.menu.ba
   '"menu.border": Color.menu.border']) assert.ok(dock.includes(token), token);
 for (const action of ['launcher', 'add', 'auto-hide'])
   assert.ok(menu.includes('"' + action + '"'), action);
-assert.match(controlItem, /onAddApplicationRequested:/);
-assert.match(controlItem, /onAutoHideToggled:/);
+assert.match(controlItem, /onAddApplication: root\.addApplicationRequested\(\)/);
+assert.match(controlItem, /onToggleAutoHide: root\.autoHideToggled\(!root\.autoHide\)/);
+assert.match(dock, /onAddApplicationRequested: appPicker\.open\(\)/);
+assert.match(dock, /onAutoHideToggled: enabled => root\.autoHideRequested\(enabled\)/);
 assert.match(host, /onAutoHideRequested: enabled => root\.saveSetting\("autoHide", enabled\)/);
 assert.equal((host.match(/configFile\.setText\(/g) || []).length, 1, 'Keep the single host writer');
 
@@ -83,7 +86,26 @@ scope.updateAutoHideState();
 assert.equal(scope.autoHideRevealed, false);
 assert.equal(stops, 6);
 
-const schema = JSON.parse(read('config/settings-schema.json'));
+// Requested values still reach the actual dock normalizers after preview state
+// is removed. Evaluate production binding expressions, not a copied normalizer.
+const bindings = vm.createContext({ settings: { iconSize: 48, hoverGlowOpacity: .72,
+  autoHide: true, reserveSpace: true }, DockModel: loadModel('DockModel') });
+for (const name of ['iconSize', 'hoverGlowOpacity', 'autoHide', 'reserveSpace']) {
+  const expression = dock.match(new RegExp('readonly property \\w+ ' + name + ': ([\\s\\S]*?)(?=\\n  (?:readonly|property|//))'))?.[1];
+  assert.ok(expression, name);
+  bindings[name] = vm.runInContext('(' + expression + ')', bindings);
+}
+assert.equal(bindings.iconSize, 48);
+assert.equal(bindings.hoverGlowOpacity, .70);
+assert.equal(bindings.reserveSpace, false);
+
+const h = hostHarness({ pinned: ['Code', 'Unavailable.App'], hiddenApplications: ['Code'],
+  iconOverrides: { code: 'file:///tmp/kept.svg' }, extension: { keep: true } });
+assert.equal(h.request('apps.show', { id: 'code.desktop' }).ok, true);
+assert.deepEqual(plain(h.host.settings.pinned), ['Code', 'Unavailable.App']);
+assert.deepEqual(plain(h.host.settings.iconOverrides), { code: 'file:///tmp/kept.svg' });
+assert.deepEqual(plain(h.host.settings.extension), { keep: true });
+assert.deepEqual(plain(h.host.settings.hiddenApplications), []);
 for (const command of ['config.apply', 'config.reset', 'apps.show', 'apps.move', 'icons.set', 'icons.reload'])
-  assert.ok(schema.commands.includes(command), command);
+  assert.ok(h.metadata.commands.includes(command), command);
 console.log('Settings cutover, live theme bindings, retained actions and auto-hide behavior: PASS');

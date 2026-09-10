@@ -209,7 +209,7 @@ Item {
 
   // Retained FDM-881 writer behavior from PR #43 @7473a23: actual saved/error
   // completion, bounded retry bytes and failed-write echo protection. One write
-  // path is shared by CLI and existing menu/Settings intents.
+  // path is shared by CLI and existing dock-menu intents.
   function writeSettings() {
     var text = JSON.stringify(settings, null, 2) + "\n"
     settingsWriteBaseText = settingsLoadedText
@@ -261,17 +261,6 @@ Item {
     Qt.callLater(function() {
       if (root.settingsReloadPending && root.settingsWriteState !== "saving") configFile.reload()
     })
-  }
-
-  function resetSettings() {
-    var patch = DockModel.resetSettingsPatch()
-    patch.attentionBadgesEnabled = true
-    patch.urgentWindowAnimationEnabled = true
-    patch.interfaceAnimationsEnabled = true
-    patch.launcherBadgeMode = "automatic"
-    patch.windowScope = "all"
-    patch.showUrgentOutsideScope = true
-    return saveSettings(patch, false)
   }
 
   function refreshTrash() {
@@ -454,9 +443,6 @@ Item {
         onUnpinRequested: desktopId => root.unpinApplication(desktopId)
         onHideRequested: desktopId => root.hideApplication(desktopId)
         onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
-        onSettingChanged: (key, value) => root.saveSetting(key, value)
-        onSettingsPatchRequested: patch => root.saveSettings(patch, false)
-        onResetSettingsRequested: root.resetSettings()
         onOpenTrashRequested: root.openTrash()
         onEmptyTrashRequested: root.emptyTrash()
       }

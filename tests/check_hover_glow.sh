@@ -28,16 +28,13 @@ for relative_path in \
   done
 done
 
-settings="$plugin_root/components/DockSettings.qml"
 for token in hoverGlowEnabled hoverGlowOpacity hoverGlowRadius; do
-  if ! rg -n "$token" "$settings" >/dev/null; then
-    printf 'Dock Settings must expose %s\n' "$token" >&2
+  if ! rg -n "\"$token\"" "$plugin_root/config/settings-schema.json" >/dev/null; then
+    printf 'CLI schema must expose %s\n' "$token" >&2
+    exit 1
+  fi
+  if ! rg -n "${token}: root\.${token}" "$plugin_root/components/Dock.qml" >/dev/null; then
+    printf 'Dock must pass %s to its icon components\n' "$token" >&2
     exit 1
   fi
 done
-
-if ! rg -n 'hoverGlowEnabled|hoverGlowOpacity|hoverGlowRadius' \
-    "$plugin_root/components/Dock.qml" >/dev/null; then
-  printf 'Dock must pass hover glow settings to its icon components\n' >&2
-  exit 1
-fi

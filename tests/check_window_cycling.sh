@@ -28,10 +28,8 @@ reject_pattern() {
 require_pattern '"scrollAction"[[:space:]]*:[[:space:]]*"none"' config/dock.json
 require_pattern 'property var settings: dockControl\.defaults' DockHost.qml
 require_pattern 'scrollAction:[[:space:]]*normalizeSetting\(' components/DockModel.js
-require_pattern 'scrollAction:[[:space:]]*effectiveSetting\("scrollAction"\)' components/Dock.qml
-require_pattern 'function scrollActionOptions\(\)' components/DockModel.js
-require_pattern 'label:[[:space:]]*"Scroll"' components/DockSettings.qml
-require_pattern 'root\.current\("scrollAction"\)' components/DockSettings.qml
+require_pattern 'scrollAction:[[:space:]]*settings\.scrollAction' components/Dock.qml
+require_pattern '"scrollAction".*"cycle-windows"' config/settings-schema.json
 require_pattern 'scrollAction' README.md
 require_pattern 'cycle-windows' README.md
 
@@ -68,7 +66,6 @@ reject_pattern 'property var minimizedOrigins' components/DockItem.qml
 reject_pattern 'property var minimizedOrigins' components/Dock.qml
 
 # FDM-808 must not resurrect the parked Shift-click action schema.
-reject_pattern 'shiftClickAction' config/dock.json
-reject_pattern 'label:[[:space:]]*"Shift \+ left click"' components/DockSettings.qml
+reject_pattern 'shiftClickAction' config/dock.json config/settings-schema.json
 
 echo "check_window_cycling: PASS"
