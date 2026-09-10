@@ -18,6 +18,8 @@ PopupWindow {
   required property var windowActions
   property bool interfaceAnimationsEnabled: true
   property bool originOnly: false
+  property bool canCustomizeIcon: false
+  property bool hasIconOverride: false
   onRunningToplevelsChanged: if (visible) dismiss()
   property bool controlItem: false
   signal openLauncher()
@@ -26,6 +28,8 @@ PopupWindow {
   signal addApplication()
   signal removeFromDock()
   signal hideFromDock()
+  signal changeIcon()
+  signal restoreIcon()
   signal toggleAutoHide()
 
   property string page: "windows"
@@ -384,6 +388,36 @@ PopupWindow {
             }
 
             DockMenuAction {
+              visible: !root.controlItem && root.canCustomizeIcon
+              iconName: "app-window"
+              text: "Change icon…"
+              keyboardActive: !!root && itemIndex === root.activeMenuIndex
+              readonly property int itemIndex: {
+                if (!root) return -1
+                var items = root.currentFocusableItems()
+                for (var i = 0; i < items.length; ++i)
+                  if (items[i] === this) return i
+                return -1
+              }
+              onTriggered: root.changeIcon()
+            }
+
+            DockMenuAction {
+              visible: !root.controlItem && root.canCustomizeIcon && root.hasIconOverride
+              iconName: "rotate-ccw"
+              text: "Restore default icon"
+              keyboardActive: !!root && itemIndex === root.activeMenuIndex
+              readonly property int itemIndex: {
+                if (!root) return -1
+                var items = root.currentFocusableItems()
+                for (var i = 0; i < items.length; ++i)
+                  if (items[i] === this) return i
+                return -1
+              }
+              onTriggered: root.restoreIcon()
+            }
+
+            DockMenuAction {
               visible: root.controlItem
               iconName: DockModel.dockControlIcon("launcher", root.autoHide)
               text: "Open App Launcher"
@@ -555,6 +589,36 @@ PopupWindow {
                   root.dismiss()
                   root.hideFromDock()
                 }
+              }
+
+              DockMenuAction {
+                visible: !root.controlItem && root.canCustomizeIcon
+                iconName: "app-window"
+                text: "Change icon…"
+                keyboardActive: !!root && itemIndex === root.activeMenuIndex
+                readonly property int itemIndex: {
+                  if (!root) return -1
+                  var items = root.currentFocusableItems()
+                  for (var i = 0; i < items.length; ++i)
+                    if (items[i] === this) return i
+                  return -1
+                }
+                onTriggered: root.changeIcon()
+              }
+
+              DockMenuAction {
+                visible: !root.controlItem && root.canCustomizeIcon && root.hasIconOverride
+                iconName: "rotate-ccw"
+                text: "Restore default icon"
+                keyboardActive: !!root && itemIndex === root.activeMenuIndex
+                readonly property int itemIndex: {
+                  if (!root) return -1
+                  var items = root.currentFocusableItems()
+                  for (var i = 0; i < items.length; ++i)
+                    if (items[i] === this) return i
+                  return -1
+                }
+                onTriggered: root.restoreIcon()
               }
 
               DockMenuAction {
