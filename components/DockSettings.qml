@@ -50,6 +50,8 @@ PanelWindow {
   readonly property bool wideLayout: panelWidth >= 720
   readonly property bool compactControls: panelWidth < 560
   property bool advancedExpanded: false
+  readonly property bool groupedEffective: current("workspaceLayout") === "grouped"
+    && position !== "left" && position !== "right"
   // Theme token map is owned live by Dock; this binding keeps symbolic
   // references synchronized when the active theme changes.
   required property var themeColorTokens

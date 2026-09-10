@@ -88,3 +88,7 @@ for method in preview commit; do
 done
 rg -Fq 'enabled: !root.groupedEffective' "$settings_qml" \
   || { echo "Grouped mode must disable flat-only controls" >&2; exit 1; }
+rg -q 'readonly property bool groupedEffective: current\("workspaceLayout"\) === "grouped"' "$settings_qml" \
+  || { echo "Dock Settings is missing its grouped-layout state" >&2; exit 1; }
+rg -Fq '&& position !== "left" && position !== "right"' "$settings_qml" \
+  || { echo "Grouped layout must be disabled on vertical dock edges" >&2; exit 1; }
