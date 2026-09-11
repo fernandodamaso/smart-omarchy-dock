@@ -14,6 +14,9 @@ Item {
   property color background: "#303030"
   property color accent: "#808080"
   property bool animationsEnabled: true
+  property bool windowDragActive: false
+  property point dragScenePosition: Qt.point(0, 0)
+  property int dragNavigationDirection: 0
   readonly property real desiredWidth: content.implicitWidth + contentPadding * 2
   readonly property bool overflowing: desiredWidth > width
   readonly property real navigationWidth: overflowing ? Math.min(buttonSize, width / 3) : 0
@@ -31,7 +34,7 @@ Item {
   }
 
   function ensureVisible(item, extent) {
-    if (!item || viewport.width <= 0) return
+    if (windowDragActive || !item || viewport.width <= 0) return
     content.forceLayout()
     var point = content.mapFromItem(item, 0, 0)
     var start = point.x + contentPadding
@@ -47,9 +50,68 @@ Item {
     return point.x >= 0 && point.x + item.width <= viewport.width
   }
 
+  function containsScenePoint(scenePoint) {
+    if (!visible || !scenePoint || !isFinite(scenePoint.x) || !isFinite(scenePoint.y)
+        || viewport.width <= 0 || viewport.height <= 0) return false
+    var point = viewport.mapFromItem(null, scenePoint.x, scenePoint.y)
+    return point.x >= 0 && point.x < viewport.width
+      && point.y >= 0 && point.y < viewport.height
+  }
+
+  function navigationDirectionAt(scenePoint) {
+    if (!visible || !overflowing || !scenePoint
+        || !isFinite(scenePoint.x) || !isFinite(scenePoint.y)) return 0
+    for (var i = 0; i < navigationButtons.count; ++i) {
+      var button = navigationButtons.itemAt(i)
+      if (!button || !button.visible || button.width <= 0) continue
+      var point = button.mapFromItem(null, scenePoint.x, scenePoint.y)
+      if (point.x >= 0 && point.x < button.width
+          && point.y >= 0 && point.y < button.height) return i === 0 ? -1 : 1
+    }
+    return 0
+  }
+
+  function updateDragNavigation() {
+    var direction = windowDragActive ? navigationDirectionAt(dragScenePosition) : 0
+    if (direction === dragNavigationDirection) return
+    dragDwell.stop()
+    dragScroll.stop()
+    dragNavigationDirection = direction
+    if (direction !== 0) dragDwell.restart()
+  }
+
+  function dragScrollStep() {
+    if (!windowDragActive || dragNavigationDirection === 0) return
+    scrollBy(dragNavigationDirection * 12)
+  }
+
+  onWindowDragActiveChanged: updateDragNavigation()
+  onDragScenePositionChanged: updateDragNavigation()
+  onViewportChanged: updateDragNavigation()
   onMaximumOffsetChanged: { clampOffset(); viewportChanged() }
   onWidthChanged: { clampOffset(); viewportChanged() }
   onRowYChanged: viewportChanged()
+  onXChanged: viewportChanged()
+  onYChanged: viewportChanged()
+  onVisibleChanged: { updateDragNavigation(); viewportChanged() }
+
+  Timer {
+    id: dragDwell
+    interval: 250
+    repeat: false
+    onTriggered: {
+      if (!root.windowDragActive || root.dragNavigationDirection === 0) return
+      root.dragScrollStep()
+      dragScroll.start()
+    }
+  }
+
+  Timer {
+    id: dragScroll
+    interval: 40
+    repeat: true
+    onTriggered: root.dragScrollStep()
+  }
 
   Flickable {
     id: viewport
@@ -61,9 +123,9 @@ Item {
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     flickableDirection: Flickable.HorizontalFlick
-    // Explicit buttons work with a mouse. Do not intercept app wheel cycling.
-    interactive: root.overflowing
+    interactive: root.overflowing && !root.windowDragActive
     onContentXChanged: root.viewportChanged()
+    onWidthChanged: root.viewportChanged()
 
     Row {
       id: content
@@ -76,6 +138,7 @@ Item {
   }
 
   Repeater {
+    id: navigationButtons
     model: 2
     Rectangle {
       required property int index
@@ -91,10 +154,10 @@ Item {
       color: navHover.hovered ? root.accent : root.background
       Accessible.role: Accessible.Button
       Accessible.name: index === 0 ? "Previous workspace cards" : "Next workspace cards"
-      Accessible.onPressAction: root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
-      activeFocusOnTab: visible && enabled
-      Keys.onReturnPressed: root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
-      Keys.onSpacePressed: root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
+      Accessible.onPressAction: if (!root.windowDragActive) root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
+      activeFocusOnTab: visible && enabled && !root.windowDragActive
+      Keys.onReturnPressed: if (!root.windowDragActive) root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
+      Keys.onSpacePressed: if (!root.windowDragActive) root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
       Text {
         anchors.centerIn: parent
         text: parent.index === 0 ? "‹" : "›"
@@ -102,7 +165,10 @@ Item {
         font.pixelSize: 24
       }
       HoverHandler { id: navHover; cursorShape: Qt.PointingHandCursor }
-      TapHandler { onTapped: root.scrollBy((parent.index === 0 ? -1 : 1) * root.viewportWidth * 0.8) }
+      TapHandler {
+        enabled: !root.windowDragActive
+        onTapped: root.scrollBy((parent.index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
+      }
     }
   }
 }

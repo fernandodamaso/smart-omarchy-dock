@@ -43,6 +43,11 @@ Item {
   required property bool vertical
   required property bool previewActive
   required property bool interfaceAnimationsEnabled
+  property DockWorkspaceDrag workspaceDrag: null
+  property bool workspaceDragEnabled: false
+  property bool workspaceGestureOwned: false
+  readonly property bool workspaceDragActive: workspaceDrag !== null && workspaceDrag.active
+  readonly property bool workspaceInputSuppressed: workspaceDragActive || workspaceGestureOwned
   property bool presentationActive: true
   property bool originOnly: false
   property bool localUrgent: false
@@ -59,6 +64,32 @@ Item {
     previewReleased(root)
   }
 
+  function cancelWorkspaceDrag(reason) {
+    if (root.workspaceDrag && root.workspaceDrag.sourceItem === root)
+      root.workspaceDrag.cancel(reason)
+  }
+
+  function workspaceGrabChanged(transition, point) {
+    if (!root.workspaceDrag || root.workspaceDrag.sourceItem !== root) return
+    if (transition === PointerDevice.UngrabExclusive) {
+      if (point.state === EventPoint.Released)
+        root.workspaceDrag.finish(point.scenePosition)
+      else
+        cancelWorkspaceDrag("non-release ungrab")
+    } else if (transition === PointerDevice.CancelGrabExclusive
+        || transition === PointerDevice.CancelGrabPassive) {
+      cancelWorkspaceDrag("grab cancelled")
+    }
+  }
+
+  onWorkspaceDragActiveChanged: if (workspaceDragActive) {
+    dismissPopups()
+    wheelRemainder = 0
+    lastWheelTimestamp = 0
+  }
+  onWorkspaceDragEnabledChanged: if (!workspaceDragEnabled) cancelWorkspaceDrag("drag disabled")
+  onParentChanged: cancelWorkspaceDrag("source reparented")
+
   function refreshPopupGeometry() {
     if (!presentationVisible) return
     tooltip.scheduleReanchor()
@@ -69,10 +100,12 @@ Item {
   property bool menuOpen: false
   onScopeRevisionChanged: if (originOnly && contextMenu.visible) contextMenu.dismiss()
   onVisibleChanged: if (!visible) {
+    cancelWorkspaceDrag("source hidden")
     contextMenu.dismiss()
     root.previewReleased(root)
   }
   Component.onDestruction: {
+    cancelWorkspaceDrag("source destroyed")
     if (menuOpen) {
       menuOpen = false
       root.contextMenuVisibilityChanged(false)
@@ -123,12 +156,12 @@ Item {
   readonly property real itemCenter: (vertical ? y + height / 2 : x + width / 2)
     + dragOffset + reorderOffset
   readonly property real distance: Math.abs(pointerPosition - itemCenter)
-  readonly property real influence: pointerPosition < -1000
+  readonly property real influence: pointerPosition < -1000 || workspaceInputSuppressed
     ? 0
     : Math.exp(-(distance * distance) / (magnificationRadius * magnificationRadius))
   readonly property var fullscreenPresentation:
     DockModel.fullscreenIconPresentation(
-      fullscreenModeActive, fullscreenEmphasized, mouse.hovered)
+      fullscreenModeActive, fullscreenEmphasized, mouse.hovered && !workspaceInputSuppressed)
   readonly property real iconScale: fullscreenPresentation.scale
     * (1 + (magnification - 1) * influence)
   readonly property var urgentBadgeState: badgeTracker
@@ -141,10 +174,11 @@ Item {
   readonly property bool attentionActive: badgeTracker
     ? badgeTracker.motionAttentionFor(desktopId, attentionScope) : false
   readonly property bool urgentMotionSuppressed: !presentationVisible || mouse.hovered
-    || dragHandler.active || contextMenu.visible
+    || dragHandler.active || contextMenu.visible || workspaceInputSuppressed
     || previewActive || previewInteractionActive || !presentationActive
 
   function launch() {
+    if (root.workspaceInputSuppressed) return
     if (entry)
       entry.execute()
     else
@@ -152,6 +186,7 @@ Item {
   }
 
   function dispatchApplicationAction(action, options) {
+    if (root.workspaceInputSuppressed) return false
     if (!DockModel.applicationActionCanRun(action, runningCount)) return false
 
     var request = options || ({})
@@ -197,6 +232,7 @@ Item {
 
   onPresentationActiveChanged: {
     if (!presentationActive) {
+      cancelWorkspaceDrag("presentation removed")
       dismissPopups()
       attentionReminderTimer.stop()
       attentionMotion.stop()
@@ -301,6 +337,7 @@ Item {
     width: root.iconSize
     height: root.iconSize
     opacity: root.fullscreenPresentation.opacity
+      * (root.workspaceDragActive && root.workspaceDrag.sourceItem === root ? 0.35 : 1)
     transformOrigin: root.position === "top"
       ? Item.Top
       : root.position === "left"
@@ -334,7 +371,7 @@ Item {
         spread: Math.max(1, root.iconSize * 0.06)
         offset: Qt.vector2d(0, 0)
         color: Color.accent
-        opacity: root.hoverGlowEnabled && mouse.hovered
+        opacity: root.hoverGlowEnabled && mouse.hovered && !root.workspaceInputSuppressed
           ? root.hoverGlowOpacity : 0
         z: -1
 
@@ -347,11 +384,12 @@ Item {
         anchors.fill: parent
         anchors.margins: -4
         radius: Math.max(10, Style.cornerRadius)
-        color: Util.alpha(Color.background, mouse.hovered ? 0.36 : 0)
+        color: Util.alpha(Color.background, mouse.hovered && !root.workspaceInputSuppressed ? 0.36 : 0)
         Behavior on color { ColorAnimation { duration: 140 } }
       }
 
       IconImage {
+        id: applicationArtwork
         anchors.fill: parent
         opacity: root.allWindowsMinimized ? 0.56 : 1.0
         source: root.entry && root.entry.icon
@@ -483,7 +521,7 @@ Item {
     id: tooltip
     anchorItem: root
     position: root.position
-    requestedVisible: root.presentationVisible && mouse.hovered && !contextMenu.visible && !root.previewActive && !dragHandler.active && root.reorderOffset === 0
+    requestedVisible: root.presentationVisible && mouse.hovered && !contextMenu.visible && !root.previewActive && !dragHandler.active && root.reorderOffset === 0 && !root.workspaceInputSuppressed
     text: root.tooltipLabel()
     fontFamily: Style.font.family
     fontSize: Style.font.body
@@ -511,7 +549,7 @@ Item {
     onHoveredChanged: {
       if (hovered) {
         if (root.showPreviews && root.runningCount >= 2
-            && !contextMenu.visible && !dragHandler.active)
+            && !contextMenu.visible && !dragHandler.active && !root.workspaceInputSuppressed)
           root.previewRequested(root, root.desktopId,
             root.runningToplevels, root.entry)
       } else if (root.previewActive || root.runningCount >= 2) {
@@ -521,21 +559,21 @@ Item {
   }
 
   TapHandler {
-    enabled: root.presentationActive
+    enabled: root.presentationActive && !root.workspaceInputSuppressed
     acceptedButtons: Qt.LeftButton
     acceptedModifiers: Qt.NoModifier
     onTapped: root.dispatchPointerAction("left", {})
   }
 
   TapHandler {
-    enabled: root.presentationActive
+    enabled: root.presentationActive && !root.workspaceInputSuppressed
     acceptedButtons: Qt.MiddleButton
     acceptedModifiers: Qt.NoModifier
     onTapped: root.dispatchPointerAction("middle", {})
   }
 
   TapHandler {
-    enabled: root.presentationActive
+    enabled: root.presentationActive && !root.workspaceInputSuppressed
     acceptedButtons: Qt.RightButton
     // Right click owns the context menu regardless of keyboard modifiers.
     acceptedModifiers: Qt.KeyboardModifierMask
@@ -549,7 +587,7 @@ Item {
     id: wheelHandler
 
     enabled: root.presentationActive && root.runningCount >= 2
-      && root.applicationActions.scrollAction === "cycle-windows"
+      && root.applicationActions.scrollAction === "cycle-windows" && !root.workspaceInputSuppressed
     target: null
     onWheel: event => {
       event.accepted = false
@@ -575,10 +613,58 @@ Item {
     }
   }
 
+  // Separate from pin reordering: both axes, normal platform threshold, and
+  // no target translation. Clipping the source must not disable its live grab.
+  DragHandler {
+    id: workspaceDragHandler
+    enabled: root.workspaceDragEnabled && root.presentationActive
+      && (active || root.presentationVisible && root.runningCount > 0
+        && !root.sticky && !root.workspaceInputSuppressed)
+    target: null
+    acceptedButtons: Qt.LeftButton
+    acceptedModifiers: Qt.NoModifier
+    xAxis.enabled: true
+    yAxis.enabled: true
+    grabPermissions: PointerHandler.CanTakeOverFromItems
+      | PointerHandler.CanTakeOverFromHandlersOfDifferentType
+    cursorShape: Qt.ClosedHandCursor
+    onActiveChanged: {
+      if (active) {
+        workspaceReleaseCleanup.stop()
+        root.workspaceGestureOwned = true
+        root.dismissPopups()
+        root.previewDismissRequested()
+        if (root.workspaceDrag)
+          root.workspaceDrag.begin(root, root.runningToplevels,
+            centroid.scenePosition, applicationArtwork.source)
+      } else {
+        // active=false also means cancellation. Only a released exclusive
+        // grab may commit; this next-turn fallback only cancels/cleans up.
+        workspaceReleaseCleanup.restart()
+      }
+    }
+    onActiveTranslationChanged: if (active && root.workspaceDrag)
+      root.workspaceDrag.updatePointer(centroid.scenePosition)
+    onGrabChanged: (transition, point) => root.workspaceGrabChanged(transition, point)
+    onCanceled: root.cancelWorkspaceDrag("grab stolen")
+    onEnabledChanged: if (!enabled) root.cancelWorkspaceDrag("handler disabled")
+  }
+
+  Timer {
+    id: workspaceReleaseCleanup
+    interval: 0
+    repeat: false
+    onTriggered: {
+      root.cancelWorkspaceDrag("grab ended without release")
+      root.workspaceGestureOwned = false
+    }
+  }
+
   DragHandler {
     id: dragHandler
 
     enabled: root.presentationActive && root.pinnedItem && !root.originOnly
+      && !root.workspaceInputSuppressed
     target: null
     acceptedButtons: Qt.LeftButton
     acceptedModifiers: Qt.NoModifier

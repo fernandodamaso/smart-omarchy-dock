@@ -526,8 +526,9 @@ function effectiveColor(enabled, override, themeColor, tokens) {
 }
 
 function effectiveBorderWidth(enabled, override, themeWidth) {
-  if (!Boolean(enabled)) return themeWidth
-  return steppedNumber(override, 0, 8, 1, 2, 0)
+  return Boolean(enabled)
+    ? steppedNumber(override, 0, 8, 1, 2, 0)
+    : themeWidth
 }
 
 function surfaceColorMode(enabled, value) {
@@ -599,7 +600,7 @@ function normalizeSetting(key, value) {
     return value === "grouped" ? "grouped" : "flat"
   case "position":
     return ["top", "bottom", "left", "right"].indexOf(value) >= 0
-      ? value : defaults.position
+      ? value : "bottom"
   case "fullLength":
   case "reserveSpace":
   case "autoHide":
@@ -656,7 +657,8 @@ function centeredPopupAnchor(position, screenWidth, screenHeight,
     parentTop = parentH < screenH
       ? (screenH - parentH) / 2 : 0
   } else {
-    parentLeft = parentW < screenW ? (screenW - parentW) / 2 : 0
+    parentLeft = parentW < screenW
+      ? (screenW - parentW) / 2 : 0
     parentTop = position === "bottom" ? screenH - parentH : 0
   }
 
@@ -879,15 +881,16 @@ function normalizeWindowAddress(value) {
 
 function moveWindowRequest(address, workspace, usingLua) {
   var target = normalizeWindowAddress(address)
-  var workspaceNumber = Number(workspace)
-  if (!target || !Number.isInteger(workspaceNumber)
-      || workspaceNumber < 1 || workspaceNumber > 10)
-    return ""
+  var raw = String(workspace === undefined || workspace === null ? "" : workspace)
+  var workspaceTarget = normalizeWorkspaceTarget(raw)
+  // Reject unsafe input rather than silently changing a named workspace.
+  if (!target || !workspaceTarget || raw !== workspaceTarget
+      || /[\x00-\x1f\x7f]/.test(raw)) return ""
 
   if (usingLua)
     return 'hl.dsp.window.move({ window = "address:' + target
-      + '", workspace = "' + workspaceNumber + '", follow = false })'
-  return "movetoworkspacesilent " + workspaceNumber + ",address:" + target
+      + '", workspace = "' + workspaceTarget + '", follow = false })'
+  return "movetoworkspacesilent " + workspaceTarget + ",address:" + target
 }
 
 function minimizeWindowRequest(address, usingLua) {
@@ -1258,6 +1261,7 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
       var aClosedPinned = a.pinned && a.toplevels.length === 0
       var bClosedPinned = b.pinned && b.toplevels.length === 0
       if (aClosedPinned && !bClosedPinned) return -1
+      if (aClosedPinned && bClosedPinned) return a.originalIndex - b.originalIndex
       if (!aClosedPinned && bClosedPinned) return 1
 
       // Everything else is ordered by the lowest workspace id it occupies.

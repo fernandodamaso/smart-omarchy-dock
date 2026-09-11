@@ -158,6 +158,136 @@ Item {
     return true
   }
 
+  // Drag payloads own exact objects AND addresses, never an app-id lookup.
+  function captureWorkspaceMove(toplevels) {
+    var values = toplevels || []
+    var captured = []
+    var seen = []
+    for (var i = 0; i < values.length; ++i) {
+      var toplevel = values[i]
+      if (!isAlive(toplevel)) return []
+      if (seen.indexOf(toplevel) >= 0) continue
+      seen.push(toplevel)
+      captured.push({ toplevel: toplevel, address: addressFor(toplevel) })
+    }
+    var validated = workspaceMoveMembers(captured)
+    return validated && validated.length === captured.length ? captured : []
+  }
+
+  function workspaceMoveLocation(toplevel, address) {
+    var handle = handleFor(toplevel)
+    if (!handle || !address || addressFor(toplevel) !== address) return null
+    var ipc = handle.lastIpcObject || ({})
+    if (ipc.pinned === true) return null
+    var handles = currentHandles()
+    for (var i = 0; i < handles.length; ++i) {
+      var other = handles[i]
+      if (other && other.wayland !== toplevel && isAlive(other.wayland)
+          && DockModel.normalizeWindowAddress(other.address) === address)
+        return null
+    }
+    // IPC wins over both stale object relationships and saved origins.
+    var identity = DockWindowModel.workspaceIdentity(workspaceForHandle(handle))
+    var minimized = identity === minimizedWorkspace
+    var target = workspaceTarget(workspaceForHandle(handle))
+    if (!minimized && (!target || identity.indexOf("special:") === 0
+        || !DockModel.moveWindowRequest(address, target, false))) return null
+    var origin = minimized ? originFor(address) : null
+    return {
+      toplevel: toplevel, address: address, minimized: minimized,
+      workspace: minimized ? origin ? origin.workspace : "" : target,
+      monitor: minimized ? origin ? origin.monitor : "" : monitorIdentity(handle)
+    }
+  }
+
+  // null means an unsafe surviving member; [] means all captured objects closed.
+  function workspaceMoveMembers(members) {
+    var values = members || []
+    var result = []
+    var seen = []
+    for (var i = 0; i < values.length; ++i) {
+      var member = values[i]
+      if (!member || !member.address) return null
+      if (!isAlive(member.toplevel)) continue
+      if (seen.indexOf(member.toplevel) >= 0) continue
+      var location = workspaceMoveLocation(member.toplevel, member.address)
+      if (!location) return null
+      seen.push(member.toplevel)
+      result.push(location)
+    }
+    return result
+  }
+
+  function resolveWorkspaceDropTarget(identity) {
+    if (typeof identity !== "string"
+        || DockWindowModel.workspaceIdentity(identity) !== identity) return null
+    var target = identity.indexOf("id:") === 0 ? identity.slice(3) : identity
+    if (!DockModel.moveWindowRequest("1", target, false)) return null
+    var workspaces = Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
+    var monitors = Hyprland.monitors ? Hyprland.monitors.values || [] : []
+    var resolved = null
+    for (var i = 0; i < workspaces.length; ++i) {
+      var descriptor = workspaces[i]
+      if (!descriptor || DockWindowModel.workspaceIdentity(descriptor) !== identity) continue
+      var ipc = descriptor.lastIpcObject || descriptor
+      if (identity.indexOf("name:") === 0) {
+        var name = String(ipc.name !== undefined ? ipc.name : descriptor.name || "")
+        if ((name.indexOf("name:") === 0 ? name : "name:" + name) !== target) return null
+      }
+      var owner = DockWindowModel.canonicalMonitorIdentity(
+        ipc.monitorID !== undefined ? ipc.monitorID
+          : ipc.monitor !== undefined ? ipc.monitor : descriptor.monitor, monitors)
+      if (!owner || resolved && resolved.monitor !== owner) return null
+      resolved = { identity: identity, target: target, monitor: owner }
+    }
+    return resolved
+  }
+
+  function workspaceMoveChangesLocation(member, destination) {
+    if (DockModel.normalizeWorkspaceTarget(member.workspace) !== destination.target) return true
+    if (!member.minimized) return false
+    var monitors = Hyprland.monitors ? Hyprland.monitors.values || [] : []
+    return DockWindowModel.canonicalMonitorIdentity(member.monitor, monitors) !== destination.monitor
+  }
+
+  function workspaceMoveWouldChange(members, identity) {
+    var destination = resolveWorkspaceDropTarget(identity)
+    var live = workspaceMoveMembers(members)
+    if (!destination || !live) return false
+    for (var i = 0; i < live.length; ++i) {
+      if (workspaceMoveChangesLocation(live[i], destination)) return true
+    }
+    return false
+  }
+
+  function moveCapturedToplevels(members, workspaceIdentity) {
+    var destination = resolveWorkspaceDropTarget(workspaceIdentity)
+    var live = workspaceMoveMembers(members)
+    if (!destination || !live || live.length === 0) return false
+    // Complete preflight before the first side effect. This is a submission
+    // result, not a compositor acknowledgement or an atomic multi-window move.
+    var changed = false
+    for (var i = 0; i < live.length; ++i) {
+      destination = resolveWorkspaceDropTarget(workspaceIdentity)
+      if (!destination) break
+      var member = workspaceMoveLocation(live[i].toplevel, live[i].address)
+      if (!member || !workspaceMoveChangesLocation(member, destination)) continue
+      if (member.minimized) {
+        changed = setOrigin(member.address, {
+          workspace: destination.target, monitor: destination.monitor
+        }) || changed
+      } else {
+        var request = DockModel.moveWindowRequest(
+          member.address, destination.target, Hyprland.usingLua)
+        if (dispatchRequest(request)) {
+          forgetOrigin(member.address)
+          changed = true
+        }
+      }
+    }
+    return changed
+  }
+
   function resolveOriginTarget(recorded, originOnly) {
     var target = DockModel.normalizeWorkspaceTarget(recorded)
     if (recorded || originOnly === true) return target
