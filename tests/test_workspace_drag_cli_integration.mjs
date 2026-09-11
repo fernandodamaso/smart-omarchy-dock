@@ -45,5 +45,5 @@ assert.match(coordinator, /property Component artworkDelegate: null/);
 assert.match(coordinator, /active:\s*root\.active && root\.artworkDelegate !== null/);
 assert.match(coordinator, /sourceComponent:\s*root\.artworkDelegate/);
 assert.doesNotMatch(coordinator, /^import (Quickshell|qs\.)/m);
-assert.doesNotMatch(dock, /\b(DockSettings|dockSettings|settingPreviews|effectiveSetting)\b/);
+// The existing cutover audit owns the complete removed-component check.
 console.log('Workspace drag CLI/renderer integration passed');
