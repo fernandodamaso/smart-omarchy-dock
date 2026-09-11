@@ -190,8 +190,8 @@ Item {
     var identity = DockWindowModel.workspaceIdentity(workspaceForHandle(handle))
     var minimized = identity === minimizedWorkspace
     var target = workspaceTarget(workspaceForHandle(handle))
-    if (!minimized && (!target || identity.indexOf("special:") === 0
-        || !DockModel.moveWindowRequest(address, target, false))) return null
+    // A resolvable fallback source needs no guessed source workspace: only
+    // its exact address and the independently validated destination are sent.
     var origin = minimized ? originFor(address) : null
     return {
       toplevel: toplevel, address: address, minimized: minimized,

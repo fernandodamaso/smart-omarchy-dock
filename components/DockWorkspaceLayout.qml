@@ -73,6 +73,8 @@ Item {
 
   function updateDragNavigation() {
     var direction = windowDragActive ? navigationDirectionAt(dragScenePosition) : 0
+    if (direction < 0 && contentX <= 0
+        || direction > 0 && contentX >= maximumOffset) direction = 0
     if (direction === dragNavigationDirection) return
     dragDwell.stop()
     dragScroll.stop()
@@ -102,7 +104,7 @@ Item {
     onTriggered: {
       if (!root.windowDragActive || root.dragNavigationDirection === 0) return
       root.dragScrollStep()
-      dragScroll.start()
+      if (root.windowDragActive && root.dragNavigationDirection !== 0) dragScroll.start()
     }
   }
 

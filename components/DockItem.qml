@@ -618,7 +618,8 @@ Item {
   DragHandler {
     id: workspaceDragHandler
     enabled: root.workspaceDragEnabled && root.presentationActive
-      && (active || root.presentationVisible && root.runningCount > 0
+      && (active || root.workspaceGestureOwned
+        || root.presentationVisible && root.runningCount > 0
         && !root.sticky && !root.workspaceInputSuppressed)
     target: null
     acceptedButtons: Qt.LeftButton

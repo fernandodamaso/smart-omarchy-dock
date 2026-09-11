@@ -526,9 +526,8 @@ function effectiveColor(enabled, override, themeColor, tokens) {
 }
 
 function effectiveBorderWidth(enabled, override, themeWidth) {
-  return Boolean(enabled)
-    ? steppedNumber(override, 0, 8, 1, 2, 0)
-    : themeWidth
+  if (!Boolean(enabled)) return themeWidth
+  return steppedNumber(override, 0, 8, 1, 2, 0)
 }
 
 function surfaceColorMode(enabled, value) {
@@ -600,7 +599,7 @@ function normalizeSetting(key, value) {
     return value === "grouped" ? "grouped" : "flat"
   case "position":
     return ["top", "bottom", "left", "right"].indexOf(value) >= 0
-      ? value : "bottom"
+      ? value : defaults.position
   case "fullLength":
   case "reserveSpace":
   case "autoHide":
@@ -657,8 +656,7 @@ function centeredPopupAnchor(position, screenWidth, screenHeight,
     parentTop = parentH < screenH
       ? (screenH - parentH) / 2 : 0
   } else {
-    parentLeft = parentW < screenW
-      ? (screenW - parentW) / 2 : 0
+    parentLeft = parentW < screenW ? (screenW - parentW) / 2 : 0
     parentTop = position === "bottom" ? screenH - parentH : 0
   }
 
@@ -1261,7 +1259,6 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
       var aClosedPinned = a.pinned && a.toplevels.length === 0
       var bClosedPinned = b.pinned && b.toplevels.length === 0
       if (aClosedPinned && !bClosedPinned) return -1
-      if (aClosedPinned && bClosedPinned) return a.originalIndex - b.originalIndex
       if (!aClosedPinned && bClosedPinned) return 1
 
       // Everything else is ordered by the lowest workspace id it occupies.
