@@ -14,11 +14,10 @@ tracker=components/DockBadgeTracker.qml
 motion=components/DockAttentionMotion.qml
 dock=components/Dock.qml
 item=components/DockItem.qml
-settings=components/DockSettings.qml
 config=config/dock.json
 node_test=tests/test_attention_motion_model.mjs
 
-for path in "$model" "$tracker" "$motion" "$dock" "$item" "$settings" "$config" "$node_test"; do
+for path in "$model" "$tracker" "$motion" "$dock" "$item" "$config" "$node_test"; do
   [[ -f "$path" ]] || fail "missing $path"
 done
 
@@ -114,19 +113,13 @@ if grep -Eq 'autoHideRevealed[[:space:]]*=' "$tracker" "$motion" "$item"; then
   fail 'urgent motion must not reveal an auto-hidden dock'
 fi
 
-# Settings default on, explicit disable control, effective only with badge display enabled.
+# Default-on preference remains CLI-configurable; the runtime reducer owns the badge gate.
 grep -Fq '"urgentWindowAnimationEnabled": true' "$config" \
   || fail 'config default missing'
-grep -Fq 'urgentWindowAnimationEnabled: true' DockHost.qml \
-  || fail 'host fallback default missing'
-grep -Fq 'patch.urgentWindowAnimationEnabled = true' DockHost.qml \
-  || fail 'reset default missing'
-grep -Fq 'title: "Application Badges"' "$settings" \
-  || fail 'Application Badges settings section missing'
-grep -Fq 'label: "Urgent window animation"' "$settings" \
-  || fail 'explicit urgent motion toggle missing'
-grep -Fq 'enabled: root.current("attentionBadgesEnabled") !== false' "$settings" \
-  || fail 'motion toggle must be effective only when badges are enabled'
+grep -Fq 'property var settings: dockControl.defaults' DockHost.qml \
+  || fail 'host fallback must use declared defaults (including urgent motion)'
+grep -Fq '"urgentWindowAnimationEnabled"' config/settings-schema.json \
+  || fail 'CLI urgent motion preference missing'
 grep -Fq 'animationEnabled: urgentWindowAnimationEnabled' "$item" \
   || fail 'animation setting not wired into decision reducer'
 grep -Fq 'badgesEnabled: attentionBadgesEnabled' "$item" \

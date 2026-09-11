@@ -79,8 +79,8 @@ grep -Fq 'isPrimaryVisibleItem' components/Dock.qml \
 
 grep -Fq '"attentionBadgesEnabled": true' config/dock.json \
   || fail 'config default must enable attention badges'
-grep -Fq 'attentionBadgesEnabled: true' DockHost.qml \
-  || fail 'host fallback must enable attention badges'
+grep -Fq 'property var settings: dockControl.defaults' DockHost.qml \
+  || fail 'host fallback must use declared defaults (including attention badges)'
 grep -Fq 'DockApplicationBadge {' components/DockItem.qml \
   || fail 'DockItem.qml must use the reusable application badge'
 grep -Fq 'color: urgent ? Color.urgent : Color.accent' "$badge" \

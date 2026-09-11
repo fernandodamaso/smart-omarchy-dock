@@ -1,5 +1,12 @@
 # FDM-858 native Omarchy UI audit
 
+> **Historical audit — superseded by the CLI-first Settings removal in PR #44.**
+> The dropdown adapter, its local fixture and runner described below are no longer
+> present. Do not execute the historical validation commands against this branch.
+> Current qualification follows [CLI_RUNTIME_CHECKS.md](CLI_RUNTIME_CHECKS.md).
+> The decisions and original handoff below are retained as source history, not
+> current UI or testing instructions.
+
 ## Reference points
 
 - SmartDock baseline reviewed for this change: `main@2b11adfccd84883a2dca1287ffb4612a95e9697e`.
@@ -45,7 +52,7 @@ This audit found one high-confidence generic-control duplication worth replacing
 
 No additional follow-up issue is created from this audit because the remaining visual components retain material SmartDock-specific responsibilities or already wrap the appropriate native primitive. Future replacements should be opened only when a concrete native component removes meaningful code without changing those contracts.
 
-## Host-dependent validation handoff
+## Host-dependent validation handoff (historical, superseded)
 
 The settings-binding regression intentionally lives in `local-tests/`, outside the headless CI `tests/` tree. On the Omarchy machine, run:
 

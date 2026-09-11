@@ -5,7 +5,7 @@ import "../components/DockModel.js" as DockModel
 TestCase {
   name: "DockModel"
 
-  function test_workspaceMonitorScopeDefaultsRoundtripAndReset() {
+  function test_workspaceMonitorScopeDefaultsRoundtripAndProjection() {
     for (var invalid of [undefined, null, "invalid", "monitor", false, 7])
       compare(DockModel.normalizeSetting("workspaceMonitorScope", invalid), "all")
     compare(DockModel.settingsDefaults().workspaceMonitorScope, "all")
@@ -18,12 +18,12 @@ TestCase {
       compare(loaded.windowScope, "monitor")
       compare(loaded.position, "left")
       compare(DockModel.mergeSettings(loaded,
-        DockModel.resetSettingsPatch()).workspaceMonitorScope, "all")
+        DockModel.settingsDefaults()).workspaceMonitorScope, "all")
     }
     verify(original.workspaceMonitorScope === undefined)
   }
 
-  function test_workspaceLayoutDefaultsRoundtripAndReset() {
+  function test_workspaceLayoutDefaultsRoundtripAndProjection() {
     compare(DockModel.normalizeSetting("workspaceLayout", undefined), "flat")
     compare(DockModel.normalizeSetting("workspaceLayout", "invalid"), "flat")
     compare(DockModel.normalizeSetting("workspaceLayout", "grouped"), "grouped")
@@ -38,7 +38,7 @@ TestCase {
     for (var flatKey in original) compare(flat[flatKey], original[flatKey])
     compare(settings.workspaceLayout, "grouped")
     compare(JSON.parse(JSON.stringify(settings)).workspaceLayout, "grouped")
-    var reset = DockModel.mergeSettings(settings, DockModel.resetSettingsPatch())
+    var reset = DockModel.mergeSettings(settings, DockModel.settingsDefaults())
     compare(reset.workspaceLayout, "flat")
     compare(reset.other, 7)
     compare(reset.pinned[0], "chrome")
@@ -83,7 +83,7 @@ TestCase {
     compare(DockModel.controlCommand(null), "omarchy-menu toggle apps")
   }
 
-  function test_normalizesSettingsForTheConfigurationPanel() {
+  function test_normalizesRuntimePreferences() {
     compare(DockModel.normalizeSetting("iconSize", 10), 24)
     compare(DockModel.normalizeSetting("iconSize", 120), 96)
     compare(DockModel.normalizeSetting("iconSize", 41.6), 42)
@@ -183,33 +183,6 @@ TestCase {
       JSON.stringify(["source", "target", "hidden-after"]))
   }
 
-  function test_buildsHiddenApplicationSettingsRowsWithFallbacks() {
-    var rows = DockModel.hiddenApplicationRows([
-      " org.mozilla.Firefox ", "org.example.Missing", "ORG.MOZILLA.FIREFOX"
-    ], [
-      { id: "org.mozilla.Firefox.desktop", name: "Firefox", icon: "firefox" }
-    ])
-
-    compare(JSON.stringify(rows), JSON.stringify([
-      { id: "org.mozilla.Firefox", name: "Firefox", icon: "firefox" },
-      { id: "org.example.Missing", name: "org.example.Missing",
-        icon: "application-x-executable" }
-    ]))
-    compare(JSON.stringify(DockModel.hiddenApplicationRows([], [])), "[]")
-  }
-
-  function test_readsHiddenApplicationEntriesFromArrayLikeQObjectLists() {
-    var entries = {
-      0: { id: "org.mozilla.Firefox", name: "Firefox", icon: "firefox" },
-      length: 1
-    }
-
-    compare(JSON.stringify(DockModel.hiddenApplicationRows(
-      ["org.mozilla.Firefox"], entries)), JSON.stringify([
-        { id: "org.mozilla.Firefox", name: "Firefox", icon: "firefox" }
-      ]))
-  }
-
   function test_persistsHiddenApplicationInSettingsPatch() {
     var settings = {
       pinned: ["org.gnome.Nautilus", "com.google.Chrome"],
@@ -267,58 +240,6 @@ TestCase {
     compare(DockModel.normalizeSetting("borderWidth", 3.4), 3)
   }
 
-  function test_buildsAtomicSurfaceOverridePatches() {
-    compare(DockModel.surfaceColorMode(false, "@accent"), "default")
-    compare(DockModel.surfaceColorMode(true, ""), "default")
-    compare(DockModel.surfaceColorMode(true, "@accent"), "token")
-    compare(DockModel.surfaceColorMode(true, "#aabbcc"), "custom")
-
-    compare(JSON.stringify(DockModel.surfaceColorPatch(
-      "backgroundColorEnabled", "backgroundColor", "")),
-      JSON.stringify({ backgroundColorEnabled: false }))
-    compare(JSON.stringify(DockModel.surfaceColorPatch(
-      "backgroundColorEnabled", "backgroundColor", "@Accent")),
-      JSON.stringify({
-        backgroundColorEnabled: true,
-        backgroundColor: "@accent"
-      }))
-    compare(JSON.stringify(DockModel.surfaceColorPatch(
-      "borderColorEnabled", "borderColor", "#AABBCC")),
-      JSON.stringify({
-        borderColorEnabled: true,
-        borderColor: "#aabbcc"
-      }))
-    compare(JSON.stringify(DockModel.surfaceColorPatch(
-      "borderColorEnabled", "borderColor", "not-a-color")), "{}")
-    compare(JSON.stringify(DockModel.surfaceColorPatch(
-      "workspaceBadgeBackgroundColorEnabled",
-      "workspaceBadgeBackgroundColor", "@Accent")),
-      JSON.stringify({
-        workspaceBadgeBackgroundColorEnabled: true,
-        workspaceBadgeBackgroundColor: "@accent"
-      }))
-    compare(JSON.stringify(DockModel.surfaceColorPatch(
-      "workspaceBadgeTextColorEnabled", "workspaceBadgeTextColor", "#AABBCC")),
-      JSON.stringify({
-        workspaceBadgeTextColorEnabled: true,
-        workspaceBadgeTextColor: "#aabbcc"
-      }))
-    compare(JSON.stringify(DockModel.surfaceColorPatch(
-      "workspaceBadgeBackgroundColorEnabled",
-      "workspaceBadgeBackgroundColor", "")),
-      JSON.stringify({ workspaceBadgeBackgroundColorEnabled: false }))
-    compare(JSON.stringify(DockModel.surfaceColorPatch(
-      "workspaceBadgeTextColorEnabled", "workspaceBadgeTextColor", "bad")), "{}")
-    compare(JSON.stringify(DockModel.surfaceColorPatch(
-      "autoHide", "borderColor", "@accent")), "{}")
-  }
-
-  function test_formatsColorDialogValuesForExistingHexSettings() {
-    compare(DockModel.colorToHex({ r: 1, g: 0.5, b: 0, a: 1 }), "#ff8000")
-    compare(DockModel.colorToHex({ r: 1, g: 0, b: 0, a: 0.5 }), "#80ff0000")
-    compare(DockModel.colorToHex({ r: 0, g: 0.25, b: 1, a: 0 }), "#000040ff")
-  }
-
   function test_usesThemeSurfaceValuesWhenOverridesAreDisabled() {
     compare(DockModel.effectiveColor(false, "#112233", "#445566"), "#445566")
     compare(DockModel.effectiveColor(true, "invalid", "#445566"), "#445566")
@@ -354,7 +275,7 @@ TestCase {
 
   function test_mapsDockControlActionsToIcons() {
     compare(DockModel.dockControlIcon("launcher", false), "rocket")
-    compare(DockModel.dockControlIcon("settings", false), "settings-2")
+    compare(DockModel.dockControlIcon("settings", false), "")
     compare(DockModel.dockControlIcon("add", false), "plus")
     compare(DockModel.dockControlIcon("auto-hide", false), "eye-off")
     compare(DockModel.dockControlIcon("auto-hide", true), "eye")
@@ -390,25 +311,8 @@ TestCase {
     compare(DockModel.shouldReserveSpace(false, false), false)
   }
 
-  function test_centersSettingsPopupInMonitorCoordinates() {
-    var bottomCompact = DockModel.centeredPopupAnchor(
-      "bottom", 1920, 1080, 450, 109, 460, 760, 12)
-    compare(bottomCompact.x, -5)
-    compare(bottomCompact.y, -811)
-
-    var topFullLength = DockModel.centeredPopupAnchor(
-      "top", 1920, 1080, 1920, 109, 460, 760, 12)
-    compare(topFullLength.x, 730)
-    compare(topFullLength.y, 160)
-
-    var leftCompact = DockModel.centeredPopupAnchor(
-      "left", 1920, 1080, 109, 450, 460, 760, 12)
-    compare(leftCompact.x, 730)
-    compare(leftCompact.y, -155)
-  }
-
-  function test_buildsResetPatchWithoutUnrelatedSettings() {
-    var reset = DockModel.resetSettingsPatch()
+  function test_runtimeDefaultsExcludeCollectionsAndMargin() {
+    var reset = DockModel.settingsDefaults()
     compare(reset.iconSize, 42)
     compare(reset.magnification, 1.2)
     compare(reset.magnificationRadius, 95)

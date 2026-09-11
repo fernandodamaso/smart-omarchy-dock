@@ -26,14 +26,13 @@ PanelWindow {
   required property bool workspaceCountsReady
   required property int workspaceCountsRevision
   required property int scopeRevision
+  property var iconOverrides: ({})
+  property int iconReloadRevision: 0
   signal reorderRequested(string sourceDesktopId, string targetDesktopId)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
   signal hideRequested(string desktopId)
   signal autoHideRequested(bool enabled)
-  signal settingChanged(string key, var value)
-  signal settingsPatchRequested(var patch)
-  signal resetSettingsRequested()
   signal openTrashRequested()
   signal emptyTrashRequested()
 
@@ -42,25 +41,24 @@ PanelWindow {
   property int openMenuCount: 0
   property bool autoHideRevealed: false
   property int badgeStateRevision: 0
-  property var settingPreviews: ({})
 
   readonly property int iconSize: DockModel.normalizeSetting(
-    "iconSize", effectiveSetting("iconSize"))
+    "iconSize", settings.iconSize)
   readonly property real magnification: DockModel.normalizeSetting(
-    "magnification", effectiveSetting("magnification"))
+    "magnification", settings.magnification)
   readonly property real magnificationRadius: DockModel.normalizeSetting(
-    "magnificationRadius", effectiveSetting("magnificationRadius"))
+    "magnificationRadius", settings.magnificationRadius)
   readonly property bool hoverGlowEnabled: DockModel.normalizeSetting(
-    "hoverGlowEnabled", effectiveSetting("hoverGlowEnabled"))
+    "hoverGlowEnabled", settings.hoverGlowEnabled)
   readonly property real hoverGlowOpacity: DockModel.normalizeSetting(
-    "hoverGlowOpacity", effectiveSetting("hoverGlowOpacity"))
+    "hoverGlowOpacity", settings.hoverGlowOpacity)
   readonly property real hoverGlowRadius: DockModel.normalizeSetting(
-    "hoverGlowRadius", effectiveSetting("hoverGlowRadius"))
+    "hoverGlowRadius", settings.hoverGlowRadius)
   readonly property bool showPreviews: DockModel.normalizeSetting(
-    "showPreviews", effectiveSetting("showPreviews"))
+    "showPreviews", settings.showPreviews)
   readonly property int edgeMargin: settings.margin === undefined ? 10 : settings.margin
-  // Names exposed by Dock Settings. Values are live bindings to Omarchy's
-  // Color singleton so symbolic overrides follow a theme change immediately.
+  // Live bindings to Omarchy's Color singleton keep symbolic overrides in sync
+  // with theme changes, independently of how the preferences were configured.
   readonly property var themeColorTokens: ({
     "background": Color.background,
     "foreground": Color.foreground,
@@ -90,11 +88,11 @@ PanelWindow {
   readonly property bool workspaceBadgeBackgroundColorEnabled:
     DockModel.normalizeSetting(
       "workspaceBadgeBackgroundColorEnabled",
-      effectiveSetting("workspaceBadgeBackgroundColorEnabled"))
+      settings.workspaceBadgeBackgroundColorEnabled)
   readonly property string workspaceBadgeBackgroundColorOverride:
     DockModel.normalizeSetting(
       "workspaceBadgeBackgroundColor",
-      effectiveSetting("workspaceBadgeBackgroundColor"))
+      settings.workspaceBadgeBackgroundColor)
   readonly property color effectiveWorkspaceBadgeBackgroundColor:
     DockModel.effectiveColor(
       workspaceBadgeBackgroundColorEnabled,
@@ -104,11 +102,11 @@ PanelWindow {
   readonly property bool workspaceBadgeTextColorEnabled:
     DockModel.normalizeSetting(
       "workspaceBadgeTextColorEnabled",
-      effectiveSetting("workspaceBadgeTextColorEnabled"))
+      settings.workspaceBadgeTextColorEnabled)
   readonly property string workspaceBadgeTextColorOverride:
     DockModel.normalizeSetting(
       "workspaceBadgeTextColor",
-      effectiveSetting("workspaceBadgeTextColor"))
+      settings.workspaceBadgeTextColor)
   readonly property color effectiveWorkspaceBadgeTextColor:
     DockModel.effectiveColor(
       workspaceBadgeTextColorEnabled,
@@ -116,32 +114,32 @@ PanelWindow {
       "#ffffff",
       themeColorTokens)
   readonly property bool backgroundColorEnabled: DockModel.normalizeSetting(
-    "backgroundColorEnabled", effectiveSetting("backgroundColorEnabled"))
+    "backgroundColorEnabled", settings.backgroundColorEnabled)
   readonly property string backgroundColorOverride: DockModel.normalizeSetting(
-    "backgroundColor", effectiveSetting("backgroundColor"))
+    "backgroundColor", settings.backgroundColor)
   readonly property color dockBackgroundBaseColor: DockModel.effectiveColor(
     backgroundColorEnabled, backgroundColorOverride, Color.menu.background,
     themeColorTokens)
   readonly property real backgroundOpacity: DockModel.normalizeSetting(
-    "backgroundOpacity", effectiveSetting("backgroundOpacity"))
+    "backgroundOpacity", settings.backgroundOpacity)
   readonly property color dockBackgroundColor: Qt.rgba(
     dockBackgroundBaseColor.r,
     dockBackgroundBaseColor.g,
     dockBackgroundBaseColor.b,
     DockModel.surfaceOpacity(dockBackgroundBaseColor.a, backgroundOpacity))
   readonly property bool borderColorEnabled: DockModel.normalizeSetting(
-    "borderColorEnabled", effectiveSetting("borderColorEnabled"))
+    "borderColorEnabled", settings.borderColorEnabled)
   readonly property string borderColorOverride: DockModel.normalizeSetting(
-    "borderColor", effectiveSetting("borderColor"))
+    "borderColor", settings.borderColor)
   readonly property bool borderWidthEnabled: DockModel.normalizeSetting(
-    "borderWidthEnabled", effectiveSetting("borderWidthEnabled"))
+    "borderWidthEnabled", settings.borderWidthEnabled)
   readonly property var themeDockBorderSpec: Border.surfaceSpec(
     "menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
   readonly property real themeBorderWidth: Math.max(
     Border.top(themeDockBorderSpec), Border.right(themeDockBorderSpec),
     Border.bottom(themeDockBorderSpec), Border.left(themeDockBorderSpec))
   readonly property real borderWidth: DockModel.effectiveBorderWidth(
-    borderWidthEnabled, effectiveSetting("borderWidth"), themeBorderWidth)
+    borderWidthEnabled, settings.borderWidth, themeBorderWidth)
   readonly property color dockBorderColor: DockModel.effectiveColor(
     borderColorEnabled, borderColorOverride, Color.menu.border,
     themeColorTokens)
@@ -160,44 +158,44 @@ PanelWindow {
     return spec
   }
   readonly property bool autoHide: DockModel.normalizeSetting(
-    "autoHide", effectiveSetting("autoHide"))
+    "autoHide", settings.autoHide)
   readonly property bool reserveSpace: DockModel.shouldReserveSpace(
-    DockModel.normalizeSetting("reserveSpace", effectiveSetting("reserveSpace")),
+    DockModel.normalizeSetting("reserveSpace", settings.reserveSpace),
     autoHide)
   readonly property var applicationActions: DockModel.normalizeApplicationActionConfig({
-    clickAction: effectiveSetting("clickAction"),
-    middleClickAction: effectiveSetting("middleClickAction"),
-    scrollAction: effectiveSetting("scrollAction")
+    clickAction: settings.clickAction,
+    middleClickAction: settings.middleClickAction,
+    scrollAction: settings.scrollAction
   })
   readonly property string controlCommand: DockModel.normalizeSetting(
-    "controlCommand", effectiveSetting("controlCommand"))
+    "controlCommand", settings.controlCommand)
   readonly property string position: DockModel.normalizeSetting(
-    "position", effectiveSetting("position"))
+    "position", settings.position)
   readonly property bool vertical: position === "left" || position === "right"
   readonly property bool fullLength: DockModel.normalizeSetting(
-    "fullLength", effectiveSetting("fullLength"))
+    "fullLength", settings.fullLength)
   readonly property bool sortByWorkspace: DockModel.normalizeSetting(
-    "sortByWorkspace", effectiveSetting("sortByWorkspace"))
+    "sortByWorkspace", settings.sortByWorkspace)
   readonly property string workspaceMonitorScope: DockModel.normalizeSetting(
-    "workspaceMonitorScope", effectiveSetting("workspaceMonitorScope"))
+    "workspaceMonitorScope", settings.workspaceMonitorScope)
   readonly property bool groupWindows: DockModel.normalizeSetting(
-    "groupWindows", effectiveSetting("groupWindows"))
+    "groupWindows", settings.groupWindows)
   readonly property string windowScope: DockWindowModel.normalizeWindowScope(
-    effectiveSetting("windowScope"))
+    settings.windowScope)
   readonly property bool showUrgentOutsideScope:
     DockWindowModel.normalizeShowUrgentOutsideScope(
-      effectiveSetting("showUrgentOutsideScope"))
+      settings.showUrgentOutsideScope)
   readonly property bool attentionBadgesEnabled:
-    typeof effectiveSetting("attentionBadgesEnabled") === "boolean"
-      ? effectiveSetting("attentionBadgesEnabled") : true
+    typeof settings.attentionBadgesEnabled === "boolean"
+      ? settings.attentionBadgesEnabled : true
   readonly property bool urgentWindowAnimationEnabled:
-    typeof effectiveSetting("urgentWindowAnimationEnabled") === "boolean"
-      ? effectiveSetting("urgentWindowAnimationEnabled") : true
+    typeof settings.urgentWindowAnimationEnabled === "boolean"
+      ? settings.urgentWindowAnimationEnabled : true
   readonly property bool interfaceAnimationsEnabled: DockModel.normalizeSetting(
-    "interfaceAnimationsEnabled", effectiveSetting("interfaceAnimationsEnabled"))
+    "interfaceAnimationsEnabled", settings.interfaceAnimationsEnabled)
   readonly property var pinned: settings.pinned || []
   readonly property var hiddenApplications: DockModel.normalizeSetting(
-    "hiddenApplications", effectiveSetting("hiddenApplications"))
+    "hiddenApplications", settings.hiddenApplications)
   readonly property var applications: DesktopEntries.applications.values || []
   readonly property var toplevels: ToplevelManager.toplevels.values || []
   readonly property var hyprToplevels: Hyprland.toplevels
@@ -240,7 +238,7 @@ PanelWindow {
   readonly property bool fullscreenModeActive: fullscreenOwnerToplevel !== null
   property var visibleItems: []
   readonly property bool groupedRequested: !vertical
-    && DockModel.normalizeSetting("workspaceLayout", effectiveSetting("workspaceLayout")) === "grouped"
+    && DockModel.normalizeSetting("workspaceLayout", settings.workspaceLayout) === "grouped"
   property var workspacePresentation: ({ groups: [], globalLaunchers: [], fallbackItems: [], renderedItems: [] })
   readonly property bool grouped: groupedRequested
   readonly property var renderedItems: grouped ? workspacePresentation.renderedItems : visibleItems
@@ -281,7 +279,7 @@ PanelWindow {
   readonly property int compactPanelExtent: compactGroupedSurface
     ? compactMainExtent - groupedSurfaceTrim + groupedSurfaceGutter * 2 : compactMainExtent
   readonly property bool keepAutoHideOpen: windowPointer.hovered
-    || appPicker.visible || dockSettings.visible || openMenuCount > 0
+    || appPicker.visible || openMenuCount > 0
     || dragSource >= 0 || windowPreview.interactionActive
   readonly property bool dockShown: !autoHide || autoHideRevealed
   readonly property real pointerPosition: !pointer.hovered
@@ -289,10 +287,6 @@ PanelWindow {
     : vertical
       ? pointer.point.position.y
       : pointer.point.position.x
-
-  function effectiveSetting(key) {
-    return settingPreviews[key] !== undefined ? settingPreviews[key] : settings[key]
-  }
 
   function refreshVisibleItems() {
     if (groupedRequested) {
@@ -356,25 +350,6 @@ PanelWindow {
         break
       }
     }
-  }
-
-  function previewSetting(key, value) {
-    var previews = DockModel.mergeSettings(settingPreviews, ({}))
-    previews[key] = value
-    settingPreviews = previews
-  }
-
-  function clearSettingPreview(key) {
-    if (settingPreviews[key] === undefined) return
-    var previews = {}
-    for (var previewKey in settingPreviews) {
-      if (previewKey !== key) previews[previewKey] = settingPreviews[previewKey]
-    }
-    settingPreviews = previews
-  }
-
-  function clearSettingPreviews() {
-    settingPreviews = ({})
   }
 
   function reorderOffset(index) {
@@ -443,7 +418,6 @@ PanelWindow {
   onDragSourceChanged: if (dragSource >= 0) windowPreview.dismissImmediately()
   onShowPreviewsChanged: if (!showPreviews) windowPreview.dismissImmediately()
   onSettingsChanged: root.scheduleVisibleItemsRefresh()
-  onSettingPreviewsChanged: root.scheduleVisibleItemsRefresh()
   onPinnedChanged: root.scheduleVisibleItemsRefresh()
   onWorkspaceMonitorScopeChanged: root.scheduleVisibleItemsRefresh()
   onFocusedScopeWorkspaceChanged: root.scheduleVisibleItemsRefresh()
@@ -667,7 +641,6 @@ PanelWindow {
         position: root.position
         vertical: root.vertical
         interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
-        onSettingsRequested: dockSettings.open()
         onAddApplicationRequested: appPicker.open()
         onAutoHideToggled: enabled => root.autoHideRequested(enabled)
         onContextMenuVisibilityChanged: visible => {
@@ -906,6 +879,8 @@ PanelWindow {
     identityToplevel: modelData.identityToplevel || null
 
     desktopId: modelData.desktopId
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
     pinnedItem: modelData.pinned
     runningToplevels: modelData.toplevels
     focused: root.activeToplevel !== null
@@ -990,6 +965,8 @@ PanelWindow {
     position: root.position
     visibleItems: root.renderedItems
     clipItem: root.grouped ? groupedLayout : null
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
   }
 
   DockAppPicker {
@@ -998,30 +975,9 @@ PanelWindow {
     anchorItem: dockBackground
     position: root.position
     pinned: root.pinned
+    iconOverrides: root.iconOverrides
+    iconReloadRevision: root.iconReloadRevision
     onApplicationSelected: desktopId => root.pinRequested(desktopId)
-  }
-
-  DockSettings {
-    id: dockSettings
-
-    anchorItem: controlItem
-    position: root.position
-    settings: root.settings
-    themeColorTokens: root.themeColorTokens
-    onVisibleChanged: if (!visible) root.clearSettingPreviews()
-    onSettingPreviewed: (key, value) => root.previewSetting(key, value)
-    onSettingCommitted: (key, value) => {
-      root.settingChanged(key, value)
-      root.clearSettingPreview(key)
-    }
-    onSettingsPatchCommitted: patch => {
-      root.settingsPatchRequested(patch)
-      for (var key in patch) root.clearSettingPreview(key)
-    }
-    onResetRequested: {
-      root.clearSettingPreviews()
-      root.resetSettingsRequested()
-    }
   }
 
   HoverHandler {

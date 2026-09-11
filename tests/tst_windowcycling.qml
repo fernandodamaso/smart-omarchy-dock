@@ -38,8 +38,7 @@ TestCase {
     compare(DockModel.applicationActionCanRun("cycle-windows", 1), false)
     compare(DockModel.applicationActionCanRun("cycle-windows", 2), true)
 
-    compare(DockModel.applicationActionOptions().some(
-      option => option.value === "cycle-windows"), false)
+    compare(DockModel.applicationActionValues().indexOf("cycle-windows"), -1)
   }
 
   function test_wrapsForwardAndBackwardFromTheActiveMember() {
