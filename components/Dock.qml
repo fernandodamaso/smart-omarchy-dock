@@ -58,9 +58,13 @@ PanelWindow {
     var handles = root.hyprToplevels
     for (var j = 0; j < handles.length; ++j) {
       var handle = handles[j]
-      if (handle && handle.wayland === toplevel)
-        return handle.address
-          || String((handle.lastIpcObject || {}).address || "")
+      if (!handle || handle.wayland !== toplevel) continue
+      // The provider keys windows by the hyprctl IPC address form; prefer the
+      // authoritative IPC record and normalize Quickshell's bare hex form.
+      var ipc = handle.lastIpcObject || ({})
+      if (ipc.address) return String(ipc.address)
+      var address = handle.address ? String(handle.address) : ""
+      return address && address.indexOf("0x") !== 0 ? "0x" + address : address
     }
     return ""
   }

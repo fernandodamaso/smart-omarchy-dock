@@ -124,7 +124,7 @@ grep -Fq 'profileKey: root.browserProfileKey' components/DockItem.qml \
   || fail 'DockItem.qml must forward the window profile key'
 grep -Fq 'function hyprAddressFor' components/Dock.qml \
   || fail 'Dock.qml must map generic toplevels to Hyprland addresses'
-grep -Fq 'handle.wayland === toplevel' components/Dock.qml \
+grep -Fq 'handle.wayland !== toplevel' components/Dock.qml \
   || fail 'Dock.qml must pair toplevels through HyprlandToplevel.wayland'
 grep -Fq 'google-chrome@profile:' tests/test_icon_overrides.mjs \
   || fail 'icon override tests must cover profile keys'
