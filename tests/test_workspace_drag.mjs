@@ -218,7 +218,8 @@ for (const mutate of [
         finish: point => { calls.push(['finish', point]); item.workspaceDrag.sourceItem = null },
         cancel: () => { calls.push(['cancel']); item.workspaceDrag.sourceItem = null }
       } })
-    item.workspaceDrag.sourceItem = item
+    // A vm context's external wrapper is not its in-context global identity.
+    vm.runInContext('workspaceDrag.sourceItem = root', item)
     const point = { state, scenePosition: { x: 91, y: 37 } }
     item.workspaceGrabChanged(transition, point)
     item.workspaceGrabChanged(transition, point)
