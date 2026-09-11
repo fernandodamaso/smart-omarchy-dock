@@ -1,5 +1,11 @@
 # SmartDock for Omarchy
 
+> **Unreleased CLI-first candidate:** this branch belongs to
+> [Draft PR #44](https://github.com/fernandodamaso/smart-omarchy-dock/pull/44),
+> not a released `main` installation. Keep it unmerged and undeployed until the
+> separate delivery gate is satisfied. The exact-SHA
+> [local qualification runbook](docs/CLI_RUNTIME_CHECKS.md) is not a deployment command.
+
 > Local Omarchy variant: pinned applications remain first, while grouped
 > running applications from every workspace are appended automatically.
 
@@ -18,10 +24,9 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Dot-first application attention badges from live SNI/Hyprland state and available Omarchy notifications
 - Reduced-motion bounded attention nudge with three-second reminders while attention remains active
 - Optional authoritative application-provided launcher badge counts with dot fallback
-- First-position sliders control for the app launcher, Dock Settings, adding
-  applications, and auto-hide
+- First-position sliders control for the app launcher, adding applications, and auto-hide
 - Bundled Lucide SVG artwork for the Trash icon and dock context-menu actions
-- Theme-aware graphical settings panel with live previews and persistent changes
+- Host-owned CLI configuration, app management, and local PNG/SVG icon overrides
 - Optional dynamic Trash icon with item count, open, and confirmed empty actions
 - Compact trailing workspace switcher that mirrors the Omarchy top-bar visibility rule
 - Minimized-window markers, counts, tooltip summaries, and per-window status labels
@@ -29,7 +34,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Per-window right-click management for workspace moves, fullscreen-with-bars,
   Hyprland-style minimize/restore, focus, and close
 - Drag-to-reorder with persistent pinned-app order
-- Context-menu hiding with persistent restoration controls in Dock Settings
+- Context-menu hiding with persistent restoration through `smartdock apps show`
 - Right-click actions to launch, close, pin, or unpin applications
 - Fuzzy application search for adding dock items
 - Configurable dock background transparency
@@ -43,6 +48,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 
 - Hyprland
 - Quickshell 0.3 or newer
+- Python 3 for the configuration CLI (standard library only)
 - GLib's `gio` command for optional Trash integration
 - A working freedesktop icon theme
 - Optional numeric launcher counts: CMake, a C++20 compiler, and Qt 6.6+ Core/DBus development files to build the native provider
@@ -222,39 +228,74 @@ preserved in this repository.
 
 ## Configure
 
-Installed copies use `~/.config/smartdock/dock.json`. When running from the repository, edit [`config/dock.json`](config/dock.json):
+The [CLI reference](docs/CLI_REFERENCE.md) describes commands, JSON fields and
+errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 41
+settings, declared defaults and dependencies. Both ship beside the offline
+[agent guide](docs/AGENT_CONFIGURATION.md). Its recipes are executed against
+the real CLI parser and production host/model harness in the existing CI;
+that is not real Omarchy rendering or IPC qualification.
 
-The same settings are available graphically: click or right-click the first
-sliders icon and choose **Dock Settings…**. Slider changes preview while dragging and
-are saved when released; switches and choices save immediately.
+Use the selected running host through the CLI rather than editing a live
+`dock.json`. Install just the client from a source checkout without starting a
+second dock:
 
-Dock Settings uses an icon-led responsive card layout. Icon geometry and hover
-effects sit side by side, Dock surface exposes Theme default, Omarchy token,
-and custom hex modes without leaving disabled inputs visible, and Layout and
-Behavior share a compact row. Layout includes the persistent **Show Trash**
-switch. Behavior includes application action selectors for Left click and
-Middle click. **Application Badges** contains the persistent attention-badge
-switch and the separate urgent-window motion switch. Behavior contains the
-interface-animation switch for workspace and context-menu transitions. Advanced launcher settings
-expand on demand; Reset and Close remain fixed at the bottom. On narrow screens
-the card grid stacks and the middle content area scrolls while the header and
-footer remain visible. The centered panel leaves the dock's edge strip
-interactive, so moving over dock icons continues to preview magnification and
-hover glow while you adjust settings.
+```bash
+bash ./install.sh --cli-only
+smartdock status --json
+smartdock config schema --json
+smartdock config get --json
+smartdock config set iconSize 48 --json
+smartdock agent-guide
+```
 
-Background, border, and workspace badge color overrides use a progressive
-control: choose **Theme default**, pick an Omarchy token (for example
-`@accent`, `@menu.background`, or `@popups.border`), or enable **Custom hex** and
-use the clickable alpha-aware color swatch or manual `#RRGGBB` /
-`#AARRGGBB` entry. Token selections store the symbolic reference so the color
-follows future theme changes; custom hex values store a fixed override. The
-workspace badge has independent Background and Text controls and defaults to
-the accent background with white text. The border width similarly switches
-between the theme width and a **Custom width** slider, preserving the stored
-width when the override is disabled.
+The host reports its authoritative `data.configPath`; do not infer that path
+from the working directory. Choose `--runtime plugin|standalone` and an exact
+`--instance ID` when discovery needs disambiguation. No command silently starts
+or restarts a host. Read the [agent configuration guide](docs/AGENT_CONFIGURATION.md)
+for atomic patches, dry runs, persistence errors, reset scope and safe exports.
+[`config/dock.json`](config/dock.json) contains bundled defaults, not necessarily
+the running configuration.
+
+Configuration is CLI-only: there is no settings window, live preference preview,
+or graphical icon editor. The dock, ordinary window previews, application picker,
+context menus, drag reordering, workspace controls and Trash remain available.
+The first sliders icon opens the existing launcher/add-application/auto-hide menu.
+Changes are applied through the same host-owned writer without resetting existing
+preferences, pins, hidden apps, custom icons or extension keys.
+
+Use `config set KEY VALUE` for a single preference and `config apply --stdin`
+for a related batch. Background, border and workspace badge colors accept
+`#RRGGBB`, Qt `#AARRGGBB`, and symbolic Omarchy tokens such as `@accent` or
+`@menu.background`. Set the paired `Enabled` flag to use an override; set it to
+`false` to follow the theme without discarding the saved override. Tokens keep
+following live theme changes. Workspace badges default to accent with white text.
+
+```bash
+printf '%s\n' '{"backgroundColorEnabled":true,"backgroundColor":"@menu.background"}' | smartdock config apply --stdin --dry-run --json
+printf '%s\n' '{"backgroundColorEnabled":true,"backgroundColor":"@menu.background"}' | smartdock config apply --stdin --json
+smartdock config set backgroundColorEnabled false --json
+smartdock config set showTrash false --json
+smartdock config set interfaceAnimationsEnabled false --json
+smartdock config reset hoverGlowOpacity --json
+```
+
+Inspect `applied`, `persisted` and `writeState` separately. A failed save may be
+active for the session only; read status before `config retry`. A transport
+timeout has an unknown outcome and requires readback before retrying. Preference
+reset (`config reset --preferences`) preserves pins, hidden apps, icon overrides,
+margin and unknown keys. Use a key reset for a narrow request.
+
+`controlCommand` is executable configuration used later by the launcher action;
+never execute it merely to validate a setting. Preference reset also resets this
+command. Use runtime metadata and touched-key rollback rather than silently
+falling back to raw configuration writes on an older or incompatible host.
+
+The following is an example configuration shape, not a replacement snapshot to
+apply. Read the running host's schema/defaults and preserve the user's values:
 
 ```json
 {
+  "iconOverrides": {},
   "iconSize": 42,
   "magnification": 1.2,
   "magnificationRadius": 95,
@@ -302,6 +343,7 @@ width when the override is disabled.
 
 | Option | Description |
 | --- | --- |
+| `iconOverrides` | App-wide, SmartDock-only local PNG/SVG artwork by desktop ID; defaults to `{}`; use `icons set/reset/reload` |
 | `iconSize` | Base icon size in pixels |
 | `magnification` | Maximum icon scale under the pointer |
 | `magnificationRadius` | Distance over which nearby icons magnify |
@@ -314,7 +356,7 @@ width when the override is disabled.
 | `backgroundOpacity` | Dock background opacity from `0.0` (transparent) to `1.0` (opaque) |
 | `backgroundColorEnabled` | When `true`, use `backgroundColor` instead of Omarchy's menu background token |
 | `backgroundColor` | Custom dock background in `#RRGGBB`, `#AARRGGBB`, or an Omarchy token such as `@menu.background` |
-| `borderColorEnabled` | When `true`, use `borderColor` instead of Omarchy's menu border token |
+| `borderColorEnabled` | When `true`, use `borderColor` instead of the theme border color |
 | `borderColor` | Custom dock border color in `#RRGGBB`, `#AARRGGBB`, or an Omarchy token such as `@accent` |
 | `workspaceBadgeBackgroundColorEnabled` | When `true`, use `workspaceBadgeBackgroundColor` for application workspace-number badge backgrounds |
 | `workspaceBadgeBackgroundColor` | Workspace badge background in `#RRGGBB`, `#AARRGGBB`, or an Omarchy token such as `@accent` |
@@ -343,11 +385,71 @@ width when the override is disabled.
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
+### Application and icon commands
+
+```bash
+smartdock apps list --query 'Editor' --json
+smartdock apps list --pinned --json
+smartdock apps list --hidden --json
+smartdock apps pin code --json
+smartdock apps move code --before org.gnome.Nautilus --json
+smartdock apps move code --after org.gnome.Nautilus --json
+smartdock apps hide code --json
+smartdock apps show code --json
+smartdock apps show --all --json
+smartdock apps unpin code --json
+smartdock icons list --json
+smartdock icons set code "$HOME/Pictures/Dock Icons/Ícone.svg" --json
+smartdock icons reload code --json
+smartdock icons reset code --json
+```
+
+Use actual IDs from `apps list`; the examples are not guaranteed installed IDs.
+Discovery uses the host's native desktop-entry catalog and keeps unavailable
+stored pins/hidden IDs visible in its output. IDs match exactly after case
+folding and optional `.desktop` removal, never by fuzzy name. Pinning does not
+unhide an app; hiding does not unpin it or close windows. Show only clears hidden
+membership. Move requires two different pinned IDs and preserves the relative
+order of all other entries, including hidden and unavailable pins. Repeating a
+membership command is a no-op rather than another settings write.
+
+`iconOverrides` defaults to `{}` and changes only SmartDock artwork. Each entry
+applies across main icons, preview metadata and app-picker rows. It never changes
+`.desktop` files, launch identity, window grouping, screenshots, badges, Trash or
+action glyphs. A browser tab grouped as Chrome remains a Chrome item; custom
+artwork does not split browser groups.
+
+Only local static PNG/SVG files are accepted. Ordinary relative paths supplied
+to the CLI are resolved from its current directory; the host accepts absolute
+local paths and local `file:///` URLs, preserving spaces and Unicode. Remote
+URLs and other formats are rejected. Files are referenced in place, not copied,
+so keep them outside the plugin checkout. Per-app set/reset preserves unrelated
+map entries. Preference reset also preserves `iconOverrides`.
+
+The bounded fallback is **custom file → original desktop icon →
+`application-x-executable` → bundled theme-tinted `app-window` glyph**. Custom
+artwork is not tinted. Missing or corrupt images retain the requested mapping
+and fall back instead of being silently removed.
+
+There is no continuous artwork-file watch. After replacing bytes at the same
+path, use `icons reload ID`; it bumps the global artwork revision without writing
+settings, and other mapped icons may refresh too. Setting an equivalent source
+also requests a reload without a redundant save. Every successful icon response
+reports `renderVerified: false`: persistence and reload requests do not prove
+image decoding or a visible redraw. Real rendering/cache behavior is reserved
+for local Omarchy qualification, not claimed by headless tests.
+
 ### Application pointer actions
 
 The Left and Middle click keys accept the same vocabulary: `none`,
 `minimize-restore`, `previews`, `close`, and `focus-or-launch`. `scrollAction`
 is intentionally narrower: `none` or `cycle-windows`.
+
+```bash
+smartdock config set clickAction focus-or-launch --json
+smartdock config set middleClickAction none --json
+smartdock config set scrollAction cycle-windows --json
+```
 
 Input precedence is intentionally strict:
 
@@ -390,6 +492,11 @@ before focus.
 existing behavior; `workspace` uses the workspace active on Hyprland's focused
 monitor; `monitor` uses each Dock's own screen/monitor; and
 `workspace-monitor` requires both. Closed pinned launchers stay visible.
+
+```bash
+smartdock config set windowScope workspace --json
+smartdock config set showUrgentOutsideScope true --json
+```
 
 When `showUrgentOutsideScope` is enabled, only Hyprland's actual per-window
 urgent state bypasses scope. Explicitly hidden applications still stay hidden.
@@ -446,15 +553,12 @@ source while the remaining FDM-809 sources continue to work.
 
 The first dock icon is always the dock controls icon and is not part of
 `pinned`. Clicking it opens the controls menu; **Open App Launcher** runs
-`controlCommand`, while the menu also exposes Dock Settings, Add Application,
-and the auto-hide toggle. Application context menus contain only application
-and window actions. For example, to use the Omarchy app
-launcher plugin instead of the stock apps menu:
+`controlCommand`, while the menu also exposes Add Application and the auto-hide
+toggle. Application context menus contain only application and window actions.
+For example, with the Omarchy app-launcher plugin already installed:
 
-```json
-{
-  "controlCommand": "omarchy-shell shell toggle tyrsolution.app-launcher '{}'"
-}
+```bash
+smartdock config set controlCommand "omarchy-shell shell toggle tyrsolution.app-launcher '{}'" --json
 ```
 
 The trailing Trash and workspace controls are not part of `pinned`. Trash uses
@@ -463,24 +567,21 @@ the freedesktop `trash:///` location and can be removed from the dock with
 query. Workspace buttons always include 1 and 2, then add any focused or
 occupied workspace through 10; clicking a number focuses it.
 
-Pinned values are desktop-entry filenames without the `.desktop` suffix. List available IDs with:
+Pinned values are desktop-entry IDs. List the authoritative running host's IDs with:
 
 ```bash
-find /usr/share/applications ~/.local/share/applications \
-  -type f -name '*.desktop' 2>/dev/null \
-  | sed 's#.*/##; s/\.desktop$//' | sort -u
+smartdock apps list --json
 ```
 
 Right-click any application in the dock and choose **Hide from Dock** to hide
 the whole application while leaving its windows running and its pinned
 membership unchanged. The canonical desktop-entry ID is stored in
 `hiddenApplications`, so the choice persists across restarts and live config
-reloads. Open **Dock Settings** to review hidden applications: each row's
-**Show** action restores that application, and **Show All** clears the list.
-Restoring an application returns it to its existing pinned position; it does
-not pin or unpin anything. **Reset to defaults** resets the general dock
-settings but intentionally preserves `hiddenApplications`; use **Show All** or
-set the option to `[]` when you also want to reset hidden applications.
+reloads. Inspect hidden apps with `smartdock apps list --hidden --json`; use
+`smartdock apps show ID --json` to restore one or `smartdock apps show --all --json`
+to clear hidden membership. Restoring an application returns it to its existing
+pinned position without pinning or unpinning anything. `config reset --preferences`
+intentionally preserves `hiddenApplications` and the other application collections.
 
 The configuration file is watched and updates automatically. Drag a dock icon to another slot to reorder it; the new `pinned` order is written back to this file. Reserved space follows visibility: while auto-hide is off, the `reserveSpace` option decides whether tiled windows keep a clear dock-sized area; while auto-hide is on, the hidden dock never reserves space.
 
@@ -489,13 +590,10 @@ Surface override settings are independent. Leave an `*Enabled` flag set to
 custom color or width. Custom background alpha is multiplied by
 `backgroundOpacity` just like the theme background.
 
-For a full-height vertical dock on the left, use:
+For a full-height vertical dock on the left, use one related patch:
 
-```json
-{
-  "position": "left",
-  "fullLength": true
-}
+```bash
+printf '%s\n' '{"position":"left","fullLength":true}' | smartdock config apply --stdin --json
 ```
 
 ### Disable cursor warping
@@ -531,55 +629,29 @@ This disables cursor warping for all workspace changes, not only dock clicks.
 
 ### Workspace cards (opt-in)
 
-Choose **Workspace cards** in Dock Settings → Layout, or set `"workspaceLayout": "grouped"` in `${XDG_CONFIG_HOME:-$HOME/.config}/smartdock/dock.json` to enable horizontal workspace cards; live reload applies the change. Set it back to `"flat"` to roll back. Missing/invalid values and Reset use flat. Left/right positions render flat without changing the saved preference. Window scope, workspace sorting and urgent-outside-scope are flat-only controls; their saved values are preserved. Group windows remains available in either layout.
+Use `smartdock config set workspaceLayout grouped --json` to enable horizontal
+workspace cards. Use `smartdock config set workspaceLayout flat --json` to roll
+back. Missing/invalid values and `config reset workspaceLayout` use flat.
+Left/right positions render flat without changing the saved preference. Window
+scope, workspace sorting and urgent-outside-scope affect the flat layout; their
+saved values are preserved. `groupWindows` remains effective in either layout.
 
-By default, **Workspaces from → All monitors** (`"workspaceMonitorScope": "all"`) shows the same workspaces, apps, and globally focused workspace highlight on every monitor dock. Choose **This monitor only** (`"current-monitor"`) to restore local workspace membership and active highlighting. Missing/invalid values and Reset use `"all"`; existing settings need no migration. This control is enabled only for effective grouped layouts; flat layouts keep their existing Window scope. Clicking a remote workspace or app focuses it where it lives without moving it.
+By default, `workspaceMonitorScope: all` shows the same workspaces, apps, and
+globally focused workspace highlight on every monitor dock. Use
+`smartdock config set workspaceMonitorScope current-monitor --json` for local
+workspace membership and active highlighting, or set it to `all` to restore the
+default. Missing/invalid values and `config reset workspaceMonitorScope` use all;
+existing settings need no migration. This setting affects grouped layouts only;
+flat layouts keep their existing window scope. Clicking a remote workspace or
+app focuses it where it lives without moving it.
 
-Every normal workspace in the selected scope always shows all its app icons inside a rounded translucent card, including inactive workspaces. Cards use narrow workspace labels and a subtle tint across the active group; the label and card styling identify focus. Window counts remain in the header tooltip. Click a header to switch workspaces. Empty workspaces retain their header. Closed pinned launchers and **Other windows** (unknown/special membership) stay outside normal cards. With **This monitor only**, known windows on another monitor are excluded. Window actions and previews use only the item's members; hide and launcher pinning remain application-wide. Pinned reordering and redundant per-icon workspace labels are disabled in grouped mode; running-window dragging is described below.
+Every normal workspace in the selected scope always shows all its app icons inside a rounded translucent card, including inactive workspaces. Cards use narrow workspace labels and a subtle tint across the active group; the label and card styling identify focus. Window counts remain in the header tooltip. Click a header to switch workspaces. Empty workspaces retain their header. Closed pinned launchers and **Other windows** (unknown/special membership) stay outside normal cards. With `current-monitor`, known windows on another monitor are excluded. Window actions and previews use only the item's members; hide and launcher pinning remain application-wide. Grouped dragging and redundant per-icon workspace labels are disabled.
 
 Grouped minimize/restore requires a validated recorded workspace: an unknown origin never moves a window to a guessed focused workspace. Flat mode retains its fallback. Sticky windows appear once on their monitor’s active normal workspace with a small marker; minimized windows retain their recorded origin. Local urgency marks its workspace and member icons. App-wide notification badges have one visible owner per app per dock, without claiming a notification belongs to a workspace.
 
-Crowded cards scroll inside a bounded horizontal viewport. Use the previous/next buttons with a mouse; app wheel cycling keeps its configured behavior. Control/settings and optional Trash stay fixed. Switching workspaces brings the active header into view, and scrolling a popup’s icon out of view closes the popup. Compact and full-length layouts retain magnification headroom. Horizontal workspace cards use a slimmer surface and tighter spacing without changing the configured icon size; application and utility tiles highlight on hover.
+Crowded cards scroll inside a bounded horizontal viewport. Use the previous/next buttons with a mouse; app wheel cycling keeps its configured behavior. Dock Controls and optional Trash stay fixed. Switching workspaces brings the active header into view, and scrolling a popup’s icon out of view closes the popup. Compact and full-length layouts retain magnification headroom. Horizontal workspace cards use a slimmer surface and tighter spacing without changing the configured icon size; application and utility tiles highlight on hover.
 
 Both dock layouts use hover-highlighted icon tiles, accent window-count badges,
 a broad focus underline, and spaced utility separators. Flat mode includes a
 rounded workspace selector with a tinted active pill; grouped mode keeps every
 workspace’s icons visible. Icon size, surface overrides and Show Trash still apply.
-
-### Drag windows between workspace cards
-
-In a top/bottom grouped layout, hold the left mouse button without modifiers
-and drag a running icon past the normal drag threshold onto a workspace card's
-visible header or app area. A grouped icon moves only the exact windows captured
-from that icon, not other same-app windows elsewhere. The source artwork dims
-and a floating icon shows the surviving group count. A click below the threshold
-keeps its configured action. Flat/vertical layouts and their pinned reordering
-remain unchanged; there is no new drag setting.
-
-Visible members move silently, without following or focusing them. SmartDock-
-minimized members stay hidden on `special:smartdock-minimized`; only their saved
-restore workspace and destination monitor change. An explicit valid drop can
-establish a missing restore origin. Members already at the destination are
-skipped. Closed members are never replaced by another window, and an entirely
-closed group cancels. Sticky or unresolved surviving members are rejected.
-
-Destinations must be existing normal workspaces in the selected monitor scope,
-including empty cards, IDs above 10, and safely supported names with spaces or
-Unicode. Named cards are resolved by their real identity, not the compact `*`
-label. A remote-monitor card shown in this dock is valid; its workspace itself
-is not relocated. **Other windows**, special sections, gaps, Trash, navigation
-buttons and clipped-out areas are not destinations. A non-sticky **Other
-windows** source is allowed only when its live handle/address is resolvable.
-Dragging between separate monitor-dock surfaces and creating workspaces are not
-supported.
-
-Hold over an overflow navigation button for 250 ms to scroll at 12 logical
-pixels per 40 ms; scrolling stops at the boundary, on leaving the button, or when
-the gesture ends. Releasing there cancels rather than switching workspaces. The
-dock stays revealed during the drag; previews, tooltips, competing actions,
-flicking and active-card auto-reveal pause. Card replacement is deferred, but
-live window/destination validation continues. Release rechecks the final pointer
-and live destination; lost grabs, invalid releases or incompatible layout changes
-clear the feedback without moving windows. See the
-[implementation plan and remote/local handoff](docs/superpowers/plans/2026-09-09-smartdock-workspace-drag.md)
-for test coverage and the separate real-pointer Omarchy qualification gate.
