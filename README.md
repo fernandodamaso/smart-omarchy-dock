@@ -535,7 +535,7 @@ Choose **Workspace cards** in Dock Settings → Layout, or set `"workspaceLayout
 
 By default, **Workspaces from → All monitors** (`"workspaceMonitorScope": "all"`) shows the same workspaces, apps, and globally focused workspace highlight on every monitor dock. Choose **This monitor only** (`"current-monitor"`) to restore local workspace membership and active highlighting. Missing/invalid values and Reset use `"all"`; existing settings need no migration. This control is enabled only for effective grouped layouts; flat layouts keep their existing Window scope. Clicking a remote workspace or app focuses it where it lives without moving it.
 
-Every normal workspace in the selected scope always shows all its app icons inside a rounded translucent card, including inactive workspaces. Cards use narrow workspace labels and a subtle tint across the active group; the label and card styling identify focus. Window counts remain in the header tooltip. Click a header to switch workspaces. Empty workspaces retain their header. Closed pinned launchers and **Other windows** (unknown/special membership) stay outside normal cards. With **This monitor only**, known windows on another monitor are excluded. Window actions and previews use only the item's members; hide and launcher pinning remain application-wide. Grouped dragging and redundant per-icon workspace labels are disabled.
+Every normal workspace in the selected scope always shows all its app icons inside a rounded translucent card, including inactive workspaces. Cards use narrow workspace labels and a subtle tint across the active group; the label and card styling identify focus. Window counts remain in the header tooltip. Click a header to switch workspaces. Empty workspaces retain their header. Closed pinned launchers and **Other windows** (unknown/special membership) stay outside normal cards. With **This monitor only**, known windows on another monitor are excluded. Window actions and previews use only the item's members; hide and launcher pinning remain application-wide. Pinned reordering and redundant per-icon workspace labels are disabled in grouped mode; running-window dragging is described below.
 
 Grouped minimize/restore requires a validated recorded workspace: an unknown origin never moves a window to a guessed focused workspace. Flat mode retains its fallback. Sticky windows appear once on their monitor’s active normal workspace with a small marker; minimized windows retain their recorded origin. Local urgency marks its workspace and member icons. App-wide notification badges have one visible owner per app per dock, without claiming a notification belongs to a workspace.
 
@@ -545,3 +545,41 @@ Both dock layouts use hover-highlighted icon tiles, accent window-count badges,
 a broad focus underline, and spaced utility separators. Flat mode includes a
 rounded workspace selector with a tinted active pill; grouped mode keeps every
 workspace’s icons visible. Icon size, surface overrides and Show Trash still apply.
+
+### Drag windows between workspace cards
+
+In a top/bottom grouped layout, hold the left mouse button without modifiers
+and drag a running icon past the normal drag threshold onto a workspace card's
+visible header or app area. A grouped icon moves only the exact windows captured
+from that icon, not other same-app windows elsewhere. The source artwork dims
+and a floating icon shows the surviving group count. A click below the threshold
+keeps its configured action. Flat/vertical layouts and their pinned reordering
+remain unchanged; there is no new drag setting.
+
+Visible members move silently, without following or focusing them. SmartDock-
+minimized members stay hidden on `special:smartdock-minimized`; only their saved
+restore workspace and destination monitor change. An explicit valid drop can
+establish a missing restore origin. Members already at the destination are
+skipped. Closed members are never replaced by another window, and an entirely
+closed group cancels. Sticky or unresolved surviving members are rejected.
+
+Destinations must be existing normal workspaces in the selected monitor scope,
+including empty cards, IDs above 10, and safely supported names with spaces or
+Unicode. Named cards are resolved by their real identity, not the compact `*`
+label. A remote-monitor card shown in this dock is valid; its workspace itself
+is not relocated. **Other windows**, special sections, gaps, Trash, navigation
+buttons and clipped-out areas are not destinations. A non-sticky **Other
+windows** source is allowed only when its live handle/address is resolvable.
+Dragging between separate monitor-dock surfaces and creating workspaces are not
+supported.
+
+Hold over an overflow navigation button for 250 ms to scroll at 12 logical
+pixels per 40 ms; scrolling stops at the boundary, on leaving the button, or when
+the gesture ends. Releasing there cancels rather than switching workspaces. The
+dock stays revealed during the drag; previews, tooltips, competing actions,
+flicking and active-card auto-reveal pause. Card replacement is deferred, but
+live window/destination validation continues. Release rechecks the final pointer
+and live destination; lost grabs, invalid releases or incompatible layout changes
+clear the feedback without moving windows. See the
+[implementation plan and remote/local handoff](docs/superpowers/plans/2026-09-09-smartdock-workspace-drag.md)
+for test coverage and the separate real-pointer Omarchy qualification gate.
