@@ -1,5 +1,11 @@
 # SmartDock for Omarchy
 
+> **Unreleased CLI-first candidate:** this branch belongs to
+> [Draft PR #44](https://github.com/fernandodamaso/smart-omarchy-dock/pull/44),
+> not a released `main` installation. Keep it unmerged and undeployed until the
+> separate delivery gate is satisfied. The exact-SHA
+> [local qualification runbook](docs/CLI_RUNTIME_CHECKS.md) is not a deployment command.
+
 > Local Omarchy variant: pinned applications remain first, while grouped
 > running applications from every workspace are appended automatically.
 
@@ -222,6 +228,13 @@ preserved in this repository.
 
 ## Configure
 
+The [CLI reference](docs/CLI_REFERENCE.md) describes commands, JSON fields and
+errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 41
+settings, declared defaults and dependencies. Both ship beside the offline
+[agent guide](docs/AGENT_CONFIGURATION.md). Its recipes are executed against
+the real CLI parser and production host/model harness in the existing CI;
+that is not real Omarchy rendering or IPC qualification.
+
 Use the selected running host through the CLI rather than editing a live
 `dock.json`. Install just the client from a source checkout without starting a
 second dock:
@@ -271,6 +284,11 @@ active for the session only; read status before `config retry`. A transport
 timeout has an unknown outcome and requires readback before retrying. Preference
 reset (`config reset --preferences`) preserves pins, hidden apps, icon overrides,
 margin and unknown keys. Use a key reset for a narrow request.
+
+`controlCommand` is executable configuration used later by the launcher action;
+never execute it merely to validate a setting. Preference reset also resets this
+command. Use runtime metadata and touched-key rollback rather than silently
+falling back to raw configuration writes on an older or incompatible host.
 
 The following is an example configuration shape, not a replacement snapshot to
 apply. Read the running host's schema/defaults and preserve the user's values:
