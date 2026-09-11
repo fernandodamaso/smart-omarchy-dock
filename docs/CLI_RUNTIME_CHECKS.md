@@ -6,7 +6,10 @@
 
 Read the live FDM-919 handoff, FDM-920/FDM-885, AGENTS.md and docs/DELIVERY.md. Set `CANDIDATE_SHA` and `BASE_SHA` to the **full hashes from that handoff**, not a branch's latest commit or this document's historical provenance. Confirm remote branch writes have paused and take single-writer ownership before publishing fixes. FDM-889's separate drag branch/PR must not be imported or modified.
 
+Use Bash with failure checking for setup; stop at a failed identity/precondition check. Preserve the run directory and variables when changing test terminals.
+
 ```bash
+set -euo pipefail
 : "${CANDIDATE_SHA:?Set the full head SHA from the FDM-919 handoff}"
 : "${BASE_SHA:?Set the full base SHA from the FDM-919 handoff}"
 source_repo=/home/admin/Projects/smart-omarchy-dock
@@ -36,7 +39,7 @@ For standalone in the isolated session only, use a private config and the source
 ```bash
 cp "$run_dir/source/config/dock.json" "$run_dir/state/dock.json"
 # Execute only in the isolated test display/session, not alongside the plugin.
-SMARTDOCK_CONFIG="$run_dir/state/dock.json" "$run_dir/source/scripts/run"
+XDG_CACHE_HOME="$run_dir/state/cache" SMARTDOCK_CONFIG="$run_dir/state/dock.json" "$run_dir/source/scripts/run"
 ```
 
 Keep that host in its own terminal/process and perform CLI checks from another terminal in the same isolated session. Test plugin and standalone sequentially, not as competing production writers. For plugin mode, its own isolated XDG_CONFIG_HOME supplies smartdock/dock.json; SMARTDOCK_CONFIG is a standalone-only override. Use temporary copies of valid/corrupt/missing PNG/SVG artwork for failures. Never corrupt a system theme or the user's current ChatGPT artwork.
@@ -59,7 +62,7 @@ Before any mutation, verify status reports the expected isolated **host** config
 
 ## 3. Run the bounded acceptance matrix and record actual observations
 
-Use the guide's minimal patch/primitive commands. Record command, exit code, JSON, before/after values, actual file bytes, relevant logs and visual evidence. Put PASS, FAIL or NOT RUN beside each row; state unavailable hardware/service cases explicitly. Avoid permanent polling and retry loops.
+Use the guide's minimal patch/primitive commands. Record command, exit code, JSON, before/after values, actual file bytes, relevant logs and visual evidence. Put PASS, FAIL or NOT RUN beside each row; state unavailable hardware/service cases explicitly. Avoid permanent polling and retry loops. Capture deliberate error probes with an explicit conditional so a required nonzero exit is recorded, not mistaken for success or allowed to skip cleanup.
 
 | Area | Action and required observation |
 | --- | --- |
@@ -96,6 +99,8 @@ The local coding agent owns code review, narrow source fixes, tests and CI. Do n
 Re-run the repository's existing headless commands from the candidate source:
 
 ```bash
+set -euo pipefail
+cd "$run_dir/source"
 for script in install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh; do bash -n "$script" || exit; done
 for script in tests/check_*.sh; do bash "$script" || exit; done
 for script in tests/test_*.mjs; do node "$script" || exit; done

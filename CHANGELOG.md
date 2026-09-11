@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Shipped the CLI command/JSON/error reference, all 41 declared setting defaults
+  and dependencies, and agent recipes for minimal patches, themes, calmer motion,
+  workspace cards, application restoration/order and per-app icon set/reload/reset.
+- Added executable documentation checks through the existing CLI and production
+  host/model harness, including preservation, dry runs, effective projections,
+  parser/schema consistency, Unicode artwork URLs and offline installation.
+- Included linked reference, inventory and local-runbook documents beside the
+  installed agent guide without adding a runtime, test framework or CI workflow.
+- Added the migration plan and exact-SHA FDM-920/FDM-885 joint local runbook with
+  isolation, touched-state restoration and explicit not-yet-verified runtime gates.
+
 ### Changed
 
 - Removed the graphical Dock Settings page, its menu route, temporary preference

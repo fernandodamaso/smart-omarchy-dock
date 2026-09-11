@@ -102,7 +102,7 @@ smartdock apps move code --before org.gnome.Nautilus --json
 
 Discovery uses the host's native desktop catalog, not a new desktop-file scan. Rows include `id`, `name`, `available`, `pinned`, `hidden`, `pinnedIndex`. Query searches ID/name text; mutations match exact IDs after trimming, case folding and optional `.desktop` removal. Unsafe/sentinel/prototype-sensitive IDs are rejected. Stored spelling/order and unavailable pins/hidden IDs survive.
 
-Membership operations are idempotent. Hide does not close or unpin; unpin does not hide running windows. `apps show --all` clears all hidden membership and needs explicit broad intent. Move needs two different pinned IDs and exactly one before/after anchor, preserving other relative order including hidden/unavailable entries. Re-read that order before an intentional rollback; do not replay an obsolete array.
+Membership operations are idempotent. `apps hide ID` hides without closing or unpinning; `apps unpin ID` removes pin membership without hiding running windows. `apps show --all` clears all hidden membership and needs explicit broad intent. Move needs two different pinned IDs and exactly one before/after anchor, preserving other relative order including hidden/unavailable entries. Re-read that order before an intentional rollback; do not replay an obsolete array.
 
 ## Set, refresh and restore per-app artwork
 
@@ -136,7 +136,7 @@ Export writes a new owner-only plain JSON file and never overwrites a destinatio
 
 ## Machine contract and installation
 
-`--json` emits one object with `apiVersion: 1`, `ok`, `data`, `warnings`, and `error.code/message` on failure. Exit codes: 0 success; 2 usage/validation; 3 absent/ambiguous host; 4 persistence/export failure; 5 transport/protocol/timeout; 6 busy/invalid config. See [CLI_REFERENCE.md](CLI_REFERENCE.md) for exact fields/codes and [CONFIGURATION.md](CONFIGURATION.md) for all defaults/dependencies. Both ship beside this offline guide.
+`--json` emits one object with `apiVersion: 1`, `ok`, `data`, `warnings`, and `error.code/message` on failure. Exit codes: 0 success; 2 usage/validation; 3 absent/ambiguous host; 4 persistence/export failure; 5 transport/protocol/timeout; 6 busy/invalid config. See [CLI_REFERENCE.md](CLI_REFERENCE.md) for exact fields/codes and [CONFIGURATION.md](CONFIGURATION.md) for all defaults/dependencies. Both ship beside this offline guide, together with the separate [local qualification runbook](CLI_RUNTIME_CHECKS.md); installing that document does not start qualification.
 
 ```sh
 bash ./install.sh --cli-only

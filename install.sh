@@ -82,7 +82,7 @@ install_client_bundle() {
     install -m 0644 "$source_dir/config/settings-schema.json" "$destination/config/settings-schema.json"
     install -m 0644 "$source_dir/config/dock.json" "$destination/config/dock.json"
     local document
-    for document in AGENT_CONFIGURATION.md CLI_REFERENCE.md CONFIGURATION.md; do
+    for document in AGENT_CONFIGURATION.md CLI_REFERENCE.md CONFIGURATION.md CLI_RUNTIME_CHECKS.md; do
       install -m 0644 "$source_dir/docs/$document" "$destination/docs/$document"
     done
     install -m 0755 "$source_dir/uninstall.sh" "$destination/uninstall.sh"

@@ -3,6 +3,7 @@
 Only transport/FileView services are substituted. No copied patch validator,
 new runtime, or desktop session is involved. The marked guide blocks are inputs.
 """
+import argparse
 import importlib.util
 import json
 import os
@@ -18,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('docs_cli', ROOT / 'scripts/smartdock_cli.py')
 cli = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cli)
+DOCUMENTS = ('AGENT_CONFIGURATION.md', 'CLI_REFERENCE.md', 'CONFIGURATION.md',
+             'CLI_RUNTIME_CHECKS.md')
 
 # Replay into the existing harness so every request runs production QML method
 # bodies and DockConfigModel/DockIconModel. Replaying keeps this fixture stateless
@@ -94,6 +97,15 @@ class CliDocumentationTests(unittest.TestCase):
         text = reference.read_text()
         for command in metadata['commands']:
             self.assertIn('`' + command.replace('.', ' ') + '`', text)
+        # Derive command coverage from the real parser, not a parallel registry.
+        def leaves(parser, prefix=()):
+            groups = [action for action in parser._actions
+                      if isinstance(action, argparse._SubParsersAction)]
+            if not groups:
+                return {'.'.join(prefix)}
+            return set().union(*(leaves(child, prefix + (name,))
+                                 for group in groups for name, child in group.choices.items()))
+        self.assertEqual(leaves(cli.build_parser()), set(metadata['commands']))
         for code in cli.EXIT_CODES:
             self.assertIn(code, text)
         self.assertEqual(metadata['settings']['controlCommand']['risk'], 'executes-on-use')
@@ -101,7 +113,7 @@ class CliDocumentationTests(unittest.TestCase):
         self.assertIn('never execute it to validate', self.guide)
 
     def test_json_recipes_dry_run_apply_preserve_and_project(self):
-        for name in ('theme', 'calmer-motion', 'workspace-cards'):
+        for name in ('safe-batch', 'theme', 'calmer-motion', 'workspace-cards'):
             payload = json.loads(self.block(name, 'json'))
             before = self.run_command('smartdock config get --json')['settings']
             with tempfile.TemporaryDirectory() as temporary:
@@ -121,6 +133,7 @@ class CliDocumentationTests(unittest.TestCase):
         self.assertEqual(effective['workspaceLayout'], 'grouped')
         self.assertEqual(effective['workspaceMonitorScope'], 'current-monitor')
         self.assertEqual(effective['magnification'], 1)
+        self.assertFalse(effective['reserveSpace'])
         self.assertIsNone(effective['backgroundColor'])
         self.assertEqual(after['backgroundColor'], '@menu.background')
         self.assertTrue(after['backgroundColorEnabled'])
@@ -150,6 +163,9 @@ class CliDocumentationTests(unittest.TestCase):
             if 'icons set ' in line:
                 self.assertTrue(data['persisted'])
                 reload_revision = data['iconReloadRevision']
+                expected = dict(self.transport.initial['iconOverrides'],
+                                code=Path('Pictures/My Ícone.svg').absolute().as_uri())
+                self.assertEqual(data['requested']['iconOverrides'], expected)
             if 'icons reload ' in line:
                 self.assertFalse(data['applied'])
                 self.assertTrue(data['reloaded'])
@@ -158,6 +174,18 @@ class CliDocumentationTests(unittest.TestCase):
         self.assertEqual(settings['iconOverrides'], self.transport.initial['iconOverrides'])
         self.assertEqual(settings['pinned'], pins)
         self.assertEqual(settings['extensionData'], self.transport.initial['extensionData'])
+
+    def test_document_shell_syntax_and_relative_links(self):
+        for name in DOCUMENTS:
+            text = (ROOT / 'docs' / name).read_text(encoding='utf-8')
+            for index, block in enumerate(re.findall(r'^```(?:sh|bash)\n(.*?)^```', text, re.M | re.S)):
+                # Parse only: never execute a local qualification/lifecycle block.
+                result = subprocess.run(['bash', '-n'], input=block, text=True,
+                                        capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 0, (name, index, result.stderr))
+            for target in re.findall(r'\[[^\]]+\]\(([^)]+\.md)\)', text):
+                if '://' not in target:
+                    self.assertIn(target, DOCUMENTS, (name, 'Uninstalled documentation link', target))
 
     def test_installed_guide_and_reference_are_offline_and_match_source(self):
         with tempfile.TemporaryDirectory(prefix='smartdock docs ') as temporary:
@@ -173,7 +201,7 @@ class CliDocumentationTests(unittest.TestCase):
             subprocess.run(['bash', str(ROOT / 'install.sh'), '--cli-only'], env=env,
                            check=True, capture_output=True, text=True, timeout=10)
             installed = root / 'data/smartdock-cli'
-            for name in ('AGENT_CONFIGURATION.md', 'CLI_REFERENCE.md', 'CONFIGURATION.md'):
+            for name in DOCUMENTS:
                 self.assertTrue((installed / 'docs' / name).is_file(), name + ' must be installed')
                 self.assertEqual((installed / 'docs' / name).read_bytes(), (ROOT / 'docs' / name).read_bytes())
             # A missing source checkout must not break the installed offline guide.
