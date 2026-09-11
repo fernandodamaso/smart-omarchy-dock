@@ -4,7 +4,7 @@ set -euo pipefail
 plugin_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dock_qml="$plugin_root/components/Dock.qml"
 dock_item_qml="$plugin_root/components/DockItem.qml"
-settings_qml="$plugin_root/components/DockSettings.qml"
+schema="$plugin_root/config/settings-schema.json"
 
 for token in \
   backgroundColorEnabled \
@@ -17,10 +17,12 @@ for token in \
   workspaceBadgeTextColor \
   borderWidthEnabled \
   borderWidth; do
-  if ! rg -n "$token" "$dock_qml" "$settings_qml" >/dev/null; then
-    printf 'Surface override setting is missing: %s\n' "$token" >&2
-    exit 1
-  fi
+  for file in "$dock_qml" "$schema"; do
+    if ! rg -n "$token" "$file" >/dev/null; then
+      printf 'Surface override setting is missing from %s: %s\n' "$file" "$token" >&2
+      exit 1
+    fi
+  done
 done
 
 if ! rg -n 'effectiveColor|effectiveBorderWidth' "$dock_qml" >/dev/null; then
@@ -45,22 +47,7 @@ rg -n 'color: root\.workspaceBadgeBackgroundColor' "$dock_item_qml" >/dev/null \
 rg -n 'color: root\.workspaceBadgeTextColor' "$dock_item_qml" >/dev/null \
   || { echo 'Workspace badge text does not use its resolved color' >&2; exit 1; }
 
-for label in 'Dock surface' 'Workspace badge' 'Background opacity' \
-  'Theme default' 'Custom hex' 'Custom width'; do
-  rg -n "$label" "$settings_qml" >/dev/null || {
-    printf 'Dock Settings is missing progressive surface control: %s\n' "$label" >&2
-    exit 1
-  }
-done
-
-if rg -n 'Use custom background color|Use custom border color|Use custom border width' \
-    "$settings_qml" >/dev/null; then
-  printf 'Dock Settings still exposes the old always-expanded override rows\n' >&2
-  exit 1
-fi
-
-if ! rg -n 'settingsPatchCommitted|settingsPatchRequested|saveSettings\(patch\)' \
-    "$settings_qml" "$dock_qml" "$plugin_root/DockHost.qml" >/dev/null; then
-  printf 'Surface selectors must persist default/token/custom changes atomically\n' >&2
-  exit 1
-fi
+# Atomic multi-key color intents are exercised by the actual host/model suite.
+rg -n 'root\.host\.saveSettings\(args.patch, args.dryRun === true\)' \
+    "$plugin_root/components/DockControl.qml" >/dev/null \
+  || { echo 'CLI color patches must use the shared host writer' >&2; exit 1; }

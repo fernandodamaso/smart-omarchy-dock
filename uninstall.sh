@@ -5,10 +5,12 @@ data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 bin_home="${XDG_BIN_HOME:-$HOME/.local/bin}"
 app_dir="$data_home/smartdock"
+client_dir="$data_home/smartdock-cli"
 config_dir="$config_home/smartdock"
 desktop_file="$data_home/applications/smartdock.desktop"
 purge=false
 agent_assets_only=false
+cli_only=false
 
 agent_ids=(
   smartdock-agent-pi
@@ -28,15 +30,16 @@ usage() {
   cat <<'EOF'
 Usage: uninstall.sh [OPTION]
 
+  --cli-only      Remove only client-owned files, never live plugin configuration
   --agent-assets-only
                   Remove only the terminal-agent launchers and icons
-  --purge         Remove SmartDock and its configuration
+  --purge         Remove standalone SmartDock and its configuration
   --help          Show this help
 EOF
 }
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --cli-only) cli_only=true ;;
     --purge) purge=true ;;
     --agent-assets-only) agent_assets_only=true ;;
     --help|-h) usage; exit ;;
@@ -44,10 +47,20 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-
-if $agent_assets_only && $purge; then
-  echo "--agent-assets-only cannot be combined with --purge." >&2
+if $cli_only && { $purge || $agent_assets_only; }; then
+  echo '--cli-only cannot be combined with --purge or --agent-assets-only.' >&2
   exit 2
+fi
+if $agent_assets_only && $purge; then
+  echo '--agent-assets-only cannot be combined with --purge.' >&2
+  exit 2
+fi
+
+if $cli_only; then
+  rm -rf -- "$client_dir"
+  if [[ ! -f "$app_dir/shell.qml" ]]; then rm -f -- "$bin_home/smartdock"; fi
+  echo 'Removed SmartDock client-only files. Plugin, standalone and configuration were not changed.'
+  exit
 fi
 
 remove_agent_assets() {
@@ -62,27 +75,25 @@ remove_agent_assets() {
     fi
   done
 }
-
 if $agent_assets_only; then
   remove_agent_assets
-  echo "Removed SmartDock terminal-agent launchers and icons."
+  echo 'Removed SmartDock terminal-agent launchers and icons.'
   exit
 fi
-
 if command -v qs >/dev/null 2>&1; then
   qs kill -p "$app_dir" --any-display >/dev/null 2>&1 || true
 fi
-
 remove_agent_assets
 rm -f -- "$config_home/autostart/smartdock.desktop"
 rm -f -- "$desktop_file"
-rm -f -- "$bin_home/smartdock"
 rm -rf -- "$app_dir"
-
+if [[ ! -f "$client_dir/scripts/smartdock_cli.py" ]]; then
+  rm -f -- "$bin_home/smartdock"
+fi
 if $purge; then
   rm -rf -- "$config_dir"
-  echo "Removed SmartDock for Omarchy and its configuration."
+  echo 'Removed SmartDock for Omarchy and its configuration.'
 else
-  echo "Removed SmartDock for Omarchy. Configuration preserved at:"
+  echo 'Removed SmartDock for Omarchy. Configuration preserved at:'
   echo "  $config_dir/dock.json"
 fi

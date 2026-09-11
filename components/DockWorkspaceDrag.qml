@@ -12,6 +12,8 @@ Item {
   property point pointerScene: Qt.point(0, 0)
   property string hoveredIdentity: ""
   property url iconSource: ""
+  // The host supplies its retained renderer without importing host modules here.
+  property Component artworkDelegate: null
   property int iconSize: 42
   property color accent: "#808080"
   property color background: "#303030"
@@ -125,9 +127,16 @@ Item {
     y: pointerLocal.y - height / 2
     opacity: 0.85
 
+    Loader {
+      objectName: "workspaceDragArtwork"
+      anchors.fill: parent
+      active: root.active && root.artworkDelegate !== null
+      sourceComponent: root.artworkDelegate
+    }
     Image {
       anchors.fill: parent
-      source: root.iconSource
+      visible: root.artworkDelegate === null
+      source: root.artworkDelegate === null ? root.iconSource : ""
       fillMode: Image.PreserveAspectFit
       asynchronous: true
     }

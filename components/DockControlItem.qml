@@ -24,7 +24,6 @@ Item {
   required property string position
   required property bool vertical
   required property bool interfaceAnimationsEnabled
-  signal settingsRequested()
   signal addApplicationRequested()
   signal autoHideToggled(bool enabled)
   signal contextMenuVisibilityChanged(bool visible)
@@ -170,7 +169,6 @@ Item {
       contextMenu.dismiss()
       Qt.callLater(() => root.activate())
     }
-    onOpenSettings: root.settingsRequested()
     onAddApplication: root.addApplicationRequested()
     onToggleAutoHide: root.autoHideToggled(!root.autoHide)
   }

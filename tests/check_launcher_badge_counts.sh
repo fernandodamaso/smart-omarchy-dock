@@ -67,8 +67,8 @@ fi
 
 grep -Fq '"launcherBadgeMode": "automatic"' config/dock.json \
   || fail 'automatic count mode config default missing'
-grep -Fq 'launcherBadgeMode: "automatic"' DockHost.qml \
-  || fail 'automatic count mode host fallback missing'
+grep -Fq 'property var settings: dockControl.defaults' DockHost.qml \
+  || fail 'host fallback must use declared defaults (including count mode)'
 grep -q 'function normalizeLauncherIdentity' "$model" \
   || fail 'launcher URI/desktop-id normalization missing'
 grep -q 'function launcherCountState' "$model" \

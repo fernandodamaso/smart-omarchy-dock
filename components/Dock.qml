@@ -41,6 +41,11 @@ PanelWindow {
   property int openMenuCount: 0
   property bool autoHideRevealed: false
   property int badgeStateRevision: 0
+  readonly property bool workspaceDragActive: workspaceDrag.active
+  readonly property DockWorkspaceDrag workspaceDragController: workspaceDrag
+  property bool workspacePresentationDirty: false
+  property bool revealAfterWorkspaceDrag: false
+  property bool dragFullscreenModeActive: false
 
   readonly property int iconSize: DockModel.normalizeSetting(
     "iconSize", settings.iconSize)
@@ -235,7 +240,8 @@ PanelWindow {
   readonly property var fullscreenOwnerToplevel: DockModel.fullscreenOwner(
     toplevels, hyprToplevels, focusedWorkspaceId, activeToplevel,
     scopeRevision)
-  readonly property bool fullscreenModeActive: fullscreenOwnerToplevel !== null
+  readonly property bool fullscreenModeActive: workspaceDragActive
+    ? dragFullscreenModeActive : fullscreenOwnerToplevel !== null
   property var visibleItems: []
   readonly property bool groupedRequested: !vertical
     && DockModel.normalizeSetting("workspaceLayout", settings.workspaceLayout) === "grouped"
@@ -280,7 +286,7 @@ PanelWindow {
     ? compactMainExtent - groupedSurfaceTrim + groupedSurfaceGutter * 2 : compactMainExtent
   readonly property bool keepAutoHideOpen: windowPointer.hovered
     || appPicker.visible || openMenuCount > 0
-    || dragSource >= 0 || windowPreview.interactionActive
+    || dragSource >= 0 || windowPreview.interactionActive || workspaceDragActive
   readonly property bool dockShown: !autoHide || autoHideRevealed
   readonly property real pointerPosition: !pointer.hovered
     ? -10000
@@ -289,6 +295,10 @@ PanelWindow {
       : pointer.point.position.x
 
   function refreshVisibleItems() {
+    if (root.workspaceDragActive) {
+      root.workspacePresentationDirty = true
+      return
+    }
     if (groupedRequested) {
       var monitor = dockHyprMonitor
       var ipc = monitor ? monitor.lastIpcObject || monitor : ({})
@@ -322,10 +332,55 @@ PanelWindow {
       groupWindows, hiddenApplications)
     if (!DockModel.visibleItemsEqual(visibleItems, nextItems))
       visibleItems = nextItems
+    if (root.revealAfterWorkspaceDrag) {
+      root.revealAfterWorkspaceDrag = false
+      Qt.callLater(root.revealActiveWorkspace)
+    }
   }
 
   function scheduleVisibleItemsRefresh() {
+    if (root.workspaceDragActive) {
+      root.workspacePresentationDirty = true
+      workspaceDrag.updatePointer(workspaceDrag.pointerScene)
+      return
+    }
     visibleItemsRefreshTimer.restart()
+  }
+
+  function prepareWorkspacePresentation() {
+    root.dragFullscreenModeActive = root.fullscreenModeActive
+    root.workspacePresentationDirty = true
+    visibleItemsRefreshTimer.stop()
+    windowPreview.dismissImmediately()
+  }
+
+  function finishWorkspacePresentation() {
+    root.workspacePresentationDirty = false
+    root.revealAfterWorkspaceDrag = true
+    visibleItemsRefreshTimer.restart()
+  }
+
+  function cancelWorkspaceGesture(reason) {
+    if (workspaceDrag) workspaceDrag.cancel(reason)
+  }
+
+  function workspaceDropTargetAt(scenePoint) {
+    if (!grouped || !windowActions || !groupedLayout.containsScenePoint(scenePoint)) return ""
+    for (var i = 0; i < workspaceCards.count; ++i) {
+      var slot = workspaceCards.itemAt(i)
+      var card = slot ? slot.dropCard : null
+      if (!slot || !slot.present || !card || !card.visible) continue
+      var point = card.mapFromItem(null, scenePoint.x, scenePoint.y)
+      if (point.x < 0 || point.x >= card.width || point.y < 0 || point.y >= card.height) continue
+      var destination = windowActions.resolveWorkspaceDropTarget(slot.workspaceIdentity)
+      if (!destination) return ""
+      if (workspaceMonitorScope === "current-monitor") {
+        var monitor = DockWindowModel.canonicalMonitorIdentity(dockHyprMonitor, hyprMonitors)
+        if (!monitor || destination.monitor !== monitor) return ""
+      }
+      return destination.identity
+    }
+    return ""
   }
 
   function primaryBadgeOwnerFor(index) {
@@ -342,7 +397,7 @@ PanelWindow {
   }
 
   function revealActiveWorkspace() {
-    if (!grouped) return
+    if (!grouped || root.workspaceDragActive) return
     for (var i = 0; i < workspaceCards.count; ++i) {
       var card = workspaceCards.itemAt(i)
       if (card && card.active) {
@@ -417,12 +472,18 @@ PanelWindow {
   onOpenMenuCountChanged: if (openMenuCount > 0) windowPreview.dismissImmediately()
   onDragSourceChanged: if (dragSource >= 0) windowPreview.dismissImmediately()
   onShowPreviewsChanged: if (!showPreviews) windowPreview.dismissImmediately()
-  onSettingsChanged: root.scheduleVisibleItemsRefresh()
+  onSettingsChanged: { root.cancelWorkspaceGesture("settings changed"); root.scheduleVisibleItemsRefresh() }
+  onPositionChanged: root.cancelWorkspaceGesture("dock edge changed")
+  onScreenChanged: root.cancelWorkspaceGesture("screen changed")
+  onWidthChanged: root.cancelWorkspaceGesture("surface resized")
+  onHeightChanged: root.cancelWorkspaceGesture("surface resized")
+  onVisibleChanged: if (!visible) root.cancelWorkspaceGesture("surface hidden")
   onPinnedChanged: root.scheduleVisibleItemsRefresh()
   onWorkspaceMonitorScopeChanged: root.scheduleVisibleItemsRefresh()
   onFocusedScopeWorkspaceChanged: root.scheduleVisibleItemsRefresh()
   onSortByWorkspaceChanged: root.scheduleVisibleItemsRefresh()
   onGroupedChanged: {
+    root.cancelWorkspaceGesture("layout changed")
     windowPreview.dismissImmediately()
     dragSource = -1
     dragTarget = -1
@@ -433,6 +494,7 @@ PanelWindow {
   onHyprMonitorsChanged: root.scheduleVisibleItemsRefresh()
   onHyprWorkspacesChanged: root.scheduleVisibleItemsRefresh()
   Component.onDestruction: {
+    root.cancelWorkspaceGesture("surface destroyed")
     if (badgeTracker && screen) badgeTracker.syncWorkspaceScopes(screen.name, [])
   }
   onWorkspaceCountsRevisionChanged: root.scheduleVisibleItemsRefresh()
@@ -533,6 +595,31 @@ PanelWindow {
     item: root.dockShown ? interactionArea : revealStrip
   }
 
+  DockWorkspaceDrag {
+    id: workspaceDrag
+    anchors.fill: parent
+    z: 100
+    windowActions: root.windowActions
+    targetAtScenePoint: root.workspaceDropTargetAt
+    iconSize: root.iconSize
+    accent: Color.accent
+    background: Color.background
+    foreground: Color.background
+    fontFamily: Style.font.family
+    fontSize: Style.font.bodySmall
+    artworkDelegate: Component {
+      DockAppIcon {
+        desktopId: workspaceDrag.sourceItem ? workspaceDrag.sourceItem.desktopId : ""
+        desktopIcon: workspaceDrag.sourceItem && workspaceDrag.sourceItem.entry
+          ? workspaceDrag.sourceItem.entry.icon || "" : ""
+        iconOverrides: root.iconOverrides
+        reloadRevision: root.iconReloadRevision
+      }
+    }
+    onAboutToBegin: root.prepareWorkspacePresentation()
+    onEnded: root.finishWorkspacePresentation()
+  }
+
   Timer {
     id: hideTimer
 
@@ -625,13 +712,14 @@ PanelWindow {
       DockControlItem {
         id: controlItem
 
+        enabled: !root.workspaceDragActive
         x: root.vertical ? (parent.width - width) / 2 : root.mainPadding
         y: root.vertical ? root.mainPadding : (parent.height - height) / 2
         controlCommand: root.controlCommand
         windowActions: root.windowActions
         slotSize: root.itemSize
         iconSize: root.iconSize
-        magnification: root.magnification
+        magnification: root.workspaceDragActive ? 1 : root.magnification
         magnificationRadius: root.magnificationRadius
         hoverGlowEnabled: root.hoverGlowEnabled
         hoverGlowOpacity: root.hoverGlowOpacity
@@ -680,7 +768,12 @@ PanelWindow {
         background: Color.menu.background
         accent: Color.accent
         animationsEnabled: root.interfaceAnimationsEnabled
-        onViewportChanged: windowPreview.refreshAnchorGeometry()
+        windowDragActive: root.workspaceDragActive
+        dragScenePosition: workspaceDrag.pointerScene
+        onViewportChanged: {
+          windowPreview.refreshAnchorGeometry()
+          if (root.workspaceDragActive) workspaceDrag.updatePointer(workspaceDrag.pointerScene)
+        }
         DockPresentationModel {
           id: workspacePresentationModel
           sourceItems: root.groupedRequested ? root.workspacePresentation.groups : []
@@ -698,6 +791,10 @@ PanelWindow {
             id: workspaceCardSlot
             required property var modelData
             required property int index
+            readonly property string workspaceIdentity: modelData.item.identity
+            readonly property Item dropCard: workspaceCard
+            readonly property bool active: workspaceCard.active
+            readonly property real headerWidth: workspaceCard.headerWidth
             present: modelData.present
             animateEntrance: modelData.animateEntrance
             animationsEnabled: root.interfaceAnimationsEnabled
@@ -716,6 +813,8 @@ PanelWindow {
               label: modelData.label
               count: modelData.count
               urgent: modelData.urgent === true && root.attentionBadgesEnabled
+              windowDragActive: root.workspaceDragActive
+              dropHighlighted: root.workspaceDragActive && workspaceDrag.hoveredIdentity === modelData.identity
               position: root.position
               viewport: groupedLayout
               active: modelData.active
@@ -763,6 +862,7 @@ PanelWindow {
           label: "Other windows"
           position: root.position
           viewport: groupedLayout
+          windowDragActive: root.workspaceDragActive
           count: root.workspacePresentation.fallbackItems.reduce(function(total, item) {
             return total + item.toplevels.length
           }, 0)
@@ -797,12 +897,12 @@ PanelWindow {
           ? parent.trailingStart + appTrashSeparator.height
           : (parent.height - height) / 2
         visible: root.showTrash
-        enabled: root.showTrash
+        enabled: root.showTrash && !root.workspaceDragActive
         trashItemCount: root.trashItemCount
         trashStateKnown: root.trashStateKnown
         slotSize: root.itemSize
         iconSize: root.iconSize
-        magnification: root.magnification
+        magnification: root.workspaceDragActive ? 1 : root.magnification
         magnificationRadius: root.magnificationRadius
         hoverGlowEnabled: root.hoverGlowEnabled
         hoverGlowOpacity: root.hoverGlowOpacity
@@ -877,6 +977,8 @@ PanelWindow {
     scopeRevision: root.scopeRevision
     presentationId: modelData.presentationId || modelData.desktopId
     identityToplevel: modelData.identityToplevel || null
+    workspaceDrag: root.workspaceDragController
+    workspaceDragEnabled: root.grouped && appItem.originOnly
 
     desktopId: modelData.desktopId
     iconOverrides: root.iconOverrides
@@ -947,6 +1049,7 @@ PanelWindow {
     onRemoveRequested: desktopId => root.unpinRequested(desktopId)
     onHideRequested: desktopId => root.hideRequested(desktopId)
     onPreviewRequested: (anchorItem, desktopId, toplevels, applicationEntry) => {
+      if (root.workspaceDragActive) return
       windowPreview.requestPreview(
         anchorItem, desktopId, toplevels, applicationEntry)
     }

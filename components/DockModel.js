@@ -263,32 +263,6 @@ function reorderPinnedById(pinnedIds, sourceDesktopId, targetDesktopId) {
   return reordered
 }
 
-function hiddenApplicationRows(ids, entries) {
-  var normalized = normalizeApplicationIds(ids)
-  var availableEntries = []
-  if (Array.isArray(entries)) {
-    availableEntries = entries
-  } else if (entries && typeof entries.length === "number") {
-    for (var entryIndex = 0; entryIndex < entries.length; ++entryIndex)
-      availableEntries.push(entries[entryIndex])
-  }
-  var rows = []
-
-  for (var i = 0; i < normalized.length; ++i) {
-    var id = normalized[i]
-    var entry = entryForDesktopId(id, availableEntries)
-    var name = entry && String(entry.name || "").trim()
-    var icon = entry && String(entry.icon || "").trim()
-    rows.push({
-      id: id,
-      name: name || id,
-      icon: icon || "application-x-executable"
-    })
-  }
-
-  return rows
-}
-
 function controlCommand(settings) {
   var configured = settings && settings.controlCommand
   var command = String(configured === undefined || configured === null
@@ -303,23 +277,6 @@ function applicationActionValues() {
     "previews",
     "close",
     "focus-or-launch"
-  ]
-}
-
-function applicationActionOptions() {
-  return [
-    { value: "none", label: "No action" },
-    { value: "minimize-restore", label: "Minimize / restore" },
-    { value: "previews", label: "Show previews" },
-    { value: "close", label: "Close" },
-    { value: "focus-or-launch", label: "Focus or launch" }
-  ]
-}
-
-function scrollActionOptions() {
-  return [
-    { value: "none", label: "No action" },
-    { value: "cycle-windows", label: "Cycle windows" }
   ]
 }
 
@@ -452,8 +409,6 @@ function dockControlIcon(action, autoHide) {
   switch (action) {
   case "launcher":
     return "rocket"
-  case "settings":
-    return "settings-2"
   case "add":
     return "plus"
   case "auto-hide":
@@ -499,26 +454,6 @@ function resolveColorValue(value, tokens, fallback) {
   return resolved === undefined || resolved === null ? fallback : resolved
 }
 
-function colorChannelHex(value, fallback) {
-  var channel = Number(value)
-  if (!isFinite(channel)) channel = fallback
-  channel = Math.max(0, Math.min(1, channel))
-  var hex = Math.round(channel * 255).toString(16)
-  return hex.length === 1 ? "0" + hex : hex
-}
-
-function colorToHex(color) {
-  if (!color) return ""
-
-  var red = colorChannelHex(color.r, 0)
-  var green = colorChannelHex(color.g, 0)
-  var blue = colorChannelHex(color.b, 0)
-  var alpha = colorChannelHex(color.a, 1)
-  return alpha === "ff"
-    ? "#" + red + green + blue
-    : "#" + alpha + red + green + blue
-}
-
 function effectiveColor(enabled, override, themeColor, tokens) {
   return Boolean(enabled)
     ? resolveColorValue(override, tokens, themeColor)
@@ -528,37 +463,6 @@ function effectiveColor(enabled, override, themeColor, tokens) {
 function effectiveBorderWidth(enabled, override, themeWidth) {
   if (!Boolean(enabled)) return themeWidth
   return steppedNumber(override, 0, 8, 1, 2, 0)
-}
-
-function surfaceColorMode(enabled, value) {
-  var normalized = String(value || "").trim()
-  if (!enabled || normalized === "") return "default"
-  return normalized.indexOf("@") === 0 ? "token" : "custom"
-}
-
-function surfaceColorPatch(enabledKey, valueKey, value) {
-  var validPair = (enabledKey === "backgroundColorEnabled"
-      && valueKey === "backgroundColor")
-    || (enabledKey === "borderColorEnabled"
-      && valueKey === "borderColor")
-    || (enabledKey === "workspaceBadgeBackgroundColorEnabled"
-      && valueKey === "workspaceBadgeBackgroundColor")
-    || (enabledKey === "workspaceBadgeTextColorEnabled"
-      && valueKey === "workspaceBadgeTextColor")
-  if (!validPair) return ({})
-
-  var raw = String(value === undefined || value === null ? "" : value).trim()
-  var patch = {}
-  if (raw === "") {
-    patch[enabledKey] = false
-    return patch
-  }
-
-  var normalized = normalizeSetting(valueKey, raw)
-  if (normalized === "") return ({})
-  patch[enabledKey] = true
-  patch[valueKey] = normalized
-  return patch
 }
 
 function normalizeSetting(key, value) {
@@ -629,49 +533,8 @@ function normalizeSetting(key, value) {
   }
 }
 
-function resetSettingsPatch() {
-  return settingsDefaults()
-}
-
 function mergeSettings(settings, patch) {
   return Object.assign({}, settings || {}, patch || {})
-}
-
-function centeredPopupAnchor(position, screenWidth, screenHeight,
-                             parentWidth, parentHeight,
-                             popupWidth, popupHeight, margin) {
-  var screenW = Math.max(1, Number(screenWidth) || 1)
-  var screenH = Math.max(1, Number(screenHeight) || 1)
-  var parentW = Math.max(0, Number(parentWidth) || 0)
-  var parentH = Math.max(0, Number(parentHeight) || 0)
-  var popupW = Math.max(1, Number(popupWidth) || 1)
-  var popupH = Math.max(1, Number(popupHeight) || 1)
-  var inset = Math.max(0, Number(margin) || 0)
-  var parentLeft = 0
-  var parentTop = 0
-  var vertical = position === "left" || position === "right"
-
-  if (vertical) {
-    parentLeft = position === "right" ? screenW - parentW : 0
-    parentTop = parentH < screenH
-      ? (screenH - parentH) / 2 : 0
-  } else {
-    parentLeft = parentW < screenW ? (screenW - parentW) / 2 : 0
-    parentTop = position === "bottom" ? screenH - parentH : 0
-  }
-
-  function clamp(value, minimum, maximum) {
-    return Math.max(minimum, Math.min(value, Math.max(minimum, maximum)))
-  }
-
-  var globalX = clamp((screenW - popupW) / 2,
-    inset, screenW - popupW - inset)
-  var globalY = clamp((screenH - popupH) / 2,
-    inset, screenH - popupH - inset)
-  return {
-    x: Math.round(globalX - parentLeft),
-    y: Math.round(globalY - parentTop)
-  }
 }
 
 function workspaceGridPosition(position, parentWidth, parentHeight,

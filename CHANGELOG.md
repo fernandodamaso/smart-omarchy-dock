@@ -1,5 +1,60 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Shipped the CLI command/JSON/error reference, all 41 declared setting defaults
+  and dependencies, and agent recipes for minimal patches, themes, calmer motion,
+  workspace cards, application restoration/order and per-app icon set/reload/reset.
+- Added executable documentation checks through the existing CLI and production
+  host/model harness, including preservation, dry runs, effective projections,
+  parser/schema consistency, Unicode artwork URLs and offline installation.
+- Included linked reference, inventory and local-runbook documents beside the
+  installed agent guide without adding a runtime, test framework or CI workflow.
+- Added the migration plan and exact-SHA FDM-920/FDM-885 joint local runbook with
+  isolation, touched-state restoration and explicit not-yet-verified runtime gates.
+
+### Changed
+
+- Removed the graphical Dock Settings page, its menu route, temporary preference
+  previews, exclusive controls and editor-only helpers. Configuration and icon
+  editing now use `smartdock config`, `smartdock apps` and `smartdock icons`.
+- Retained ordinary window previews, the app picker, dock menus, auto-hide,
+  pinned-app dragging, workspace/window actions, Trash and live theme bindings.
+- Preserved existing configuration, application identities, pin order, hidden
+  membership and custom icons through the existing host-owned settings writer.
+  Restore hidden applications with `smartdock apps show ID` or `apps show --all`.
+- Updated active configuration instructions and split mixed regression suites so
+  runtime behavior remains covered without depending on removed UI components.
+- **Breaking launcher change:** bare `smartdock` shows help; unrecognized leading
+  arguments no longer implicitly launch Quickshell. Replace invocations such as
+  `smartdock --no-color` with `smartdock launch --no-color`. The explicit
+  `--daemonize` and `-d` lifecycle aliases remain supported.
+- **Source configuration migration:** `./scripts/run` now defaults to
+  `${XDG_CONFIG_HOME:-$HOME/.config}/smartdock/dock.json`, not the checkout's
+  `config/dock.json`. `SMARTDOCK_CONFIG` still selects an explicit configuration.
+  Existing source-only customizations are not copied over user state automatically;
+  preserve a separate copy outside the checkout and select it explicitly. Use an
+  isolated config/display for source qualification, not a second production dock.
+
+### Fixed
+
+- Source-run configuration saves no longer overwrite the bundled defaults used
+  by single-key and preference resets after restart.
+- New bulk pin/hidden-ID patches reject surrounding whitespace instead of saving
+  identities that CLI discovery and dock rendering resolve differently. Untouched
+  legacy settings are preserved.
+- Drag reordering uses the same legacy-preserving move intent as the CLI,
+  retaining duplicate/unavailable legacy pins, hidden membership, other ordering
+  and the existing forward/backward drop semantics. Bulk replacement stays strict.
+- Removed the obsolete local dropdown fixture and extended both removal audits
+  to local tests. The FDM-858 UI audit is explicitly historical and superseded.
+
+The CLI-first migration remains an unreleased candidate. Remote checks do not
+replace the final Omarchy focus, auto-hide, FileView and image/cache qualification.
+Historical entries below describe earlier versions and are not current UI routes.
+
 ## 2.1.0 - 2026-09-01
 
 ### Changed

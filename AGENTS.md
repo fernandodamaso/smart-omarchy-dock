@@ -22,12 +22,46 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
   `DockWindowActions` instance owned by `DockHost.qml`; per-screen docks and
   context menus must consume that shared controller rather than duplicate it.
 - Put reusable visual components in `components/`.
-- Keep user-facing defaults in `config/dock.json` and mirror fallback defaults in `shell.qml`.
+- Keep user-facing defaults in `config/dock.json`; `DockControl` loads them for
+  both host modes. Keep CLI metadata in `config/settings-schema.json` and retain
+  compatible runtime normalization in `DockModel.js`.
 - Installed user settings live outside the application at `~/.config/smartdock/dock.json`; updates must never overwrite them.
 - Keep `install.sh`, `uninstall.sh`, and `scripts/smartdock` compatible with custom XDG directory variables.
 - Prefer Quickshell APIs over shelling out to external commands.
 - Use freedesktop desktop-entry IDs without the `.desktop` suffix.
 - Preserve live configuration reloads.
+
+## Configuration workflow
+
+Use `smartdock status --json`, `smartdock config schema --json`, and
+`smartdock config get --json` to discover the selected running host before a
+minimal CLI mutation. The host-reported config path is authoritative. Read
+`docs/AGENT_CONFIGURATION.md` for backup, typed patches, app/icon intents,
+requested/effective readback, persistence and touched-key rollback. The complete
+command contract and inventory are `docs/CLI_REFERENCE.md` and
+`docs/CONFIGURATION.md`. `bash ./install.sh --cli-only` installs the client and
+offline documentation; it must not start another dock or alter live settings.
+
+Configuration requests must not edit a deployed checkout, scrape the UI, or
+silently fall back to raw dock.json writes when a command is unsupported. Use
+runtime metadata, preserve unknown keys and collection order, dry-run related
+patches, then read back effective values and actual persistence. Never execute
+controlCommand for validation. Source work is reserved for an explicitly
+requested unsupported feature or an evidenced defect under its owning issue.
+
+Preferences and icon editing are CLI-only. Do not reintroduce a settings window,
+preview-only preferences, or a second config writer. Retain ordinary window
+previews, the app picker, dock menus, drag reordering and live theme bindings.
+The host's FileView remains the only live settings writer. Saved settings and
+verified rendering are separate facts; headless tests do not qualify Omarchy
+focus, auto-hide scheduling, image decoding or cache behavior.
+
+The CLI-first branch is an unreleased Draft candidate, not permission to deploy.
+After remote FDM-919 hands off an exact SHA, pause remote branch writes while the
+local FDM-920 owner performs `docs/CLI_RUNTIME_CHECKS.md`, sharing surviving icon
+checks with FDM-885. Preserve independent branches and scope shared documentation
+edits; do not absorb unrelated workspace-drag work. AI owns source review, fixes
+and test acceptance; unavailable physical/runtime checks remain explicit gates.
 
 ## Validation
 
@@ -47,10 +81,14 @@ omarchy plugin validate .
 git diff --check
 ```
 
-A portal warning about an application ID already being registered can occur when another Quickshell process is running; it is not a dock failure.
+Run source-host smoke checks only in the owning issue's isolated display/config
+context, never by launching a second dock beside the production plugin. A portal
+warning about an application ID already being registered can occur when another
+Quickshell process is running; it is not by itself a dock failure.
 
 ## Style
 
 - Use two-space indentation in QML.
 - Keep JavaScript helpers small and local to the component that owns the behavior.
-- Add new configuration options to both `config/dock.json` and the README.
+- Add new configuration options to `config/dock.json`, the CLI schema, the tested
+  configuration inventory and the README.

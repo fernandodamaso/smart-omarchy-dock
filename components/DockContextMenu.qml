@@ -21,7 +21,6 @@ PopupWindow {
   onRunningToplevelsChanged: if (visible) dismiss()
   property bool controlItem: false
   signal openLauncher()
-  signal openSettings()
   signal openNewWindow()
   signal addApplication()
   signal removeFromDock()
@@ -398,24 +397,6 @@ PopupWindow {
               onTriggered: {
                 root.dismiss()
                 Qt.callLater(() => root.openLauncher())
-              }
-            }
-
-            DockMenuAction {
-              visible: root.controlItem
-              iconName: DockModel.dockControlIcon("settings", root.autoHide)
-              text: "Dock Settings…"
-              keyboardActive: !!root && itemIndex === root.activeMenuIndex
-              readonly property int itemIndex: {
-                if (!root) return -1
-                var items = root.currentFocusableItems()
-                for (var i = 0; i < items.length; ++i)
-                  if (items[i] === this) return i
-                return -1
-              }
-              onTriggered: {
-                root.dismiss()
-                Qt.callLater(() => root.openSettings())
               }
             }
 
