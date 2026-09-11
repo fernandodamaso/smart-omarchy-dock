@@ -50,15 +50,28 @@ PanelWindow {
   property bool dragFullscreenModeActive: false
 
   // The profile applies only when every window in the item reports the same
-  // one; mixed-profile groups keep the plain application icon.
+  // one; mixed-profile groups keep the plain application icon. Item toplevels
+  // are generic Wayland handles, so resolve Hyprland addresses through the
+  // paired HyprlandToplevel (same pairing itemWorkspaceId already uses).
+  function hyprAddressFor(toplevel) {
+    if (!toplevel) return ""
+    var handles = root.hyprToplevels
+    for (var j = 0; j < handles.length; ++j) {
+      var handle = handles[j]
+      if (handle && handle.wayland === toplevel)
+        return handle.address
+          || String((handle.lastIpcObject || {}).address || "")
+    }
+    return ""
+  }
+
   function profileKeyFor(item) {
     var service = root.browserProfileService
     if (!service || !service.available) return ""
     var toplevels = item && item.toplevels ? item.toplevels : []
     var key = ""
     for (var i = 0; i < toplevels.length; ++i) {
-      var toplevel = toplevels[i]
-      var address = toplevel && toplevel.address ? toplevel.address : ""
+      var address = hyprAddressFor(toplevels[i])
       if (!address) return ""
       var windowKey = service.profileKeyForAddress(address)
       if (!windowKey) return ""
