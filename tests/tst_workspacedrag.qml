@@ -45,6 +45,37 @@ TestCase {
       onEnded: endings++
     }
   }
+  Component {
+    id: scrollingSceneComponent
+    Item {
+      x: 60
+      y: 100
+      width: 300
+      height: 100
+      property alias layout: layout
+      property alias drag: drag
+      Components.DockWorkspaceLayout {
+        id: layout
+        anchors.fill: parent
+        windowDragActive: drag.active
+        dragScenePosition: drag.pointerScene
+        onViewportChanged: if (drag.active) drag.updatePointer(drag.pointerScene)
+        Rectangle { width: 150; height: 50 }
+        Rectangle { id: destination; width: 150; height: 50 }
+      }
+      Components.DockWorkspaceDrag {
+        id: drag
+        anchors.fill: parent
+        windowActions: actions
+        targetAtScenePoint: function(point) {
+          if (!layout.containsScenePoint(point)) return ""
+          var local = destination.mapFromItem(null, point.x, point.y)
+          return local.x >= 0 && local.x < destination.width
+            && local.y >= 0 && local.y < destination.height ? "id:12" : ""
+        }
+      }
+    }
+  }
   function init() {
     actions.captures = 0
     actions.moves = 0
@@ -141,5 +172,24 @@ TestCase {
     tryCompare(drag, "active", false)
     verifyClean(drag)
     compare(actions.moves, 0)
+  }
+  function test_stationaryPointerRetargetsAfterViewportScroll() {
+    var scene = createTemporaryObject(scrollingSceneComponent, testCase)
+    verify(scene)
+    wait(30)
+    var point = scene.layout.mapToItem(null, 150, 20)
+    verify(scene.drag.begin(source, [source], point, ""))
+    compare(scene.drag.hoveredIdentity, "")
+    scene.layout.scrollBy(10000)
+    compare(scene.drag.pointerScene, point)
+    compare(scene.drag.hoveredIdentity, "id:12")
+    scene.layout.scrollBy(-10000)
+    compare(scene.drag.hoveredIdentity, "")
+    scene.layout.scrollBy(10000)
+    verify(scene.drag.finish(point))
+    compare(actions.moves, 1)
+    compare(actions.committed, "id:12")
+    verifyClean(scene.drag)
+    compare(scene.layout.windowDragActive, false)
   }
 }

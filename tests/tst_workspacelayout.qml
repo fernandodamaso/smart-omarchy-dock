@@ -147,6 +147,7 @@ TestCase {
     layout.scrollBy(10000)
     wait(320)
     compare(layout.contentX, layout.maximumOffset)
+    compare(layout.dragNavigationDirection, 0, 'navigation timers stop at the boundary')
     var previous = findChild(layout, 'previousCards')
     layout.dragScenePosition = previous.mapToItem(null, previous.width / 2, previous.height / 2)
     tryVerify(function() { return layout.contentX < layout.maximumOffset }, 700)
@@ -154,6 +155,7 @@ TestCase {
     before = layout.contentX
     wait(320)
     compare(layout.contentX, before, 'finish/cancel stops both timers')
+    compare(layout.dragNavigationDirection, 0)
     layout.windowDragActive = true
     wait(100)
     compare(layout.contentX, before, 'a new drag gets a fresh dwell')

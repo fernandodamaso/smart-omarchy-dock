@@ -151,6 +151,7 @@ for (const mutate of [
 {
   const f = fixture()
   let scheduled = 0
+  let retargeted = 0
   const cards = [{ present: true, workspaceIdentity: 'id:12', dropCard: {
     visible: true, width: 150, height: 50,
     mapFromItem: (_item, x, y) => ({ x: x - 60, y: y - 20 }) } }]
@@ -161,7 +162,7 @@ for (const mutate of [
     workspaceCards: { count: 1, itemAt: i => cards[i] },
     groupedLayout: { containsScenePoint: p => p.x >= 30 && p.x < 180 && p.y >= 0 && p.y < 100 },
     visibleItemsRefreshTimer: { restart: () => scheduled++ },
-    workspaceDrag: { updatePointer: () => {}, pointerScene: { x: 100, y: 30 } }
+    workspaceDrag: { updatePointer: () => retargeted++, pointerScene: { x: 100, y: 30 } }
   })
   assert.equal(dock.workspaceDropTargetAt({ x: 100, y: 30 }), 'id:12')
   assert.equal(dock.workspaceDropTargetAt({ x: 190, y: 30 }), '', 'clipped card region')
@@ -179,10 +180,62 @@ for (const mutate of [
   for (let i = 0; i < 5; i++) dock.scheduleVisibleItemsRefresh()
   dock.refreshVisibleItems()
   assert.equal(scheduled, 0)
+  assert.equal(retargeted, 5, 'inventory changes still retarget the stationary pointer')
   assert.equal(dock.workspacePresentationDirty, true)
   dock.workspaceDragActive = false
   dock.finishWorkspacePresentation()
   assert.equal(scheduled, 1, 'one queued refresh after session end')
   assert.equal(dock.workspacePresentationDirty, false)
+}
+
+// Evaluate the real handler binding through the release latch. Actual native
+// pointer delivery/arbitration remains the explicitly separate local gate.
+{
+  const expression = read('DockItem.qml').match(
+    /id: workspaceDragHandler\s+enabled:([\s\S]*?)\n    target:/)?.[1]
+  assert.ok(expression, 'workspace gesture binding is present')
+  const root = { workspaceDragEnabled: true, presentationActive: true,
+    workspaceGestureOwned: false, presentationVisible: true, runningCount: 1,
+    sticky: false, workspaceInputSuppressed: false }
+  const enabled = (patch = {}, active = false) => vm.runInNewContext(
+    `Boolean(${expression})`, { root: { ...root, ...patch }, active })
+  assert.equal(enabled(), true)
+  assert.equal(enabled({ presentationVisible: false }), false)
+  assert.equal(enabled({ sticky: true }), false)
+  assert.equal(enabled({ runningCount: 0 }), false)
+  assert.equal(enabled({ workspaceDragEnabled: false }, true), false)
+  assert.equal(enabled({ presentationActive: false }, true), false)
+  assert.equal(enabled({ presentationVisible: false, workspaceInputSuppressed: true }, true), true)
+  assert.equal(enabled({ workspaceGestureOwned: true, workspaceInputSuppressed: true }), true,
+    'active=false must not disable the handler before the release transition is delivered')
+
+  const transitions = { UngrabExclusive: 1, CancelGrabExclusive: 2, CancelGrabPassive: 3 }
+  for (const [transition, state, expected] of [[1, 1, 'finish'], [1, 0, 'cancel'],
+    [2, 1, 'cancel'], [3, 1, 'cancel']]) {
+    const calls = []
+    const item = methods('DockItem.qml', { PointerDevice: transitions,
+      EventPoint: { Released: 1 }, workspaceDrag: {
+        finish: point => { calls.push(['finish', point]); item.workspaceDrag.sourceItem = null },
+        cancel: () => { calls.push(['cancel']); item.workspaceDrag.sourceItem = null }
+      } })
+    item.workspaceDrag.sourceItem = item
+    const point = { state, scenePosition: { x: 91, y: 37 } }
+    item.workspaceGrabChanged(transition, point)
+    item.workspaceGrabChanged(transition, point)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0][0], expected)
+    if (expected === 'finish') assert.equal(calls[0][1], point.scenePosition)
+  }
+}
+
+// A known non-sticky fallback source is safe: the command uses its exact
+// address and the destination is independently validated, never guessed.
+for (const workspace of [{}, { id: -99, name: 'special:scratch' }]) {
+  const f = fixture()
+  f.handles[0].lastIpcObject.workspace = workspace
+  const captured = f.actions.captureWorkspaceMove([f.windows[0]])
+  assert.equal(captured.length, 1, 'resolvable Other windows source remains draggable')
+  assert.equal(f.actions.moveCapturedToplevels(captured, 'id:12'), true)
+  assert.deepEqual(f.requests, [DockModel.moveWindowRequest('1', 12, false)])
 }
 console.log('workspace dragging production actions, targets and refresh: PASS')
