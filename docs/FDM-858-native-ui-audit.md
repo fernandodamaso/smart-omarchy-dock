@@ -22,7 +22,7 @@ A native control is adopted only when it removes duplicated generic control beha
 | `Dock.qml` | Keep | Top-level dock/layer-shell composition and application state orchestration are SmartDock responsibilities, not a generic UI control. |
 | `DockActionDropdown.qml` | **Replace internals; keep thin adapter** | Native `qs.Ui.Dropdown` owns option rendering, popup behavior, pointer handling, and keyboard navigation. The adapter keeps SmartDock's existing label composition and restores the settings-driven child binding after native selection. |
 | `DockAppPicker.qml` | Keep | Application discovery/filtering, pinned-state behavior, dock-relative popup geometry, and selection flow are application-specific. |
-| `DockApplicationBadge.qml` | Keep | Renders SmartDock-specific launcher/attention state; Omarchy exposes no equivalent generic badge control in the reviewed UI module. |
+| `DockApplicationBadge.qml` | Keep | Renders SmartDock-specific launcher/attention badge state; Omarchy exposes no equivalent generic badge control in the reviewed UI module. |
 | `DockApplicationStateIndicator.qml` | Keep | Encodes dock-position-aware running/focused marker geometry rather than generic form/control behavior. |
 | `DockAttentionMotion.qml` | Keep | Owns SmartDock's icon attention motion contract and animation lifecycle. |
 | `DockColorSwatch.qml` | Keep | Small color-preview primitive used by SmartDock's specialized color settings; replacing it would not remove control logic. |
