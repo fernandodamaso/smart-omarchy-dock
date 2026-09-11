@@ -12,6 +12,7 @@ const removed = ['DockSettings', 'DockSettingSlider', 'DockSettingsSection',
   'DockActionDropdown', 'DockHiddenApplicationRow'];
 const obsolete = /DockSettings|dockSettings|settingPreviews|SettingsRequested|settingsRequested|smartdock-settings|openIconEditor|openSettings|DockSettingSlider|DockColorTokenDropdown|DockColorSwatch|DockActionDropdown|DockHiddenApplicationRow/;
 function files(directory) {
+  if (!fs.existsSync(path.join(base, directory))) return [];
   return fs.readdirSync(path.join(base, directory), { withFileTypes: true }).flatMap(entry => {
     const name = path.posix.join(directory, entry.name);
     return entry.isDirectory() ? files(name) : [name];
@@ -20,7 +21,7 @@ function files(directory) {
 // Audit executable sources, including mixed tests and runtime fixtures. The two
 // removal audits name forbidden components as test data, not executable imports.
 const active = ['DockHost.qml', 'shell.qml', 'Overlay.qml', ...files('components'),
-  ...files('scripts'), ...files('tests')].filter(name =>
+  ...files('scripts'), ...files('tests'), ...files('local-tests')].filter(name =>
   /\.(qml|js|mjs|py|sh)$/.test(name) && !/\/test_settings_(cutover|helpers)\.mjs$/.test(name));
 const references = active.flatMap(name => read(name).split('\n').flatMap((line, index) =>
   obsolete.test(line) ? [`${name}:${index + 1}: ${line.trim()}`] : []));

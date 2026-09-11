@@ -27,6 +27,29 @@
   Restore hidden applications with `smartdock apps show ID` or `apps show --all`.
 - Updated active configuration instructions and split mixed regression suites so
   runtime behavior remains covered without depending on removed UI components.
+- **Breaking launcher change:** bare `smartdock` shows help; unrecognized leading
+  arguments no longer implicitly launch Quickshell. Replace invocations such as
+  `smartdock --no-color` with `smartdock launch --no-color`. The explicit
+  `--daemonize` and `-d` lifecycle aliases remain supported.
+- **Source configuration migration:** `./scripts/run` now defaults to
+  `${XDG_CONFIG_HOME:-$HOME/.config}/smartdock/dock.json`, not the checkout's
+  `config/dock.json`. `SMARTDOCK_CONFIG` still selects an explicit configuration.
+  Existing source-only customizations are not copied over user state automatically;
+  preserve a separate copy outside the checkout and select it explicitly. Use an
+  isolated config/display for source qualification, not a second production dock.
+
+### Fixed
+
+- Source-run configuration saves no longer overwrite the bundled defaults used
+  by single-key and preference resets after restart.
+- New bulk pin/hidden-ID patches reject surrounding whitespace instead of saving
+  identities that CLI discovery and dock rendering resolve differently. Untouched
+  legacy settings are preserved.
+- Drag reordering uses the same legacy-preserving move intent as the CLI,
+  retaining duplicate/unavailable legacy pins, hidden membership, other ordering
+  and the existing forward/backward drop semantics. Bulk replacement stays strict.
+- Removed the obsolete local dropdown fixture and extended both removal audits
+  to local tests. The FDM-858 UI audit is explicitly historical and superseded.
 
 The CLI-first migration remains an unreleased candidate. Remote checks do not
 replace the final Omarchy focus, auto-hide, FileView and image/cache qualification.

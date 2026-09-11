@@ -82,8 +82,19 @@ Item {
   }
 
   function reorderPinned(sourceDesktopId, targetDesktopId) {
-    var pinned = DockModel.reorderPinnedById(settings.pinned, sourceDesktopId, targetDesktopId)
-    return savePinned(pinned)
+    var pins = Array.isArray(settings.pinned) ? settings.pinned : []
+    var sourceKey = ConfigModel.canonicalApplicationId(sourceDesktopId)
+    var targetKey = ConfigModel.canonicalApplicationId(targetDesktopId)
+    var sourceIndex = ConfigModel.identityIndex(pins, sourceKey)
+    var targetIndex = ConfigModel.identityIndex(pins, targetKey)
+    if (sourceKey && targetKey && sourceIndex >= 0 && sourceIndex === targetIndex)
+      return saveSettings({}, false)
+    // A forward drop occupies the target's old slot (after it once removed);
+    // a backward drop goes before it. Use the same legacy-preserving primitive
+    // as CLI moves instead of revalidating every untouched stored pin.
+    var args = { id: sourceDesktopId }
+    args[sourceIndex < targetIndex ? "after" : "before"] = targetDesktopId
+    return changeApplication("move", args)
   }
 
   function pinApplication(desktopId) {

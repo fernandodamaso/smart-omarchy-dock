@@ -5,13 +5,14 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 function scan(directory) {
+  if (!fs.existsSync(path.join(root, directory))) return [];
   return fs.readdirSync(path.join(root, directory), { withFileTypes: true }).flatMap(entry => {
     const name = path.posix.join(directory, entry.name);
     return entry.isDirectory() ? scan(name) : [name];
   });
 }
 const helpers = /hiddenApplicationRows|applicationActionOptions|scrollActionOptions|colorChannelHex|colorToHex|surfaceColorMode|surfaceColorPatch|centeredPopupAnchor|resetSettingsPatch/;
-const sources = ['DockHost.qml', ...scan('components'), ...scan('tests')].filter(name =>
+const sources = ['DockHost.qml', ...scan('components'), ...scan('tests'), ...scan('local-tests')].filter(name =>
   /\.(qml|js|mjs|py|sh)$/.test(name) && !name.endsWith('/test_settings_helpers.mjs'));
 const obsolete = sources.flatMap(name => fs.readFileSync(path.join(root, name), 'utf8')
   .split('\n').flatMap((line, index) => helpers.test(line) ? [`${name}:${index + 1}: ${line.trim()}`] : []));

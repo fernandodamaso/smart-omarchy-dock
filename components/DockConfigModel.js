@@ -40,6 +40,10 @@ function valueError(value, spec) {
       for (var i = 0; i < value.length; ++i) {
         var id = canonicalApplicationId(value[i])
         if (!id) return "Invalid application ID at index " + i
+        // Bulk patches retain spelling; padded pins would not resolve in DockModel.
+        // Reject new padding rather than silently rewriting legacy collections.
+        if (value[i] !== value[i].trim())
+          return "Application ID must not have surrounding whitespace at index " + i
         if (own(seen, id)) return "Duplicate application ID: " + value[i]
         seen[id] = true
       }

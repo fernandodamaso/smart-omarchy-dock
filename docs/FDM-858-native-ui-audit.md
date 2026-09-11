@@ -1,5 +1,12 @@
 # FDM-858 native Omarchy UI audit
 
+> **Historical audit — superseded by the CLI-first Settings removal in PR #44.**
+> The dropdown adapter, its local fixture and runner described below are no longer
+> present. Do not execute the historical validation commands against this branch.
+> Current qualification follows [CLI_RUNTIME_CHECKS.md](CLI_RUNTIME_CHECKS.md).
+> The decisions and original handoff below are retained as source history, not
+> current UI or testing instructions.
+
 ## Reference points
 
 - SmartDock baseline reviewed for this change: `main@2b11adfccd84883a2dca1287ffb4612a95e9697e`.
@@ -15,7 +22,7 @@ A native control is adopted only when it removes duplicated generic control beha
 | `Dock.qml` | Keep | Top-level dock/layer-shell composition and application state orchestration are SmartDock responsibilities, not a generic UI control. |
 | `DockActionDropdown.qml` | **Replace internals; keep thin adapter** | Native `qs.Ui.Dropdown` owns option rendering, popup behavior, pointer handling, and keyboard navigation. The adapter keeps SmartDock's existing label composition and restores the settings-driven child binding after native selection. |
 | `DockAppPicker.qml` | Keep | Application discovery/filtering, pinned-state behavior, dock-relative popup geometry, and selection flow are application-specific. |
-| `DockApplicationBadge.qml` | Keep | Renders SmartDock-specific launcher/attention badge state; Omarchy exposes no equivalent generic badge control in the reviewed UI module. |
+| `DockApplicationBadge.qml` | Keep | Renders SmartDock-specific launcher/attention state; Omarchy exposes no equivalent generic badge control in the reviewed UI module. |
 | `DockApplicationStateIndicator.qml` | Keep | Encodes dock-position-aware running/focused marker geometry rather than generic form/control behavior. |
 | `DockAttentionMotion.qml` | Keep | Owns SmartDock's icon attention motion contract and animation lifecycle. |
 | `DockColorSwatch.qml` | Keep | Small color-preview primitive used by SmartDock's specialized color settings; replacing it would not remove control logic. |
@@ -45,7 +52,7 @@ This audit found one high-confidence generic-control duplication worth replacing
 
 No additional follow-up issue is created from this audit because the remaining visual components retain material SmartDock-specific responsibilities or already wrap the appropriate native primitive. Future replacements should be opened only when a concrete native component removes meaningful code without changing those contracts.
 
-## Host-dependent validation handoff
+## Host-dependent validation handoff (historical, superseded)
 
 The settings-binding regression intentionally lives in `local-tests/`, outside the headless CI `tests/` tree. On the Omarchy machine, run:
 
