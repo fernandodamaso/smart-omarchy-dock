@@ -10,6 +10,28 @@ function normalizeKey(value) {
     || reserved.indexOf(key) >= 0 ? "" : key
 }
 
+function normalizeProfileSegment(value) {
+  if (typeof value !== "string") return ""
+  var segment = value.trim().replace(/\s+/g, " ")
+  return !segment || /[\x00-\x1f\x7f/\\@]/.test(segment) ? "" : segment
+}
+
+// Profile-aware keys read "id@profile:Dir" (e.g. google-chrome@profile:Profile 1).
+function profileOverrideKey(desktopId, profileKey) {
+  var id = normalizeKey(desktopId)
+  var profile = normalizeProfileSegment(profileKey)
+  return id && profile ? id + "@profile:" + profile : ""
+}
+
+function splitProfileKey(value) {
+  if (typeof value !== "string") return null
+  var marker = value.indexOf("@profile:")
+  if (marker < 0) return null
+  var id = normalizeKey(value.slice(0, marker))
+  var profile = normalizeProfileSegment(value.slice(marker + 9))
+  return id && profile ? { id: id, profile: profile } : null
+}
+
 function localFileUrl(value) {
   if (typeof value !== "string" || !value) return ""
   var path = value
@@ -47,16 +69,23 @@ function normalizeOverrides(value) {
   var result = {}
   if (!value || typeof value !== "object" || Array.isArray(value)) return result
   Object.keys(value).forEach(function(rawKey) {
-    var key = normalizeKey(rawKey)
+    var key = normalizeOverrideKey(rawKey)
     var source = normalizeSource(value[rawKey])
     if (key && source) result[key] = source
   })
   return result
 }
 
+// Override map keys are either plain desktop IDs or profile-aware keys.
+function normalizeOverrideKey(value) {
+  var profileKey = splitProfileKey(value)
+  return profileKey ? profileKey.id + "@profile:" + profileKey.profile
+    : normalizeKey(value)
+}
+
 function applyOverride(overrides, desktopId, sourceOrNull) {
   var updated = normalizeOverrides(overrides)
-  var key = normalizeKey(desktopId)
+  var key = normalizeOverrideKey(desktopId)
   var source = sourceOrNull === null ? null : normalizeSource(sourceOrNull)
   if (!key || source === "")
     return { ok: false, changed: false, overrides: updated,
@@ -68,12 +97,21 @@ function applyOverride(overrides, desktopId, sourceOrNull) {
   return { ok: true, changed: changed, overrides: updated, error: "" }
 }
 
-function candidates(overrideUrl, desktopUrl, genericUrl) {
+function candidates(profileUrl, overrideUrl, desktopUrl, genericUrl) {
   var result = []
-  var sources = [overrideUrl, desktopUrl, genericUrl]
+  var sources = [profileUrl, overrideUrl, desktopUrl, genericUrl]
   sources.forEach(function(source) {
     if (typeof source === "string" && source && result.indexOf(source) < 0)
       result.push(source)
   })
   return result
+}
+
+// Deterministic badge color for profiles without a photo.
+function badgeColor(name) {
+  var text = String(name || "").trim()
+  var hash = 0
+  for (var i = 0; i < text.length; i++)
+    hash = (hash * 31 + text.charCodeAt(i)) >>> 0
+  return "hsl(" + (hash % 360) + ", 55%, 50%)"
 }

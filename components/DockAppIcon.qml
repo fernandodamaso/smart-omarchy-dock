@@ -10,12 +10,20 @@ Item {
   property string desktopIcon: ""
   property var iconOverrides: ({})
   property int reloadRevision: 0
+  property string profileKey: ""
+  property string profileName: ""
+  property string profileAvatarPath: ""
+  property bool profileBadgesEnabled: true
 
+  readonly property string overrideKey: DockIconModel.normalizeOverrideKey(profileKey
+    ? DockIconModel.profileOverrideKey(desktopId, profileKey) : "")
   readonly property string overrideSource: DockIconModel.normalizeOverrides(iconOverrides)[
-    DockIconModel.normalizeKey(desktopId)] || ""
+    DockIconModel.normalizeOverrideKey(desktopId)] || ""
+  readonly property string profileOverrideSource: overrideKey
+    ? (DockIconModel.normalizeOverrides(iconOverrides)[overrideKey] || "") : ""
   readonly property string desktopSource: resolveDesktopIcon(desktopIcon)
-  readonly property var sourceCandidates: DockIconModel.candidates(overrideSource,
-    desktopSource, String(Quickshell.iconPath("application-x-executable", true) || ""))
+  readonly property var sourceCandidates: DockIconModel.candidates(profileOverrideSource,
+    overrideSource, desktopSource, String(Quickshell.iconPath("application-x-executable", true) || ""))
 
   // Diagnostics describe this attempt, never mutate the configured mapping.
   readonly property bool usingOverride: !reloadPending && attemptedOverride !== ""
@@ -24,6 +32,12 @@ Item {
   readonly property string renderedSource: terminalFallback
     ? String(Qt.resolvedUrl("../assets/lucide/app-window.svg"))
     : artwork.status === Image.Ready ? String(artwork.source) : ""
+
+  readonly property bool profileBadgeVisible: profileBadgesEnabled && !!profileKey
+    && !profileBadgeActive && artwork.status === Image.Ready
+  readonly property bool profileBadgeAvatarVisible: profileBadgeVisible
+    && profileAvatarPath !== ""
+  readonly property bool profileBadgeActive: overrideKey && profileOverrideSource !== ""
 
   property bool componentReady: false
   property bool reloadPending: false
@@ -56,7 +70,7 @@ Item {
     if (!componentReady) return
     if (reloadPending) {
       attemptSources = sourceCandidates.slice()
-      attemptedOverride = overrideSource
+      attemptedOverride = overrideSource || profileOverrideSource
       attemptIndex = 0
       customFailed = false
       reloadPending = false
@@ -97,6 +111,7 @@ Item {
 
   IconImage {
     id: artwork
+
     anchors.fill: parent
     asynchronous: true
     // Fixed decoding budget: caller geometry and magnification only scale paint.
@@ -104,6 +119,45 @@ Item {
     backer.fillMode: Image.PreserveAspectFit
     visible: status === Image.Ready && !root.terminalFallback
     onStatusChanged: if (status === Image.Error) root.rejectSource(String(source))
+  }
+
+  // Profile badge: the profile's own photo, or an initial circle when the
+  // profile has none. Hidden while a profile-specific icon override renders.
+  Rectangle {
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    anchors.margins: Math.max(1, parent.width * 0.04)
+    width: Math.max(8, parent.width * 0.34)
+    height: width
+    radius: width / 2
+    visible: root.profileBadgeVisible
+    clip: true
+    border.width: Math.max(1, width * 0.09)
+    border.color: "white"
+    color: root.profileBadgeAvatarVisible ? "#ffffff"
+      : DockIconModel.badgeColor(root.profileName || root.profileKey)
+
+    Image {
+      id: profileAvatar
+
+      anchors.fill: parent
+      visible: root.profileBadgeAvatarVisible
+      asynchronous: true
+      source: root.profileBadgeAvatarVisible
+        ? DockIconModel.localFileUrl(root.profileAvatarPath) : ""
+      fillMode: Image.PreserveAspectCrop
+      cache: false
+    }
+
+    Text {
+      anchors.centerIn: parent
+      visible: !root.profileBadgeAvatarVisible
+      text: String(root.profileName || root.profileKey || "").trim().charAt(0)
+        .toUpperCase()
+      color: "#ffffff"
+      font.pixelSize: parent.width * 0.6
+      font.weight: Font.DemiBold
+    }
   }
 
   DockLucideIcon {

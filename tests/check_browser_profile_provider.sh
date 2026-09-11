@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+fail() {
+  printf 'check_browser_profile_provider: %s\n' "$*" >&2
+  exit 1
+}
+
+provider=provider/browser-profiles/browser_profile_provider.py
+service=components/DockBrowserProfileService.qml
+icon=components/DockAppIcon.qml
+model=components/DockIconModel.js
+
+[[ -f "$provider" ]] || fail 'browser profile provider missing'
+[[ -f "$service" ]] || fail 'DockBrowserProfileService.qml missing'
+[[ -f "$icon" ]] || fail 'DockAppIcon.qml missing'
+[[ -f "$model" ]] || fail 'DockIconModel.js missing'
+
+python3 -m py_compile "$provider" || fail 'provider must byte-compile'
+command -v python3 >/dev/null 2>&1 || fail 'python3 required'
+
+# Behavioral checks against the real module with a stubbed CDP client. No live
+# browser or Hyprland session is required for the host-independent contract.
+python3 - <<'PYEOF' || fail 'provider behavior checks failed'
+import json, os, sys, tempfile
+
+sys.path.insert(0, "provider/browser-profiles")
+import browser_profile_provider as provider
+
+class StubClient:
+    def __init__(self, bounds=None):
+        self.bounds = bounds or {}
+    def call(self, method, params=None, session_id=None):
+        if method == "Browser.getWindowForTarget":
+            return {"windowId": abs(hash(params["targetId"])) % 1000}
+        if method == "Browser.getWindowBounds":
+            return {"bounds": self.bounds.get(params["windowId"], {"width": 0, "height": 0})}
+        raise provider.CdpError("unsupported")
+
+assert provider.strip_browser_suffix("Inbox - Google Chrome") == "Inbox"
+assert provider.strip_browser_suffix("Inbox - Chromium") == "Inbox"
+assert provider.strip_browser_suffix("Plain title") == "Plain title"
+
+ctx_a, ctx_b = "CTXAAAAAAAAAAAAAAAAAAAAAAAAAAA", "CTXBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+pages = [
+    {"targetId": "t1", "title": "Mail", "browserContextId": ctx_a},
+    {"targetId": "t2", "title": "New Tab", "browserContextId": ctx_a},
+    {"targetId": "t3", "title": "New Tab", "browserContextId": ctx_b},
+]
+windows = [
+    {"address": "0x1", "title": "Mail - Google Chrome", "size": [100, 100]},
+    {"address": "0x2", "title": "New Tab - Google Chrome", "size": [200, 100]},
+    {"address": "0x3", "title": "New Tab - Google Chrome", "size": [200, 100]},
+    {"address": "0x4", "title": "Untitled - Google Chrome", "size": [100, 100]},
+]
+got = provider.match_window_contexts(StubClient(), windows, pages)
+assert got["0x1"] == ctx_a, got
+# Two same-title same-size windows stay ambiguous rather than guessing.
+assert "0x2" not in got and "0x3" not in got, got
+assert "0x4" not in got, got
+
+# Geometry breaks the tie when sizes differ.
+pages.append({"targetId": "t4", "title": "Untitled", "browserContextId": ctx_b})
+class BoundsClient(StubClient):
+    bounds_by_target = {
+        "t2": {"width": 100, "height": 100},
+        "t3": {"width": 300, "height": 100},
+    }
+    def call(self, method, params=None, session_id=None):
+        if method == "Browser.getWindowForTarget":
+            return {"windowId": params["targetId"]}
+        if method == "Browser.getWindowBounds":
+            return {"bounds": self.bounds_by_target[params["windowId"]]}
+        return super().call(method, params, session_id)
+windows2 = [
+    {"address": "0x2", "title": "New Tab - Google Chrome", "size": [300, 100]},
+    {"address": "0x3", "title": "New Tab - Google Chrome", "size": [100, 100]},
+]
+got2 = provider.match_window_contexts(BoundsClient(), windows2, pages)
+assert got2["0x2"] == ctx_b and got2["0x3"] == ctx_a, got2
+
+# Snapshot metadata: Local State names, avatar presence, missing profile skip.
+with tempfile.TemporaryDirectory() as tmp:
+    data_home = os.path.join(tmp, "chrome")
+    os.makedirs(os.path.join(data_home, "Default"))
+    with open(os.path.join(data_home, "Local State"), "w") as handle:
+        json.dump({"profile": {"info_cache": {
+            "Default": {"name": "Fernando"},
+            "Profile 1": {"name": "Work"},
+        }}}, handle)
+    with open(os.path.join(data_home, "Default", "Google Profile Picture.png"), "wb") as handle:
+        handle.write(b"png")
+    default_path = os.path.join(data_home, "Default")
+    profile_path = os.path.join(data_home, "Profile 1")
+    snapshot = provider.build_snapshot(
+        {"0x1": ctx_a, "0x9": "CTX-UNRESOLVED"},
+        {ctx_a: default_path, "CTX-UNRESOLVED": ""},
+        9222)
+    assert snapshot["schemaVersion"] == 1 and snapshot["available"] is True
+    # Unresolved contexts publish no window mapping and no profile entry.
+    assert snapshot["windows"] == {"0x1": "Default"}, snapshot["windows"]
+    assert set(snapshot["profiles"]) == {"Default"}, snapshot["profiles"]
+    entry = snapshot["profiles"]["Default"]
+    assert entry["name"] == "Fernando"
+    assert entry["avatarPath"].endswith("Google Profile Picture.png")
+    # A profile without a photo reports an empty avatar path.
+    snapshot2 = provider.build_snapshot({"0x2": ctx_b}, {ctx_b: profile_path}, 9222)
+    assert snapshot2["profiles"]["Profile 1"]["name"] == "Work"
+    assert snapshot2["profiles"]["Profile 1"]["avatarPath"] == ""
+
+print("provider behavior checks: PASS")
+PYEOF
+
+grep -Fq 'DockBrowserProfileService {' Service.qml \
+  || fail 'Service.qml must own DockBrowserProfileService'
+grep -Fq 'property alias browserProfileService' Service.qml \
+  || fail 'Service.qml must expose the profile service alias'
+grep -Fq 'browserProfileService: root.browserProfileService' components/Dock.qml \
+  || fail 'Dock.qml must consume the profile service'
+grep -Fq 'profileKey: root.browserProfileKey' components/DockItem.qml \
+  || fail 'DockItem.qml must forward the window profile key'
+grep -Fq 'google-chrome@profile:' tests/test_icon_overrides.mjs \
+  || fail 'icon override tests must cover profile keys'
+
+printf 'check_browser_profile_provider: PASS\n'

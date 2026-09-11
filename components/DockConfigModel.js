@@ -202,22 +202,30 @@ function iconsChanged(before, after) {
     || keys.some(function(key) { return next[key] !== previous[key] })
 }
 
+function iconKey(value) {
+  if (typeof value !== "string" || /[\x7f/\\]/.test(value)) return ""
+  for (var i = 0; i < value.length; ++i) {
+    if (value.charCodeAt(i) < 32) return ""
+  }
+  return DockIconModel.normalizeOverrideKey(value)
+}
+
 function iconIntent(current, id, sourceOrNull) {
-  var key = canonicalApplicationId(id)
+  var key = iconKey(id)
   if (!key) return rejectedIntent("id", "Invalid application ID")
   // Reuse the retained validator for the single intent. Do not normalize or
   // prune unrelated legacy entries in the user's requested map on a one-app edit.
   var intent = DockIconModel.applyOverride({}, key, sourceOrNull)
   if (!intent.ok) return rejectedIntent("source", intent.error)
   var original = isObject(current.iconOverrides) ? current.iconOverrides : {}
-  var aliases = Object.keys(original).filter(function(name) { return canonicalApplicationId(name) === key })
+  var aliases = Object.keys(original).filter(function(name) { return iconKey(name) === key })
   if (sourceOrNull === null && aliases.length === 0) return withPatch(current, {})
   if (sourceOrNull !== null && aliases.length === 1
       && DockIconModel.normalizeSource(original[aliases[0]]) === intent.overrides[key])
     return withPatch(current, {})
   var updated = Object.create(null)
   Object.keys(original).forEach(function(name) {
-    if (canonicalApplicationId(name) !== key) updated[name] = original[name]
+    if (iconKey(name) !== key) updated[name] = original[name]
   })
   if (sourceOrNull !== null) updated[key] = intent.overrides[key]
   return withPatch(current, { iconOverrides: updated })

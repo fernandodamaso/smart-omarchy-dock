@@ -84,6 +84,7 @@ Configured spelling and order are retained. Pinned/hidden filters preserve their
 | `icons set` | `ID PATH`; update one app-wide mapping against the latest map and request fresh artwork. |
 | `icons reset` | `ID`; remove only that mapping. Repeating a reset is a true settings/reload no-op. |
 | `icons reload` | `ID`; require a valid existing local mapping and advance the shared reload revision without a config write. |
+| `--profile DIR` | With `set`/`reset`/`reload`, target one browser profile instead of the whole application: the key becomes `ID@profile:DIR` (DIR is the on-disk profile directory, e.g. `Profile 1`, matching a browser-profile provider badge). |
 
 Use static local PNG/SVG files referenced in place. The client resolves ordinary relative paths against its current directory; the shared model validates absolute paths and supported local `file:///` URLs, preserving spaces/Unicode through URL encoding. No remote URLs, downloads, system theme writes, imports or `.desktop` edits. Store artwork outside the plugin checkout. Missing/unreadable/corrupt files keep their requested mapping and fall back.
 
@@ -91,7 +92,7 @@ Set/reset preserves unrelated map entries, including untouched legacy sources. A
 
 Successful icon mutations add `reloaded`, `iconReloadRevision`, `renderVerified: false` to mutation data. Reload normally has `applied: false`, `noop: true`, `reloaded: true`; these fields are not contradictory. `reloaded` means requested, not decoded. Settings acceptance, durable save and actual rendering are separate observations.
 
-The shared renderer applies across main app icons, preview metadata and picker rows. Fallback is custom file → original desktop icon → `application-x-executable` → bundled theme-tinted `app-window` glyph. Custom artwork is not tinted. Identity, launch command, grouping, preview screenshots, badges, Trash and action glyphs are unchanged. A Chrome tab remains a Chrome-grouped item; artwork does not split browser groups.
+The shared renderer applies across main app icons, preview metadata and picker rows. Fallback is profile-specific custom file → app-wide custom file → original desktop icon → `application-x-executable` → bundled theme-tinted `app-window` glyph. Custom artwork is not tinted. Identity, launch command, grouping, preview screenshots, badges, Trash and action glyphs are unchanged. A Chrome tab remains a Chrome-grouped item; artwork does not split browser groups.
 
 ## JSON and errors
 

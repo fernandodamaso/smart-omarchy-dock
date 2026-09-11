@@ -51,12 +51,15 @@ function renderer({ desktop = 'desktop', generic = 'image://icon/generic', overr
     Quickshell: { iconPath: name => name === 'application-x-executable' ? generic : name === 'desktop' ? 'image://icon/desktop' : '' },
     Qt: { callLater: fn => queue.add(fn), resolvedUrl: path => `file:///repo/components/${path}` },
     desktopId: 'app', desktopIcon: desktop, iconOverrides: overrides, reloadRevision: 0,
+    profileKey: '', profileName: '', profileAvatarPath: '', profileBadgesEnabled: true,
     componentReady: true, reloadPending: false, attemptSources: [], attemptIndex: 0,
     attemptedOverride: '', customFailed: false, terminalFallback: false
   })
   scope.root = scope
   vm.runInContext(methods.join('\n'), scope)
-  for (const name of ['overrideSource', 'desktopSource', 'sourceCandidates', 'usingOverride', 'overrideFailed', 'renderedSource']) {
+  for (const name of ['overrideKey', 'profileOverrideSource', 'overrideSource', 'desktopSource',
+      'sourceCandidates', 'usingOverride', 'overrideFailed', 'renderedSource',
+      'profileBadgeVisible', 'profileBadgeActive', 'profileBadgeAvatarVisible']) {
     Object.defineProperty(scope, name, { get: () => vm.runInContext(binding(name), scope) })
   }
   function flush() {
@@ -117,6 +120,36 @@ assert.equal(empty.scope.overrideFailed, false)
 assert.deepEqual(empty.loads, [])
 const normal = renderer({ overrides: {} })
 assert.equal(normal.artwork.source, 'image://icon/desktop')
+
+// Profile-specific artwork wins over the app-wide override; the badge only
+// renders when no profile override replaced the icon.
+{
+  const scoped = renderer({ overrides: { app: '/tmp/custom.png', 'app@profile:Profile 1': '/tmp/work.svg' } })
+  assert.equal(scoped.artwork.source, 'file:///tmp/custom.png')
+  assert.equal(scoped.scope.profileBadgeVisible, false) // no profile on this window
+  scoped.scope.profileKey = 'Profile 1'
+  scoped.scope.requestReload()
+  scoped.flush()
+  assert.equal(scoped.artwork.source, 'file:///tmp/work.svg')
+  assert.equal(scoped.scope.profileBadgeActive, true)
+  assert.equal(scoped.scope.profileBadgeVisible, false)
+  assert.equal(scoped.scope.profileBadgeAvatarVisible, false)
+}
+
+// Badge visibility: profile without artwork shows an initial; avatar path wins.
+{
+  const scoped = renderer({ overrides: {} })
+  scoped.scope.profileKey = 'Profile 1'
+  scoped.scope.profileName = 'Work'
+  assert.equal(scoped.scope.profileBadgeVisible, false) // artwork not ready yet
+  scoped.artwork.status = scoped.Image.Ready
+  assert.equal(scoped.scope.profileBadgeVisible, true)
+  assert.equal(scoped.scope.profileBadgeAvatarVisible, false)
+  scoped.scope.profileAvatarPath = '/home/u/.config/chrome/Profile 1/Google Profile Picture.png'
+  assert.equal(scoped.scope.profileBadgeAvatarVisible, true)
+  scoped.scope.profileBadgesEnabled = false
+  assert.equal(scoped.scope.profileBadgeVisible, false)
+}
 const genericOnly = renderer({ desktop: 'missing-theme-name', overrides: {} })
 assert.equal(genericOnly.artwork.source, 'image://icon/generic')
 const duplicate = renderer({ desktop: '/tmp/custom.png', generic: 'file:///tmp/custom.png' })
@@ -150,7 +183,8 @@ interrupted.flush()
 assert.equal(interrupted.loads.length, 2)
 
 // Structural guards supplement, but do not establish, real QML/image behavior.
-for (const declaration of ['property string desktopId: ""', 'property string desktopIcon: ""', 'property var iconOverrides: ({})', 'property int reloadRevision: 0'])
+for (const declaration of ['property string desktopId: ""', 'property string desktopIcon: ""', 'property var iconOverrides: ({})', 'property int reloadRevision: 0',
+    'property string profileKey: ""', 'property string profileName: ""', 'property bool profileBadgesEnabled: true'])
   assert.ok(qml.includes(declaration), declaration)
 for (const event of ['onSourceCandidatesChanged', 'onDesktopIdChanged', 'onReloadRevisionChanged'])
   assert.match(qml, new RegExp(`${event}: (?:root\\.)?requestReload\\(\\)`))

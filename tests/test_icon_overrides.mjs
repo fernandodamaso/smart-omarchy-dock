@@ -47,6 +47,26 @@ assert.deepEqual(plain(icons.candidates('custom', 'desktop', 'generic')), ['cust
 assert.deepEqual(plain(icons.candidates('', 'same', 'same')), ['same']);
 assert.deepEqual(plain(icons.candidates(null, '', undefined)), []);
 
+// Browser-profile keys: "id@profile:Dir" keeps the profile directory case.
+assert.equal(icons.profileOverrideKey(' Google-Chrome.desktop ', ' Profile 1 '), 'google-chrome@profile:Profile 1');
+assert.equal(icons.profileOverrideKey('chatgpt', ''), '');
+assert.equal(icons.profileOverrideKey('chatgpt', '/abs/dir'), '');
+assert.deepEqual(plain(icons.splitProfileKey('google-chrome@profile:Profile 1')), { id: 'google-chrome', profile: 'Profile 1' });
+assert.equal(icons.splitProfileKey('google-chrome@profile:'), null);
+assert.equal(icons.splitProfileKey('chatgpt'), null);
+assert.equal(icons.normalizeOverrideKey(' ChatGPT.desktop '), 'chatgpt');
+assert.equal(icons.normalizeOverrideKey(' Google-Chrome.desktop @profile: Profile 1 '), 'google-chrome@profile:Profile 1');
+assert.equal(icons.normalizeOverrideKey('google-chrome@profile:Profile 1'), 'google-chrome@profile:Profile 1');
+assert.equal(icons.normalizeOverrides({ 'CHATGPT.desktop': '/tmp/a.svg', 'google-chrome@profile:Profile 1': '/tmp/work.svg' })['google-chrome@profile:Profile 1'], 'file:///tmp/work.svg');
+const profileSet = icons.applyOverride(original, 'Google-Chrome.desktop@profile:Profile 1', '/tmp/work.svg');
+assert.equal(profileSet.ok, true);
+assert.deepEqual(plain(profileSet.overrides), { ...original, 'google-chrome@profile:Profile 1': 'file:///tmp/work.svg' });
+assert.equal(icons.applyOverride(profileSet.overrides, 'google-chrome@profile:Profile 1', null).changed, true);
+assert.equal(icons.applyOverride(original, 'google-chrome@profile:Profile 1', null).changed, false);
+assert.match(icons.badgeColor('Work'), /^hsl\(\d+, 55%, 50%\)$/);
+assert.equal(icons.badgeColor('Work'), icons.badgeColor('Work '));
+assert.notEqual(icons.badgeColor('Work'), icons.badgeColor('Fernando'));
+
 const { host, writes, request } = hostHarness({ pinned: ['code'], iconOverrides: original, customSetting: 'retained' });
 const initialRevision = host.iconReloadRevision;
 assert.equal(host.saveIconOverride('chatgpt', '/tmp/chatgpt.svg').ok, true);
@@ -65,14 +85,19 @@ assert.equal(request('config.reset', { preferences: true }).ok, true);
 assert.equal(host.settings.iconSize, JSON.parse(read('config/dock.json')).iconSize);
 assert.equal(host.iconReloadRevision, initialRevision + 3);
 assert.equal(host.settings.iconOverrides.chatgpt, 'file:///tmp/chatgpt.svg');
+assert.equal(host.saveIconOverride('google-chrome@profile:Profile 1', '/tmp/work.svg').ok, true);
+assert.equal(host.settings.iconOverrides['google-chrome@profile:Profile 1'], 'file:///tmp/work.svg');
+assert.equal(host.saveIconOverride('google-chrome@profile:Profile 1', 'bad').ok, false);
+host.saveIconOverride('google-chrome@profile:Profile 1', '');
+assert.equal(host.iconReloadRevision, initialRevision + 5);
 host.loadSettings(JSON.stringify({ ...plain(host.settings), iconOverrides: { 'CHATGPT.desktop': '/tmp/chatgpt.svg', code: '/tmp/new.png' } }));
-assert.equal(host.iconReloadRevision, initialRevision + 3);
+assert.equal(host.iconReloadRevision, initialRevision + 5);
 host.loadSettings(JSON.stringify({ ...plain(host.settings), iconOverrides: { code: '/tmp/external.png' } }));
-assert.equal(host.iconReloadRevision, initialRevision + 4);
+assert.equal(host.iconReloadRevision, initialRevision + 6);
 host.saveIconOverride('code', '');
-assert.equal(host.iconReloadRevision, initialRevision + 5);
+assert.equal(host.iconReloadRevision, initialRevision + 7);
 host.saveIconOverride('code', '');
-assert.equal(host.iconReloadRevision, initialRevision + 5);
+assert.equal(host.iconReloadRevision, initialRevision + 7);
 for (const iconOverrides of [null, [], 'bad', { code: 'bad' }]) {
   host.loadSettings(JSON.stringify({ pinned: ['code'], iconSize: 57, iconOverrides }));
   // The CLI-02 requested snapshot is lossless; only the effective renderer view
@@ -80,7 +105,7 @@ for (const iconOverrides of [null, [], 'bad', { code: 'bad' }]) {
   assert.deepEqual(plain(host.settings.iconOverrides), iconOverrides);
   assert.deepEqual(plain(icons.normalizeOverrides(host.settings.iconOverrides)), {});
   assert.equal(host.settings.iconSize, 57);
-  assert.equal(host.iconReloadRevision, initialRevision + 5);
+  assert.equal(host.iconReloadRevision, initialRevision + 7);
 }
 assert.deepEqual(JSON.parse(read('config/dock.json')).iconOverrides, {});
 console.log('Retained icon model and shared host writer behavior: PASS');
