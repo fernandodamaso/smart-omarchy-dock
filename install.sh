@@ -28,7 +28,7 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [OPTION]
 
-  --cli-only      Install just the client, bundled schema/defaults and agent guide
+  --cli-only      Install just the client, schema/defaults and offline documentation
   --no-autostart  Do not create an XDG autostart entry for standalone installation
   --agent-assets-only
                   Install only the terminal-agent launchers and icons
@@ -81,7 +81,10 @@ install_client_bundle() {
     install -m 0644 "$source_dir/scripts/smartdock_cli.py" "$destination/scripts/smartdock_cli.py"
     install -m 0644 "$source_dir/config/settings-schema.json" "$destination/config/settings-schema.json"
     install -m 0644 "$source_dir/config/dock.json" "$destination/config/dock.json"
-    install -m 0644 "$source_dir/docs/AGENT_CONFIGURATION.md" "$destination/docs/AGENT_CONFIGURATION.md"
+    local document
+    for document in AGENT_CONFIGURATION.md CLI_REFERENCE.md CONFIGURATION.md; do
+      install -m 0644 "$source_dir/docs/$document" "$destination/docs/$document"
+    done
     install -m 0755 "$source_dir/uninstall.sh" "$destination/uninstall.sh"
   fi
   install -m 0755 "$source_dir/scripts/smartdock" "$bin_home/smartdock"
