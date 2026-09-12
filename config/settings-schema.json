@@ -41,6 +41,7 @@
     "attentionBadgesEnabled": {"type":"boolean","description":"Enable attention indicators without starting a notification daemon."},
     "urgentWindowAnimationEnabled": {"type":"boolean","description":"Enable the existing urgent-window attention motion."},
     "launcherBadgeMode": {"type":"string","enum":["automatic","dots-only"],"description":"Use available provider counts or existing dot fallback; does not install or start a provider."},
+    "browserProfileBadgesEnabled": {"type":"boolean","description":"Show per-window browser profile badges when the browser-profile provider is installed and the browser exposes a DevTools endpoint; no provider is installed or started by this setting."},
     "hiddenApplications": {"type":"array","format":"application-ids","resetWithPreferences":false,"description":"Hidden desktop IDs; independent of pins. Retained by preference reset."},
     "pinned": {"type":"array","format":"application-ids","resetWithPreferences":false,"description":"Ordered desktop IDs, including unavailable/hidden apps. Retained by preference reset."}
   }

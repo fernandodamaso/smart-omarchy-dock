@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source_file="$repo_root/provider/browser-profiles/browser_profile_provider.py"
+data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+install_dir="$data_home/smartdock/providers"
+
+for command in python3 install; do
+  command -v "$command" >/dev/null 2>&1 || {
+    echo "Required command not found: $command" >&2
+    exit 1
+  }
+done
+
+python3 -m py_compile "$source_file"
+
+install -Dm0755 "$source_file" \
+  "$install_dir/smartdock-browser-profile-provider"
+
+cat <<EOF
+Browser profile provider installed:
+  $install_dir/smartdock-browser-profile-provider
+
+Restart/reload the SmartDock plugin so its service can start the provider.
+The provider needs Chrome running with a DevTools endpoint
+(--remote-debugging-port, enabled by Omarchy's defaults).
+EOF

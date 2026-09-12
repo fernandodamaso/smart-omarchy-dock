@@ -17,9 +17,12 @@ DockHost {
       ? shell.serviceFor("omarchy.notifications") : null
 
   // FDM-811 is a multi-kind plugin. Omarchy owns one headless service instance
-  // and the overlay only consumes its provider-neutral count snapshot.
-  launcherBadgeService: shell && typeof shell.serviceFor === "function"
+  // and the overlay only consumes its provider-neutral count snapshot. The same
+  // singleton also exposes browser-window profile snapshots.
+  readonly property var pluginService: shell && typeof shell.serviceFor === "function"
     ? shell.serviceFor("io.github.fernandodamaso.smartdock") : null
+  launcherBadgeService: pluginService
+  browserProfileService: pluginService ? pluginService.browserProfileService : null
 
   configPath: (Quickshell.env("XDG_CONFIG_HOME")
     || Quickshell.env("HOME") + "/.config")

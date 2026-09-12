@@ -18,6 +18,7 @@ Item {
   required property string runtimeMode
   property var notificationService: null
   property var launcherBadgeService: null
+  property var browserProfileService: null
   readonly property var applications: DesktopEntries.applications.values || []
   property int iconReloadRevision: 0
 
@@ -440,6 +441,8 @@ Item {
         settings: root.settings
         iconOverrides: root.settings.iconOverrides || ({})
         iconReloadRevision: root.iconReloadRevision
+        browserProfileService: root.browserProfileService
+        browserProfileBadgesEnabled: root.settings.browserProfileBadgesEnabled !== false
         showTrash: root.showTrash
         windowActions: root.windowActions
         badgeTracker: root.badgeTracker

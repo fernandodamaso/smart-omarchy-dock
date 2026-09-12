@@ -1,4 +1,5 @@
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Widgets
 import "DockIconModel.js" as DockIconModel
@@ -10,26 +11,46 @@ Item {
   property string desktopIcon: ""
   property var iconOverrides: ({})
   property int reloadRevision: 0
+  property string profileKey: ""
+  property string profileName: ""
+  property string profileAvatarPath: ""
+  property bool profileBadgesEnabled: true
 
+  readonly property string overrideKey: DockIconModel.normalizeOverrideKey(profileKey
+    ? DockIconModel.profileOverrideKey(desktopId, profileKey) : "")
   readonly property string overrideSource: DockIconModel.normalizeOverrides(iconOverrides)[
-    DockIconModel.normalizeKey(desktopId)] || ""
+    DockIconModel.normalizeOverrideKey(desktopId)] || ""
+  readonly property string profileOverrideSource: overrideKey
+    ? (DockIconModel.normalizeOverrides(iconOverrides)[overrideKey] || "") : ""
   readonly property string desktopSource: resolveDesktopIcon(desktopIcon)
-  readonly property var sourceCandidates: DockIconModel.candidates(overrideSource,
-    desktopSource, String(Quickshell.iconPath("application-x-executable", true) || ""))
+  readonly property var sourceCandidates: DockIconModel.candidates(profileOverrideSource,
+    overrideSource, desktopSource, String(Quickshell.iconPath("application-x-executable", true) || ""))
 
   // Diagnostics describe this attempt, never mutate the configured mapping.
-  readonly property bool usingOverride: !reloadPending && attemptedOverride !== ""
-    && String(artwork.source) === attemptedOverride && artwork.status === Image.Ready
+  readonly property bool usingOverride: !reloadPending
+    && attemptedOverrides.indexOf(String(artwork.source)) >= 0
+    && artwork.status === Image.Ready
   readonly property bool overrideFailed: !reloadPending && customFailed
   readonly property string renderedSource: terminalFallback
     ? String(Qt.resolvedUrl("../assets/lucide/app-window.svg"))
     : artwork.status === Image.Ready ? String(artwork.source) : ""
 
+  readonly property bool profileBadgeVisible: profileBadgesEnabled && !!profileKey
+    && !profileBadgeActive && artwork.status === Image.Ready
+  readonly property bool profileBadgeAvatarVisible: profileBadgeVisible
+    && profileAvatarPath !== ""
+  readonly property real profileBadgeSize: Math.max(12, Math.min(width, height) * 0.44)
+  readonly property bool profileBadgeActive: !reloadPending
+    && attemptedProfileOverride !== ""
+    && String(artwork.source) === attemptedProfileOverride
+    && artwork.status === Image.Ready
+
   property bool componentReady: false
   property bool reloadPending: false
   property var attemptSources: []
   property int attemptIndex: 0
-  property string attemptedOverride: ""
+  property var attemptedOverrides: []
+  property string attemptedProfileOverride: ""
   property bool customFailed: false
   property bool terminalFallback: false
 
@@ -56,7 +77,8 @@ Item {
     if (!componentReady) return
     if (reloadPending) {
       attemptSources = sourceCandidates.slice()
-      attemptedOverride = overrideSource
+      attemptedOverrides = DockIconModel.candidates(profileOverrideSource, overrideSource)
+      attemptedProfileOverride = profileOverrideSource
       attemptIndex = 0
       customFailed = false
       reloadPending = false
@@ -71,7 +93,7 @@ Item {
     if (String(artwork.source) === source) return
     terminalFallback = false
     // Bypass stale bytes only for custom files. System icons remain cached.
-    artwork.backer.cache = source !== attemptedOverride
+    artwork.backer.cache = attemptedOverrides.indexOf(source) < 0
     artwork.source = source
   }
 
@@ -79,7 +101,7 @@ Item {
     if (reloadPending || terminalFallback || !source
         || artwork.status !== Image.Error || source !== String(artwork.source)
         || source !== attemptSources[attemptIndex]) return
-    if (source === attemptedOverride) customFailed = true
+    if (attemptedOverrides.indexOf(source) >= 0) customFailed = true
     attemptIndex++
     artwork.source = ""
     // Advance once outside the status callback, including synchronous errors.
@@ -97,6 +119,7 @@ Item {
 
   IconImage {
     id: artwork
+
     anchors.fill: parent
     asynchronous: true
     // Fixed decoding budget: caller geometry and magnification only scale paint.
@@ -104,6 +127,60 @@ Item {
     backer.fillMode: Image.PreserveAspectFit
     visible: status === Image.Ready && !root.terminalFallback
     onStatusChanged: if (status === Image.Error) root.rejectSource(String(source))
+  }
+
+  // Profile badge: the profile's own photo, or an initial circle when the
+  // profile has none. Hidden while a profile-specific icon override renders.
+  Rectangle {
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+    anchors.margins: Math.max(1, parent.width * 0.04)
+    width: root.profileBadgeSize
+    height: width
+    radius: width / 2
+    visible: root.profileBadgeVisible
+    border.width: Math.max(1, width * 0.09)
+    border.color: "white"
+    color: root.profileBadgeAvatarVisible ? "#ffffff"
+      : DockIconModel.badgeColor(root.profileName || root.profileKey)
+
+    Image {
+      id: profileAvatar
+
+      anchors.fill: parent
+      anchors.margins: parent.border.width
+      visible: false
+      asynchronous: true
+      source: root.profileBadgeAvatarVisible
+        ? DockIconModel.localFileUrl(root.profileAvatarPath) : ""
+      fillMode: Image.PreserveAspectCrop
+      cache: false
+    }
+
+    Rectangle {
+      id: profileAvatarMask
+
+      anchors.fill: profileAvatar
+      radius: width / 2
+      visible: false
+    }
+
+    OpacityMask {
+      anchors.fill: profileAvatar
+      visible: root.profileBadgeAvatarVisible
+      source: profileAvatar
+      maskSource: profileAvatarMask
+    }
+
+    Text {
+      anchors.centerIn: parent
+      visible: !root.profileBadgeAvatarVisible
+      text: String(root.profileName || root.profileKey || "").trim().charAt(0)
+        .toUpperCase()
+      color: "#ffffff"
+      font.pixelSize: parent.width * 0.6
+      font.weight: Font.DemiBold
+    }
   }
 
   DockLucideIcon {

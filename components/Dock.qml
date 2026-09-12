@@ -28,6 +28,8 @@ PanelWindow {
   required property int scopeRevision
   property var iconOverrides: ({})
   property int iconReloadRevision: 0
+  property var browserProfileService: null
+  property bool browserProfileBadgesEnabled: true
   signal reorderRequested(string sourceDesktopId, string targetDesktopId)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
@@ -46,6 +48,33 @@ PanelWindow {
   property bool workspacePresentationDirty: false
   property bool revealAfterWorkspaceDrag: false
   property bool dragFullscreenModeActive: false
+
+  // The profile applies only when every window in the item reports the same
+  // one; mixed-profile groups keep the plain application icon. Item toplevels
+  // are generic Wayland handles, so resolve Hyprland addresses through the
+  // paired HyprlandToplevel (same pairing itemWorkspaceId already uses).
+  function hyprAddressFor(toplevel) {
+    var handle = DockWindowModel.handleForToplevel(toplevel, root.hyprToplevels)
+    if (!handle) return ""
+    var ipc = handle.lastIpcObject || ({})
+    return DockModel.normalizeWindowAddress(handle.address || ipc.address)
+  }
+
+  function profileKeyFor(item) {
+    var service = root.browserProfileService
+    if (!service || !service.available) return ""
+    var toplevels = item && item.toplevels ? item.toplevels : []
+    var key = ""
+    for (var i = 0; i < toplevels.length; ++i) {
+      var address = hyprAddressFor(toplevels[i])
+      if (!address) return ""
+      var windowKey = service.profileKeyForAddress(address)
+      if (!windowKey) return ""
+      if (key === "") key = windowKey
+      else if (key !== windowKey) return ""
+    }
+    return key
+  }
 
   readonly property int iconSize: DockModel.normalizeSetting(
     "iconSize", settings.iconSize)
@@ -983,6 +1012,9 @@ PanelWindow {
     desktopId: modelData.desktopId
     iconOverrides: root.iconOverrides
     iconReloadRevision: root.iconReloadRevision
+    browserProfileService: root.browserProfileService
+    browserProfileKey: root.profileKeyFor(modelData)
+    browserProfileBadgesEnabled: root.browserProfileBadgesEnabled
     pinnedItem: modelData.pinned
     runningToplevels: modelData.toplevels
     focused: root.activeToplevel !== null

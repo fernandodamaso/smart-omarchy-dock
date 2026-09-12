@@ -54,6 +54,9 @@ Artwork (SmartDock-only; local static PNG/SVG files referenced in place):
   icons reset ID              Remove only this application's mapping
   icons reload ID             Refresh an existing mapping after same-path file replacement
                                Reload uses the global artwork revision; never writes config
+  --profile DIR               With set/reset/reload, target one browser profile:
+                               key ID@profile:DIR (DIR is the on-disk profile directory,
+                               e.g. Profile 1); matches a browser-profile provider badge
 
 Options may appear before or after the command:
   --json                       Emit one versioned JSON object on stdout
@@ -367,6 +370,9 @@ def build_parser():
         child.add_argument('id')
         if name == 'set':
             child.add_argument('source')
+        child.add_argument('--profile',
+                           help='Target one browser profile: "ID@profile:DIR" key '
+                                '(DIR is the on-disk profile directory, e.g. "Profile 1")')
     return parser
 
 
@@ -483,6 +489,16 @@ def app_icon_request(transport, instance, args):
         if args.group == 'apps' and args.action == 'move':
             key = 'before' if args.before is not None else 'after'
             arguments[key] = getattr(args, key)
+        if args.group == 'icons':
+            profile = getattr(args, 'profile', None)
+            if profile is not None:
+                profile = str(profile).strip()
+                if (not profile or re.search(r'[\x00-\x1f\x7f/\\@]', profile)
+                        or '@profile:' in arguments['id']):
+                    raise CliError('E_VALIDATION',
+                                   'Profile must be a non-empty directory name without '
+                                   'path separators, control characters or "@profile:".')
+                arguments['id'] = arguments['id'] + '@profile:' + profile
         if args.group == 'icons' and args.action == 'set':
             source = args.source
             if not source:

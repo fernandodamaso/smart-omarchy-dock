@@ -49,6 +49,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 41 rows 
 | `attentionBadgesEnabled` | `true` | Boolean; gates attention indicators without installing a notification daemon. |
 | `urgentWindowAnimationEnabled` | `true` | Boolean; existing bounded attention motion, also gated by attentionBadgesEnabled in rendering. |
 | `launcherBadgeMode` | `"automatic"` | String: automatic or dots-only. Uses an already-available provider; does not start/install one. |
+| `browserProfileBadgesEnabled` | `true` | Boolean; per-window browser profile corner badges (photo or initial) from the browser-profile provider. No provider or DevTools endpoint means no badges; the setting installs nothing. |
 | `hiddenApplications` | `[]` | Safe desktop ID array with no new canonical duplicates; independent of pins and retained by preference reset. |
 | `pinned` | `["org.gnome.Nautilus","com.google.Chrome","com.mitchellh.ghostty","code","obsidian","chatgpt"]` | Ordered safe desktop ID array, including unavailable/hidden apps; no new canonical duplicates; retained by preference reset. |
 

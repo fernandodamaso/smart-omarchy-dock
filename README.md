@@ -164,6 +164,41 @@ integration is intentionally excluded until a separate event-driven provider
 exists; optional numeric counts remain limited to application-published
 LauncherEntry state.
 
+### Browser profile badges
+
+Chrome can run every profile inside a single browser process, so a window's
+process or `app_id` cannot tell a work profile window from a personal one. The
+optional browser-profile provider reads Chrome's DevTools endpoint (one CDP
+browser context per profile) and publishes which profile owns each window:
+
+```bash
+bash ./scripts/install-browser-profile-provider
+```
+
+The script byte-compiles the Python helper and installs it under
+`${XDG_DATA_HOME:-$HOME/.local/share}/smartdock/providers/`. Reload or restart
+the SmartDock plugin afterwards. The browser must run with
+`--remote-debugging-port` (Omarchy's Chrome defaults enable it); without a
+reachable endpoint the dock simply keeps the plain application icon, exactly
+like an unavailable launcher-count provider.
+
+Detected profiles render as a small corner badge over the app icon: the
+profile's own photo when one exists, otherwise an initial circle in a
+deterministic color derived from the profile name. Windows of the same
+application from different profiles therefore look different. A fully custom
+artwork per profile is also available through the CLI:
+
+```bash
+smartdock icons set google-chrome ~/Pictures/work.svg --profile "Profile 1"
+smartdock icons reset google-chrome --profile "Profile 1"
+```
+
+The profile argument is the on-disk profile directory inside the browser's
+user data directory (`Default`, `Profile 1`, ...). Profile-specific artwork
+wins over the application-wide override and suppresses the automatic badge
+only after it renders. Application-wide artwork retains the profile badge.
+When the provider is not installed, these keys stay inert.
+
 ### Terminal-agent launchers
 
 SmartDock bundles visible application entries that open these terminal agents

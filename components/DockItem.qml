@@ -50,6 +50,11 @@ Item {
   property bool workspaceGestureOwned: false
   readonly property bool workspaceDragActive: workspaceDrag !== null && workspaceDrag.active
   readonly property bool workspaceInputSuppressed: workspaceDragActive || workspaceGestureOwned
+  property var browserProfileService: null
+  property string browserProfileKey: ""
+  property bool browserProfileBadgesEnabled: true
+  readonly property var browserProfileEntry: browserProfileKey && browserProfileService
+    ? browserProfileService.profileFor(browserProfileKey) : null
   property bool presentationActive: true
   property bool originOnly: false
   property bool localUrgent: false
@@ -398,6 +403,10 @@ Item {
         desktopIcon: root.entry && root.entry.icon ? root.entry.icon : ""
         iconOverrides: root.iconOverrides
         reloadRevision: root.iconReloadRevision
+        profileKey: root.browserProfileKey
+        profileName: root.browserProfileEntry ? String(root.browserProfileEntry.name || "") : ""
+        profileAvatarPath: root.browserProfileEntry ? String(root.browserProfileEntry.avatarPath || "") : ""
+        profileBadgesEnabled: root.browserProfileBadgesEnabled
 
         Behavior on opacity { NumberAnimation { duration: 140 } }
       }
@@ -531,6 +540,9 @@ Item {
 
   function tooltipLabel() {
     var name = root.entry ? root.entry.name : root.desktopId
+    var profileName = root.browserProfileEntry
+      ? String(root.browserProfileEntry.name || "").trim() : ""
+    if (profileName) name += " - " + profileName
     var state = root.focused ? "focused application"
       : root.runningCount > 0 ? "running application" : ""
     var label = state ? name + " — " + state : name

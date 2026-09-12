@@ -359,7 +359,8 @@ function settingsDefaults() {
     workspaceLayout: "flat",
     workspaceMonitorScope: "all",
     groupWindows: true,
-    interfaceAnimationsEnabled: true
+    interfaceAnimationsEnabled: true,
+    browserProfileBadgesEnabled: true
   }
 }
 
@@ -489,6 +490,7 @@ function normalizeSetting(key, value) {
   case "workspaceBadgeTextColorEnabled":
   case "borderWidthEnabled":
   case "interfaceAnimationsEnabled":
+  case "browserProfileBadgesEnabled":
     return typeof value === "boolean" ? value : defaults[key]
   case "backgroundColor":
   case "borderColor":
