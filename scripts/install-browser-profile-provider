@@ -23,6 +23,6 @@ Browser profile provider installed:
   $install_dir/smartdock-browser-profile-provider
 
 Restart/reload the SmartDock plugin so its service can start the provider.
-The provider needs a Chromium-family browser running with a DevTools endpoint
-(--remote-debugging-port, enabled by Omarchy's Chrome defaults).
+The provider needs Chrome running with a DevTools endpoint
+(--remote-debugging-port, enabled by Omarchy's defaults).
 EOF

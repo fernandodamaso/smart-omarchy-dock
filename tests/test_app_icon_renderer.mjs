@@ -53,7 +53,8 @@ function renderer({ desktop = 'desktop', generic = 'image://icon/generic', overr
     desktopId: 'app', desktopIcon: desktop, iconOverrides: overrides, reloadRevision: 0,
     profileKey: '', profileName: '', profileAvatarPath: '', profileBadgesEnabled: true,
     componentReady: true, reloadPending: false, attemptSources: [], attemptIndex: 0,
-    attemptedOverride: '', customFailed: false, terminalFallback: false
+    attemptedOverrides: [], attemptedProfileOverride: '', customFailed: false,
+    terminalFallback: false
   })
   scope.root = scope
   vm.runInContext(methods.join('\n'), scope)
@@ -131,9 +132,30 @@ assert.equal(normal.artwork.source, 'image://icon/desktop')
   scoped.scope.requestReload()
   scoped.flush()
   assert.equal(scoped.artwork.source, 'file:///tmp/work.svg')
+  assert.equal(scoped.loads.at(-1).cache, false)
+  assert.equal(scoped.scope.profileBadgeActive, false)
+  scoped.artwork.status = scoped.Image.Ready
   assert.equal(scoped.scope.profileBadgeActive, true)
   assert.equal(scoped.scope.profileBadgeVisible, false)
   assert.equal(scoped.scope.profileBadgeAvatarVisible, false)
+}
+
+// App-wide custom artwork stays badged, including after a broken profile icon
+// falls back to it. Both custom files bypass stale image caching.
+{
+  const scoped = renderer({ overrides: { app: '/tmp/custom.png', 'app@profile:Profile 1': '/tmp/missing.svg' } })
+  scoped.scope.profileKey = 'Profile 1'
+  scoped.scope.profileName = 'Work'
+  scoped.scope.requestReload()
+  scoped.flush()
+  assert.deepEqual(scoped.loads.at(-1), { source: 'file:///tmp/missing.svg', cache: false })
+  scoped.fail()
+  assert.deepEqual(scoped.loads.at(-1), { source: 'file:///tmp/custom.png', cache: false })
+  scoped.artwork.status = scoped.Image.Ready
+  assert.equal(scoped.scope.usingOverride, true)
+  assert.equal(scoped.scope.overrideFailed, true)
+  assert.equal(scoped.scope.profileBadgeActive, false)
+  assert.equal(scoped.scope.profileBadgeVisible, true)
 }
 
 // Badge visibility: profile without artwork shows an initial; avatar path wins.

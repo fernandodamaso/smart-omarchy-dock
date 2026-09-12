@@ -82,6 +82,41 @@ windows2 = [
 got2 = provider.match_window_contexts(BoundsClient(), windows2, pages)
 assert got2["0x2"] == ctx_b and got2["0x3"] == ctx_a, got2
 
+# Match browser windows one-to-one: a personal window's background New Tab
+# must not claim an equal-sized Work window whose active tab is New Tab.
+class GroupedWindowClient(StubClient):
+    windows_by_target = {
+        "personal-mail": "personal",
+        "work-new-tab": "work",
+        "personal-new-tab": "personal",
+    }
+    def call(self, method, params=None, session_id=None):
+        if method == "Browser.getWindowForTarget":
+            return {"windowId": self.windows_by_target[params["targetId"]]}
+        if method == "Browser.getWindowBounds":
+            return {"bounds": {"width": 200, "height": 100}}
+        return super().call(method, params, session_id)
+
+grouped_pages = [
+    {"targetId": "personal-mail", "title": "Mail", "browserContextId": ctx_a},
+    {"targetId": "work-new-tab", "title": "New Tab", "browserContextId": ctx_b},
+    {"targetId": "personal-new-tab", "title": "New Tab", "browserContextId": ctx_a},
+]
+grouped_windows = [
+    {"address": "0x5", "title": "Mail - Google Chrome", "size": [200, 100]},
+    {"address": "0x6", "title": "New Tab - Google Chrome", "size": [200, 100]},
+]
+got3 = provider.match_window_contexts(GroupedWindowClient(), grouped_windows, grouped_pages)
+assert got3 == {"0x5": ctx_a, "0x6": ctx_b}, got3
+
+# Different titles from one CDP window cannot identify two OS windows.
+one_group_pages = [
+    {"targetId": "personal-mail", "title": "Mail", "browserContextId": ctx_a},
+    {"targetId": "personal-new-tab", "title": "New Tab", "browserContextId": ctx_a},
+]
+assert provider.match_window_contexts(GroupedWindowClient(), grouped_windows,
+                                      one_group_pages) == {}
+
 # Snapshot metadata: Local State names, avatar presence, missing profile skip.
 with tempfile.TemporaryDirectory() as tmp:
     data_home = os.path.join(tmp, "chrome")
@@ -122,10 +157,10 @@ grep -Fq 'browserProfileService: root.browserProfileService' components/Dock.qml
   || fail 'Dock.qml must consume the profile service'
 grep -Fq 'profileKey: root.browserProfileKey' components/DockItem.qml \
   || fail 'DockItem.qml must forward the window profile key'
-grep -Fq 'function hyprAddressFor' components/Dock.qml \
-  || fail 'Dock.qml must map generic toplevels to Hyprland addresses'
-grep -Fq 'handle.wayland !== toplevel' components/Dock.qml \
-  || fail 'Dock.qml must pair toplevels through HyprlandToplevel.wayland'
+grep -Fq 'DockWindowModel.handleForToplevel(toplevel, root.hyprToplevels)' components/Dock.qml \
+  || fail 'Dock.qml must resolve generic toplevels through DockWindowModel'
+grep -Fq 'DockModel.normalizeWindowAddress(handle.address || ipc.address)' components/Dock.qml \
+  || fail 'Dock.qml must normalize profile snapshot addresses through DockModel'
 grep -Fq 'google-chrome@profile:' tests/test_icon_overrides.mjs \
   || fail 'icon override tests must cover profile keys'
 

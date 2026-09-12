@@ -26,8 +26,9 @@ Item {
     overrideSource, desktopSource, String(Quickshell.iconPath("application-x-executable", true) || ""))
 
   // Diagnostics describe this attempt, never mutate the configured mapping.
-  readonly property bool usingOverride: !reloadPending && attemptedOverride !== ""
-    && String(artwork.source) === attemptedOverride && artwork.status === Image.Ready
+  readonly property bool usingOverride: !reloadPending
+    && attemptedOverrides.indexOf(String(artwork.source)) >= 0
+    && artwork.status === Image.Ready
   readonly property bool overrideFailed: !reloadPending && customFailed
   readonly property string renderedSource: terminalFallback
     ? String(Qt.resolvedUrl("../assets/lucide/app-window.svg"))
@@ -37,13 +38,17 @@ Item {
     && !profileBadgeActive && artwork.status === Image.Ready
   readonly property bool profileBadgeAvatarVisible: profileBadgeVisible
     && profileAvatarPath !== ""
-  readonly property bool profileBadgeActive: overrideKey && profileOverrideSource !== ""
+  readonly property bool profileBadgeActive: !reloadPending
+    && attemptedProfileOverride !== ""
+    && String(artwork.source) === attemptedProfileOverride
+    && artwork.status === Image.Ready
 
   property bool componentReady: false
   property bool reloadPending: false
   property var attemptSources: []
   property int attemptIndex: 0
-  property string attemptedOverride: ""
+  property var attemptedOverrides: []
+  property string attemptedProfileOverride: ""
   property bool customFailed: false
   property bool terminalFallback: false
 
@@ -70,7 +75,8 @@ Item {
     if (!componentReady) return
     if (reloadPending) {
       attemptSources = sourceCandidates.slice()
-      attemptedOverride = overrideSource || profileOverrideSource
+      attemptedOverrides = DockIconModel.candidates(profileOverrideSource, overrideSource)
+      attemptedProfileOverride = profileOverrideSource
       attemptIndex = 0
       customFailed = false
       reloadPending = false
@@ -85,7 +91,7 @@ Item {
     if (String(artwork.source) === source) return
     terminalFallback = false
     // Bypass stale bytes only for custom files. System icons remain cached.
-    artwork.backer.cache = source !== attemptedOverride
+    artwork.backer.cache = attemptedOverrides.indexOf(source) < 0
     artwork.source = source
   }
 
@@ -93,7 +99,7 @@ Item {
     if (reloadPending || terminalFallback || !source
         || artwork.status !== Image.Error || source !== String(artwork.source)
         || source !== attemptSources[attemptIndex]) return
-    if (source === attemptedOverride) customFailed = true
+    if (attemptedOverrides.indexOf(source) >= 0) customFailed = true
     attemptIndex++
     artwork.source = ""
     // Advance once outside the status callback, including synchronous errors.

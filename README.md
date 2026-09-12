@@ -166,11 +166,10 @@ LauncherEntry state.
 
 ### Browser profile badges
 
-Chromium-family browsers (Chrome, Chromium, Brave, Edge) can run every profile
-inside a single browser process, so a window's process or `app_id` cannot tell
-a work profile window from a personal one. The optional browser-profile
-provider reads the browser's DevTools endpoint (one CDP browser context per
-profile) and publishes which profile owns each window:
+Chrome can run every profile inside a single browser process, so a window's
+process or `app_id` cannot tell a work profile window from a personal one. The
+optional browser-profile provider reads Chrome's DevTools endpoint (one CDP
+browser context per profile) and publishes which profile owns each window:
 
 ```bash
 bash ./scripts/install-browser-profile-provider
@@ -196,8 +195,9 @@ smartdock icons reset google-chrome --profile "Profile 1"
 
 The profile argument is the on-disk profile directory inside the browser's
 user data directory (`Default`, `Profile 1`, ...). Profile-specific artwork
-wins over the application-wide override; either one wins over the automatic
-badge. When the provider is not installed, these keys stay inert.
+wins over the application-wide override and suppresses the automatic badge
+only after it renders. Application-wide artwork retains the profile badge.
+When the provider is not installed, these keys stay inert.
 
 ### Terminal-agent launchers
 

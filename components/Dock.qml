@@ -54,19 +54,10 @@ PanelWindow {
   // are generic Wayland handles, so resolve Hyprland addresses through the
   // paired HyprlandToplevel (same pairing itemWorkspaceId already uses).
   function hyprAddressFor(toplevel) {
-    if (!toplevel) return ""
-    var handles = root.hyprToplevels
-    for (var j = 0; j < handles.length; ++j) {
-      var handle = handles[j]
-      if (!handle || handle.wayland !== toplevel) continue
-      // The provider keys windows by the hyprctl IPC address form; prefer the
-      // authoritative IPC record and normalize Quickshell's bare hex form.
-      var ipc = handle.lastIpcObject || ({})
-      if (ipc.address) return String(ipc.address)
-      var address = handle.address ? String(handle.address) : ""
-      return address && address.indexOf("0x") !== 0 ? "0x" + address : address
-    }
-    return ""
+    var handle = DockWindowModel.handleForToplevel(toplevel, root.hyprToplevels)
+    if (!handle) return ""
+    var ipc = handle.lastIpcObject || ({})
+    return DockModel.normalizeWindowAddress(handle.address || ipc.address)
   }
 
   function profileKeyFor(item) {

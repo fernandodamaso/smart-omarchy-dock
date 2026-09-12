@@ -92,7 +92,7 @@ Set/reset preserves unrelated map entries, including untouched legacy sources. A
 
 Successful icon mutations add `reloaded`, `iconReloadRevision`, `renderVerified: false` to mutation data. Reload normally has `applied: false`, `noop: true`, `reloaded: true`; these fields are not contradictory. `reloaded` means requested, not decoded. Settings acceptance, durable save and actual rendering are separate observations.
 
-The shared renderer applies across main app icons, preview metadata and picker rows. Fallback is profile-specific custom file → app-wide custom file → original desktop icon → `application-x-executable` → bundled theme-tinted `app-window` glyph. Custom artwork is not tinted. Identity, launch command, grouping, preview screenshots, badges, Trash and action glyphs are unchanged. A Chrome tab remains a Chrome-grouped item; artwork does not split browser groups.
+The shared renderer applies across main app icons, preview metadata and picker rows. Fallback is profile-specific custom file → app-wide custom file → original desktop icon → `application-x-executable` → bundled theme-tinted `app-window` glyph. Custom artwork is not tinted. A successfully rendered profile-specific file suppresses its profile badge; app-wide artwork and fallbacks retain the badge. Identity, launch command, grouping, preview screenshots, Trash and action glyphs are unchanged. A Chrome tab remains a Chrome-grouped item; artwork does not split browser groups.
 
 ## JSON and errors
 

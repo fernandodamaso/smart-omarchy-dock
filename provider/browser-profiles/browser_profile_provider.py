@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SmartDock browser-profile provider.
 
-Maps Chromium-family browser windows to the browser profile that owns them.
+Maps Google Chrome windows to the browser profile that owns them.
 Modern Chrome (v136+) runs all profiles inside a single browser process, so a
 window's PID cannot identify its profile. Instead each tab belongs to a CDP
 browser context (one per profile), which this provider resolves through the
@@ -205,49 +205,76 @@ def list_windows(classes):
 
 
 def match_window_contexts(client, windows, pages):
-    """address -> browserContextId using the active-tab title, then size."""
+    """Match OS windows one-to-one with CDP browser windows."""
     assignments = {}
-    by_title = {}
-    for page in pages:
-        by_title.setdefault(page.get("title", ""), []).append(page)
-    for window in windows:
-        tab_title = strip_browser_suffix(window["title"])
-        candidates = by_title.get(tab_title, [])
-        contexts = {p.get("browserContextId") for p in candidates}
-        contexts.discard(None)
-        if len(contexts) == 1:
-            assignments[window["address"]] = contexts.pop()
-    # Remaining windows share an active-tab title across profiles. CDP exposes
-    # only window size on Wayland, so accept geometry solely when it pairs one
-    # window with one target; anything still ambiguous keeps the plain icon.
-    ambiguous = [w for w in windows if w["address"] not in assignments]
-    for window in ambiguous:
-        tab_title = strip_browser_suffix(window["title"])
-        candidates = by_title.get(tab_title, [])
-        if not candidates:
-            continue
-        twins = [w for w in ambiguous if strip_browser_suffix(w["title"]) == tab_title]
-        assignments.update(resolve_by_geometry(client, twins, candidates))
-    valid = {w["address"] for w in windows}
-    return {a: c for a, c in assignments.items() if c and a in valid}
-
-
-def resolve_by_geometry(client, windows, pages):
-    """Pair windows and same-title targets by CDP window size when unambiguous."""
-    pairs = {}
+    cdp_windows = {}
     for page in pages:
         try:
             window_id = client.call(
                 "Browser.getWindowForTarget", {"targetId": page["targetId"]}
             )["windowId"]
-            bounds = client.call("Browser.getWindowBounds", {"windowId": window_id})["bounds"]
-            size = [bounds.get("width"), bounds.get("height")]
         except (CdpError, KeyError):
             continue
-        matches = [w for w in windows if w["size"] == size]
-        if len(matches) == 1:
-            pairs[matches[0]["address"]] = page.get("browserContextId")
-    return pairs
+        group = cdp_windows.setdefault(window_id, {"pages": [], "size": None})
+        group["pages"].append(page)
+    for window_id, group in cdp_windows.items():
+        try:
+            bounds = client.call("Browser.getWindowBounds", {"windowId": window_id})["bounds"]
+            group["size"] = [bounds.get("width"), bounds.get("height")]
+        except (CdpError, KeyError):
+            pass
+        contexts = {page.get("browserContextId") for page in group["pages"]}
+        contexts.discard(None)
+        group["context"] = contexts.pop() if len(contexts) == 1 else None
+        group["titles"] = {page.get("title", "") for page in group["pages"]}
+
+    os_by_title = {}
+    cdp_by_title = {}
+    for window in windows:
+        os_by_title.setdefault(strip_browser_suffix(window["title"]), []).append(window)
+    for window_id, group in cdp_windows.items():
+        if not group["context"]:
+            continue
+        for title in group["titles"]:
+            cdp_by_title.setdefault(title, []).append(window_id)
+
+    reserved = set()
+    # A title unique on both sides identifies the active CDP window even when
+    # another window contains a same-sized background tab with another title.
+    unique_matches = []
+    for title, matching_windows in os_by_title.items():
+        matching_cdp = cdp_by_title.get(title, [])
+        if len(matching_windows) == 1 and len(matching_cdp) == 1:
+            unique_matches.append((matching_windows[0], matching_cdp[0]))
+    unique_owners = {}
+    for window, window_id in unique_matches:
+        unique_owners.setdefault(window_id, []).append(window)
+    for window_id, matching_windows in unique_owners.items():
+        if len(matching_windows) == 1:
+            assignments[matching_windows[0]["address"]] = cdp_windows[window_id]["context"]
+            reserved.add(window_id)
+
+    # Geometry resolves duplicate titles only when it produces a unique pair
+    # in both directions. Anything still ambiguous keeps the plain icon.
+    remaining = [window for window in windows if window["address"] not in assignments]
+    candidates = {}
+    for window in remaining:
+        title = strip_browser_suffix(window["title"])
+        candidates[window["address"]] = {
+            window_id for window_id in cdp_by_title.get(title, [])
+            if window_id not in reserved and cdp_windows[window_id]["size"] == window["size"]
+        }
+    owners = {}
+    for address, window_ids in candidates.items():
+        for window_id in window_ids:
+            owners.setdefault(window_id, []).append(address)
+    for address, window_ids in candidates.items():
+        if len(window_ids) != 1:
+            continue
+        window_id = next(iter(window_ids))
+        if len(owners[window_id]) == 1:
+            assignments[address] = cdp_windows[window_id]["context"]
+    return assignments
 
 
 def read_profile_path(client, context_id, pages_in_context):
