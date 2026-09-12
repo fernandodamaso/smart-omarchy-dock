@@ -37,7 +37,15 @@ const menu = read('components/DockContextMenu.qml');
 const controlItem = read('components/DockControlItem.qml');
 assert.doesNotMatch(dock, /previewSetting|clearSettingPreview|signal settingChanged|signal settingsPatchRequested|signal resetSettingsRequested/);
 assert.doesNotMatch(host, /onSettingChanged|onSettingsPatchRequested|onResetSettingsRequested|function resetSettings\(/);
-assert.match(dock, /onSettingsChanged: root\.scheduleVisibleItemsRefresh\(\)/);
+// Execute the production reload callback: cancel before refreshing presentation.
+const settingsChanged = dock.match(/^  onSettingsChanged: \{(.*)\}$/m)?.[1];
+assert.ok(settingsChanged);
+const reloadCalls = [];
+vm.runInNewContext(settingsChanged, { root: {
+  cancelWorkspaceGesture(reason) { reloadCalls.push(['cancel', reason]); },
+  scheduleVisibleItemsRefresh() { reloadCalls.push(['refresh']); },
+} });
+assert.deepEqual(reloadCalls, [['cancel', 'settings changed'], ['refresh']]);
 assert.match(dock, /onApplicationSelected: desktopId => root\.pinRequested\(desktopId\)/);
 for (const component of ['DockWindowPreview', 'DockAppPicker', 'DockTrashItem', 'DockWorkspaceStrip'])
   assert.match(dock, new RegExp('\\b' + component + '\\s*\\{'));
@@ -61,7 +69,7 @@ let stops = 0, restarts = 0;
 const scope = vm.createContext({
   windowPointer: { hovered: false }, appPicker: { visible: false },
   windowPreview: { interactionActive: false }, openMenuCount: 0, dragSource: -1,
-  autoHide: true, autoHideRevealed: false,
+  autoHide: true, autoHideRevealed: false, workspaceDragActive: false,
   hideTimer: { stop() { stops++; }, restart() { restarts++; } },
 });
 scope.root = scope;
@@ -70,7 +78,8 @@ vm.runInContext(update, scope);
 assert.equal(scope.keepAutoHideOpen, false);
 for (const [object, key, value] of [[scope.windowPointer, 'hovered', true],
   [scope.appPicker, 'visible', true], [scope.windowPreview, 'interactionActive', true],
-  [scope, 'openMenuCount', 1], [scope, 'dragSource', 0]]) {
+  [scope, 'openMenuCount', 1], [scope, 'dragSource', 0],
+  [scope, 'workspaceDragActive', true]]) {
   const old = object[key];
   object[key] = value;
   scope.updateAutoHideState();
@@ -80,12 +89,12 @@ for (const [object, key, value] of [[scope.windowPointer, 'hovered', true],
   scope.updateAutoHideState();
   assert.equal(scope.keepAutoHideOpen, false, key);
 }
-assert.equal(stops, 5);
-assert.equal(restarts, 5);
+assert.equal(stops, 6);
+assert.equal(restarts, 6);
 scope.autoHide = false;
 scope.updateAutoHideState();
 assert.equal(scope.autoHideRevealed, false);
-assert.equal(stops, 6);
+assert.equal(stops, 7);
 
 // Requested values still reach the actual dock normalizers after preview state
 // is removed. Evaluate production binding expressions, not a copied normalizer.

@@ -37,7 +37,7 @@ fi
 
 grep -Fq 'Component.onCompleted: root.scheduleVisibleItemsRefresh()' "$dock" \
   || fail 'visibleItems must refresh after startup'
-grep -Fq 'onSettingsChanged: root.scheduleVisibleItemsRefresh()' "$dock" \
+grep -Eq '^[[:space:]]*onSettingsChanged:.*root\.scheduleVisibleItemsRefresh\(\)' "$dock" \
   || fail 'settings changes must refresh visibleItems'
 grep -Fq 'onPinnedChanged: root.scheduleVisibleItemsRefresh()' "$dock" \
   || fail 'pinned changes must refresh visibleItems'

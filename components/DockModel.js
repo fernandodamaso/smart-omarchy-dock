@@ -742,15 +742,16 @@ function normalizeWindowAddress(value) {
 
 function moveWindowRequest(address, workspace, usingLua) {
   var target = normalizeWindowAddress(address)
-  var workspaceNumber = Number(workspace)
-  if (!target || !Number.isInteger(workspaceNumber)
-      || workspaceNumber < 1 || workspaceNumber > 10)
-    return ""
+  var raw = String(workspace === undefined || workspace === null ? "" : workspace)
+  var workspaceTarget = normalizeWorkspaceTarget(raw)
+  // Reject unsafe input rather than silently changing a named workspace.
+  if (!target || !workspaceTarget || raw !== workspaceTarget
+      || /[\x00-\x1f\x7f]/.test(raw)) return ""
 
   if (usingLua)
     return 'hl.dsp.window.move({ window = "address:' + target
-      + '", workspace = "' + workspaceNumber + '", follow = false })'
-  return "movetoworkspacesilent " + workspaceNumber + ",address:" + target
+      + '", workspace = "' + workspaceTarget + '", follow = false })'
+  return "movetoworkspacesilent " + workspaceTarget + ",address:" + target
 }
 
 function minimizeWindowRequest(address, usingLua) {

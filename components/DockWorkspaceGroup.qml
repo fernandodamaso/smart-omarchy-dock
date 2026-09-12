@@ -11,6 +11,8 @@ Rectangle {
   required property int slotSize
   property bool switchable: true
   property bool urgent: false
+  property bool dropHighlighted: false
+  property bool windowDragActive: false
   property string position: "bottom"
   property bool presentationVisible: true
   property bool animationsEnabled: true
@@ -32,9 +34,11 @@ Rectangle {
   width: header.width + appRow.width + 2 + 14 * appOccupancy
   height: slotSize + 10
   radius: Math.max(12, Style.cornerRadius - 4)
-  color: active ? Util.alpha(Color.accent, workspaceHover.hovered ? 0.13 : 0.10) : Util.alpha(Color.background, workspaceHover.hovered ? 0.42 : 0.26)
+  color: dropHighlighted ? Util.alpha(Color.accent, 0.24)
+    : active ? Util.alpha(Color.accent, workspaceHover.hovered ? 0.13 : 0.10) : Util.alpha(Color.background, workspaceHover.hovered ? 0.42 : 0.26)
   border.width: 1
-  border.color: urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.50) : Util.alpha(Color.foreground, workspaceHover.hovered ? 0.14 : 0.07)
+  border.color: dropHighlighted ? Color.accent
+    : urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.50) : Util.alpha(Color.foreground, workspaceHover.hovered ? 0.14 : 0.07)
   Behavior on color {
     enabled: root.animationsEnabled
     ColorAnimation { duration: 160 }
@@ -57,10 +61,10 @@ Rectangle {
     height: parent.height - 2
     Accessible.role: Accessible.Button
     Accessible.name: root.label + ", " + root.count + " windows" + (root.urgent ? ", urgent" : "")
-    Accessible.onPressAction: if (root.switchable) root.activated()
-    activeFocusOnTab: root.switchable
-    Keys.onReturnPressed: if (root.switchable) root.activated()
-    Keys.onSpacePressed: if (root.switchable) root.activated()
+    Accessible.onPressAction: if (root.switchable && !root.windowDragActive) root.activated()
+    activeFocusOnTab: root.switchable && !root.windowDragActive
+    Keys.onReturnPressed: if (root.switchable && !root.windowDragActive) root.activated()
+    Keys.onSpacePressed: if (root.switchable && !root.windowDragActive) root.activated()
     Text {
       id: title
       anchors.horizontalCenter: parent.horizontalCenter
@@ -78,13 +82,13 @@ Rectangle {
       font.pixelSize: Math.max(Style.font.body, root.slotSize * 0.38)
       font.bold: true
     }
-    TapHandler { enabled: root.switchable; onTapped: root.activated() }
+    TapHandler { enabled: root.switchable && !root.windowDragActive; onTapped: root.activated() }
     HoverHandler { id: headerHover; cursorShape: root.switchable ? Qt.PointingHandCursor : Qt.ArrowCursor }
     DockToolTip {
       id: headerTooltip
       anchorItem: header
       position: root.position
-      requestedVisible: headerHover.hovered && root.presentationVisible
+      requestedVisible: headerHover.hovered && root.presentationVisible && !root.windowDragActive
       text: root.label + " — " + root.count + " windows" + (root.urgent ? " — urgent" : "")
       fontFamily: Style.font.family
       fontSize: Style.font.body
