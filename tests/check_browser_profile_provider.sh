@@ -109,6 +109,59 @@ grouped_windows = [
 got3 = provider.match_window_contexts(GroupedWindowClient(), grouped_windows, grouped_pages)
 assert got3 == {"0x5": ctx_a, "0x6": ctx_b}, got3
 
+# Refused provider-owned inspection must leave user tabs untouched. Ordinary
+# pages are not safe fallback targets because navigating them can destroy
+# unsaved or in-memory state.
+class RefusedTargetClient:
+    def __init__(self):
+        self.calls = []
+    def call(self, method, params=None, session_id=None):
+        self.calls.append((method, params, session_id))
+        if method == "Target.createTarget":
+            raise provider.CdpError("target creation refused")
+        if method == "Target.attachToTarget":
+            return {"sessionId": "user-session"}
+        if method == "Runtime.evaluate":
+            return {"result": {"value": "Profile Path  /home/u/Default"}}
+        if method == "Target.detachFromTarget":
+            return {}
+        if method in ("Page.navigate", "Target.closeTarget"):
+            raise AssertionError("provider touched an existing user target")
+        raise provider.CdpError("unexpected call: " + method)
+
+refused = RefusedTargetClient()
+assert provider.read_profile_path(refused, ctx_a, [{
+    "targetId": "user-tab", "url": "https://example.test/unsaved"
+}]) == ""
+assert [call[0] for call in refused.calls] == ["Target.createTarget"], refused.calls
+
+# An error while inspecting an already-open chrome://version page must not
+# trigger navigation or a close either; only provider-created targets may be
+# closed by the resolver.
+class BrokenExistingVersionClient:
+    def __init__(self):
+        self.calls = []
+    def call(self, method, params=None, session_id=None):
+        self.calls.append((method, params, session_id))
+        if method == "Target.createTarget":
+            raise provider.CdpError("target creation refused")
+        if method == "Target.attachToTarget":
+            return {"sessionId": "user-session"}
+        if method == "Runtime.evaluate":
+            raise provider.CdpError("inspection failed")
+        if method == "Target.detachFromTarget":
+            return {}
+        if method in ("Page.navigate", "Target.closeTarget"):
+            raise AssertionError("provider touched an existing user target")
+        raise provider.CdpError("unexpected call: " + method)
+
+broken = BrokenExistingVersionClient()
+assert provider.read_profile_path(broken, ctx_a, [{
+    "targetId": "user-version", "url": "chrome://version"
+}]) == ""
+assert "Page.navigate" not in [call[0] for call in broken.calls], broken.calls
+assert "Target.closeTarget" not in [call[0] for call in broken.calls], broken.calls
+
 # Different titles from one CDP window cannot identify two OS windows.
 one_group_pages = [
     {"targetId": "personal-mail", "title": "Mail", "browserContextId": ctx_a},

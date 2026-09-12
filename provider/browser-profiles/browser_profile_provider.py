@@ -294,37 +294,26 @@ def read_profile_path(client, context_id, pages_in_context):
                 pass
     except CdpError:
         pass
-    # Some contexts refuse createTarget; reuse an existing tab instead. Prefer
-    # ordinary pages, but a New Tab works too — it is navigated and restored.
-    candidates = [p for p in pages_in_context
-                  if not p.get("url", "").startswith(("chrome://", "chrome-untrusted://"))]
-    if not candidates:
-        candidates = list(pages_in_context)
-    for page in candidates:
-        original_url = page["url"]
-        try:
-            result = _profile_path_from_target(client, page["targetId"], navigate=True)
-        except CdpError:
+
+    # Some contexts refuse createTarget. An already-open chrome://version page
+    # is safe to inspect, but existing user pages must never be navigated.
+    for page in pages_in_context:
+        if not page.get("url", "").startswith("chrome://version"):
             continue
         try:
-            session_id = client.call(
-                "Target.attachToTarget", {"targetId": page["targetId"], "flatten": True}
-            )["sessionId"]
-            client.call("Page.navigate", {"url": original_url}, session_id=session_id)
+            result = _profile_path_from_target(client, page["targetId"])
         except CdpError:
-            pass
+            continue
         if result:
             return result
     return ""
 
 
-def _profile_path_from_target(client, target_id, navigate=False):
+def _profile_path_from_target(client, target_id):
     session_id = client.call(
         "Target.attachToTarget", {"targetId": target_id, "flatten": True}
     )["sessionId"]
     try:
-        if navigate:
-            client.call("Page.navigate", {"url": "chrome://version"}, session_id=session_id)
         deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             time.sleep(0.4)
