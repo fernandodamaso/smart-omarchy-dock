@@ -540,6 +540,9 @@ Item {
 
   function tooltipLabel() {
     var name = root.entry ? root.entry.name : root.desktopId
+    var profileName = root.browserProfileEntry
+      ? String(root.browserProfileEntry.name || "").trim() : ""
+    if (profileName) name += " - " + profileName
     var state = root.focused ? "focused application"
       : root.runningCount > 0 ? "running application" : ""
     var label = state ? name + " — " + state : name

@@ -32,6 +32,13 @@ const actions = methods('DockWindowActions.qml', {
 })
 const item = methods('DockItem.qml', { DockModel, DockWindowModel, windowActions: actions,
   originOnly: true, runningToplevels: windows, runningCount: 2, lastActivatedToplevel: -1 })
+
+Object.assign(item, { entry: { name: 'Google Chrome' }, desktopId: 'google-chrome',
+  browserProfileEntry: { name: 'Work' }, focused: false, runningCount: 1,
+  sticky: false, minimizedCount: 0 })
+assert.equal(item.tooltipLabel(), 'Google Chrome - Work — running application')
+item.browserProfileEntry = { name: '' }
+assert.equal(item.tooltipLabel(), 'Google Chrome — running application')
 const preview = methods('DockWindowPreview.qml', { windowActions: actions, originOnly: true })
 const menu = methods('DockContextMenu.qml', { windowActions: actions, originOnly: true,
   selectedToplevel: windows[0], selectedMinimized: true })
