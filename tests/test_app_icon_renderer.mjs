@@ -30,6 +30,14 @@ function binding(name) {
   assert.ok(match, `missing readonly ${name} binding`)
   return `(${match[1].trim()})`
 }
+
+const badgeGeometry = vm.createContext({ width: 40, height: 40, Math })
+assert.equal(vm.runInContext(binding('profileBadgeSize'), badgeGeometry), 17.6,
+  'a 40px icon needs a recognizable profile badge')
+badgeGeometry.width = 20
+badgeGeometry.height = 20
+assert.equal(vm.runInContext(binding('profileBadgeSize'), badgeGeometry), 12,
+  'small icons retain a readable minimum badge size')
 function renderer({ desktop = 'desktop', generic = 'image://icon/generic', overrides = { app: '/tmp/custom.png' } } = {}) {
   const queue = new Set()
   const loads = []
@@ -214,6 +222,10 @@ assert.match(qml, /onStatusChanged:.*root\.rejectSource\(String\(source\)\)/)
 assert.match(qml, /asynchronous: true/)
 assert.match(qml, /backer\.sourceSize: Qt\.size\(512, 512\)/)
 assert.match(qml, /backer\.fillMode: Image\.PreserveAspectFit/)
+assert.match(qml, /Rectangle\s*\{\s*id: profileAvatarMask[\s\S]*?radius: width \/ 2/,
+  'the avatar mask must be circular')
+assert.match(qml, /OpacityMask\s*\{[\s\S]*?source: profileAvatar[\s\S]*?maskSource: profileAvatarMask/,
+  'profile photos must render through the circular mask')
 assert.match(qml, /iconName: "app-window"/)
 assert.doesNotMatch(qml, /Timer\s*\{|FileView\s*\{|ColorOverlay\s*\{|MultiEffect\s*\{/)
 assert.doesNotMatch(qml, /saveIconOverride|saveSettings|execDetached/)

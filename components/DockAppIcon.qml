@@ -1,4 +1,5 @@
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Widgets
 import "DockIconModel.js" as DockIconModel
@@ -38,6 +39,7 @@ Item {
     && !profileBadgeActive && artwork.status === Image.Ready
   readonly property bool profileBadgeAvatarVisible: profileBadgeVisible
     && profileAvatarPath !== ""
+  readonly property real profileBadgeSize: Math.max(12, Math.min(width, height) * 0.44)
   readonly property bool profileBadgeActive: !reloadPending
     && attemptedProfileOverride !== ""
     && String(artwork.source) === attemptedProfileOverride
@@ -133,11 +135,10 @@ Item {
     anchors.bottom: parent.bottom
     anchors.right: parent.right
     anchors.margins: Math.max(1, parent.width * 0.04)
-    width: Math.max(8, parent.width * 0.34)
+    width: root.profileBadgeSize
     height: width
     radius: width / 2
     visible: root.profileBadgeVisible
-    clip: true
     border.width: Math.max(1, width * 0.09)
     border.color: "white"
     color: root.profileBadgeAvatarVisible ? "#ffffff"
@@ -147,12 +148,28 @@ Item {
       id: profileAvatar
 
       anchors.fill: parent
-      visible: root.profileBadgeAvatarVisible
+      anchors.margins: parent.border.width
+      visible: false
       asynchronous: true
       source: root.profileBadgeAvatarVisible
         ? DockIconModel.localFileUrl(root.profileAvatarPath) : ""
       fillMode: Image.PreserveAspectCrop
       cache: false
+    }
+
+    Rectangle {
+      id: profileAvatarMask
+
+      anchors.fill: profileAvatar
+      radius: width / 2
+      visible: false
+    }
+
+    OpacityMask {
+      anchors.fill: profileAvatar
+      visible: root.profileBadgeAvatarVisible
+      source: profileAvatar
+      maskSource: profileAvatarMask
     }
 
     Text {
