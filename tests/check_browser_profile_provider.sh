@@ -109,6 +109,29 @@ grouped_windows = [
 got3 = provider.match_window_contexts(GroupedWindowClient(), grouped_windows, grouped_pages)
 assert got3 == {"0x5": ctx_a, "0x6": ctx_b}, got3
 
+# Provider-owned inspection targets must stay out of Chrome's tab strip. The
+# target may be closed after inspection because the provider created it.
+class HiddenInspectionTargetClient:
+    def __init__(self):
+        self.calls = []
+    def call(self, method, params=None, session_id=None):
+        self.calls.append((method, params, session_id))
+        if method == "Target.createTarget":
+            return {"targetId": "provider-target"}
+        if method == "Target.attachToTarget":
+            return {"sessionId": "provider-session"}
+        if method == "Runtime.evaluate":
+            return {"result": {"value": "Profile Path  /home/u/Default"}}
+        if method in ("Target.detachFromTarget", "Target.closeTarget"):
+            return {}
+        raise provider.CdpError("unexpected call: " + method)
+
+hidden = HiddenInspectionTargetClient()
+assert provider.read_profile_path(hidden, ctx_a, []) == "/home/u/Default"
+create_call = next(call for call in hidden.calls if call[0] == "Target.createTarget")
+assert create_call[1]["hidden"] is True, create_call
+assert "Target.closeTarget" in [call[0] for call in hidden.calls], hidden.calls
+
 # Refused provider-owned inspection must leave user tabs untouched. Ordinary
 # pages are not safe fallback targets because navigating them can destroy
 # unsaved or in-memory state.

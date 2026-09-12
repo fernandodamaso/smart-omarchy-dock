@@ -282,7 +282,7 @@ def read_profile_path(client, context_id, pages_in_context):
     try:
         target = client.call(
             "Target.createTarget",
-            {"url": "chrome://version", "browserContextId": context_id},
+            {"url": "chrome://version", "browserContextId": context_id, "hidden": True},
         )
         target_id = target["targetId"]
         try:
