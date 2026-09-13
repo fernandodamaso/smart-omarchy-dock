@@ -31,6 +31,53 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 - Use freedesktop desktop-entry IDs without the `.desktop` suffix.
 - Preserve live configuration reloads.
 
+## Omarchy UI conventions
+
+SmartDock should compose Omarchy's native visual system instead of growing a
+parallel generic component library.
+
+When proposing or implementing a UI refactor:
+
+- Inspect the Omarchy revision SmartDock targets before creating a generic
+  visual/control component. Review `shell/Ui/`, `shell/Commons/`, and
+  representative current first-party `shell/plugins/` call sites; on an
+  installed system these live under `$OMARCHY_PATH/shell/`.
+- Prefer `qs.Ui` composition for generic buttons, toggles, dropdowns, panels,
+  popup surfaces, inputs, separators, tooltips, and similar primitives when the
+  native component matches the required interaction, focus/keyboard,
+  geometry/anchoring, state, and host contract.
+- Use `qs.Commons` `Color`, `Style`, `Border`, and `Util` for semantic colors,
+  spacing, typography, borders, opacity/state styling, and related design
+  tokens. Do not hardcode visual values when a suitable Omarchy semantic token
+  exists.
+- Keep custom SmartDock components when they own material dock-specific
+  behavior or simplify genuinely repeated domain composition. Examples include
+  dock magnification/drag behavior, application/window/workspace semantics,
+  badges, dock-relative popup geometry, and shared window-action lifecycle.
+- Decision rule: replace generic UI duplication only when a current native
+  primitive meaningfully removes duplicated code without weakening the
+  SmartDock-specific contract. Visual similarity alone is not enough.
+- Treat `docs/FDM-858-native-ui-audit.md` as historical rationale only, not as a
+  current component inventory or test checklist. Do not restore obsolete
+  Settings surfaces or their validation paths; preferences remain CLI-first as
+  documented below.
+
+### UI refactor maintenance check
+
+For each future native-UI refactor:
+
+1. Record the exact Omarchy revision inspected.
+2. Inspect the current primitive implementation and at least one first-party
+   usage that matches the intended context.
+3. Compare the required SmartDock contract: orientation/sizing,
+   focus/keyboard/pointer behavior, popup anchoring/lifecycle,
+   disabled/active states, theming, and host mode.
+4. If the native primitive matches, compose it and retain only the SmartDock
+   domain logic around it; if it does not, keep the custom component and reuse
+   Omarchy semantic tokens/helpers where appropriate.
+5. Validate only the current affected surface and tests; never treat the
+   historical FDM-858 commands as live qualification.
+
 ## Configuration workflow
 
 Use `smartdock status --json`, `smartdock config schema --json`, and
