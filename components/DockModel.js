@@ -844,6 +844,48 @@ function fullscreenOwner(toplevels, handles, focusedWorkspaceId, activeToplevel)
   return owner && activeOnFocusedWorkspace ? activeToplevel : owner
 }
 
+function workspaceFullscreenOwners(groups, handles, activeToplevel, minimizedToplevels) {
+  var owners = {}
+  var cards = groups || []
+  var hyprHandles = handles || []
+  var minimized = minimizedToplevels || []
+
+  for (var g = 0; g < cards.length; ++g) {
+    var group = cards[g]
+    if (!group || !group.identity) continue
+
+    var members = []
+    var items = group.items || []
+    for (var i = 0; i < items.length; ++i) {
+      var itemToplevels = items[i] && items[i].toplevels || []
+      for (var t = 0; t < itemToplevels.length; ++t) {
+        var member = itemToplevels[t]
+        if (member && members.indexOf(member) < 0)
+          members.push(member)
+      }
+    }
+
+    var owner = null
+    var activeEligible = false
+    for (var h = 0; h < hyprHandles.length; ++h) {
+      var handle = hyprHandles[h]
+      if (!handle || !handle.wayland
+          || members.indexOf(handle.wayland) < 0
+          || minimized.indexOf(handle.wayland) >= 0)
+        continue
+
+      if (handle.wayland === activeToplevel)
+        activeEligible = true
+      if (!owner && isFullscreenWithBars(handle.lastIpcObject || ({})))
+        owner = handle.wayland
+    }
+
+    if (owner)
+      owners[group.identity] = activeEligible ? activeToplevel : owner
+  }
+  return owners
+}
+
 function fullscreenIconPresentation(modeActive, isOwner, hovered) {
   if (isOwner)
     return { scale: 1.15, opacity: 1.0 }
