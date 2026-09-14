@@ -241,7 +241,7 @@ PanelWindow {
     ? Hyprland.monitors.values || [] : []
   readonly property var dockHyprMonitor: {
     var revision = scopeRevision
-    return Hyprland.monitorFor(screen)
+    return DockWindowModel.monitorForScreen(screen, hyprMonitors)
   }
   readonly property string focusedScopeWorkspace: {
     var revision = scopeRevision

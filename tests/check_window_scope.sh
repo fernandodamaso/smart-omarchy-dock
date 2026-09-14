@@ -58,8 +58,8 @@ assert_contains components/Dock.qml 'import "DockWindowModel.js" as DockWindowMo
   'Dock must import the pure scope model'
 assert_contains components/Dock.qml 'required property int scopeRevision' \
   'Dock must consume the shared host scope revision'
-assert_contains components/Dock.qml 'Hyprland.monitorFor(screen)' \
-  'each Dock must resolve its Hyprland monitor from PanelWindow.screen'
+assert_contains components/Dock.qml 'DockWindowModel.monitorForScreen(screen, hyprMonitors)' \
+  'each Dock must resolve its Hyprland monitor by PanelWindow screen connector'
 assert_contains components/Dock.qml 'readonly property var filteredToplevels' \
   'Dock must build a filtered per-window set'
 assert_contains components/Dock.qml \
