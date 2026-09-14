@@ -5,7 +5,9 @@ Rectangle {
   id: root
 
   required property string label
-  readonly property string displayLabel: /^[0-9]+$/.test(root.label) ? root.label : "*"
+  property bool showFullLabel: false
+  readonly property string displayLabel: root.showFullLabel || /^[0-9]+$/.test(root.label)
+    ? root.label : "*"
   required property int count
   required property bool active
   required property int slotSize
