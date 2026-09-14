@@ -40,6 +40,8 @@
 
 ### Fixed
 
+- Grouped workspace labels with fractional text widths no longer show overflow
+  arrows when the compact dock has enough room.
 - Source-run configuration saves no longer overwrite the bundled defaults used
   by single-key and preference resets after restart.
 - New bulk pin/hidden-ID patches reject surrounding whitespace instead of saving
