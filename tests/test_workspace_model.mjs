@@ -142,6 +142,11 @@ assert.equal(DockWindowModel.monitorIdentity('id:0'), 'id:0')
 assert.equal(DockWindowModel.canonicalMonitorIdentity('DP-1', monitors), 'id:0')
 assert.equal(DockWindowModel.canonicalMonitorIdentity('name:DP-1', monitors), 'id:0')
 assert.equal(DockWindowModel.canonicalMonitorIdentity(monitors[0], monitors), 'id:0')
+const reversedMonitors = [monitors[1], monitors[0]]
+assert.equal(DockWindowModel.monitorForScreen({ name: 'DP-1' }, reversedMonitors), monitors[0],
+  'dock screen resolves by connector name rather than monitor list order')
+assert.equal(DockWindowModel.monitorForScreen({ name: 'missing' }, reversedMonitors), null,
+  'unknown dock screens fail closed')
 let stickyResult = stickyPresentation()
 assert.equal(stickyResult.groups[0].count, 1)
 assert.equal(stickyResult.groups[0].items[0].sticky, true)

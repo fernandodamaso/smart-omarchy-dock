@@ -147,6 +147,19 @@ function monitorIdentity(monitor) {
   return name ? "name:" + name : ""
 }
 
+function monitorForScreen(screen, monitors) {
+  var name = String(screen && screen.name || "").trim()
+  if (!name) return null
+  var values = monitors || []
+  for (var i = 0; i < values.length; ++i) {
+    var monitor = values[i]
+    if (!monitor) continue
+    var ipc = monitor.lastIpcObject || monitor
+    if (String(ipc.name || monitor.name || "").trim() === name) return monitor
+  }
+  return null
+}
+
 // Resolve connector snapshots and IPC ids through the current monitor inventory.
 function canonicalMonitorIdentity(value, monitors) {
   var identity = monitorIdentity(value)
