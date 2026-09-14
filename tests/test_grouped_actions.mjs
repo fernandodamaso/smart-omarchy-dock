@@ -77,34 +77,126 @@ assert.equal(actions.minimizedOrigins['0x1'].workspace, '3')
 
 const cards = [{ active: false }, { active: true, headerWidth: 45 }]
 const revealed = []
+const hyprland = actions.Hyprland
 const dock = methods('Dock.qml', {
   grouped: true, workspaceCards: { count: cards.length, itemAt: i => cards[i] },
-  groupedLayout: { ensureVisible: (card, width) => revealed.push([card, width]) }
+  groupedLayout: { ensureVisible: (card, width) => revealed.push([card, width]) },
+  DockModel, DockWindowModel, Hyprland: hyprland,
+  dockHyprMonitor: { id: 0, name: 'DP-1' }
 })
 dock.revealActiveWorkspace()
 assert.deepEqual(revealed, [[cards[1], 45]], 'workspace switch reveals the active header')
 
-// Mirrored header and app routes focus the remote target without relocating it.
+// Real Dock.qml / item / preview methods own monitor -> workspace -> window order.
 preview.dismissImmediately = () => {}
+item.activationMonitor = 'id:0'
+preview.activationMonitor = 'id:0'
 item.runningToplevels = [windows[0]]
 item.runningCount = 1
 actions.minimizedOrigins = {}
-const headerBody = read('Dock.qml').match(/onActivated: \{([\s\S]*?)\n            }/)[1]
+function expectRequests(actual, expected, label) {
+  assert.deepEqual(actual, expected, label)
+}
 for (const usingLua of [false, true]) {
+  hyprland.usingLua = usingLua
+  const focusMonitor = usingLua
+    ? 'hl.dsp.focus({ monitor = "0" })' : 'focusmonitor 0'
+  const focusWorkspace = target => usingLua
+    ? `hl.dsp.focus({ workspace = "${target}", on_current_monitor = true })`
+    : `focusworkspaceoncurrentmonitor ${target}`
+  const focusWindow = address => usingLua
+    ? `hl.dsp.focus({ window = "address:${address}" })`
+    : `focuswindow address:${address}`
+  const restoreWindow = (address, workspace) => usingLua
+    ? `hl.dsp.window.move({ window = "address:${address}", workspace = "${workspace}", follow = true })`
+    : `movetoworkspace ${workspace},address:${address}`
+
   requests.length = 0
-  vm.runInNewContext(headerBody, { DockModel,
-    modelData: { activationTarget: 'name:Design work' },
-    Hyprland: { usingLua, dispatch: request => requests.push(request) } })
-  assert.equal(requests.pop(), usingLua
-    ? 'hl.dsp.focus({ workspace = "name:Design work" })' : 'workspace name:Design work')
-  actions.Hyprland.usingLua = usingLua
+  dock.focusWorkspaceOnDockMonitor('name:Design work')
+  expectRequests(requests, [focusMonitor, focusWorkspace('name:Design work')],
+    `workspace switch order (${usingLua ? 'lua' : 'legacy'})`)
+
+  const previousMonitor = dock.dockHyprMonitor
+  dock.dockHyprMonitor = null
+  requests.length = 0
+  dock.focusWorkspaceOnDockMonitor('name:Design work')
+  expectRequests(requests, [],
+    `workspace switch emits nothing without monitor (${usingLua ? 'lua' : 'legacy'})`)
+  dock.dockHyprMonitor = previousMonitor
+
   handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+  actions.minimizedOrigins = {}
   requests.length = 0
   assert.equal(item.dispatchApplicationAction('focus-or-launch'), true)
+  expectRequests(requests, [focusMonitor, focusWorkspace('9'), focusWindow('0x1')],
+    `ordinary icon activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  requests.length = 0
   assert.equal(preview.activateToplevel(windows[0]), true)
-  assert.equal(requests.length, 2)
-  assert.equal(requests.every(request => request === (usingLua
-    ? 'hl.dsp.focus({ window = "address:0x1" })' : 'focuswindow address:0x1')), true)
+  expectRequests(requests, [focusMonitor, focusWorkspace('9'), focusWindow('0x1')],
+    `ordinary preview activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  // Already-active window on another monitor still focuses the clicked dock monitor.
+  actions.activeToplevel = windows[0]
+  requests.length = 0
+  assert.equal(item.dispatchApplicationAction('focus-or-launch'), true)
+  expectRequests(requests, [focusMonitor, focusWorkspace('9'), focusWindow('0x1')],
+    `active-other-monitor icon activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
+  requests.length = 0
+  assert.equal(item.dispatchApplicationAction('focus-or-launch'), true)
+  expectRequests(requests, [focusMonitor, focusWorkspace('4'), restoreWindow('0x1', '4')],
+    `minimized icon activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  requests.length = 0
+  assert.equal(preview.activateToplevel(windows[0]), true)
+  expectRequests(requests, [focusMonitor, focusWorkspace('4'), restoreWindow('0x1', '4')],
+    `minimized preview activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  handles[1].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  actions.minimizedOrigins = {
+    '0x1': { workspace: '4', monitor: 'id:1' },
+    '0x2': { workspace: '5', monitor: 'id:1' }
+  }
+  actions.activeToplevel = windows[0]
+  item.runningToplevels = windows
+  item.runningCount = 2
+  requests.length = 0
+  assert.equal(item.dispatchApplicationAction('cycle-windows', { direction: 1 }), true)
+  expectRequests(requests, [
+    focusMonitor, focusWorkspace('5'), restoreWindow('0x2', '5'), focusWindow('0x2')
+  ], `minimized cycle activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  // Ordinary cycle still routes monitor -> workspace -> window.
+  handles[0].lastIpcObject = { workspace: { id: 8 }, monitor: 1 }
+  handles[1].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+  actions.minimizedOrigins = {}
+  actions.activeToplevel = windows[0]
+  requests.length = 0
+  assert.equal(item.dispatchApplicationAction('cycle-windows', { direction: 1 }), true)
+  expectRequests(requests, [focusMonitor, focusWorkspace('9'), focusWindow('0x2')],
+    `ordinary cycle activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  // Context-menu / minimize-restore paths omit activationMonitor and keep old restore.
+  actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  requests.length = 0
+  assert.equal(actions.restoreToplevel(windows[0], true), true)
+  expectRequests(requests, [restoreWindow('0x1', '4')],
+    `explicit restore omits monitor routing (${usingLua ? 'lua' : 'legacy'})`)
+
+  item.runningToplevels = [windows[0]]
+  item.runningCount = 1
 }
 assert.equal(read('Dock.qml').includes('indexOf(modelData)'), false)
 assert.equal(read('Dock.qml').includes('workspaceScopeKey(root.screen.name, modelData.presentationId)'), true)

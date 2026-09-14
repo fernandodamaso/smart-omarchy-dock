@@ -60,6 +60,7 @@ Item {
   property bool localUrgent: false
   property bool sticky: false
   property string attentionScopeKey: ""
+  property string activationMonitor: ""
   property bool presentationVisible: true
   property bool motionReady: false
   readonly property var attentionScope: attentionScopeKey
@@ -200,7 +201,8 @@ Item {
     switch (action) {
     case "cycle-windows":
       return root.windowActions.cycleToplevels(
-        root.runningToplevels, request.direction, root.windowActions.activeToplevel, root.originOnly)
+        root.runningToplevels, request.direction, root.windowActions.activeToplevel,
+        root.originOnly, root.activationMonitor)
     case "minimize-restore":
       return root.windowActions.minimizeRestoreToplevels(root.runningToplevels, root.originOnly)
     case "previews":
@@ -216,7 +218,8 @@ Item {
         root.lastActivatedToplevel = DockModel.nextToplevelIndex(
           root.lastActivatedToplevel, root.runningCount)
         return root.windowActions.activateToplevel(
-          root.runningToplevels[root.lastActivatedToplevel], root.originOnly)
+          root.runningToplevels[root.lastActivatedToplevel], root.originOnly,
+          root.activationMonitor)
       }
       root.launch()
       return true

@@ -693,6 +693,32 @@ function focusWorkspaceTargetRequest(workspace, usingLua) {
   return "workspace " + target
 }
 
+function normalizeMonitorTarget(value) {
+  var target = String(value || "").trim()
+  if (/^name:[^,;"\\\r\n\t]+$/.test(target)) return target
+  if (/^id:[0-9]+$/.test(target)) return target
+  return ""
+}
+
+function focusMonitorRequest(monitor, usingLua) {
+  var target = normalizeMonitorTarget(monitor)
+  if (!target) return ""
+  // Canonical identities keep id:/name: prefixes; Hyprland 0.56.2 wants raw selectors.
+  var selector = target.indexOf("id:") === 0 ? target.slice(3)
+    : target.indexOf("name:") === 0 ? target.slice(5) : ""
+  if (!selector) return ""
+  if (usingLua) return 'hl.dsp.focus({ monitor = "' + selector + '" })'
+  return "focusmonitor " + selector
+}
+
+function focusWorkspaceOnCurrentMonitorRequest(workspace, usingLua) {
+  var target = normalizeWorkspaceTarget(workspace)
+  if (!target) return ""
+  if (usingLua)
+    return 'hl.dsp.focus({ workspace = "' + target + '", on_current_monitor = true })'
+  return "focusworkspaceoncurrentmonitor " + target
+}
+
 function focusWorkspaceRequest(workspace, usingLua) {
   var id = Number(workspace)
   if (!Number.isInteger(id) || id < 1 || id > 10) return ""

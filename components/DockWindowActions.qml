@@ -334,11 +334,37 @@ Item {
     return true
   }
 
-  function activateToplevel(toplevel, originOnly) {
+  function activateToplevel(toplevel, originOnly, activationMonitor) {
     if (!isAlive(toplevel)) return false
 
-    if (isMinimized(toplevel))
+    if (isMinimized(toplevel)) {
+      var address = addressFor(toplevel)
+      if (!address) return false
+
+      var activation = DockModel.normalizeMonitorTarget(activationMonitor)
+      if (activation) {
+        var origin = originFor(address)
+        var restoreWorkspace = resolveOriginTarget(
+          origin ? origin.workspace : "", originOnly)
+        if (!restoreWorkspace) return false
+        if (!dispatchRequest(DockModel.focusMonitorRequest(
+            activation, Hyprland.usingLua))) return false
+        if (!dispatchRequest(DockModel.focusWorkspaceOnCurrentMonitorRequest(
+            restoreWorkspace, Hyprland.usingLua))) return false
+      }
+
       return restoreToplevel(toplevel, originOnly)
+    }
+
+    var handle = handleFor(toplevel)
+    var workspace = workspaceTarget(workspaceForHandle(handle))
+    var monitor = DockModel.normalizeMonitorTarget(activationMonitor)
+    if (monitor && workspace) {
+      if (!dispatchRequest(DockModel.focusMonitorRequest(
+          monitor, Hyprland.usingLua))) return false
+      if (!dispatchRequest(DockModel.focusWorkspaceOnCurrentMonitorRequest(
+          workspace, Hyprland.usingLua))) return false
+    }
 
     var request = DockModel.focusWindowRequest(
       addressFor(toplevel), Hyprland.usingLua)
@@ -351,7 +377,8 @@ Item {
     return false
   }
 
-  function cycleToplevels(toplevels, direction, activeToplevel, originOnly) {
+  function cycleToplevels(toplevels, direction, activeToplevel, originOnly,
+                          activationMonitor) {
     var members = liveMembers(toplevels)
     if (members.length < 2) return false
 
@@ -365,7 +392,7 @@ Item {
     if (!address) return false
 
     if (isMinimized(target)) {
-      if (!restoreToplevel(target, originOnly)) return false
+      if (!activateToplevel(target, originOnly, activationMonitor)) return false
       var focusRequest = DockModel.focusWindowRequest(address, Hyprland.usingLua)
       if (dispatchRequest(focusRequest)) return true
       if (typeof target.activate === "function") {
@@ -375,7 +402,7 @@ Item {
       return true
     }
 
-    return activateToplevel(target, originOnly)
+    return activateToplevel(target, originOnly, activationMonitor)
   }
 
   function minimizeRestoreToplevels(toplevels, originOnly) {

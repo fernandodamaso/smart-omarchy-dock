@@ -58,6 +58,34 @@ TestCase {
     compare(DockModel.moveWindowRequest("0xabc123", 0, true), "")
   }
 
+  function test_buildsClickedMonitorWorkspaceFocusRequests() {
+    compare(DockModel.normalizeMonitorTarget("name:DP-1"), "name:DP-1")
+    compare(DockModel.normalizeMonitorTarget("id:0"), "id:0")
+    compare(DockModel.normalizeMonitorTarget("name:DP-1; closewindow"), "")
+    compare(DockModel.normalizeMonitorTarget("id:0; closewindow"), "")
+    // Hyprland 0.56.2 focus selectors are raw connector/id, not canonical prefixes.
+    compare(
+      DockModel.focusMonitorRequest("name:DP-1", true),
+      'hl.dsp.focus({ monitor = "DP-1" })')
+    compare(
+      DockModel.focusMonitorRequest("name:DP-1", false),
+      "focusmonitor DP-1")
+    compare(
+      DockModel.focusMonitorRequest("id:0", true),
+      'hl.dsp.focus({ monitor = "0" })')
+    compare(
+      DockModel.focusMonitorRequest("id:0", false),
+      "focusmonitor 0")
+    compare(DockModel.focusMonitorRequest("name:DP-1; closewindow", true), "")
+    compare(DockModel.focusMonitorRequest("id:0; closewindow", false), "")
+    compare(
+      DockModel.focusWorkspaceOnCurrentMonitorRequest("2", true),
+      'hl.dsp.focus({ workspace = "2", on_current_monitor = true })')
+    compare(
+      DockModel.focusWorkspaceOnCurrentMonitorRequest("2", false),
+      "focusworkspaceoncurrentmonitor 2")
+  }
+
   function test_buildsHyprlandNativeMinimizeAndRestoreRequests() {
     compare(
       DockModel.minimizeWindowRequest("0xabc123", true),
