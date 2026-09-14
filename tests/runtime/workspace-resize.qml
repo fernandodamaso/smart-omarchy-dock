@@ -51,19 +51,20 @@ ShellRoot {
     settle(transitionGroup)
     var starHeaderWidth = transitionGroup.headerWidth
     var cases = [
-      ["1", "1"], ["2", "2"], ["12", "12"], ["01", "01"], ["0", "0"],
-      ["Design work", "*"], ["Notes", "*"], ["日本語", "*"],
-      ["Other windows", "*"], ["special:scratchpad", "*"],
-      ["1:dev", "*"], ["1.5", "*"], ["", "*"], ["3", "3"]
+      ["1", "1", false], ["2", "2", false], ["12", "12", false],
+      ["Design work", "*", false], ["Work", "Work", true], ["Notes", "*", false],
+      ["Other windows", "*", false], ["special:scratchpad", "*", false],
+      ["", "*", false], ["3", "3", false]
     ]
     for (var i = 0; i < cases.length; ++i) {
       transitionGroup.label = cases[i][0]
+      transitionGroup.showFullLabel = cases[i][2]
       settle(transitionGroup)
       if (transitionGroup.displayLabel !== cases[i][1]
           || transitionGroup.label !== cases[i][0])
         throw new Error("Workspace display label mismatch: " + cases[i][0])
       if (cases[i][1] === "*" && transitionGroup.headerWidth !== starHeaderWidth)
-        throw new Error("Non-numeric header retained expanded width: " + cases[i][0])
+        throw new Error("Compact header retained expanded width: " + cases[i][0])
     }
     transitionGroup.label = originalLabel
     settle(transitionGroup)
@@ -73,6 +74,16 @@ ShellRoot {
     for (var i = 0; i < group.children.length; ++i) {
       var child = group.children[i]
       if (child.width === 1 && child.height >= 18) return child
+    }
+    return null
+  }
+
+  function workspaceLayoutFor(item) {
+    if (item && item.overflowing !== undefined && item.desiredWidth !== undefined)
+      return item
+    for (var child of item.children || []) {
+      var found = workspaceLayoutFor(child)
+      if (found) return found
     }
     return null
   }
@@ -108,8 +119,8 @@ ShellRoot {
       var before = dock.implicitWidth
       var groups = []
       for (var i = 1; i <= 8; ++i)
-        groups.push({ identity: "id:" + i, label: String(i), count: 0,
-          active: i === 1, items: [], urgent: false })
+        groups.push({ identity: "id:" + i, label: i === 8 ? "Work" : String(i),
+          showFullLabel: i === 8, count: 0, active: i === 1, items: [], urgent: false })
       dock.workspacePresentation = { groups: groups, globalLaunchers: [],
         fallbackItems: [], renderedItems: [] }
       finish.start()
@@ -123,6 +134,14 @@ ShellRoot {
     interval: 100
     onTriggered: {
       settle(dock.contentItem)
+      var workspaceLayout = workspaceLayoutFor(dock.contentItem)
+      if (!workspaceLayout || workspaceLayout.desiredWidth === Math.ceil(workspaceLayout.desiredWidth)
+          || workspaceLayout.overflowing)
+        throw new Error("Fractional workspace width must not trigger overflow controls: desired="
+          + (workspaceLayout ? workspaceLayout.desiredWidth.toFixed(15) : "missing") + " width="
+          + (workspaceLayout ? workspaceLayout.width.toFixed(15) : "missing") + " delta="
+          + (workspaceLayout ? (workspaceLayout.desiredWidth - workspaceLayout.width).toFixed(15) : "missing")
+          + " overflowing=" + (workspaceLayout ? workspaceLayout.overflowing : "missing"))
       if (dock.implicitWidth !== before)
         throw new Error("Workspace updates resized the native panel: "
           + before + " -> " + dock.implicitWidth)

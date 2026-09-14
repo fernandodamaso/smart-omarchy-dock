@@ -18,11 +18,24 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
   var workspaceMonitors = Object.create(null)
   var monitorWorkspaces = Object.create(null)
 
-  function addWorkspace(identity) {
+  function addWorkspace(identity, displayName) {
     var target = activationTarget(identity)
-    if (!target || byWorkspace[identity]) return
+    if (!target) return
+    var fallbackLabel = identity.replace(/^(id:|name:)/, "")
+    var explicitLabel = String(displayName || "").trim()
+    var label = explicitLabel || fallbackLabel
+    var showFullLabel = identity.indexOf("id:") === 0
+      && explicitLabel !== "" && explicitLabel !== fallbackLabel
+    if (byWorkspace[identity]) {
+      if (explicitLabel) {
+        byWorkspace[identity].label = label
+        byWorkspace[identity].showFullLabel = showFullLabel
+      }
+      return
+    }
     var group = {
-      identity: identity, label: identity.replace(/^(id:|name:)/, ""),
+      identity: identity, label: label,
+      showFullLabel: showFullLabel,
       activationTarget: target, active: identity === active, items: [], count: 0, urgent: false
     }
     byWorkspace[identity] = group
@@ -34,9 +47,10 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     var descriptor = monitors[m]
     var ipc = descriptor.lastIpcObject || descriptor
     var owner = DockWindowModel.canonicalMonitorIdentity(descriptor, context.monitors)
-    var workspace = DockWindowModel.workspaceIdentity(ipc.activeWorkspace || descriptor.activeWorkspace)
+    var activeDescriptor = ipc.activeWorkspace || descriptor.activeWorkspace
+    var workspace = DockWindowModel.workspaceIdentity(activeDescriptor)
     if (owner) monitorWorkspaces[owner] = workspace
-    if (allMonitors) addWorkspace(workspace)
+    if (allMonitors) addWorkspace(workspace, activeDescriptor ? activeDescriptor.name : "")
   }
 
   for (var w = 0; w < workspaces.length; ++w) {
@@ -47,7 +61,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
         : ipc.monitor !== undefined ? ipc.monitor : descriptor.monitor, context.monitors)
     var identity = DockWindowModel.workspaceIdentity(descriptor)
     if (owner) workspaceMonitors[identity] = owner
-    if (allMonitors || owner && owner === monitor) addWorkspace(identity)
+    if (allMonitors || owner && owner === monitor) addWorkspace(identity, ipc.name)
   }
   addWorkspace(active)
   // Live workspace ownership wins over a saved minimized-origin connector.
@@ -68,7 +82,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
   groups.sort(function(a, b) {
     var an = a.identity.indexOf("id:") === 0
     var bn = b.identity.indexOf("id:") === 0
-    if (an && bn) return Number(a.label) - Number(b.label)
+    if (an && bn) return Number(a.identity.slice(3)) - Number(b.identity.slice(3))
     if (an !== bn) return an ? -1 : 1
     return a.identity < b.identity ? -1 : a.identity > b.identity ? 1 : 0
   })
@@ -155,7 +169,8 @@ function presentationsEqual(a, b) {
   for (var i = 0; i < a.groups.length; ++i) {
     var left = a.groups[i]
     var right = b.groups[i]
-    if (left.identity !== right.identity || left.active !== right.active
+    if (left.identity !== right.identity || left.label !== right.label
+        || left.showFullLabel !== right.showFullLabel || left.active !== right.active
         || left.count !== right.count || left.urgent !== right.urgent
         || !scopedItemsEqual(left.items, right.items))
       return false

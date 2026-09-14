@@ -316,7 +316,7 @@ PanelWindow {
   readonly property int crossExtent: vertical
     ? Math.ceil(iconSize * magnification + 80) + edgeMargin
     : Math.ceil(iconSize * magnification + 64) + edgeMargin
-  readonly property int appMainExtent: grouped ? groupedLayout.desiredWidth : visibleItems.length * itemSize
+  readonly property int appMainExtent: grouped ? Math.ceil(groupedLayout.desiredWidth) : visibleItems.length * itemSize
   readonly property int workspaceMainExtent: grouped ? 0
     : (vertical ? workspaceStrip.height : workspaceStrip.width) + (showTrash ? 0 : 12)
   readonly property int trashMainExtent: TrashModel.sectionMainExtent(
@@ -866,6 +866,7 @@ PanelWindow {
               modelData: workspaceCardSlot.modelData.item
               property var modelData
               label: modelData.label
+              showFullLabel: modelData.showFullLabel === true
               count: modelData.count
               urgent: modelData.urgent === true && root.attentionBadgesEnabled
               windowDragActive: root.workspaceDragActive
