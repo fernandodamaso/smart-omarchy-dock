@@ -412,11 +412,8 @@ PanelWindow {
 
   function focusWorkspaceOnDockMonitor(workspace) {
     var monitor = DockWindowModel.monitorIdentity(root.dockHyprMonitor)
-    var monitorRequest = DockModel.focusMonitorRequest(monitor, Hyprland.usingLua)
-    var workspaceRequest = DockModel.focusWorkspaceOnCurrentMonitorRequest(
-      workspace, Hyprland.usingLua)
-    if (!monitorRequest || !workspaceRequest) return
-    root.windowActions.dispatchRequests([monitorRequest, workspaceRequest])
+    root.windowActions.dispatchRequests(
+      root.windowActions.workspaceOnMonitorRequests(workspace, monitor))
   }
 
   function cancelWorkspaceGesture(reason) {

@@ -700,23 +700,28 @@ function normalizeMonitorTarget(value) {
   return ""
 }
 
-function focusMonitorRequest(monitor, usingLua) {
+function moveCurrentWorkspaceToMonitorRequest(monitor, usingLua) {
   var target = normalizeMonitorTarget(monitor)
   if (!target) return ""
-  // Canonical identities keep id:/name: prefixes; Hyprland 0.56.2 wants raw selectors.
   var selector = target.indexOf("id:") === 0 ? target.slice(3)
     : target.indexOf("name:") === 0 ? target.slice(5) : ""
   if (!selector) return ""
-  if (usingLua) return 'hl.dsp.focus({ monitor = "' + selector + '" })'
-  return "focusmonitor " + selector
+  if (usingLua) return 'hl.dsp.workspace.move({ monitor = "' + selector + '" })'
+  return "movecurrentworkspacetomonitor " + selector
 }
 
-function focusWorkspaceOnCurrentMonitorRequest(workspace, usingLua) {
-  var target = normalizeWorkspaceTarget(workspace)
-  if (!target) return ""
+function moveWorkspaceToMonitorRequest(workspace, monitor, usingLua) {
+  var workspaceTarget = normalizeWorkspaceTarget(workspace)
+  var monitorTarget = normalizeMonitorTarget(monitor)
+  if (!workspaceTarget || !monitorTarget) return ""
+  var selector = monitorTarget.indexOf("id:") === 0 ? monitorTarget.slice(3)
+    : monitorTarget.indexOf("name:") === 0 ? monitorTarget.slice(5) : ""
+  if (!selector) return ""
   if (usingLua)
-    return 'hl.dsp.focus({ workspace = "' + target + '", on_current_monitor = true })'
-  return "focusworkspaceoncurrentmonitor " + target
+    return 'hl.dsp.workspace.move({ workspace = "' + workspaceTarget
+      + '", monitor = "' + selector + '" })'
+  if (/\s/.test(workspaceTarget)) return ""
+  return "moveworkspacetomonitor " + workspaceTarget + " " + selector
 }
 
 function focusWorkspaceRequest(workspace, usingLua) {
