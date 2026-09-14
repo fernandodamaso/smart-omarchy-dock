@@ -89,7 +89,7 @@ const dock = methods('Dock.qml', {
 dock.revealActiveWorkspace()
 assert.deepEqual(revealed, [[cards[1], 45]], 'workspace switch reveals the active header')
 
-// Real Dock.qml / item / preview methods own monitor -> workspace -> window order.
+// Real Dock.qml / item / preview methods focus/create, move, refocus, then focus the window.
 preview.dismissImmediately = () => {}
 item.activationMonitor = 'id:0'
 preview.activationMonitor = 'id:0'
@@ -121,17 +121,22 @@ handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
 clearSubmissions()
 assert.equal(item.dispatchApplicationAction('focus-or-launch'), true)
 expectRequests(requests, [
-  'function() hl.dispatch(hl.dsp.focus({ monitor = "0" })); '
-    + 'hl.dispatch(hl.dsp.focus({ workspace = "9", on_current_monitor = true })); '
+  'function() hl.dispatch(hl.dsp.focus({ workspace = "9" })); '
+    + 'hl.dispatch(hl.dsp.workspace.move({ workspace = "9", monitor = "0" })); '
+    + 'hl.dispatch(hl.dsp.focus({ workspace = "9" })); '
     + 'hl.dispatch(hl.dsp.focus({ window = "address:0x1" })) end'
 ], 'cross-monitor activation is one ordered compositor submission')
 for (const usingLua of [false, true]) {
   hyprland.usingLua = usingLua
-  const focusMonitor = usingLua
-    ? 'hl.dsp.focus({ monitor = "0" })' : 'focusmonitor 0'
+  const moveWorkspace = target => usingLua
+    ? `hl.dsp.workspace.move({ workspace = "${target}", monitor = "0" })`
+    : `moveworkspacetomonitor ${target} 0`
   const focusWorkspace = target => usingLua
-    ? `hl.dsp.focus({ workspace = "${target}", on_current_monitor = true })`
-    : `focusworkspaceoncurrentmonitor ${target}`
+    ? `hl.dsp.focus({ workspace = "${target}" })`
+    : `workspace ${target}`
+  const moveCurrentWorkspace = usingLua
+    ? 'hl.dsp.workspace.move({ monitor = "0" })'
+    : 'movecurrentworkspacetomonitor 0'
   const focusWindow = address => usingLua
     ? `hl.dsp.focus({ window = "address:${address}" })`
     : `focuswindow address:${address}`
@@ -141,7 +146,11 @@ for (const usingLua of [false, true]) {
 
   clearSubmissions()
   dock.focusWorkspaceOnDockMonitor('name:Design work')
-  expectSequence([focusMonitor, focusWorkspace('name:Design work')], usingLua,
+  expectSequence(usingLua
+    ? [focusWorkspace('name:Design work'), moveWorkspace('name:Design work'),
+        focusWorkspace('name:Design work')]
+    : [focusWorkspace('name:Design work'), moveCurrentWorkspace,
+        focusWorkspace('name:Design work')], usingLua,
     `workspace switch order (${usingLua ? 'lua' : 'legacy'})`)
 
   const previousMonitor = dock.dockHyprMonitor
@@ -158,19 +167,22 @@ for (const usingLua of [false, true]) {
   actions.minimizedOrigins = {}
   clearSubmissions()
   assert.equal(item.dispatchApplicationAction('focus-or-launch'), true)
-  expectSequence([focusMonitor, focusWorkspace('9'), focusWindow('0x1')], usingLua,
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x1')], usingLua,
     `ordinary icon activation (${usingLua ? 'lua' : 'legacy'})`)
 
   clearSubmissions()
   assert.equal(preview.activateToplevel(windows[0]), true)
-  expectSequence([focusMonitor, focusWorkspace('9'), focusWindow('0x1')], usingLua,
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x1')], usingLua,
     `ordinary preview activation (${usingLua ? 'lua' : 'legacy'})`)
 
   // Already-active window on another monitor still focuses the clicked dock monitor.
   actions.activeToplevel = windows[0]
   clearSubmissions()
   assert.equal(item.dispatchApplicationAction('focus-or-launch'), true)
-  expectSequence([focusMonitor, focusWorkspace('9'), focusWindow('0x1')], usingLua,
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x1')], usingLua,
     `active-other-monitor icon activation (${usingLua ? 'lua' : 'legacy'})`)
 
   handles[0].lastIpcObject = {
@@ -178,16 +190,18 @@ for (const usingLua of [false, true]) {
   actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
   clearSubmissions()
   assert.equal(item.dispatchApplicationAction('focus-or-launch'), true)
-  expectSequence([focusMonitor, focusWorkspace('4'), restoreWindow('0x1', '4')], usingLua,
-    `minimized icon activation (${usingLua ? 'lua' : 'legacy'})`)
+  expectSequence([focusWorkspace('4'), moveWorkspace('4'),
+    focusWorkspace('4'), restoreWindow('0x1', '4')], usingLua,
+    `missing-origin minimized icon activation (${usingLua ? 'lua' : 'legacy'})`)
 
   actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
   handles[0].lastIpcObject = {
     workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
   clearSubmissions()
   assert.equal(preview.activateToplevel(windows[0]), true)
-  expectSequence([focusMonitor, focusWorkspace('4'), restoreWindow('0x1', '4')], usingLua,
-    `minimized preview activation (${usingLua ? 'lua' : 'legacy'})`)
+  expectSequence([focusWorkspace('4'), moveWorkspace('4'),
+    focusWorkspace('4'), restoreWindow('0x1', '4')], usingLua,
+    `missing-origin minimized preview activation (${usingLua ? 'lua' : 'legacy'})`)
 
   handles[0].lastIpcObject = {
     workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
@@ -203,17 +217,19 @@ for (const usingLua of [false, true]) {
   clearSubmissions()
   assert.equal(item.dispatchApplicationAction('cycle-windows', { direction: 1 }), true)
   expectSequence([
-    focusMonitor, focusWorkspace('5'), restoreWindow('0x2', '5'), focusWindow('0x2')
-  ], usingLua, `minimized cycle activation (${usingLua ? 'lua' : 'legacy'})`)
+    focusWorkspace('5'), moveWorkspace('5'), focusWorkspace('5'),
+    restoreWindow('0x2', '5'), focusWindow('0x2')
+  ], usingLua, `missing-origin minimized cycle activation (${usingLua ? 'lua' : 'legacy'})`)
 
-  // Ordinary cycle still routes monitor -> workspace -> window.
+  // Ordinary cycle still routes focus/create -> move -> refocus -> window focus.
   handles[0].lastIpcObject = { workspace: { id: 8 }, monitor: 1 }
   handles[1].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
   actions.minimizedOrigins = {}
   actions.activeToplevel = windows[0]
   clearSubmissions()
   assert.equal(item.dispatchApplicationAction('cycle-windows', { direction: 1 }), true)
-  expectSequence([focusMonitor, focusWorkspace('9'), focusWindow('0x2')], usingLua,
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x2')], usingLua,
     `ordinary cycle activation (${usingLua ? 'lua' : 'legacy'})`)
 
   // Context-menu / minimize-restore paths omit activationMonitor and keep old restore.

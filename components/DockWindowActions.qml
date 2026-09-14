@@ -179,6 +179,20 @@ Item {
     return true
   }
 
+  function workspaceOnMonitorRequests(workspace, monitor) {
+    var focusRequest = DockModel.focusWorkspaceTargetRequest(
+      workspace, Hyprland.usingLua)
+    var moveRequest = DockModel.moveWorkspaceToMonitorRequest(
+      workspace, monitor, Hyprland.usingLua)
+    if (moveRequest && focusRequest)
+      return [focusRequest, moveRequest, focusRequest]
+
+    var moveCurrentRequest = DockModel.moveCurrentWorkspaceToMonitorRequest(
+      monitor, Hyprland.usingLua)
+    if (!focusRequest || !moveCurrentRequest) return []
+    return [focusRequest, moveCurrentRequest, focusRequest]
+  }
+
   // Drag payloads own exact objects AND addresses, never an app-id lookup.
   function captureWorkspaceMove(toplevels) {
     var values = toplevels || []
@@ -371,12 +385,10 @@ Item {
         if (!restoreWorkspace) return false
         var restoreRequest = DockModel.restoreWindowRequest(
           address, restoreWorkspace, Hyprland.usingLua)
-        var restoreRequests = [
-          DockModel.focusMonitorRequest(activation, Hyprland.usingLua),
-          DockModel.focusWorkspaceOnCurrentMonitorRequest(
-            restoreWorkspace, Hyprland.usingLua),
-          restoreRequest
-        ]
+        var restoreRequests = workspaceOnMonitorRequests(
+          restoreWorkspace, activation)
+        if (restoreRequests.length === 0) return false
+        restoreRequests.push(restoreRequest)
         if (focusAfterRestore === true)
           restoreRequests.push(DockModel.focusWindowRequest(
             address, Hyprland.usingLua))
@@ -394,12 +406,10 @@ Item {
     var request = DockModel.focusWindowRequest(
       addressFor(toplevel), Hyprland.usingLua)
     if (monitor && workspace && request) {
-      return dispatchRequests([
-        DockModel.focusMonitorRequest(monitor, Hyprland.usingLua),
-        DockModel.focusWorkspaceOnCurrentMonitorRequest(
-          workspace, Hyprland.usingLua),
-        request
-      ])
+      var requests = workspaceOnMonitorRequests(workspace, monitor)
+      if (requests.length === 0) return false
+      requests.push(request)
+      return dispatchRequests(requests)
     }
 
     if (dispatchRequest(request)) return true
