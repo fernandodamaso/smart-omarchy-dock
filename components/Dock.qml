@@ -410,6 +410,16 @@ PanelWindow {
     visibleItemsRefreshTimer.restart()
   }
 
+  function focusWorkspaceOnDockMonitor(workspace) {
+    var monitor = DockWindowModel.monitorIdentity(root.dockHyprMonitor)
+    var monitorRequest = DockModel.focusMonitorRequest(monitor, Hyprland.usingLua)
+    var workspaceRequest = DockModel.focusWorkspaceOnCurrentMonitorRequest(
+      workspace, Hyprland.usingLua)
+    if (!monitorRequest || !workspaceRequest) return
+    Hyprland.dispatch(monitorRequest)
+    Hyprland.dispatch(workspaceRequest)
+  }
+
   function cancelWorkspaceGesture(reason) {
     if (workspaceDrag) workspaceDrag.cancel(reason)
   }
@@ -906,10 +916,9 @@ PanelWindow {
                   }
                 }
               }
-            onActivated: {
-              var request = DockModel.focusWorkspaceTargetRequest(modelData.activationTarget, Hyprland.usingLua)
-              if (request) Hyprland.dispatch(request)
-            }
+              onActivated: {
+                root.focusWorkspaceOnDockMonitor(modelData.activationTarget)
+              }
             }
 
             DockPresentationModel {
@@ -1023,9 +1032,7 @@ PanelWindow {
         position: root.position
         animationsEnabled: root.interfaceAnimationsEnabled
         onWorkspaceRequested: workspaceId => {
-          var request = DockModel.focusWorkspaceRequest(
-            workspaceId, Hyprland.usingLua)
-          if (request) Hyprland.dispatch(request)
+          root.focusWorkspaceOnDockMonitor(workspaceId)
         }
       }
     }
@@ -1046,6 +1053,7 @@ PanelWindow {
     identityToplevel: modelData.identityToplevel || null
     workspaceDrag: root.workspaceDragController
     workspaceDragEnabled: root.grouped && appItem.originOnly
+    activationMonitor: DockWindowModel.monitorIdentity(root.dockHyprMonitor)
 
     desktopId: modelData.desktopId
     iconOverrides: root.iconOverrides
@@ -1135,6 +1143,7 @@ PanelWindow {
     id: windowPreview
 
     windowActions: root.windowActions
+    activationMonitor: DockWindowModel.monitorIdentity(root.dockHyprMonitor)
     position: root.position
     visibleItems: root.renderedItems
     clipItem: root.grouped ? groupedLayout : null

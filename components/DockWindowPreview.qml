@@ -15,6 +15,7 @@ PopupWindow {
   required property var visibleItems
   property var iconOverrides: ({})
   property int iconReloadRevision: 0
+  property string activationMonitor: ""
 
   property Item anchorItem: null
   property DockWorkspaceLayout clipItem: null
@@ -171,7 +172,8 @@ PopupWindow {
 
   function activateToplevel(toplevel) {
     if (!root.windowActions
-        || !root.windowActions.activateToplevel(toplevel, root.originOnly)) return false
+        || !root.windowActions.activateToplevel(
+          toplevel, root.originOnly, root.activationMonitor)) return false
     root.dismissImmediately()
     return true
   }
