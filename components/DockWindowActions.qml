@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Wayland
 import "DockModel.js" as DockModel
@@ -155,6 +156,26 @@ Item {
   function dispatchRequest(request) {
     if (!request) return false
     Hyprland.dispatch(request)
+    return true
+  }
+
+  function dispatchRequests(requests) {
+    var values = requests || []
+    if (values.length === 0) return false
+    for (var i = 0; i < values.length; ++i) {
+      if (typeof values[i] !== "string" || !values[i]) return false
+    }
+    if (values.length === 1) return dispatchRequest(values[0])
+
+    if (Hyprland.usingLua) {
+      var statements = values.map(function(request) {
+        return "hl.dispatch(" + request + ")"
+      })
+      return dispatchRequest("function() " + statements.join("; ") + " end")
+    }
+
+    var batch = values.map(function(request) { return "dispatch " + request })
+    Quickshell.execDetached(["hyprctl", "--batch", batch.join("; ")])
     return true
   }
 
@@ -334,7 +355,8 @@ Item {
     return true
   }
 
-  function activateToplevel(toplevel, originOnly, activationMonitor) {
+  function activateToplevel(toplevel, originOnly, activationMonitor,
+                            focusAfterRestore) {
     if (!isAlive(toplevel)) return false
 
     if (isMinimized(toplevel)) {
@@ -347,10 +369,20 @@ Item {
         var restoreWorkspace = resolveOriginTarget(
           origin ? origin.workspace : "", originOnly)
         if (!restoreWorkspace) return false
-        if (!dispatchRequest(DockModel.focusMonitorRequest(
-            activation, Hyprland.usingLua))) return false
-        if (!dispatchRequest(DockModel.focusWorkspaceOnCurrentMonitorRequest(
-            restoreWorkspace, Hyprland.usingLua))) return false
+        var restoreRequest = DockModel.restoreWindowRequest(
+          address, restoreWorkspace, Hyprland.usingLua)
+        var restoreRequests = [
+          DockModel.focusMonitorRequest(activation, Hyprland.usingLua),
+          DockModel.focusWorkspaceOnCurrentMonitorRequest(
+            restoreWorkspace, Hyprland.usingLua),
+          restoreRequest
+        ]
+        if (focusAfterRestore === true)
+          restoreRequests.push(DockModel.focusWindowRequest(
+            address, Hyprland.usingLua))
+        if (!dispatchRequests(restoreRequests)) return false
+        forgetOrigin(address)
+        return true
       }
 
       return restoreToplevel(toplevel, originOnly)
@@ -359,15 +391,17 @@ Item {
     var handle = handleFor(toplevel)
     var workspace = workspaceTarget(workspaceForHandle(handle))
     var monitor = DockModel.normalizeMonitorTarget(activationMonitor)
-    if (monitor && workspace) {
-      if (!dispatchRequest(DockModel.focusMonitorRequest(
-          monitor, Hyprland.usingLua))) return false
-      if (!dispatchRequest(DockModel.focusWorkspaceOnCurrentMonitorRequest(
-          workspace, Hyprland.usingLua))) return false
-    }
-
     var request = DockModel.focusWindowRequest(
       addressFor(toplevel), Hyprland.usingLua)
+    if (monitor && workspace && request) {
+      return dispatchRequests([
+        DockModel.focusMonitorRequest(monitor, Hyprland.usingLua),
+        DockModel.focusWorkspaceOnCurrentMonitorRequest(
+          workspace, Hyprland.usingLua),
+        request
+      ])
+    }
+
     if (dispatchRequest(request)) return true
 
     if (typeof toplevel.activate === "function") {
@@ -392,6 +426,10 @@ Item {
     if (!address) return false
 
     if (isMinimized(target)) {
+      var activation = DockModel.normalizeMonitorTarget(activationMonitor)
+      if (activation)
+        return activateToplevel(
+          target, originOnly, activationMonitor, true)
       if (!activateToplevel(target, originOnly, activationMonitor)) return false
       var focusRequest = DockModel.focusWindowRequest(address, Hyprland.usingLua)
       if (dispatchRequest(focusRequest)) return true
