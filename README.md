@@ -161,10 +161,10 @@ compatibility, and local validation details.
 
 SmartDock does not invoke Herdr or any recurring agent-status CLI. Agent-status
 integration is intentionally excluded until a separate event-driven provider
-exists; optional numeric counts remain limited to application-published
-LauncherEntry state.
+exists; numeric counts remain authoritative when published by LauncherEntry,
+with the optional Chrome activity provider supplying only its strict fallback.
 
-### Browser profile badges
+### Browser profile badges and activity
 
 Chrome can run every profile inside a single browser process, so a window's
 process or `app_id` cannot tell a work profile window from a personal one. The
@@ -198,6 +198,18 @@ user data directory (`Default`, `Profile 1`, ...). Profile-specific artwork
 wins over the application-wide override and suppresses the automatic badge
 only after it renders. Application-wide artwork retains the profile badge.
 When the provider is not installed, these keys stay inert.
+
+The same provider can publish strict unread activity for WhatsApp and Gmail.
+When those rows are available, hovering Chrome opens a compact card with the
+profile label, unread count, and matching window previews; selecting a row
+activates that exact browser tab and owning window. Only HTTPS pages with the
+recognized service hosts and title signals are accepted, and no message
+contents or account data leave the browser. If the activity provider is
+unavailable or a row cannot be matched exactly, previews and ordinary
+attention dots continue and Chrome may use an aggregate activity badge only
+when no authoritative LauncherEntry count is present (including an explicit
+zero or hidden state). See [`docs/browser-activity.md`](docs/browser-activity.md)
+for the provider contract and validation boundary.
 
 ### Terminal-agent launchers
 

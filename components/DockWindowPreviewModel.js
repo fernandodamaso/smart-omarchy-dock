@@ -7,6 +7,29 @@ function groupedPreviewMembers(candidates, liveToplevels) {
   return members.length >= 2 ? members : []
 }
 
+function livePreviewMembers(candidates, liveToplevels) {
+  return DockWindowModel.liveGroupMembers(candidates, liveToplevels)
+}
+
+function hasPreviewContent(memberCount, activityCount) {
+  return Number(memberCount) >= 2
+    || (Number(memberCount) >= 1 && Number(activityCount) > 0)
+}
+
+function activityViewportHeight(rowCount, rowHeight, separatorHeight,
+                                maxVisibleRows) {
+  var visibleRows = Math.min(
+    Math.max(0, Number(rowCount) || 0),
+    Math.max(0, Number(maxVisibleRows) || 0))
+  return visibleRows * Math.max(0, Number(rowHeight) || 0)
+    + Math.max(0, visibleRows - 1)
+      * Math.max(0, Number(separatorHeight) || 0)
+}
+
+function windowSectionLabel(windowCount) {
+  return "OPEN WINDOWS · " + Math.max(0, Number(windowCount) || 0)
+}
+
 function previewViewport(screenWidth, screenHeight,
                          desiredWidth, desiredHeight, margin) {
   var width = Math.max(1, Number(screenWidth) || 1)
@@ -62,6 +85,17 @@ function visiblePreviewTarget(items, presentationId, identityToplevel) {
     var item = values[i]
     if (item && String(item.presentationId || item.desktopId || "") === presentationId
         && (item.identityToplevel || null) === (identityToplevel || null)) return item
+  }
+  return null
+}
+
+function memberForAddress(members, address, addressForMember) {
+  var wanted = String(address || "").trim().toLowerCase()
+  if (!wanted || typeof addressForMember !== "function") return null
+  var values = members || []
+  for (var i = 0; i < values.length; ++i) {
+    if (String(addressForMember(values[i]) || "").trim().toLowerCase() === wanted)
+      return values[i]
   }
   return null
 }

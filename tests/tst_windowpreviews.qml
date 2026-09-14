@@ -103,6 +103,19 @@ TestCase {
       [first, stale], [first]).length, 0)
   }
 
+  function test_activityCanOpenAOneWindowPreview() {
+    verify(PreviewModel.hasPreviewContent(1, 1))
+    verify(PreviewModel.hasPreviewContent(2, 0))
+    verify(!PreviewModel.hasPreviewContent(1, 0))
+    verify(!PreviewModel.hasPreviewContent(0, 1))
+  }
+
+  function test_livePreviewMembersRetainsOneWindowForActivityCard() {
+    var first = { title: "First" }
+    var stale = { title: "Stale" }
+    compare(PreviewModel.livePreviewMembers([first, stale], [first]).length, 1)
+  }
+
   function test_clampsPreviewToScreenBounds() {
     var viewport = PreviewModel.previewViewport(800, 600, 900, 500, 8)
     compare(viewport.width, 784)
@@ -111,6 +124,27 @@ TestCase {
     var tiny = PreviewModel.previewViewport(100, 80, 900, 500, 8)
     compare(tiny.width, 84)
     compare(tiny.height, 64)
+  }
+
+  function test_activityViewportShowsAtMostSixRows() {
+    compare(PreviewModel.activityViewportHeight(2, 44, 1, 6), 89)
+    compare(PreviewModel.activityViewportHeight(8, 44, 1, 6), 269)
+  }
+
+  function test_labelsTheOpenWindowSection() {
+    compare(PreviewModel.windowSectionLabel(2), "OPEN WINDOWS · 2")
+  }
+
+  function test_matchesPreviewMemberByWindowAddress() {
+    var first = { address: "0x1" }
+    var second = { address: "0x2" }
+    function addressForMember(member) { return member.address }
+    compare(PreviewModel.memberForAddress(
+      [first, second], "0X2", addressForMember), second)
+    compare(PreviewModel.memberForAddress(
+      [first, second], "0x3", addressForMember), null)
+    compare(PreviewModel.memberForAddress(
+      [first, second], "", addressForMember), null)
   }
 
   function test_placesPreviewOnTheOppositeSideOfTheDock() {

@@ -18,6 +18,8 @@ Item {
   property int iconReloadRevision: 0
   property int previewWidth: 216
   property int previewHeight: 122
+  property bool compactActivityLayout: false
+  property url fallbackArtwork: ""
   property bool captureStopped: false
   signal activateRequested(var toplevel)
   signal closeRequested(var toplevel)
@@ -44,20 +46,23 @@ Item {
 
   BorderSurface {
     anchors.fill: parent
-    radius: Style.cornerRadius
+    radius: root.compactActivityLayout
+      ? Style.space(8) : Style.cornerRadius
     color: Color.menu.background
     borderSpec: Border.surfaceSpec(
-      "menu", "border", Color.menu.border, Math.max(1, Style.space(1)))
+      "menu", "border", Util.alpha(Color.menu.border, 0.38),
+      Style.spacing.hairline)
   }
 
   Rectangle {
     id: previewFrame
 
-    x: 8
-    y: 8
-    width: parent.width - 16
+    x: root.compactActivityLayout ? 2 : 8
+    y: root.compactActivityLayout ? 2 : 8
+    width: parent.width - (root.compactActivityLayout ? 4 : 16)
     height: root.previewHeight
-    radius: Math.max(4, Style.cornerRadius - 2)
+    radius: root.compactActivityLayout ? Style.space(7)
+      : Math.max(4, Style.cornerRadius - 2)
     color: Color.background
     clip: true
 
@@ -90,8 +95,17 @@ Item {
       anchors.fill: parent
       visible: root.captureStopped || !preview.hasContent
 
+      Image {
+        anchors.fill: parent
+        visible: root.fallbackArtwork !== ""
+        source: root.fallbackArtwork
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
+      }
+
       Text {
         anchors.centerIn: parent
+        visible: root.fallbackArtwork === ""
         text: "Preview unavailable"
         color: Color.muted
         font.family: Style.font.family
@@ -103,6 +117,7 @@ Item {
   DockAppIcon {
     id: appIcon
 
+    visible: !root.compactActivityLayout
     x: 10
     y: previewFrame.y + previewFrame.height + 10
     width: 26
@@ -114,28 +129,44 @@ Item {
     reloadRevision: root.iconReloadRevision
   }
 
+  Rectangle {
+    visible: root.compactActivityLayout
+    x: 2
+    y: previewFrame.y + previewFrame.height
+    width: parent.width - 4
+    height: Style.spacing.hairline
+    color: Util.alpha(Color.menu.text, 0.12)
+  }
+
   Item {
     id: metadata
 
-    x: appIcon.x + appIcon.width + 8
-    y: previewFrame.y + previewFrame.height + 7
-    width: parent.width - x - closeButton.width - 18
-    height: 38
+    x: root.compactActivityLayout ? Style.space(12)
+      : appIcon.x + appIcon.width + 8
+    y: previewFrame.y + previewFrame.height
+    width: parent.width - x - closeButton.width
+      - (root.compactActivityLayout ? Style.space(10) : 18)
+    height: root.compactActivityLayout
+      ? parent.height - y : 38
 
     Text {
       anchors.left: parent.left
       anchors.right: parent.right
-      anchors.top: parent.top
+      anchors.top: root.compactActivityLayout ? undefined : parent.top
+      anchors.verticalCenter: root.compactActivityLayout
+        ? parent.verticalCenter : undefined
       text: root.titleText
       color: Color.menu.text
       font.family: Style.font.family
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: root.compactActivityLayout
+        ? Style.font.subtitle : Style.font.bodySmall
       font.bold: true
       elide: Text.ElideRight
       maximumLineCount: 1
     }
 
     Text {
+      visible: !root.compactActivityLayout
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.bottom: parent.bottom
@@ -151,11 +182,14 @@ Item {
   Rectangle {
     id: closeButton
 
-    width: 30
-    height: 30
+    width: root.compactActivityLayout ? Style.space(28) : 30
+    height: width
     radius: 15
     x: parent.width - width - 8
-    y: previewFrame.y + previewFrame.height + 9
+    y: root.compactActivityLayout
+      ? previewFrame.y + previewFrame.height
+        + (parent.height - previewFrame.y - previewFrame.height - height) / 2
+      : previewFrame.y + previewFrame.height + 9
     color: closeMouse.containsMouse
       ? Color.menu.selectedBackground : "transparent"
     z: 2

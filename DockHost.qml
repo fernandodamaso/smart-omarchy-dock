@@ -429,6 +429,7 @@ Item {
     id: badgeTrackerController
     notificationService: root.notificationService
     launcherBadgeService: root.launcherBadgeService
+    browserProfileService: root.browserProfileService
     launcherBadgeMode: root.settings.launcherBadgeMode === "dots-only" ? "dots-only" : "automatic"
   }
 

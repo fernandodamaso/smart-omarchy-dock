@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added the Chrome activity hover card with strict WhatsApp/Gmail unread rows,
+  exact-tab activation, compact window previews, and a Chrome-only badge-count
+  fallback.
 - Shipped the CLI command/JSON/error reference, all 41 declared setting defaults
   and dependencies, and agent recipes for minimal patches, themes, calmer motion,
   workspace cards, application restoration/order and per-app icon set/reload/reset.

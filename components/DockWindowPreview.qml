@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "DockBrowserActivityModel.js" as ActivityModel
 import "DockWindowPreviewModel.js" as PreviewModel
 
 PopupWindow {
@@ -15,7 +16,12 @@ PopupWindow {
   required property var visibleItems
   property var iconOverrides: ({})
   property int iconReloadRevision: 0
+<<<<<<< HEAD
   property string activationMonitor: ""
+=======
+  property bool previewCaptureEnabled: true
+  property var previewArtwork: ({})
+>>>>>>> c06fccb (local visual verification)
 
   property Item anchorItem: null
   property DockWorkspaceLayout clipItem: null
@@ -35,20 +41,62 @@ PopupWindow {
     || root.anchorHovered || root.popupHovered
   readonly property bool orientationHorizontal:
     PreviewModel.orientationHorizontal(root.position)
-  readonly property int tileWidth: 232
-  readonly property int tileHeight: 176
-  readonly property int tilePreviewHeight: 122
-  readonly property int tileSpacing: 8
-  readonly property int popupPadding: 8
-  readonly property int popupGap: 8
-  readonly property int desiredWidth: root.orientationHorizontal
-    ? root.popupPadding * 2 + root.members.length * root.tileWidth
-      + Math.max(0, root.members.length - 1) * root.tileSpacing
-    : root.popupPadding * 2 + root.tileWidth
-  readonly property int desiredHeight: root.orientationHorizontal
-    ? root.popupPadding * 2 + root.tileHeight
-    : root.popupPadding * 2 + root.members.length * root.tileHeight
-      + Math.max(0, root.members.length - 1) * root.tileSpacing
+  readonly property bool hasActivity: root.activityRows.length > 0
+  readonly property int tileWidth: root.hasActivity ? Style.space(180) : 232
+  readonly property int tileHeight: root.hasActivity ? Style.space(142) : 176
+  readonly property int tilePreviewHeight: root.hasActivity ? Style.space(102) : 122
+  readonly property int tileSpacing: Style.space(8)
+  readonly property int popupPadding: Style.space(root.hasActivity ? 16 : 8)
+  readonly property int popupGap: Style.space(8)
+  readonly property int activityWidth: Style.space(368)
+  readonly property int headerHeight: Math.max(
+    Style.space(52), Style.font.title + Style.spacing.controlPaddingY * 2)
+  readonly property int activityRowHeight: Math.max(
+    Style.space(62), Style.font.subtitle + Style.font.bodySmall + Style.space(16))
+  readonly property int maxVisibleActivityRows: 6
+  readonly property int sectionSpacing: Style.space(8)
+  readonly property int separatorHeight: Style.spacing.hairline
+  readonly property int windowLabelHeight: Style.space(18)
+  readonly property var activityPresentation: ActivityModel.presentation(
+    root.anchorItem && Array.isArray(root.anchorItem["previewActivities"])
+      ? root.anchorItem["previewActivities"] : [])
+  readonly property var activityRows: activityPresentation.rows
+  readonly property int activityTotal: activityPresentation.total
+  readonly property bool showWindowPreviews: root.members.length >= 2
+  readonly property int activityContentHeight: root.activityRows.length > 0
+    ? root.activityRows.length * root.activityRowHeight
+      + Math.max(0, root.activityRows.length - 1) * root.separatorHeight : 0
+  readonly property int naturalActivityListHeight: PreviewModel.activityViewportHeight(
+    root.activityRows.length, root.activityRowHeight,
+    root.separatorHeight, root.maxVisibleActivityRows)
+  readonly property int previewContentWidth: !root.showWindowPreviews ? 0
+    : root.hasActivity || root.orientationHorizontal
+      ? root.members.length * root.tileWidth
+        + Math.max(0, root.members.length - 1) * root.tileSpacing
+      : root.tileWidth
+  readonly property int previewFlowWidth: !root.showWindowPreviews ? 0
+    : root.hasActivity ? root.activityWidth
+      : root.orientationHorizontal ? root.previewContentWidth
+      : root.tileWidth
+  readonly property int previewFlowHeight: !root.showWindowPreviews ? 0
+    : root.hasActivity || root.orientationHorizontal
+      ? root.tileHeight
+      : root.members.length * root.tileHeight
+        + Math.max(0, root.members.length - 1) * root.tileSpacing
+  readonly property int contentWidth: root.hasActivity
+    ? Math.max(root.activityWidth, root.previewFlowWidth)
+    : root.previewFlowWidth
+  readonly property int previewSectionHeight: root.showWindowPreviews
+    ? root.sectionSpacing + root.separatorHeight
+      + root.sectionSpacing + root.windowLabelHeight
+      + root.sectionSpacing + root.previewFlowHeight : 0
+  readonly property int naturalContentHeight: root.hasActivity
+    ? root.headerHeight + root.sectionSpacing
+      + root.naturalActivityListHeight + root.previewSectionHeight
+    : root.previewFlowHeight
+  readonly property int desiredWidth: root.popupPadding * 2 + root.contentWidth
+  readonly property int desiredHeight: root.popupPadding * 2
+    + root.naturalContentHeight
   readonly property var anchorWindow: root.anchorItem
     ? root.anchorItem.QsWindow.window : null
   readonly property var anchorScreen: root.anchorWindow
@@ -57,11 +105,30 @@ PopupWindow {
     root.anchorScreen ? root.anchorScreen.width : root.desiredWidth,
     root.anchorScreen ? root.anchorScreen.height : root.desiredHeight,
     root.desiredWidth, root.desiredHeight, root.popupPadding)
+  readonly property int activityListHeight: root.hasActivity
+    ? Math.min(root.naturalActivityListHeight, Math.max(0,
+      root.previewViewport.height - root.popupPadding * 2
+      - root.headerHeight - root.sectionSpacing
+      - root.previewSectionHeight)) : 0
+  readonly property int contentHeight: root.hasActivity
+    ? root.headerHeight + root.sectionSpacing + root.activityListHeight
+      + root.previewSectionHeight
+    : root.previewFlowHeight
+
+  signal activityRequested(var activity)
+
+  function serviceArtwork(serviceId) {
+    if (serviceId === "gmail")
+      return Qt.resolvedUrl("../assets/services/gmail.svg")
+    if (serviceId === "whatsapp")
+      return Qt.resolvedUrl("../assets/services/whatsapp.svg")
+    return ""
+  }
 
   function liveMembers(values) {
     var live = ToplevelManager.toplevels
       ? ToplevelManager.toplevels.values || [] : []
-    return PreviewModel.groupedPreviewMembers(values, live)
+    return PreviewModel.livePreviewMembers(values, live)
   }
 
   function visibleTarget() {
@@ -114,7 +181,12 @@ PopupWindow {
 
   function requestPreview(anchorItem, desktopId, toplevels, applicationEntry) {
     var requested = root.liveMembers(toplevels)
-    if (!anchorItem || requested.length < 2
+    var requestedActivities = ActivityModel.presentation(
+      anchorItem && Array.isArray(anchorItem["previewActivities"])
+        ? anchorItem["previewActivities"] : []).rows
+    if (!anchorItem
+        || !PreviewModel.hasPreviewContent(
+          requested.length, requestedActivities.length)
         || (root.clipItem && !root.clipItem.containsItem(anchorItem))) {
       if (root.anchorItem === anchorItem) root.dismissImmediately()
       return
@@ -162,7 +234,8 @@ PopupWindow {
       return
     }
     var refreshed = root.liveMembers(target.toplevels)
-    if (refreshed.length < 2) {
+    if (!PreviewModel.hasPreviewContent(
+        refreshed.length, root.activityRows.length)) {
       root.dismissImmediately()
       return
     }
@@ -204,7 +277,9 @@ PopupWindow {
     repeat: false
     onTriggered: {
       root.refreshFromVisibleItems()
-      if (!root.anchorHovered || !root.anchorItem || root.members.length < 2)
+      if (!root.anchorHovered || !root.anchorItem
+          || !PreviewModel.hasPreviewContent(
+            root.members.length, root.activityRows.length))
         return
       root.visible = true
       Qt.callLater(root.reanchor)
@@ -223,10 +298,11 @@ PopupWindow {
 
   BorderSurface {
     anchors.fill: parent
-    radius: Style.cornerRadius
+    radius: Math.max(Style.cornerRadius, Style.space(10))
     color: Color.menu.background
     borderSpec: Border.surfaceSpec(
-      "menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+      "menu", "border", Util.alpha(Color.menu.border, 0.38),
+      Style.spacing.hairline)
 
     HoverHandler {
       id: popupHover
@@ -243,69 +319,369 @@ PopupWindow {
       width: parent.width - root.popupPadding * 2
       height: parent.height - root.popupPadding * 2
       clip: true
+      contentWidth: contentFlow.width
+      contentHeight: contentFlow.height
       boundsBehavior: Flickable.StopAtBounds
-      contentWidth: root.orientationHorizontal ? tileFlow.width : width
-      contentHeight: root.orientationHorizontal ? height : tileFlow.height
-      interactive: contentWidth > width || contentHeight > height
+      interactive: !root.hasActivity
+        && (contentWidth > width || contentHeight > height)
 
       WheelHandler {
+        enabled: !root.hasActivity
         target: null
         onWheel: event => {
           event.accepted = false
-          var primary = Math.abs(event.angleDelta.y) >= Math.abs(event.angleDelta.x)
+          var delta = Math.abs(event.angleDelta.y) >= Math.abs(event.angleDelta.x)
             ? event.angleDelta.y : event.angleDelta.x
-          if (primary === 0) return
-
-          if (root.orientationHorizontal
-              && viewport.contentWidth > viewport.width) {
-            var maxX = viewport.contentWidth - viewport.width
-            viewport.contentX = Math.max(
-              0, Math.min(maxX, viewport.contentX - primary))
-            event.accepted = true
-          } else if (!root.orientationHorizontal
-                     && viewport.contentHeight > viewport.height) {
+          if (delta === 0) return
+          if (viewport.contentHeight > viewport.height) {
             var maxY = viewport.contentHeight - viewport.height
             viewport.contentY = Math.max(
-              0, Math.min(maxY, viewport.contentY - primary))
+              0, Math.min(maxY, viewport.contentY - delta))
+            event.accepted = true
+          } else if (viewport.contentWidth > viewport.width) {
+            var maxX = viewport.contentWidth - viewport.width
+            viewport.contentX = Math.max(
+              0, Math.min(maxX, viewport.contentX - delta))
             event.accepted = true
           }
         }
       }
 
-      Item {
-        id: tileFlow
-        width: root.orientationHorizontal
-          ? root.members.length * root.tileWidth
-            + Math.max(0, root.members.length - 1) * root.tileSpacing
-          : viewport.width
-        height: root.orientationHorizontal
-          ? viewport.height
-          : root.members.length * root.tileHeight
-            + Math.max(0, root.members.length - 1) * root.tileSpacing
+      Column {
+        id: contentFlow
+        width: root.hasActivity ? viewport.width : root.contentWidth
+        height: root.contentHeight
+        spacing: root.sectionSpacing
 
-        Repeater {
-          model: root.members
+        Item {
+          visible: root.hasActivity
+          width: contentFlow.width
+          height: root.headerHeight
 
-          DockWindowPreviewTile {
-            required property var modelData
-            required property int index
-            toplevel: modelData
-            windowActions: root.windowActions
-            applicationEntry: root.applicationEntry
+          DockAppIcon {
+            id: headerIcon
+            anchors.left: parent.left
+            anchors.leftMargin: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+            width: Style.space(30)
+            height: width
             desktopId: root.desktopId
+            desktopIcon: root.applicationEntry && root.applicationEntry.icon
+              ? root.applicationEntry.icon : ""
             iconOverrides: root.iconOverrides
-            iconReloadRevision: root.iconReloadRevision
-            captureEnabled: root.visible
-            previewWidth: root.tileWidth - 16
-            previewHeight: root.tilePreviewHeight
-            width: root.tileWidth
-            height: root.tileHeight
-            x: root.orientationHorizontal
-              ? index * (root.tileWidth + root.tileSpacing) : 0
-            y: root.orientationHorizontal
-              ? 0 : index * (root.tileHeight + root.tileSpacing)
-            onActivateRequested: toplevel => root.activateToplevel(toplevel)
-            onCloseRequested: toplevel => root.closeToplevel(toplevel)
+            reloadRevision: root.iconReloadRevision
+          }
+
+          Text {
+            anchors.left: headerIcon.right
+            anchors.leftMargin: Style.space(10)
+            anchors.right: totalSummary.left
+            anchors.rightMargin: Style.space(8)
+            anchors.baseline: totalCount.baseline
+            text: root.activityRows.length > 0 ? "Chrome"
+              : root.applicationEntry && root.applicationEntry.name
+              ? String(root.applicationEntry.name) : "Chrome"
+            textFormat: Text.PlainText
+            color: Color.menu.text
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.title + 1
+            font.weight: Font.Bold
+            elide: Text.ElideRight
+          }
+
+          Text {
+            id: totalCount
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(58)
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.activityRows.length > 0
+            text: String(root.activityTotal)
+            textFormat: Text.PlainText
+            color: Color.menu.text
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.title
+            font.weight: Font.DemiBold
+          }
+
+          Text {
+            id: totalSummary
+            anchors.left: totalCount.right
+            anchors.leftMargin: Style.space(6)
+            anchors.baseline: totalCount.baseline
+            text: "unread"
+            textFormat: Text.PlainText
+            color: Util.alpha(Color.menu.text, 0.62)
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: root.separatorHeight
+            color: Util.alpha(Color.menu.text, 0.12)
+          }
+        }
+
+        Flickable {
+          id: activityList
+          visible: root.activityRows.length > 0
+          width: contentFlow.width
+          height: root.activityListHeight
+          contentWidth: width
+          contentHeight: root.activityContentHeight
+          clip: true
+          boundsBehavior: Flickable.StopAtBounds
+          flickableDirection: Flickable.VerticalFlick
+          interactive: contentHeight > height
+
+          WheelHandler {
+            target: null
+            onWheel: event => {
+              event.accepted = false
+              if (activityList.contentHeight <= activityList.height)
+                return
+              var delta = event.angleDelta.y
+              if (delta === 0) return
+              var maxY = activityList.contentHeight - activityList.height
+              activityList.contentY = Math.max(
+                0, Math.min(maxY, activityList.contentY - delta))
+              event.accepted = true
+            }
+          }
+
+          Repeater {
+            model: root.activityRows
+
+            BorderSurface {
+              id: activityRow
+              required property var modelData
+              required property int index
+
+              width: activityList.width
+              height: root.activityRowHeight
+              y: index * (root.activityRowHeight + root.separatorHeight)
+              radius: Style.space(6)
+              color: activityHover.hovered
+                ? Style.hoverFill : "transparent"
+              borderSpec: activityHover.hovered
+                ? Border.surfaceSpec(
+                  "menu", "selected-border", Color.menu.selectedBorder, 0)
+                : Border.none()
+
+              Accessible.role: Accessible.Button
+              Accessible.name: ActivityModel.accessibleName(modelData)
+              Accessible.onPressAction: root.activityRequested(modelData)
+
+              HoverHandler {
+                id: activityHover
+                cursorShape: Qt.PointingHandCursor
+              }
+
+              TapHandler {
+                acceptedButtons: Qt.LeftButton
+                onTapped: root.activityRequested(activityRow.modelData)
+              }
+
+              Item {
+                id: serviceIcon
+                anchors.left: parent.left
+                anchors.leftMargin: activityRow.borderLeft + Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(38)
+                height: width
+
+                Image {
+                  id: serviceArtwork
+                  anchors.fill: parent
+                  source: root.serviceArtwork(
+                    String(activityRow.modelData.serviceId || ""))
+                  sourceSize.width: width * Screen.devicePixelRatio
+                  sourceSize.height: height * Screen.devicePixelRatio
+                  fillMode: Image.PreserveAspectFit
+                  asynchronous: true
+                }
+
+                Text {
+                  anchors.centerIn: parent
+                  visible: serviceArtwork.status !== Image.Ready
+                  text: String(activityRow.modelData.label || "?")
+                    .trim().charAt(0).toUpperCase()
+                  textFormat: Text.PlainText
+                  color: activityHover.hovered
+                    ? Color.menu.selectedText : Color.menu.text
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.title
+                  font.weight: Font.DemiBold
+                }
+              }
+
+              Column {
+                anchors.left: serviceIcon.right
+                anchors.leftMargin: Style.space(12)
+                anchors.right: countPill.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(2)
+
+                Text {
+                  width: parent.width
+                  text: String(activityRow.modelData.label || "")
+                  textFormat: Text.PlainText
+                  color: activityHover.hovered
+                    ? Color.menu.selectedText : Color.menu.text
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.subtitle + 1
+                  font.weight: Font.DemiBold
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  width: parent.width
+                  text: String(activityRow.modelData.profileKey || "")
+                    || String(activityRow.modelData.domain || "")
+                  textFormat: Text.PlainText
+                  color: Util.alpha(Color.menu.text, 0.62)
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.bodySmall
+                  elide: Text.ElideRight
+                }
+              }
+
+              Rectangle {
+                id: countPill
+                anchors.right: activityChevron.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(Style.space(32),
+                  countLabel.implicitWidth + Style.space(12))
+                height: Style.space(26)
+                radius: Style.space(7)
+                color: Util.alpha(Color.accent, 0.12)
+                border.width: Style.spacing.hairline
+                border.color: Util.alpha(Color.accent, 0.28)
+
+                Text {
+                  id: countLabel
+                  anchors.centerIn: parent
+                  text: String(activityRow.modelData.count)
+                  textFormat: Text.PlainText
+                  color: Color.accent
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.bodySmall
+                  font.weight: Font.DemiBold
+                }
+              }
+
+              DockLucideIcon {
+                id: activityChevron
+                anchors.right: parent.right
+                anchors.rightMargin: activityRow.borderRight + Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(16)
+                height: width
+                iconName: "chevron-right"
+                tint: activityHover.hovered
+                  ? Color.menu.selectedText : Util.alpha(Color.menu.text, 0.55)
+              }
+
+              Rectangle {
+                anchors.top: parent.bottom
+                width: parent.width
+                height: root.separatorHeight
+                visible: activityRow.index < root.activityRows.length - 1
+                color: Util.alpha(Color.menu.text, 0.12)
+              }
+            }
+          }
+        }
+
+        Item {
+          visible: root.activityRows.length > 0 && root.showWindowPreviews
+          width: contentFlow.width
+          height: root.separatorHeight
+
+          Rectangle {
+            anchors.fill: parent
+            color: Util.alpha(Color.menu.text, 0.18)
+          }
+        }
+
+        Item {
+          visible: root.hasActivity && root.showWindowPreviews
+          width: contentFlow.width
+          height: root.windowLabelHeight
+
+          Text {
+            anchors.left: parent.left
+            anchors.leftMargin: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+            text: PreviewModel.windowSectionLabel(root.members.length)
+            textFormat: Text.PlainText
+            color: Util.alpha(Color.menu.text, 0.58)
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.caption
+            font.weight: Font.DemiBold
+            font.letterSpacing: Style.space(1)
+          }
+        }
+
+        Item {
+          id: tileFlow
+          visible: root.showWindowPreviews
+          width: root.hasActivity ? contentFlow.width : root.previewFlowWidth
+          height: root.previewFlowHeight
+          clip: root.hasActivity
+
+          Flickable {
+            id: previewList
+            anchors.fill: parent
+            contentWidth: root.previewContentWidth
+            contentHeight: root.previewFlowHeight
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.HorizontalFlick
+            interactive: root.hasActivity && contentWidth > width
+
+            WheelHandler {
+              enabled: previewList.contentWidth > previewList.width
+              target: null
+              onWheel: event => {
+                var delta = Math.abs(event.angleDelta.x) > Math.abs(event.angleDelta.y)
+                  ? event.angleDelta.x : event.angleDelta.y
+                var maxX = previewList.contentWidth - previewList.width
+                previewList.contentX = Math.max(
+                  0, Math.min(maxX, previewList.contentX - delta))
+                event.accepted = true
+              }
+            }
+
+            Repeater {
+              model: root.showWindowPreviews ? root.members : []
+
+              DockWindowPreviewTile {
+                required property var modelData
+                required property int index
+                toplevel: modelData
+                windowActions: root.windowActions
+                applicationEntry: root.applicationEntry
+                desktopId: root.desktopId
+                iconOverrides: root.iconOverrides
+                iconReloadRevision: root.iconReloadRevision
+                captureEnabled: root.visible && root.previewCaptureEnabled
+                compactActivityLayout: root.hasActivity
+                fallbackArtwork: root.previewArtwork[modelData.title] || ""
+                previewWidth: root.tileWidth
+                previewHeight: root.tilePreviewHeight
+                width: root.tileWidth
+                height: root.tileHeight
+                x: root.hasActivity || root.orientationHorizontal
+                  ? index * (root.tileWidth + root.tileSpacing) : 0
+                y: root.hasActivity || root.orientationHorizontal
+                  ? 0 : index * (root.tileHeight + root.tileSpacing)
+                onActivateRequested: toplevel => root.activateToplevel(toplevel)
+                onCloseRequested: toplevel => root.closeToplevel(toplevel)
+              }
+            }
           }
         }
       }
@@ -315,8 +691,19 @@ PopupWindow {
   onVisibleItemsChanged: root.refreshFromVisibleItems()
   onClipItemChanged: root.refreshAnchorGeometry()
   onPositionChanged: if (root.visible) Qt.callLater(root.reanchor)
-  onMembersChanged: if (root.visible && root.members.length >= 2)
+  onMembersChanged: if (root.visible
+      && PreviewModel.hasPreviewContent(
+        root.members.length, root.activityRows.length))
     Qt.callLater(root.reanchor)
+  onActivityRowsChanged: {
+    if (!root.visible) return
+    if (!PreviewModel.hasPreviewContent(
+        root.members.length, root.activityRows.length)) {
+      root.dismissImmediately()
+    } else {
+      Qt.callLater(root.reanchor)
+    }
+  }
   onAnchorItemChanged: {
     if (!root.anchorItem && root.desktopId !== "")
       root.dismissImmediately()
@@ -324,12 +711,21 @@ PopupWindow {
 
   Connections {
     target: root.anchorItem
+    ignoreUnknownSignals: true
     function onDestroyed() { root.dismissImmediately() }
     function onXChanged() { root.refreshAnchorGeometry() }
     function onYChanged() { root.refreshAnchorGeometry() }
     function onWidthChanged() { root.refreshAnchorGeometry() }
     function onHeightChanged() { root.refreshAnchorGeometry() }
     function onVisibleChanged() { if (root.anchorItem && !root.anchorItem.visible) root.dismissImmediately() }
+    function onPreviewActivitiesChanged() {
+      if (!PreviewModel.hasPreviewContent(
+          root.members.length, root.activityRows.length)) {
+        root.dismissImmediately()
+      } else if (root.visible) {
+        Qt.callLater(root.reanchor)
+      }
+    }
   }
 
   Connections {

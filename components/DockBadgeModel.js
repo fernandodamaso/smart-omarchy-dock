@@ -259,6 +259,21 @@ function launcherCountState(records, desktopId, providerAvailable) {
   return none
 }
 
+function browserCountState(desktopId, entry, classes, count, available, aliases) {
+  var none = { authoritative: false, count: 0, visible: false }
+  if (!available || !strictIdentityMatches(
+      desktopId, entry, classes, aliases)) return none
+  var normalized = normalizeLauncherCount(count)
+  if (normalized === null) return none
+  return { authoritative: true, count: normalized, visible: normalized > 0 }
+}
+
+function preferredCountState(launcherState, browserState) {
+  if (launcherState && launcherState.authoritative === true) return launcherState
+  if (browserState && browserState.authoritative === true) return browserState
+  return { authoritative: false, count: 0, visible: false }
+}
+
 function applicationBadgePresentation(enabled, mode, countState, severity) {
   var safeSeverity = severityRank(severity) > 0 ? severity : BADGE_NONE
   var none = {

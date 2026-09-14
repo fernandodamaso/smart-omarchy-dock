@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "DockBrowserActivityModel.js" as ActivityModel
 
 // Consumes browser-profiles snapshots from the browser-profile provider and
 // exposes window address -> profile key plus profile metadata. Unavailable or
@@ -14,6 +15,9 @@ Item {
   property int revision: 0
   property var windows: ({})
   property var profiles: ({})
+  property var activities: ({})
+  property var classes: []
+  property int port: 0
   property bool providerExecutable: false
   property bool shuttingDown: false
   property int restartAttempts: 0
@@ -46,11 +50,38 @@ Item {
   }
 
   function clearSnapshot() {
-    if (!available && Object.keys(windows || ({})).length === 0) return
+    if (!available && Object.keys(windows || ({})).length === 0
+        && Object.keys(profiles || ({})).length === 0
+        && Object.keys(activities || ({})).length === 0
+        && classes.length === 0 && port === 0) return
     available = false
     windows = ({})
     profiles = ({})
+    activities = ({})
+    classes = []
+    port = 0
     revision++
+  }
+
+  function activityRowsForAddresses(addresses) {
+    var stateRevision = revision
+    return ActivityModel.rowsForAddresses(activities, addresses)
+  }
+
+  function allActivityRows() {
+    return ActivityModel.rowsForAddresses(
+      activities, Object.keys(activities || ({})))
+  }
+
+  function activateTarget(targetId) {
+    if (!available || !providerExecutable || activationProcess.running)
+      return false
+    var command = ActivityModel.activationCommand(
+      root.providerBinaryPath, targetId, root.port)
+    if (command.length === 0) return false
+    activationProcess.command = command
+    activationProcess.running = true
+    return true
   }
 
   function applySnapshot(raw) {
@@ -80,6 +111,18 @@ Item {
 
     windows = parsed.windows
     profiles = parsed.profiles
+    var nextActivities = ({})
+    if (parsed.activities && typeof parsed.activities === "object"
+        && !Array.isArray(parsed.activities)) {
+      Object.keys(parsed.activities).forEach(function(address) {
+        if (!Array.isArray(parsed.activities[address])) return
+        var rows = ActivityModel.presentation(parsed.activities[address]).rows
+        if (rows.length > 0) nextActivities[address] = rows
+      })
+    }
+    activities = nextActivities
+    classes = ActivityModel.normalizeClasses(parsed.classes)
+    port = ActivityModel.normalizePort(parsed.port)
     available = true
     restartAttempts = 0
     var providerRevision = Number(parsed.revision)
@@ -123,6 +166,16 @@ Item {
         root.startProvider()
       else
         root.clearSnapshot()
+    }
+  }
+
+  Process {
+    id: activationProcess
+
+    command: []
+    onExited: function(exitCode) {
+      if (exitCode !== 0)
+        console.warn("Dock: browser activity activation failed (exit " + exitCode + ")")
     }
   }
 
