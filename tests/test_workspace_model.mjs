@@ -82,6 +82,31 @@ assert.deepEqual(Array.from(result.groups, g => g.count), [0, 0])
 workspaces.push({ id: -1337, name: 'Design work', monitorID: 0 })
 result = build()
 assert.equal(result.groups[2].activationTarget, 'name:Design work')
+const namedNumeric = model.buildWorkspacePresentation([], [],
+  [{ id: 10, name: 'Work', monitorID: 0 }], context)
+const workGroup = namedNumeric.groups.find(group => group.identity === 'id:10')
+assert.equal(workGroup?.label, 'Work',
+  'a numeric workspace uses its configured display name')
+assert.equal(workGroup?.showFullLabel, true)
+const focusedNamedNumeric = model.buildWorkspacePresentation([], [],
+  [{ id: 10, name: 'Work', monitorID: 0 }], { ...context, activeWorkspace: 'id:10' })
+assert.equal(focusedNamedNumeric.groups.find(group => group.identity === 'id:10')?.label,
+  'Work', 'focus discovery must not erase the configured name')
+const occupiedNamedNumeric = model.buildWorkspacePresentation([], [
+  { toplevel: {}, workspace: 'id:10', workspaceKnown: true,
+    monitor: 'id:0', monitorKnown: true }
+], [{ id: 10, name: 'Work', monitorID: 0 }], context)
+assert.equal(occupiedNamedNumeric.groups.find(group => group.identity === 'id:10')?.label,
+  'Work', 'window discovery must not erase the configured name')
+const orderedNamedNumeric = model.buildWorkspacePresentation([], [], [
+  { id: 10, name: 'Work', monitorID: 0 }, { id: 2, monitorID: 0 }, { id: 1, monitorID: 0 }
+], context)
+assert.deepEqual(Array.from(orderedNamedNumeric.groups, group => group.identity),
+  ['id:1', 'id:2', 'id:10'])
+const renamedNumeric = model.buildWorkspacePresentation([], [],
+  [{ id: 10, name: 'Office', monitorID: 0 }], context)
+assert.equal(model.presentationsEqual(namedNumeric, renamedNumeric), false,
+  'display-name changes refresh the presentation')
 // Origin snapshots feed the same location adapter, without another origin store.
 handles[2].lastIpcObject.workspace = { name: 'special:smartdock-minimized' }
 const originLocation = DockWindowModel.locationForToplevel(windows[2], handles,

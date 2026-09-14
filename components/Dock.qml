@@ -840,6 +840,7 @@ PanelWindow {
               modelData: workspaceCardSlot.modelData.item
               property var modelData
               label: modelData.label
+              showFullLabel: modelData.showFullLabel === true
               count: modelData.count
               urgent: modelData.urgent === true && root.attentionBadgesEnabled
               windowDragActive: root.workspaceDragActive

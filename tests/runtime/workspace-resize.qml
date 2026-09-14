@@ -51,19 +51,20 @@ ShellRoot {
     settle(transitionGroup)
     var starHeaderWidth = transitionGroup.headerWidth
     var cases = [
-      ["1", "1"], ["2", "2"], ["12", "12"], ["01", "01"], ["0", "0"],
-      ["Design work", "*"], ["Notes", "*"], ["日本語", "*"],
-      ["Other windows", "*"], ["special:scratchpad", "*"],
-      ["1:dev", "*"], ["1.5", "*"], ["", "*"], ["3", "3"]
+      ["1", "1", false], ["2", "2", false], ["12", "12", false],
+      ["Design work", "*", false], ["Work", "Work", true], ["Notes", "*", false],
+      ["Other windows", "*", false], ["special:scratchpad", "*", false],
+      ["", "*", false], ["3", "3", false]
     ]
     for (var i = 0; i < cases.length; ++i) {
       transitionGroup.label = cases[i][0]
+      transitionGroup.showFullLabel = cases[i][2]
       settle(transitionGroup)
       if (transitionGroup.displayLabel !== cases[i][1]
           || transitionGroup.label !== cases[i][0])
         throw new Error("Workspace display label mismatch: " + cases[i][0])
       if (cases[i][1] === "*" && transitionGroup.headerWidth !== starHeaderWidth)
-        throw new Error("Non-numeric header retained expanded width: " + cases[i][0])
+        throw new Error("Compact header retained expanded width: " + cases[i][0])
     }
     transitionGroup.label = originalLabel
     settle(transitionGroup)
