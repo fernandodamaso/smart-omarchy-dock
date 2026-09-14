@@ -78,6 +78,16 @@ ShellRoot {
     return null
   }
 
+  function workspaceLayoutFor(item) {
+    if (item && item.overflowing !== undefined && item.desiredWidth !== undefined)
+      return item
+    for (var child of item.children || []) {
+      var found = workspaceLayoutFor(child)
+      if (found) return found
+    }
+    return null
+  }
+
   Timer {
     interval: 200
     running: true
@@ -109,8 +119,8 @@ ShellRoot {
       var before = dock.implicitWidth
       var groups = []
       for (var i = 1; i <= 8; ++i)
-        groups.push({ identity: "id:" + i, label: String(i), count: 0,
-          active: i === 1, items: [], urgent: false })
+        groups.push({ identity: "id:" + i, label: i === 8 ? "Work" : String(i),
+          showFullLabel: i === 8, count: 0, active: i === 1, items: [], urgent: false })
       dock.workspacePresentation = { groups: groups, globalLaunchers: [],
         fallbackItems: [], renderedItems: [] }
       finish.start()
@@ -124,6 +134,14 @@ ShellRoot {
     interval: 100
     onTriggered: {
       settle(dock.contentItem)
+      var workspaceLayout = workspaceLayoutFor(dock.contentItem)
+      if (!workspaceLayout || workspaceLayout.desiredWidth === Math.ceil(workspaceLayout.desiredWidth)
+          || workspaceLayout.overflowing)
+        throw new Error("Fractional workspace width must not trigger overflow controls: desired="
+          + (workspaceLayout ? workspaceLayout.desiredWidth.toFixed(15) : "missing") + " width="
+          + (workspaceLayout ? workspaceLayout.width.toFixed(15) : "missing") + " delta="
+          + (workspaceLayout ? (workspaceLayout.desiredWidth - workspaceLayout.width).toFixed(15) : "missing")
+          + " overflowing=" + (workspaceLayout ? workspaceLayout.overflowing : "missing"))
       if (dock.implicitWidth !== before)
         throw new Error("Workspace updates resized the native panel: "
           + before + " -> " + dock.implicitWidth)
