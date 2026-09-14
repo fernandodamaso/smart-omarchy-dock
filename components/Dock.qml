@@ -48,6 +48,7 @@ PanelWindow {
   property bool workspacePresentationDirty: false
   property bool revealAfterWorkspaceDrag: false
   property bool dragFullscreenModeActive: false
+  property var dragWorkspaceFullscreenOwners: ({})
 
   // The profile applies only when every window in the item reports the same
   // one; mixed-profile groups keep the plain application icon. Item toplevels
@@ -276,6 +277,25 @@ PanelWindow {
     && DockModel.normalizeSetting("workspaceLayout", settings.workspaceLayout) === "grouped"
   property var workspacePresentation: ({ groups: [], globalLaunchers: [], fallbackItems: [], renderedItems: [] })
   readonly property bool grouped: groupedRequested
+  readonly property var minimizedToplevels: {
+    var revision = scopeRevision
+    if (!windowActions || windowActions.minimizedOriginsSnapshot === null)
+      return []
+    return toplevels.filter(function(toplevel) {
+      return windowActions.isMinimized(toplevel)
+    })
+  }
+  readonly property var liveWorkspaceFullscreenOwners: {
+    var revision = scopeRevision
+    if (!grouped) return ({})
+    return DockModel.workspaceFullscreenOwners(
+      workspacePresentation.groups, hyprToplevels, activeToplevel,
+      minimizedToplevels)
+  }
+  readonly property var workspaceFullscreenOwners:
+    workspaceDragActive ? dragWorkspaceFullscreenOwners : liveWorkspaceFullscreenOwners
+  readonly property bool groupedFullscreenModeActive:
+    Object.keys(workspaceFullscreenOwners).length > 0
   readonly property var renderedItems: grouped ? workspacePresentation.renderedItems : visibleItems
   readonly property string activeCardIdentity: {
     var active = workspacePresentation.groups.find(function(group) { return group.active })
@@ -378,6 +398,7 @@ PanelWindow {
 
   function prepareWorkspacePresentation() {
     root.dragFullscreenModeActive = root.fullscreenModeActive
+    root.dragWorkspaceFullscreenOwners = root.liveWorkspaceFullscreenOwners
     root.workspacePresentationDirty = true
     visibleItemsRefreshTimer.stop()
     windowPreview.dismissImmediately()
@@ -792,7 +813,8 @@ PanelWindow {
           : height - (dockLayout.height + root.itemSize + 10) / 2
         contentPadding: Math.ceil(root.iconSize * (root.magnification
           * DockModel.fullscreenIconPresentation(
-            root.fullscreenModeActive, root.fullscreenModeActive, false).scale - 1) / 2) + 1
+            root.groupedFullscreenModeActive,
+            root.groupedFullscreenModeActive, false).scale - 1) / 2) + 1
         foreground: Color.menu.text
         background: Color.menu.background
         accent: Color.accent
@@ -811,7 +833,11 @@ PanelWindow {
         }
         Repeater {
           model: root.groupedRequested ? root.workspacePresentation.globalLaunchers : []
-          AppIcon { y: 2 }
+          AppIcon {
+            y: 2
+            fullscreenModeActive: false
+            fullscreenEmphasized: false
+          }
         }
         Repeater {
           id: workspaceCards
@@ -869,6 +895,14 @@ PanelWindow {
                     index: appSlot.index
                     presentationActive: appSlot.modelData.present
                       && workspaceCardSlot.modelData.present
+                    fullscreenModeActive:
+                      root.workspaceFullscreenOwners[workspaceCard.modelData.identity] !== undefined
+                    fullscreenEmphasized: {
+                      var owner =
+                        root.workspaceFullscreenOwners[workspaceCard.modelData.identity]
+                      return owner !== undefined
+                        && modelData.toplevels.indexOf(owner) >= 0
+                    }
                   }
                 }
               }
@@ -901,7 +935,10 @@ PanelWindow {
           slotSize: root.itemSize
           Repeater {
             model: root.groupedRequested ? root.workspacePresentation.fallbackItems : []
-            AppIcon {}
+            AppIcon {
+              fullscreenModeActive: false
+              fullscreenEmphasized: false
+            }
           }
         }
       }

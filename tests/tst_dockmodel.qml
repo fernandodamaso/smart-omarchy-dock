@@ -655,6 +655,97 @@ TestCase {
       activeWindow)
   }
 
+  function test_scopesFullscreenOwnersIndependentlyPerWorkspaceCard() {
+    var aOwner = { title: "A owner" }
+    var aSibling = { title: "A sibling" }
+    var bOwner = { title: "B owner" }
+    var bSibling = { title: "B sibling" }
+    var neutral = { title: "Neutral" }
+    var groups = [
+      { identity: "id:1", items: [
+        { toplevels: [aSibling, aOwner] },
+        { toplevels: [aOwner] }
+      ] },
+      { identity: "id:2", items: [{ toplevels: [bSibling, bOwner] }] },
+      { identity: "id:3", items: [{ toplevels: [neutral] }] }
+    ]
+    var handles = [
+      { wayland: aOwner, lastIpcObject: { fullscreen: 1, fullscreenClient: 0 } },
+      { wayland: aSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+      { wayland: bOwner, lastIpcObject: { fullscreen: 1, fullscreenClient: 1 } },
+      { wayland: bSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+      { wayland: neutral, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } }
+    ]
+
+    var owners = DockModel.workspaceFullscreenOwners(groups, handles, null, [])
+    compare(owners["id:1"], aOwner)
+    compare(owners["id:2"], bOwner)
+    verify(owners["id:3"] === undefined)
+    compare(Object.keys(owners).length, 2)
+  }
+
+  function test_updatesInactiveCardOwnerWithoutMembershipOrActiveWindowChanges() {
+    var active = { title: "Active A" }
+    var inactive = { title: "Inactive B" }
+    var groups = [
+      { identity: "id:1", items: [{ toplevels: [active] }] },
+      { identity: "id:2", items: [{ toplevels: [inactive] }] }
+    ]
+    var handles = [
+      { wayland: active, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+      { wayland: inactive, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } }
+    ]
+
+    var before = DockModel.workspaceFullscreenOwners(groups, handles, active, [])
+    compare(Object.keys(before).length, 0)
+    handles[1].lastIpcObject.fullscreen = 1
+    handles[1].lastIpcObject.fullscreenClient = 0
+    var after = DockModel.workspaceFullscreenOwners(groups, handles, active, [])
+    compare(after["id:2"], inactive)
+    verify(after["id:1"] === undefined)
+  }
+
+  function test_excludesMinimizedFullscreenAndActiveMembers() {
+    var owner = { title: "Fullscreen" }
+    var active = { title: "Active" }
+    var groups = [
+      { identity: "id:1", items: [{ toplevels: [active, owner] }] }
+    ]
+    var handles = [
+      { wayland: owner, lastIpcObject: { fullscreen: 1, fullscreenClient: 0 } },
+      { wayland: active, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } }
+    ]
+
+    var minimizedOwner = DockModel.workspaceFullscreenOwners(
+      groups, handles, active, [owner])
+    verify(minimizedOwner["id:1"] === undefined)
+
+    var minimizedActive = DockModel.workspaceFullscreenOwners(
+      groups, handles, active, [active])
+    compare(minimizedActive["id:1"], owner)
+
+    var handoff = DockModel.workspaceFullscreenOwners(groups, handles, active, [])
+    compare(handoff["id:1"], active)
+  }
+
+  function test_prefersHyprlandHandleOrderOverCardItemOrder() {
+    var first = { title: "First handle" }
+    var second = { title: "Second item" }
+    var groups = [
+      { identity: "id:1", items: [
+        { toplevels: [second] },
+        { toplevels: [first] }
+      ] }
+    ]
+    var handles = [
+      { wayland: first, lastIpcObject: { fullscreen: 1, fullscreenClient: 1 } },
+      { wayland: second, lastIpcObject: { fullscreen: 1, fullscreenClient: 0 } }
+    ]
+
+    var owners = DockModel.workspaceFullscreenOwners(groups, handles, null, [])
+    compare(owners["id:1"], first)
+  }
+
   function test_presentsFullscreenOwnerAndFadesOtherIcons() {
     var owner = DockModel.fullscreenIconPresentation(true, true, false)
     compare(owner.scale, 1.15)

@@ -108,6 +108,68 @@ for (const usingLua of [false, true]) {
 }
 assert.equal(read('Dock.qml').includes('indexOf(modelData)'), false)
 assert.equal(read('Dock.qml').includes('workspaceScopeKey(root.screen.name, modelData.presentationId)'), true)
+// Fullscreen presentation is scoped by workspace-card identity. Global
+// launchers and fallback windows remain neutral, and drag snapshots freeze it.
+const fullscreenDockSource = read('Dock.qml')
+const aOwner = {}, aSibling = {}, bOwner = {}, bSibling = {}, neutralWindow = {}
+const fullscreenGroups = [
+  { identity: 'id:1', items: [{ toplevels: [aSibling, aOwner] }] },
+  { identity: 'id:2', items: [{ toplevels: [bSibling, bOwner] }] },
+  { identity: 'id:3', items: [{ toplevels: [neutralWindow] }] }
+]
+const fullscreenHandles = [
+  { wayland: aOwner, lastIpcObject: { fullscreen: 1, fullscreenClient: 0 } },
+  { wayland: aSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: bOwner, lastIpcObject: { fullscreen: 1, fullscreenClient: 1 } },
+  { wayland: bSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: neutralWindow, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } }
+]
+const cardOwners = DockModel.workspaceFullscreenOwners(
+  fullscreenGroups, fullscreenHandles, null, [])
+assert.equal(cardOwners['id:1'], aOwner)
+assert.equal(cardOwners['id:2'], bOwner)
+assert.equal(cardOwners['id:3'], undefined)
+function cardPresentation(identity, toplevels) {
+  const owner = cardOwners[identity]
+  return DockModel.fullscreenIconPresentation(
+    owner !== undefined, owner !== undefined && toplevels.includes(owner), false)
+}
+const emphasizedPresentation = cardPresentation('id:1', [aOwner])
+const siblingPresentation = cardPresentation('id:1', [aSibling])
+const neutralCardPresentation = cardPresentation('id:3', [neutralWindow])
+assert.equal(emphasizedPresentation.scale, 1.15)
+assert.equal(emphasizedPresentation.opacity, 1)
+assert.equal(siblingPresentation.scale, 0.9)
+assert.equal(siblingPresentation.opacity, 0.45)
+assert.equal(neutralCardPresentation.scale, 1)
+assert.equal(neutralCardPresentation.opacity, 1)
+assert.ok(fullscreenDockSource.includes(
+  'root.workspaceFullscreenOwners[workspaceCard.modelData.identity]'),
+  'grouped card delegate must read only its local owner')
+assert.ok(fullscreenDockSource.includes(
+  'return windowActions.isMinimized(toplevel)'),
+  'grouped ownership must reuse DockWindowActions.isMinimized()')
+assert.ok(fullscreenDockSource.includes(
+  'readonly property bool groupedFullscreenModeActive:'),
+  'grouped padding must react to any card owner')
+assert.ok(fullscreenDockSource.includes(
+  'workspaceDragActive ? dragWorkspaceFullscreenOwners : liveWorkspaceFullscreenOwners'),
+  'workspace drag must freeze the per-card fullscreen snapshot')
+assert.ok(fullscreenDockSource.includes(
+  'root.dragWorkspaceFullscreenOwners = root.liveWorkspaceFullscreenOwners'),
+  'drag preparation must capture the per-card fullscreen snapshot')
+assert.ok(fullscreenDockSource.includes(`model: root.groupedRequested ? root.workspacePresentation.globalLaunchers : []
+          AppIcon {
+            y: 2
+            fullscreenModeActive: false
+            fullscreenEmphasized: false
+          }`), 'global launchers stay neutral')
+assert.ok(fullscreenDockSource.includes(`model: root.groupedRequested ? root.workspacePresentation.fallbackItems : []
+            AppIcon {
+              fullscreenModeActive: false
+              fullscreenEmphasized: false
+            }`), 'fallback icons stay neutral')
+
 // Evaluate the production marker bindings: grouped magnification must not push
 // the focus underline outside the compact surface, even with zero edge margin.
 const markerBlock = read('DockItem.qml').split('id: applicationStateIndicator')[1].split('\n    }')[0]
@@ -142,14 +204,53 @@ for (const iconSize of [24, 31, 64, 96]) for (const position of ['top', 'bottom'
 const paddingExpression = read('Dock.qml').split('id: groupedLayout')[1]
   .match(/contentPadding: ([\s\S]*?)\n        foreground:/)[1]
 const paddingFor = root => vm.runInNewContext(paddingExpression, { root, DockModel })
-assert.ok(paddingFor({ iconSize: 24, magnification: 1.2, fullscreenModeActive: false }) <= 4,
+assert.ok(paddingFor({ iconSize: 24, magnification: 1.2, groupedFullscreenModeActive: false }) <= 4,
   'default grouped spacing must not add redundant viewport padding')
-assert.ok(paddingFor({ iconSize: 24, magnification: 2, fullscreenModeActive: false }) + 7 >= 12 + 8,
+assert.ok(paddingFor({ iconSize: 24, magnification: 2, groupedFullscreenModeActive: false }) + 7 >= 12 + 8,
   'global launcher hover tile fits its slot inset plus viewport allowance')
 const largeOwnerScale = DockModel.fullscreenIconPresentation(true, true, false).scale * 2
 const largeOwnerOverhang = 96 * (largeOwnerScale - 1) / 2
-assert.ok(paddingFor({ iconSize: 96, magnification: 2, fullscreenModeActive: true }) + 13 >= largeOwnerOverhang,
+assert.ok(paddingFor({ iconSize: 96, magnification: 2, groupedFullscreenModeActive: true }) + 13 >= largeOwnerOverhang,
   'fullscreen artwork fits the trailing card inset plus viewport allowance')
+const inactiveOnlyHandles = [
+  { wayland: aOwner, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: aSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: bOwner, lastIpcObject: { fullscreen: 1, fullscreenClient: 0 } },
+  { wayland: bSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: neutralWindow, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } }
+]
+const noOwnerHandles = inactiveOnlyHandles.map(handle => ({
+  wayland: handle.wayland,
+  lastIpcObject: { fullscreen: 0, fullscreenClient: handle.lastIpcObject.fullscreenClient }
+}))
+const inactiveOwners = DockModel.workspaceFullscreenOwners(
+  fullscreenGroups, inactiveOnlyHandles, aSibling, [])
+assert.equal(inactiveOwners['id:2'], bOwner)
+assert.equal(inactiveOwners['id:1'], undefined)
+const noOwners = DockModel.workspaceFullscreenOwners(
+  fullscreenGroups, noOwnerHandles, aSibling, [])
+const oneOwnerPadding = paddingFor({
+  iconSize: 96, magnification: 2,
+  groupedFullscreenModeActive: Object.keys(inactiveOwners).length > 0
+})
+const twoOwnerPadding = paddingFor({
+  iconSize: 96, magnification: 2,
+  groupedFullscreenModeActive: Object.keys(cardOwners).length > 0
+})
+const clearedPadding = paddingFor({
+  iconSize: 96, magnification: 2,
+  groupedFullscreenModeActive: Object.keys(noOwners).length > 0
+})
+const normalPadding = paddingFor({
+  iconSize: 96, magnification: 2, groupedFullscreenModeActive: false
+})
+assert.ok(oneOwnerPadding > clearedPadding,
+  'inactive-card owner reserves fullscreen padding')
+assert.equal(oneOwnerPadding, twoOwnerPadding,
+  'multiple owners reserve the same padding as one owner')
+assert.equal(clearedPadding, normalPadding,
+  'padding returns to normal after the final owner clears')
+
 console.log('grouped action routes and compact geometry: PASS')
 
 // Execute the geometry bindings from QML. This catches trimming the logical
@@ -164,7 +265,7 @@ const backgroundSource = dockSource.split('id: dockBackground')[1]
 const layoutSource = dockSource.split('id: dockLayout')[1]
 const groupedSource = dockSource.split('id: groupedLayout')[1]
 function dockGeometry(options = {}) {
-  const root = { iconSize: 24, magnification: 1.2, fullscreenModeActive: false,
+  const root = { iconSize: 24, magnification: 1.2, groupedFullscreenModeActive: false,
     grouped: true, vertical: false, fullLength: false, showTrash: false,
     screen: { width: 1920 }, ...options }
   const groupedLayout = { contentPadding: paddingFor(root) }
@@ -203,8 +304,8 @@ function dockGeometry(options = {}) {
     desiredWidth: groupedLayout.desiredWidth }
 }
 for (const iconSize of [24, 31, 64, 96]) for (const magnification of [1, 1.2, 2])
-  for (const fullscreenModeActive of [false, true]) {
-    const g = dockGeometry({ iconSize, magnification, fullscreenModeActive })
+  for (const groupedFullscreenModeActive of [false, true]) {
+    const g = dockGeometry({ iconSize, magnification, groupedFullscreenModeActive })
     assert.equal(g.surfaceX + g.surfaceWidth - g.visibleRight, 4, 'visible right inset is exactly 4px')
     assert.equal(g.surfaceX * 2 + g.surfaceWidth, g.panelWidth, 'visible surface is centered')
     assert.equal(g.layoutWidth, g.root.compactMainExtent, 'logical layout retains its original width')
