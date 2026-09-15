@@ -89,6 +89,19 @@ function targetIsCurrent(targetContext, currentToplevels, addressFor) {
   return String(addressFor(targetContext.toplevel) || "") === capturedAddress
 }
 
+function targetSnapshotsEqual(left, right) {
+  var a = left || []
+  var b = right || []
+  if (a.length !== b.length) return false
+  for (var i = 0; i < a.length; ++i) {
+    if (!a[i] || !b[i]
+        || a[i].toplevel !== b[i].toplevel
+        || String(a[i].address || "") !== String(b[i].address || ""))
+      return false
+  }
+  return true
+}
+
 function initialPage(controlItem, targetCount, preferredTargetValid) {
   if (controlItem) return "controls"
   if (preferredTargetValid || Number(targetCount) === 1) return "window"
