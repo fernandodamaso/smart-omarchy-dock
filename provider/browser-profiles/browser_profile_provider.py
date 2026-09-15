@@ -37,9 +37,13 @@ from urllib.parse import urlsplit
 TITLE_SUFFIXES = (" - Google Chrome", " - Chromium", " - Brave", " - Microsoft Edge")
 MAX_UNREAD_COUNT = 999999
 WHATSAPP_TITLE = re.compile(r"^\((\d+)\)\s+WhatsApp$")
+INSTAGRAM_TITLE = re.compile(r"^\((\d+)\)\s+Instagram$")
 # Only the supported inbox title is an unread signal. Other mailbox counts
 # and parenthesized numbers in message subjects are not unread evidence.
-GMAIL_TITLE = re.compile(r"Inbox \(([0-9]+)\) - [^\r\n]+ - Gmail")
+GMAIL_TITLE = re.compile(
+    r"(?:Inbox|Caixa de entrada) \(([0-9]+)\) - [^\r\n]+ - "
+    r"(?:Gmail|E-mail de [^\r\n]+)"
+)
 
 
 def valid_target_id(value):
@@ -73,6 +77,10 @@ def activity_for_target(target, profile_key, window_address):
     match = WHATSAPP_TITLE.fullmatch(title) if host == "web.whatsapp.com" else None
     if match:
         service_id, label, domain = "whatsapp", "WhatsApp", "web.whatsapp.com"
+    elif host == "www.instagram.com":
+        match = INSTAGRAM_TITLE.fullmatch(title)
+        if match:
+            service_id, label, domain = "instagram", "Instagram", "www.instagram.com"
     elif host == "mail.google.com" and parsed.fragment == "inbox":
         # A message subject can itself look like an inbox title. Require the
         # inbox listing route too; never publish or persist the inspected URL.

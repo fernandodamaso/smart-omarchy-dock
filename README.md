@@ -199,7 +199,8 @@ wins over the application-wide override and suppresses the automatic badge
 only after it renders. Application-wide artwork retains the profile badge.
 When the provider is not installed, these keys stay inert.
 
-The same provider can publish strict unread activity for WhatsApp and Gmail.
+The same provider can publish strict unread activity for WhatsApp, Instagram,
+and supported English or Portuguese Gmail inbox titles.
 When those rows are available, hovering Chrome opens a compact card with the
 profile label, unread count, and matching window previews; selecting a row
 activates that exact browser tab and owning window. Hover a row to reveal an

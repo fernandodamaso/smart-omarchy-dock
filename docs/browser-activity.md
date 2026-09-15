@@ -26,15 +26,16 @@ alongside the existing `windows` and `profiles` maps:
 }
 ```
 
-The provider accepts only HTTPS targets on `web.whatsapp.com` or
-`mail.google.com`. WhatsApp requires a title of `(N) WhatsApp`. Gmail requires
-the supported English `Inbox (N) - ... - Gmail` title and the exact `#inbox`
-listing route. Subjects, drafts, other folders, and unverified localized title
-forms are ignored rather than interpreted as unread counts. Keep a supported
-Gmail inbox tab open to expose its count; an open message is not an inbox
-listing even when its subject resembles an inbox title. Counts are positive
-integers capped at 999999. Duplicate targets for one service/profile are reduced
-to the highest count, and target IDs are validated before display or activation.
+The provider accepts only HTTPS targets on `web.whatsapp.com`,
+`www.instagram.com`, or `mail.google.com`. WhatsApp and Instagram require the
+title form `(N) Service`. Gmail requires the supported English or Portuguese
+inbox title and the exact `#inbox` listing route. Subjects, drafts, other
+folders, and unverified localized title forms are ignored rather than
+interpreted as unread counts. Keep a supported Gmail inbox tab open to expose
+its count; an open message is not an inbox listing even when its subject
+resembles an inbox title. Counts are positive integers capped at 999999.
+Duplicate targets for one service/profile are reduced to the highest count, and
+target IDs are validated before display or activation.
 
 The card exposes profile names, service labels, counts, and ordinary window
 preview captures. It never publishes URLs, titles, message text, account

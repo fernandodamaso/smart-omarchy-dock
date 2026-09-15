@@ -26,6 +26,26 @@ class ActivityTitleRegressionTest(unittest.TestCase):
         self.assertNotIn("title", row)
         self.assertNotIn("url", row)
 
+    def test_recognizes_portuguese_workspace_inbox_title(self):
+        row = provider.activity_for_target(
+            self.target(
+                "Caixa de entrada (332) - person@example.test - E-mail de Example"
+            ), "Default", "0x1")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["count"], 332)
+        self.assertEqual(row["serviceId"], "gmail")
+
+    def test_recognizes_instagram_unread_title(self):
+        row = provider.activity_for_target({
+            "targetId": "B" * 32,
+            "url": "https://www.instagram.com/",
+            "title": "(4) Instagram",
+            "browserContextId": "context-1",
+        }, "Default", "0x1")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["count"], 4)
+        self.assertEqual(row["serviceId"], "instagram")
+
     def test_rejects_subject_draft_and_other_ambiguous_numbers(self):
         for title in (
             "Project update (42) - person@example.test - Gmail",
