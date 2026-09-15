@@ -25,6 +25,8 @@ PY
 
 grep -q 'function workspaceGroupIntent' components/DockConfigModel.js \
   || fail 'DockConfigModel must own exact pair mutation'
+grep -q 'var entry = exactEntry(entries || \[\], desktopKey)' components/DockConfigModel.js \
+  || fail 'new group pairs must canonicalize through the exact desktop entry'
 grep -q 'function groupWorkspaceApplication' DockHost.qml \
   || fail 'DockHost must expose the group intent through the sole settings writer'
 grep -q 'function ungroupWorkspaceApplication' DockHost.qml \
@@ -46,6 +48,10 @@ grep -q 'mutateWorkspaceGroup' components/DockContextActionController.qml \
   || fail 'menu grouping must delegate through the host controller'
 grep -q 'result.groupWindows = false' components/DockControl.qml \
   || fail 'effective CLI readback must report legacy global grouping inactive'
+grep -q 'function targetSnapshotsEqual' components/DockMenuModel.js \
+  || fail 'candidate snapshots must compare exact object and address identity'
+grep -q 'DockMenuModel.targetSnapshotsEqual' components/DockContextMenu.qml \
+  || fail 'Group Windows must revalidate the exact captured candidate set'
 grep -q 'groupCandidateSnapshot' components/DockContextMenu.qml \
   || fail 'Group Windows must snapshot exact eligible membership'
 grep -q 'onSettingsChanged' components/DockContextMenu.qml \
