@@ -62,6 +62,7 @@ Item {
   property bool sticky: false
   property string attentionScopeKey: ""
   property string activationMonitor: ""
+  property string workspaceActivationTarget: ""
   property bool presentationVisible: true
   property bool motionReady: false
   readonly property var attentionScope: attentionScopeKey
@@ -223,7 +224,7 @@ Item {
           root.lastActivatedToplevel, root.runningCount)
         return root.windowActions.activateToplevel(
           root.runningToplevels[root.lastActivatedToplevel], root.originOnly,
-          activationMonitor)
+          activationMonitor, undefined, request.workspaceTargetOverride)
       }
       root.launch()
       return true
@@ -235,8 +236,11 @@ Item {
   function dispatchPointerAction(input, modifiers, options) {
     var keys = modifiers || ({})
     var request = Object.assign({}, options || ({}))
-    if (keys.control === true)
+    if (keys.control === true) {
       request.activationMonitor = root.activationMonitor
+      if (root.workspaceActivationTarget !== "")
+        request.workspaceTargetOverride = root.workspaceActivationTarget
+    }
     return dispatchApplicationAction(DockModel.resolveApplicationPointerAction(
       applicationActions, input, modifiers), request)
   }

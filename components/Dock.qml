@@ -944,6 +944,7 @@ PanelWindow {
                   AppIcon {
                     modelData: appSlot.modelData.item
                     index: appSlot.index
+                    workspaceActivationTarget: workspaceCard.modelData.activationTarget
                     presentationActive: appSlot.modelData.present
                       && workspaceCardSlot.modelData.present
                     fullscreenModeActive:

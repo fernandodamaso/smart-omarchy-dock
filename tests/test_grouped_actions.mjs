@@ -193,6 +193,20 @@ for (const usingLua of [false, true]) {
     focusWorkspace('9'), focusWindow('0x1')], usingLua,
     `Ctrl+click icon activation (${usingLua ? 'lua' : 'legacy'})`)
 
+  item.workspaceActivationTarget = 'name:Design work'
+  handles[0].lastIpcObject = { monitor: 1 }
+  actions.minimizedOrigins = {}
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('left', { control: true }), true)
+  expectSequence(usingLua
+    ? [focusWorkspace('name:Design work'), moveWorkspace('name:Design work'),
+        focusWorkspace('name:Design work'), focusWindow('0x1')]
+    : [focusWorkspace('name:Design work'), moveCurrentWorkspace,
+        focusWorkspace('name:Design work'), focusWindow('0x1')], usingLua,
+    `card-window Ctrl+click uses card workspace override (${usingLua ? 'lua' : 'legacy'})`)
+  item.workspaceActivationTarget = ''
+  handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+
   clearSubmissions()
   assert.equal(item.dispatchPointerAction('middle', { control: true }), true)
   expectSequence([focusWorkspace('9'), moveWorkspace('9'),

@@ -370,7 +370,7 @@ Item {
   }
 
   function activateToplevel(toplevel, originOnly, activationMonitor,
-                            focusAfterRestore) {
+                            focusAfterRestore, workspaceTargetOverride) {
     if (!isAlive(toplevel)) return false
 
     if (isMinimized(toplevel)) {
@@ -401,7 +401,7 @@ Item {
     }
 
     var handle = handleFor(toplevel)
-    var workspace = workspaceTarget(workspaceForHandle(handle))
+    var workspace = workspaceTargetOverride || workspaceTarget(workspaceForHandle(handle))
     var monitor = DockModel.normalizeMonitorTarget(activationMonitor)
     var request = DockModel.focusWindowRequest(
       addressFor(toplevel), Hyprland.usingLua)
