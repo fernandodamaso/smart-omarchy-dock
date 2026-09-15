@@ -208,6 +208,8 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
 
   addWorkspace(primaryWorkspaceIdentity)
 
+  // Resolve record locations without mutating the caller's snapshots. A live
+  // workspace descriptor, even an unresolved one, outranks a minimized origin.
   records = (records || []).map(function(record) {
     var descriptorEvidence = resolvedOwner(descriptorOwners[record.workspace])
     var owner = record.minimized && descriptorEvidence.seen
@@ -304,6 +306,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       var presentationIdentity = key + "/" + item.desktopId
       if (context.groupWindows === false && members.length) {
         var firstRecord = records.find(function(value) { return value.toplevel === members[0] })
+        // Object identity remains available to preview lookup while a handle is pending.
         presentationIdentity += "/" + (firstRecord && firstRecord.address || "pending")
       }
       var scoped = Object.assign({}, item, {
@@ -396,6 +399,8 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     }
   }
 
+  // Badge/preview traversal remains globally primary-first, independent of the
+  // per-monitor visual ordering and the number of cards with active styling.
   var badgeGroups = groups.slice().sort(workspaceCompare)
   var renderedItems = []
   var primaryGroupIndex = -1
