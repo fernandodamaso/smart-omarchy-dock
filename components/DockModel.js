@@ -350,14 +350,14 @@ function resolveApplicationPointerAction(config, input, modifiers) {
   var meta = keys.meta === true
 
   if (kind === "right") return "context-menu"
-  if (control || alt || meta) return "none"
+  if (alt || meta) return "none"
 
   if (kind === "left")
     return shift ? "none" : actionConfig.clickAction
   if (kind === "middle")
     return shift ? "none" : actionConfig.middleClickAction
   if (kind === "scroll")
-    return shift ? "none" : actionConfig.scrollAction
+    return shift || control ? "none" : actionConfig.scrollAction
   return "none"
 }
 

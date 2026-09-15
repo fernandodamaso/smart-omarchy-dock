@@ -510,9 +510,11 @@ Input precedence is intentionally strict:
 
 - Right click always opens the existing application context menu.
 - Left click with no modifier uses `clickAction`.
+- Ctrl+Left click uses the same `clickAction`; `focus-or-launch` also moves that window's workspace onto the clicked dock monitor.
 - Middle click with no modifier uses `middleClickAction`.
+- Ctrl+Middle click uses the same `middleClickAction`, including the workspace pull when that action is `focus-or-launch`.
 - Vertical-dominant scrolling uses `scrollAction`; horizontal/tied gestures pass through.
-- Ctrl, Alt, Meta, Shift, and mixed modifier combinations do not trigger scroll actions.
+- Alt, Meta, Shift, and mixed modifier combinations do not trigger click or scroll actions. Ctrl does not trigger scroll actions.
 
 The current action semantics are:
 
@@ -525,9 +527,9 @@ The current action semantics are:
   enabled. The same popup also opens after briefly hovering an application with
   two or more running windows.
 - `close`: request graceful closure of every live grouped member.
-- `focus-or-launch`: preserves the legacy Left click behavior exactly: repeated
-  clicks focus successive windows in a running group in dock order, while a closed pinned
-  application launches.
+- `focus-or-launch`: unmodified clicks focus successive windows in a running
+  group in dock order without moving workspaces; a closed pinned application
+  launches. Ctrl+click also moves that window's workspace onto the clicked dock.
 
 Existing configuration files need no migration. If either action key is absent,
 it normalizes to its default; an absent or invalid legacy `clickAction`

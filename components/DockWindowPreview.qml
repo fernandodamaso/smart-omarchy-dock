@@ -249,10 +249,11 @@ PopupWindow {
     if (root.visible) Qt.callLater(root.reanchor)
   }
 
-  function activateToplevel(toplevel) {
+  function activateToplevel(toplevel, pullToDockMonitor) {
+    var monitor = pullToDockMonitor === true ? root.activationMonitor : ""
     if (!root.windowActions
         || !root.windowActions.activateToplevel(
-          toplevel, root.originOnly, root.activationMonitor)) return false
+          toplevel, root.originOnly, monitor)) return false
     root.dismissImmediately()
     return true
   }
@@ -764,7 +765,8 @@ PopupWindow {
                   ? index * (root.tileWidth + root.tileSpacing) : 0
                 y: root.orientationHorizontal
                   ? 0 : index * (root.tileHeight + root.tileSpacing)
-                onActivateRequested: toplevel => root.activateToplevel(toplevel)
+                onActivateRequested: (toplevel, pullToDockMonitor) =>
+                  root.activateToplevel(toplevel, pullToDockMonitor)
                 onCloseRequested: toplevel => root.closeToplevel(toplevel)
               }
             }

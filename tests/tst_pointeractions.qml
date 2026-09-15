@@ -76,7 +76,10 @@ TestCase {
 
     compare(DockModel.resolveApplicationPointerAction(config, "left", {
       control: true
-    }), "none")
+    }), "focus-or-launch")
+    compare(DockModel.resolveApplicationPointerAction(config, "middle", {
+      control: true
+    }), "focus-or-launch")
     compare(DockModel.resolveApplicationPointerAction(config, "left", {
       alt: true
     }), "none")

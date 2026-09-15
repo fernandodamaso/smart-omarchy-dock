@@ -21,7 +21,7 @@ Item {
   property bool compactActivityLayout: false
   property url fallbackArtwork: ""
   property bool captureStopped: false
-  signal activateRequested(var toplevel)
+  signal activateRequested(var toplevel, bool pullToDockMonitor)
   signal closeRequested(var toplevel)
 
   readonly property var windowState: root.windowActions
@@ -42,7 +42,7 @@ Item {
   Accessible.role: Accessible.Button
   Accessible.name: root.titleText + ", " + root.statusText
   Accessible.description: "Focus or restore this application window"
-  Accessible.onPressAction: root.activateRequested(root.toplevel)
+  Accessible.onPressAction: root.activateRequested(root.toplevel, false)
 
   BorderSurface {
     anchors.fill: parent
@@ -224,7 +224,11 @@ Item {
     anchors.fill: parent
     anchors.rightMargin: closeButton.width + 10
     cursorShape: Qt.PointingHandCursor
-    onClicked: root.activateRequested(root.toplevel)
+    onClicked: mouse => {
+      var keys = mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier
+        | Qt.AltModifier | Qt.MetaModifier)
+      root.activateRequested(root.toplevel, keys === Qt.ControlModifier)
+    }
   }
 
   Component.onDestruction: preview.captureSource = null
