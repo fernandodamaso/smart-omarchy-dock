@@ -210,6 +210,19 @@ function normalizeApplicationIds(value) {
   return normalized
 }
 
+function normalizeMonitorConnectors(value) {
+  if (!Array.isArray(value)) return []
+  var normalized = []
+  for (var i = 0; i < value.length; ++i) {
+    if (typeof value[i] !== "string" || !value[i]
+        || value[i] !== value[i].trim() || /[\x00-\x1f\x7f]/.test(value[i])
+        || normalized.indexOf(value[i]) >= 0)
+      return []
+    normalized.push(value[i])
+  }
+  return normalized
+}
+
 function addHiddenApplication(ids, desktopId) {
   var normalized = normalizeApplicationIds(ids)
   var id = String(desktopId === undefined || desktopId === null
@@ -408,6 +421,7 @@ function settingsDefaults() {
     sortByWorkspace: false,
     workspaceLayout: "flat",
     workspaceMonitorScope: "all",
+    workspaceMonitorOrder: [],
     groupWindows: true,
     interfaceAnimationsEnabled: true,
     browserProfileBadgesEnabled: true
@@ -551,6 +565,8 @@ function normalizeSetting(key, value) {
     return steppedNumber(value, 0, 8, 1, defaults.borderWidth, 0)
   case "workspaceMonitorScope":
     return value === "current-monitor" ? "current-monitor" : "all"
+  case "workspaceMonitorOrder":
+    return normalizeMonitorConnectors(value)
   case "workspaceLayout":
     return value === "grouped" ? "grouped" : "flat"
   case "position":

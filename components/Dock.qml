@@ -258,6 +258,8 @@ PanelWindow {
     "sortByWorkspace", settings.sortByWorkspace)
   readonly property string workspaceMonitorScope: DockModel.normalizeSetting(
     "workspaceMonitorScope", settings.workspaceMonitorScope)
+  readonly property var workspaceMonitorOrder: DockModel.normalizeSetting(
+    "workspaceMonitorOrder", settings.workspaceMonitorOrder)
   readonly property bool groupWindows: DockModel.normalizeSetting(
     "groupWindows", settings.groupWindows)
   readonly property string windowScope: DockWindowModel.normalizeWindowScope(
@@ -406,6 +408,7 @@ PanelWindow {
           false, groupWindows, hiddenApplications), records, hyprWorkspaces, {
           monitor: DockWindowModel.monitorIdentity(monitor),
           monitorScope: workspaceMonitorScope,
+          monitorOrder: workspaceMonitorOrder,
           activeWorkspace: workspaceMonitorScope === "all" ? focusedScopeWorkspace
             : DockWindowModel.workspaceIdentity(ipc.activeWorkspace
             || (monitor ? monitor.activeWorkspace : null)),
@@ -584,6 +587,7 @@ PanelWindow {
   onVisibleChanged: if (!visible) root.cancelWorkspaceGesture("surface hidden")
   onPinnedChanged: root.scheduleVisibleItemsRefresh()
   onWorkspaceMonitorScopeChanged: root.scheduleVisibleItemsRefresh()
+  onWorkspaceMonitorOrderChanged: root.scheduleVisibleItemsRefresh()
   onFocusedScopeWorkspaceChanged: root.scheduleVisibleItemsRefresh()
   onSortByWorkspaceChanged: root.scheduleVisibleItemsRefresh()
   onGroupedChanged: {

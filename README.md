@@ -283,7 +283,7 @@ preserved in this repository.
 ## Configure
 
 The [CLI reference](docs/CLI_REFERENCE.md) describes commands, JSON fields and
-errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 43
+errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 44
 settings, declared defaults and dependencies. Both ship beside the offline
 [agent guide](docs/AGENT_CONFIGURATION.md). Its recipes are executed against
 the real CLI parser and production host/model harness in the existing CI;
@@ -299,6 +299,7 @@ smartdock status --json
 smartdock config schema --json
 smartdock config get --json
 smartdock config set iconSize 48 --json
+smartdock config set workspaceMonitorOrder '["HDMI-A-1","DP-1"]' --json
 smartdock agent-guide
 ```
 
@@ -379,6 +380,9 @@ apply. Read the running host's schema/defaults and preserve the user's values:
   "scrollAction": "none",
   "controlCommand": "omarchy-menu toggle apps",
   "sortByWorkspace": false,
+  "workspaceLayout": "flat",
+  "workspaceMonitorScope": "all",
+  "workspaceMonitorOrder": [],
   "groupWindows": true,
   "interfaceAnimationsEnabled": true,
   "attentionBadgesEnabled": true,
@@ -423,6 +427,7 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 | `fullLength` | Fill the screen width, or height for a vertical dock |
 | `workspaceLayout` | `flat` (default) or `grouped` workspace cards; grouped applies to top/bottom and scrolls when crowded |
 | `workspaceMonitorScope` | Grouped cards: `all` (default) mirrors workspaces across docks; `current-monitor` shows only each dock’s monitor |
+| `workspaceMonitorOrder` | Grouped/all monitor section order by exact connector name. `[]` uses automatic physical x/y order; saved disconnected connectors remain stored for reconnect. |
 | `reserveSpace` | When `true` and `autoHide` is `false`, tiled windows stop beside the visible dock; hidden auto-hide docks do not reserve space |
 | `autoHide` | Hide the dock until the pointer reaches its screen edge; can also be toggled from the right-click menu |
 | `clickAction` | Action for an unmodified Left click; defaults to legacy-compatible `focus-or-launch` |
@@ -702,6 +707,17 @@ default. Missing/invalid values and `config reset workspaceMonitorScope` use all
 existing settings need no migration. This setting affects grouped layouts only;
 flat layouts keep their existing window scope. Clicking a remote workspace or
 app focuses it where it lives without moving it.
+
+With grouped `workspaceMonitorScope: all`, `workspaceMonitorOrder` controls only
+the visual order of monitor sections; it never moves a Hyprland monitor or
+workspace. The default `[]` uses automatic physical order by finite monitor `x`,
+then `y`, with deterministic connector/identity ties and monitors lacking usable
+positions after positioned monitors. A saved connector list such as
+`["HDMI-A-1","DP-1"]` puts those connected monitors first; other connected
+monitors append automatically. Saved disconnected connector names remain stored
+and resume their configured position after reconnect. Flat and `current-monitor`
+layouts retain the value but do not use it visually. Reset automatic ordering
+with `smartdock config reset workspaceMonitorOrder --json`.
 
 Every normal workspace in the selected scope always shows all its app icons inside a rounded translucent card, including inactive workspaces. Cards use narrow workspace labels and a subtle tint across the active group; the label and card styling identify focus. Window counts remain in the header tooltip. Click a header to switch workspaces. Empty workspaces retain their header. Closed pinned launchers and **Other windows** (unknown/special membership) stay outside normal cards. With `current-monitor`, known windows on another monitor are excluded. Window actions and previews use only the item's members; hide and launcher pinning remain application-wide. Pinned reordering and redundant per-icon workspace labels are disabled in grouped mode; running-window dragging is described below.
 
