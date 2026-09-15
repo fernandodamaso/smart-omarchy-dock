@@ -8,6 +8,10 @@ usage() {
 
 cmd=${1:-}
 [[ -n "$cmd" ]] || usage
+case "$cmd" in
+  start-compositor|env|capture|start-dock|stop-dock) ;;
+  *) usage ;;
+esac
 
 name=${SMARTDOCK_SESSION_NAME:?SMARTDOCK_SESSION_NAME is required}
 candidate=${SMARTDOCK_CANDIDATE:-/home/admin/smartdock-candidate}
@@ -29,6 +33,8 @@ require_kvm_guest() {
       ;;
     esac
 }
+
+require_kvm_guest
 
 state_root="${XDG_STATE_HOME:-$HOME/.local/state}/smartdock/dev-sessions/${name}"
 runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -121,7 +127,6 @@ PY
 }
 
 start_compositor() {
-  require_kvm_guest
   mkdir -p "$state_root"
   chmod 700 "$state_root"
   mkdir -p "$runtime_dir"
@@ -222,7 +227,6 @@ capture() {
 }
 
 start_dock() {
-  require_kvm_guest
   mapfile -t ready_fields < <(load_ready)
   export WAYLAND_DISPLAY="${ready_fields[0]}"
   export HYPRLAND_INSTANCE_SIGNATURE="${ready_fields[1]}"

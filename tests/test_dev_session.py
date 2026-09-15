@@ -475,6 +475,47 @@ class SourceSyncTests(unittest.TestCase):
                         sync_source(self.record)
         self.assertEqual(read_record("agent-sync")["source_digest"], "prior-digest")
 
+    def test_stop_during_sync_does_not_resurrect_record(self):
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            start_new_session=True,
+        )
+        try:
+            ident = process_identity(proc.pid)
+            self.record.update(
+                {
+                    "qemu_pid": ident["pid"],
+                    "qemu_start_ticks": ident["start_ticks"],
+                    "qemu_pgid": ident["pgid"],
+                }
+            )
+            (self.session / "record.json").write_text(
+                json.dumps(self.record), encoding="utf-8"
+            )
+
+            def fake_scp(_record, local, _remote):
+                Path(local).touch(exist_ok=True)
+
+            def fake_ssh(_record, command, _timeout):
+                self.assertEqual(stop("agent-sync")["state"], "stopped")
+                _, digest = source_manifest(self.source)
+                return subprocess.CompletedProcess(
+                    command, 0, stdout=digest + "\n", stderr=""
+                )
+
+            with mock.patch("dev_session._scp_to_guest", side_effect=fake_scp):
+                with mock.patch("dev_session._run_ssh", side_effect=fake_ssh):
+                    with self.assertRaisesRegex(ValueError, r"state 'stopped'"):
+                        sync_source(self.record)
+            latest = read_record("agent-sync")
+            self.assertEqual(latest["state"], "stopped")
+            self.assertEqual(latest["source_digest"], "prior-digest")
+            self.assertIsNotNone(proc.poll())
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                proc.wait(timeout=5)
+
     def test_archive_rejects_file_changed_after_inventory(self):
         real_manifest = source_manifest
 
@@ -586,7 +627,7 @@ class GuestExecCaptureTests(unittest.TestCase):
                         guest_capture("agent-exec")
 
     def test_exec_and_capture_reject_stopped_or_failed(self):
-        for state in ("stopped", "failed"):
+        for state in ("stopped", "failed", "stopping"):
             self.record["state"] = state
             (self.session / "record.json").write_text(
                 json.dumps(self.record), encoding="utf-8"
@@ -877,6 +918,25 @@ class GuestControlHostGuardTests(unittest.TestCase):
         result = self.run_control("start-compositor")
         self.assertNotEqual(result.returncode, 0)
         self.assertRegex(result.stderr, r"refuses to run on the host")
+
+    def test_env_capture_and_stop_dock_refuse_on_host(self):
+        for cmd in ("env", "capture", "stop-dock"):
+            result = subprocess.run(
+                ["bash", str(GUEST_CONTROL_SH), cmd]
+                + (["/tmp/smartdock-host-capture.png"] if cmd == "capture" else []),
+                capture_output=True,
+                text=True,
+                env={
+                    **os.environ,
+                    "SMARTDOCK_SESSION_NAME": "agent-guard",
+                    "SMARTDOCK_CANDIDATE": "/home/admin/smartdock-candidate",
+                    "SMARTDOCK_SESSION_MODE": "standalone",
+                },
+                timeout=5,
+            )
+            self.assertNotEqual(result.returncode, 0, cmd)
+            self.assertRegex(result.stderr, r"refuses to run on the host", cmd)
+            self.assertNotRegex(result.stderr, r"missing.*ready", cmd)
 
 
 class GuestTargetingStatusTests(unittest.TestCase):

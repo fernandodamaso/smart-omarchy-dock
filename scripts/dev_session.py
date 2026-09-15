@@ -271,26 +271,62 @@ def read_record(name: str) -> dict:
         return _read_record_unlocked(name)
 
 
-def _write_record(record: dict) -> None:
+def _qemu_identity(record: dict) -> tuple:
+    return (
+        record.get("qemu_pid"),
+        record.get("qemu_start_ticks"),
+        record.get("qemu_pgid"),
+    )
+
+
+def _write_record_unlocked(record: dict) -> None:
     name = validate_name(record.get("name", ""))
     _validate_record(name, record)
     session = session_dir(name)
     session.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=session,
+        prefix=".record.",
+        delete=False,
+    ) as temp:
+        json.dump(record, temp, indent=2, sort_keys=True)
+        temp.write("\n")
+        temp.flush()
+        os.fsync(temp.fileno())
+        temp_path = Path(temp.name)
+    os.chmod(temp_path, 0o600)
+    os.replace(temp_path, session / "record.json")
+
+
+def _write_record(record: dict) -> None:
+    name = validate_name(record.get("name", ""))
+    session = session_dir(name)
+    session.mkdir(mode=0o700, parents=True, exist_ok=True)
     with _flock(session / "record.lock"):
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=session,
-            prefix=".record.",
-            delete=False,
-        ) as temp:
-            json.dump(record, temp, indent=2, sort_keys=True)
-            temp.write("\n")
-            temp.flush()
-            os.fsync(temp.fileno())
-            temp_path = Path(temp.name)
-        os.chmod(temp_path, 0o600)
-        os.replace(temp_path, session / "record.json")
+        _write_record_unlocked(record)
+
+
+def _commit_live_record(updated: dict, *, allowed_states: set[str]) -> dict:
+    """Write UPDATED only if NAME is still live with the same QEMU identity."""
+    name = validate_name(updated.get("name", ""))
+    expected = _qemu_identity(updated)
+    session = session_dir(name)
+    session.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with _flock(session / "record.lock"):
+        current = _read_record_unlocked(name)
+        current_state = current.get("state")
+        if current_state not in allowed_states:
+            raise ValueError(
+                f"cannot update session {name!r} in state {current_state!r}"
+            )
+        if _qemu_identity(current) != expected:
+            raise ValueError(
+                f"cannot update session {name!r}: QEMU identity changed"
+            )
+        _write_record_unlocked(updated)
+    return updated
 
 
 def owned_process(record: dict) -> bool:
@@ -1016,7 +1052,7 @@ def sync_source(record: dict) -> str:
         latest["target"] = "guest"
         latest["guest_config_path"] = GUEST_CONFIG_PATH
         latest["error"] = "dock invalidated by source sync; restart through guest host contract"
-    _write_record(latest)
+    _commit_live_record(latest, allowed_states={"starting", "ready"})
     return digest
 
 
@@ -1028,7 +1064,7 @@ def _require_runnable_session(name: str) -> dict:
     name = validate_name(name)
     record = read_record(name)
     state = record.get("state")
-    if state in {"stopped", "failed"}:
+    if state not in {"starting", "ready"}:
         raise ValueError(f"cannot use session {name!r} in state {state!r}")
     if not owned_process(record):
         raise ValueError(f"cannot use session {name!r}: owned QEMU is not running")
@@ -1117,7 +1153,7 @@ def guest_capture(name: str) -> Path:
     record["guest_display"] = ready["wayland_display"]
     record["guest_signature"] = ready["hyprland_instance_signature"]
     record["guest_output"] = ready["output"]
-    _write_record(record)
+    _commit_live_record(record, allowed_states={"starting", "ready"})
     remote_png = f"/tmp/smartdock-capture-{record['name']}.png"
     runtime = ready.get("xdg_runtime_dir") or "/run/user/1000"
     command = " ".join(
@@ -1493,7 +1529,7 @@ def start_guest_dock(name: str) -> dict:
     record["config_path"] = GUEST_CONFIG_PATH
     record["guest_config_path"] = GUEST_CONFIG_PATH
     record["target"] = "guest"
-    _write_record(record)
+    _commit_live_record(record, allowed_states={"starting", "ready"})
     _stop_guest_dock(record)
     if record.get("mode") == "plugin":
         inspected = stage_omarchy_plugin_host(record)
@@ -1528,7 +1564,7 @@ def start_guest_dock(name: str) -> dict:
     if payload.get("config_path"):
         record["config_path"] = str(payload["config_path"])
         record["guest_config_path"] = str(payload["config_path"])
-    _write_record(record)
+    _commit_live_record(record, allowed_states={"starting", "ready"})
     deadline = time.monotonic() + 45
     last_error = "guest dock did not become loaded"
     qualified = None
@@ -1544,7 +1580,7 @@ def start_guest_dock(name: str) -> dict:
         raise RuntimeError(last_error)
     record["state"] = "ready"
     record["error"] = None
-    _write_record(record)
+    _commit_live_record(record, allowed_states={"starting", "ready"})
     evidence = Path(record["evidence_path"])
     (evidence / "guest-dock-status.json").write_text(
         json.dumps(
@@ -1579,7 +1615,7 @@ def guest_dock(name: str, argv: list[str]) -> int:
         record["error"] = (
             f"recorded guest dock pid {host_pid} is gone; not guessing a replacement"
         )
-        _write_record(record)
+        _commit_live_record(record, allowed_states={"ready"})
         raise RuntimeError(record["error"])
     return guest_exec(name, dock_argv(record, argv))
 
