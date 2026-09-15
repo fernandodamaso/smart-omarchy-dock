@@ -201,9 +201,10 @@ Item {
     var activationMonitor = request.activationMonitor || ""
     switch (action) {
     case "cycle-windows":
+      // Scrolling retains its monitor pull; Ctrl only gates click activation.
       return root.windowActions.cycleToplevels(
         root.runningToplevels, request.direction, root.windowActions.activeToplevel,
-        root.originOnly, activationMonitor)
+        root.originOnly, root.activationMonitor)
     case "minimize-restore":
       return root.windowActions.minimizeRestoreToplevels(root.runningToplevels, root.originOnly)
     case "previews":
