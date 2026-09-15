@@ -18,14 +18,15 @@ function methods(file, properties) {
 
 const DockModel = model('DockModel.js')
 const DockWindowModel = model('DockWindowModel.js', { DockModel })
+const FullscreenModel = model('DockFullscreenModel.js')
 const MenuModel = model('DockMenuModel.js')
 
 const normal = { fullscreen: 0, fullscreenClient: 0 }
 const keepBars = { fullscreen: 1, fullscreenClient: 0 }
 const hideBars = { fullscreen: 2, fullscreenClient: 2 }
-assert.equal(DockModel.fullscreenMode(normal), 'normal')
-assert.equal(DockModel.fullscreenMode(keepBars), 'keep-bars')
-assert.equal(DockModel.fullscreenMode(hideBars), 'hide-bars')
+assert.equal(FullscreenModel.mode(normal), 'normal')
+assert.equal(FullscreenModel.mode(keepBars), 'keep-bars')
+assert.equal(FullscreenModel.mode(hideBars), 'hide-bars')
 
 const transitions = [
   ['normal', 'keep-bars', 'keep-bars'],
@@ -36,19 +37,19 @@ const transitions = [
   ['hide-bars', 'keep-bars', 'keep-bars']
 ]
 for (const [current, selected, expected] of transitions)
-  assert.equal(DockModel.fullscreenTargetMode(current, selected), expected,
+  assert.equal(FullscreenModel.targetMode(current, selected), expected,
     `${current} + ${selected} -> ${expected}`)
 
 assert.equal(
-  DockModel.fullscreenModeRequest('0xaaa', 'keep-bars', true),
+  FullscreenModel.request('0xaaa', 'keep-bars', true),
   'hl.dsp.window.fullscreen_state({ internal = 1, client = 0, action = "set", window = "address:0xaaa" })')
 assert.equal(
-  DockModel.fullscreenModeRequest('0xaaa', 'hide-bars', true),
+  FullscreenModel.request('0xaaa', 'hide-bars', true),
   'hl.dsp.window.fullscreen_state({ internal = 2, client = 2, action = "set", window = "address:0xaaa" })')
 assert.equal(
-  DockModel.fullscreenModeRequest('0xaaa', 'normal', true),
+  FullscreenModel.request('0xaaa', 'normal', true),
   'hl.dsp.window.fullscreen_state({ internal = 0, client = 0, action = "set", window = "address:0xaaa" })')
-assert.equal(DockModel.fullscreenModeRequest('0xaaa', 'hide-bars', false), '',
+assert.equal(FullscreenModel.request('0xaaa', 'hide-bars', false), '',
   'non-Lua fallback must not retarget the focused window implicitly')
 
 const windows = [
@@ -84,15 +85,23 @@ const actions = methods('DockWindowActions.qml', {
     dispatch: request => requests.push(request)
   }
 })
+const context = methods('DockContextActionController.qml', {
+  FullscreenModel,
+  windowActions: actions,
+  Hyprland: actions.Hyprland
+})
 
-assert.equal(actions.setFullscreenMode(windows[0], 'hide-bars'), true)
+const targetA = { toplevel: windows[0], address: '0x1' }
+const targetB = { toplevel: windows[1], address: '0x2' }
+const represented = [targetA, targetB]
+assert.equal(context.setFullscreenMode(targetA, 'hide-bars'), true)
 assert.deepEqual(requests, [
   'hl.dsp.window.fullscreen_state({ internal = 2, client = 2, action = "set", window = "address:0x1" })'
 ], 'fullscreen must address Window A, never its sibling')
 requests.length = 0
 handles[0].lastIpcObject.fullscreen = 2
 handles[0].lastIpcObject.fullscreenClient = 2
-assert.equal(actions.setFullscreenMode(windows[0], 'hide-bars'), true)
+assert.equal(context.setFullscreenMode(targetA, 'hide-bars'), true)
 assert.deepEqual(requests, [
   'hl.dsp.window.fullscreen_state({ internal = 0, client = 0, action = "set", window = "address:0x1" })'
 ], 'selecting the active mode restores only Window A')
@@ -104,16 +113,16 @@ handles[1].lastIpcObject.workspace = { name: 'special:smartdock-minimized' }
 actions.minimizedOrigins = {
   '0x2': { workspace: '3', monitor: '0' }
 }
-assert.equal(actions.minimizeVisibleToplevels(windows.slice(0, 2), true), true)
+assert.equal(context.minimizeVisible(represented, true), true)
 assert.equal(requests.length, 1)
 assert.match(requests[0], /address:0x1/)
 assert.doesNotMatch(requests[0], /address:0x3/)
 requests.length = 0
-assert.equal(actions.restoreMinimizedToplevels(windows.slice(0, 2), true), true)
+assert.equal(context.restoreMinimized(represented, true), true)
 assert.equal(requests.length, 1)
 assert.match(requests[0], /address:0x2/)
 assert.doesNotMatch(requests[0], /address:0x3/)
-assert.equal(actions.closeToplevels(windows.slice(0, 2)), true)
+assert.equal(context.closeRepresented(represented), true)
 assert.equal(windows[0].closeCount, 1)
 assert.equal(windows[1].closeCount, 1)
 assert.equal(windows[2].closeCount, 0)

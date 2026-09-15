@@ -112,3 +112,69 @@ function contentYForRow(contentY, viewportHeight, rowY, rowHeight, contentHeight
 
   return Math.min(maximum, current)
 }
+
+function shellQuote(value) {
+  return "'" + String(value === undefined || value === null ? "" : value)
+    .replace(/'/g, "'\"'\"'") + "'"
+}
+
+function iconCommandSpec(options) {
+  var value = options || ({})
+  var runtime = String(value.runtime || "")
+  var instance = String(value.instance || "")
+  var desktopId = String(value.desktopId || "")
+  var profile = String(value.profile || "")
+  var action = String(value.action || "")
+
+  if (["plugin", "standalone"].indexOf(runtime) < 0
+      || !instance || !desktopId
+      || ["set", "reset", "reload"].indexOf(action) < 0)
+    return { argv: [], text: "" }
+
+  var argv = [
+    "smartdock", "--runtime", runtime, "--instance", instance,
+    "icons", action, desktopId
+  ]
+  if (action === "set") argv.push("<IMAGE_PATH>")
+  if (profile) argv.push("--profile", profile)
+
+  return {
+    argv: argv,
+    text: argv.map(shellQuote).join(" ")
+  }
+}
+
+function mutationPresentation(reply) {
+  var value = reply || ({})
+  var data = value.data || ({})
+  var error = value.error || ({})
+  var writeState = String(data.writeState || "")
+  var applied = data.applied === true
+  var persisted = data.persisted === true
+
+  if (value.ok === true && persisted) {
+    return {
+      state: "saved",
+      durable: true,
+      applied: applied,
+      message: "Saved."
+    }
+  }
+
+  if ((String(error.code || "") === "E_BUSY" || writeState === "saving")
+      && applied && !persisted) {
+    return {
+      state: "pending",
+      durable: false,
+      applied: true,
+      message: String(error.message || "Change applied; saving is still in progress.")
+    }
+  }
+
+  return {
+    state: "error",
+    durable: false,
+    applied: applied,
+    message: String(error.message || "The change could not be saved.")
+  }
+}

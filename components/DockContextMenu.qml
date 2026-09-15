@@ -3,10 +3,12 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
 import "DockMenuModel.js" as DockMenuModel
+import "DockFullscreenModel.js" as FullscreenModel
 
 PopupWindow {
   id: root
@@ -37,7 +39,22 @@ PopupWindow {
   property int activeMenuIndex: -1
   property real entranceOpacity: 0
   property real entranceOffset: 0
+  property string feedbackTitle: ""
+  property string feedbackText: ""
+  property string pendingMutationAction: ""
+  property string pendingMutationLabel: ""
+  property string copyProfileDirectory: ""
+  property string pendingClipboardText: ""
 
+  readonly property string desktopId: !root.controlItem && root.anchorItem
+    ? String(root.anchorItem.desktopId || "") : ""
+  readonly property string applicationName: {
+    if (root.controlItem) return "Dock Controls"
+    var entry = root.anchorItem ? root.anchorItem.entry : null
+    return entry && entry.name ? String(entry.name) : root.desktopId
+  }
+  readonly property var applicationMutationController:
+    contextActions.applicationMutationController
   readonly property var selectedHandle:
     root.windowActions.handleFor(selectedToplevel)
   readonly property var selectedInfo: selectedHandle
@@ -48,7 +65,7 @@ PopupWindow {
     return root.windowActions.isMinimized(selectedToplevel)
   }
   readonly property bool selectedFakeFullscreen:
-    DockModel.isFakeFullscreen(selectedInfo)
+    FullscreenModel.mode(selectedInfo) === "keep-bars"
   readonly property int selectedWorkspaceId: {
     var workspace = selectedInfo.workspace
       || (selectedHandle ? selectedHandle.workspace : null)
@@ -60,56 +77,67 @@ PopupWindow {
     DockModel.windowStateCounts(runningWindowStates)
   readonly property int minimizedCount: runningWindowCounts.minimized
   readonly property int visibleWindowCount: runningWindowCounts.visible
-  readonly property var pageActions: buildPageActions()
+  readonly property var pageActions: decorateWithFeedback(buildPageActions())
+
+  DockContextActionController {
+    id: contextActions
+    windowActions: root.windowActions
+  }
 
   onRunningToplevelsChanged: {
-    // The open menu owns captured QObject/address identities. Any membership
-    // change invalidates that snapshot rather than silently retargeting a row.
-    if (visible)
-      dismiss()
+    // Captured exact identities are invalid after any membership change.
+    if (visible) root.dismiss()
   }
 
   function open() {
-    openGeneration += 1
-    targetContexts = buildTargetContexts()
-    pageStack = []
-    pageTarget = targetContexts.length === 1 ? targetContexts[0] : null
-    page = DockMenuModel.initialPage(
-      root.controlItem, targetContexts.length, pageTarget !== null)
-
-    entranceOpacity = interfaceAnimationsEnabled ? 0 : 1
-    entranceOffset = interfaceAnimationsEnabled ? 6 : 0
+    root.openGeneration += 1
+    root.targetContexts = root.buildTargetContexts()
+    root.pageStack = []
+    root.pageTarget = root.targetContexts.length === 1
+      ? root.targetContexts[0] : null
+    root.page = DockMenuModel.initialPage(
+      root.controlItem, root.targetContexts.length, root.pageTarget !== null)
+    root.feedbackTitle = ""
+    root.feedbackText = ""
+    root.pendingMutationAction = ""
+    root.pendingMutationLabel = ""
+    root.copyProfileDirectory = ""
+    root.entranceOpacity = root.interfaceAnimationsEnabled ? 0 : 1
+    root.entranceOffset = root.interfaceAnimationsEnabled ? 6 : 0
     visible = true
-    if (interfaceAnimationsEnabled) Qt.callLater(function() {
-      if (visible) {
-        entranceOpacity = 1
-        entranceOffset = 0
+    if (root.interfaceAnimationsEnabled) Qt.callLater(function() {
+      if (root.visible) {
+        root.entranceOpacity = 1
+        root.entranceOffset = 0
       }
     })
-    Qt.callLater(resetActiveMenuIndex)
+    Qt.callLater(root.resetActiveMenuIndex)
     if (menuSurface) menuSurface.forceActiveFocus()
   }
 
   function dismiss() {
     visible = false
-    entranceOpacity = 0
-    entranceOffset = 0
-    page = "app"
-    pageStack = []
-    targetContexts = []
-    pageTarget = null
-    activeMenuIndex = -1
+    root.entranceOpacity = 0
+    root.entranceOffset = 0
+    root.page = "app"
+    root.pageStack = []
+    root.targetContexts = []
+    root.pageTarget = null
+    root.activeMenuIndex = -1
+    root.feedbackTitle = ""
+    root.feedbackText = ""
+    root.pendingMutationAction = ""
+    root.pendingMutationLabel = ""
+    root.copyProfileDirectory = ""
   }
 
   function targetContextFor(toplevel, index) {
     if (!toplevel) return null
-
     var address = root.windowActions.addressFor(toplevel)
-    var key = address !== ""
-      ? "address:" + address
-      : "snapshot:" + root.openGeneration + ":" + index
     return {
-      key: key,
+      key: address !== ""
+        ? "address:" + address
+        : "snapshot:" + root.openGeneration + ":" + index,
       toplevel: toplevel,
       address: address
     }
@@ -118,9 +146,8 @@ PopupWindow {
   function buildTargetContexts() {
     var targets = []
     for (var i = 0; i < root.runningToplevels.length; ++i) {
-      var target = targetContextFor(root.runningToplevels[i], i)
-      if (target)
-        targets.push(target)
+      var target = root.targetContextFor(root.runningToplevels[i], i)
+      if (target) targets.push(target)
     }
     return targets
   }
@@ -129,29 +156,29 @@ PopupWindow {
     return DockMenuModel.targetIsCurrent(
       targetContext,
       root.runningToplevels,
-      function(toplevel) {
-        return root.windowActions.addressFor(toplevel)
-      })
+      function(toplevel) { return root.windowActions.addressFor(toplevel) })
+  }
+
+  function allTargetsAreValid() {
+    if (root.targetContexts.length === 0) return false
+    for (var i = 0; i < root.targetContexts.length; ++i) {
+      if (!root.targetIsValid(root.targetContexts[i])) return false
+    }
+    return true
   }
 
   function targetHandle(targetContext) {
-    if (!targetContext || !targetIsValid(targetContext)) return null
+    if (!targetContext || !root.targetIsValid(targetContext)) return null
     return root.windowActions.handleFor(targetContext.toplevel)
   }
 
   function targetInfo(targetContext) {
-    var handle = targetHandle(targetContext)
+    var handle = root.targetHandle(targetContext)
     return handle ? handle.lastIpcObject || ({}) : ({})
   }
 
-  function targetWorkspaceId(targetContext) {
-    var handle = targetHandle(targetContext)
-    if (!handle) return -1
-
-    var info = handle.lastIpcObject || ({})
-    var workspace = info.workspace || handle.workspace || null
-    var id = Number(workspace ? workspace.id : -1)
-    return Number.isInteger(id) ? id : -1
+  function targetFullscreenMode(targetContext) {
+    return FullscreenModel.mode(root.targetInfo(targetContext))
   }
 
   function targetTitle(targetContext, fallbackIndex) {
@@ -161,36 +188,70 @@ PopupWindow {
       || "Window " + (fallbackIndex + 1)
   }
 
-  function targetStatusLabel(targetContext) {
-    if (!targetContext || !targetContext.toplevel) return ""
-    return windowStatusLabel(targetContext.toplevel)
+  function windowState(toplevel) {
+    return root.windowActions.windowState(toplevel)
   }
 
-  function targetSubtitle(targetContext, fallbackIndex) {
-    var title = targetTitle(targetContext, fallbackIndex)
-    var workspaceId = targetWorkspaceId(targetContext)
-    var suffix = workspaceId > 0 ? " · Workspace " + workspaceId : ""
-    return title + suffix
+  function buildWindowStates() {
+    var originsRevision = root.windowActions.minimizedOriginsSnapshot
+    var states = []
+    for (var i = 0; i < root.runningToplevels.length; ++i)
+      states.push(root.windowState(root.runningToplevels[i]))
+    return states
+  }
+
+  function windowStatusLabel(toplevel) {
+    return DockModel.windowStatusLabel(root.windowState(toplevel))
   }
 
   function targetMinimized(targetContext) {
-    if (!targetContext || !targetIsValid(targetContext)) return false
+    if (!targetContext || !root.targetIsValid(targetContext)) return false
     var originsRevision = root.windowActions.minimizedOriginsSnapshot
     return root.windowActions.isMinimized(targetContext.toplevel)
   }
 
-  function targetFakeFullscreen(targetContext) {
-    if (!targetContext || !targetIsValid(targetContext)) return false
-    return DockModel.isFakeFullscreen(targetInfo(targetContext))
+  function workspaceLabel(targetContext) {
+    if (!targetContext || !root.targetIsValid(targetContext)) return ""
+    var state = root.windowState(targetContext.toplevel)
+    var workspace = String(state.workspace || "")
+    if (workspace.indexOf("name:") === 0) workspace = workspace.slice(5)
+    return workspace ? "Workspace " + workspace : ""
+  }
+
+  function representedWorkspaceLabel() {
+    var label = ""
+    for (var i = 0; i < root.targetContexts.length; ++i) {
+      var current = root.workspaceLabel(root.targetContexts[i])
+      if (!current) continue
+      if (!label) label = current
+      else if (current !== label) return "Multiple workspaces"
+    }
+    return label
+  }
+
+  function profileDirectoryForTarget(targetContext) {
+    if (root.controlItem || !root.anchorItem) return ""
+    var service = root.anchorItem.browserProfileService
+    if (targetContext && targetContext.address && service
+        && typeof service.profileKeyForAddress === "function") {
+      var exact = String(service.profileKeyForAddress(targetContext.address) || "")
+      if (exact) return exact
+    }
+    return String(root.anchorItem.browserProfileKey || "")
   }
 
   function pushPage(nextPage, targetContext) {
     root.pageStack = root.pageStack.concat([{
       page: root.page,
-      targetContext: root.pageTarget
+      targetContext: root.pageTarget,
+      copyProfileDirectory: root.copyProfileDirectory
     }])
     root.pageTarget = targetContext || null
+    if (nextPage === "copy-command")
+      root.copyProfileDirectory = root.profileDirectoryForTarget(targetContext)
     root.page = nextPage
+    root.feedbackTitle = ""
+    root.feedbackText = ""
     Qt.callLater(root.resetActiveMenuIndex)
   }
 
@@ -199,17 +260,19 @@ PopupWindow {
       root.dismiss()
       return false
     }
-
     var previous = root.pageStack[root.pageStack.length - 1]
     root.pageStack = root.pageStack.slice(0, root.pageStack.length - 1)
     root.pageTarget = previous.targetContext || null
+    root.copyProfileDirectory = String(previous.copyProfileDirectory || "")
     root.page = previous.page
+    root.feedbackTitle = ""
+    root.feedbackText = ""
     Qt.callLater(root.resetActiveMenuIndex)
     return true
   }
 
   function minimizeRestoreSelected() {
-    // Compatibility entry point used by the existing grouped-action harness.
+    // Compatibility entry point used by the grouped-action regression harness.
     var changed = root.selectedMinimized
       ? root.windowActions.restoreToplevel(root.selectedToplevel, root.originOnly)
       : root.windowActions.minimizeToplevel(root.selectedToplevel, root.originOnly)
@@ -218,37 +281,24 @@ PopupWindow {
   }
 
   function minimizeRestoreTarget(targetContext) {
-    if (!targetIsValid(targetContext)) {
+    if (!root.targetIsValid(targetContext)) {
       root.dismiss()
       return false
     }
-
-    var toplevel = targetContext.toplevel
-    var changed = targetMinimized(targetContext)
-      ? root.windowActions.restoreToplevel(toplevel, root.originOnly)
-      : root.windowActions.minimizeToplevel(toplevel, root.originOnly)
+    var changed = root.targetMinimized(targetContext)
+      ? root.windowActions.restoreToplevel(targetContext.toplevel, root.originOnly)
+      : root.windowActions.minimizeToplevel(targetContext.toplevel, root.originOnly)
+    if (!changed) {
+      root.feedbackTitle = "Window action failed"
+      root.feedbackText = "The selected window could not be minimized or restored."
+      return false
+    }
     root.dismiss()
-    return changed
+    return true
   }
 
   function selectedAddress() {
-    return root.windowActions.addressFor(selectedToplevel)
-  }
-
-  function windowState(toplevel) {
-    return root.windowActions.windowState(toplevel)
-  }
-
-  function buildWindowStates() {
-    var originsRevision = root.windowActions.minimizedOriginsSnapshot
-    var states = []
-    for (var i = 0; i < runningToplevels.length; ++i)
-      states.push(windowState(runningToplevels[i]))
-    return states
-  }
-
-  function windowStatusLabel(toplevel) {
-    return DockModel.windowStatusLabel(windowState(toplevel))
+    return root.windowActions.addressFor(root.selectedToplevel)
   }
 
   function dispatchRequest(request) {
@@ -258,139 +308,263 @@ PopupWindow {
   }
 
   function moveTargetToWorkspace(targetContext, workspace) {
-    if (!targetIsValid(targetContext)) {
+    if (!root.targetIsValid(targetContext)) {
       root.dismiss()
       return false
     }
-
     var request = DockModel.moveWindowRequest(
       targetContext.address, workspace, Hyprland.usingLua)
-    if (!request) return false
-
+    if (!request) {
+      root.feedbackTitle = "Move failed"
+      root.feedbackText = "The workspace target is no longer valid."
+      return false
+    }
     root.windowActions.forgetOrigin(targetContext.toplevel)
-    dispatchRequest(request)
-    dismiss()
+    root.dispatchRequest(request)
+    root.dismiss()
     return true
   }
 
-  function toggleTargetFakeFullscreen(targetContext) {
-    if (!targetIsValid(targetContext)) {
+  function setTargetFullscreenMode(targetContext, mode) {
+    if (!root.targetIsValid(targetContext)) {
       root.dismiss()
       return false
     }
-
-    var enable = !targetFakeFullscreen(targetContext)
-    var request = DockModel.fakeFullscreenRequest(
-      targetContext.address, enable, Hyprland.usingLua)
-    if (request) {
-      dispatchRequest(request)
-    } else if (targetContext.toplevel) {
-      targetContext.toplevel.maximized = enable
+    if (!contextActions.setFullscreenMode(targetContext, mode)) {
+      root.feedbackTitle = "Fullscreen failed"
+      root.feedbackText = "The compositor rejected the exact-window fullscreen request."
+      return false
     }
-    dismiss()
+    root.dismiss()
     return true
   }
 
-  function applicationActionRecords(prefix) {
+  function toggleSelectedFakeFullscreen() {
+    if (!root.pageTarget && root.selectedToplevel) {
+      root.pageTarget = root.targetContextFor(root.selectedToplevel, 0)
+    }
+    return root.setTargetFullscreenMode(root.pageTarget, "keep-bars")
+  }
+
+  function representedAction(command) {
+    if (!root.allTargetsAreValid()) {
+      root.dismiss()
+      return false
+    }
+    var changed = false
+    if (command === "minimize-visible")
+      changed = contextActions.minimizeVisible(root.targetContexts, root.originOnly)
+    else if (command === "restore-minimized")
+      changed = contextActions.restoreMinimized(root.targetContexts, root.originOnly)
+    else if (command === "close-represented")
+      changed = contextActions.closeRepresented(root.targetContexts)
+    if (!changed) {
+      root.feedbackTitle = "Group action failed"
+      root.feedbackText = "No represented window accepted the requested action."
+      return false
+    }
+    root.dismiss()
+    return true
+  }
+
+  function mutationLabel(action) {
+    if (action === "pin") return "Pin to Dock"
+    if (action === "unpin") return "Unpin from Dock"
+    return "Hide App from Dock"
+  }
+
+  function runApplicationMutation(action) {
+    var reply = contextActions.mutateApplication(action, root.desktopId)
+    var presentation = DockMenuModel.mutationPresentation(reply)
+    var label = root.mutationLabel(action)
+    root.feedbackTitle = label
+    if (presentation.state === "saved") {
+      root.feedbackText = label + " saved."
+      root.pendingMutationAction = ""
+      root.pendingMutationLabel = ""
+      return true
+    }
+    if (presentation.state === "pending") {
+      root.feedbackText = label + " applied for this session; saving…"
+      root.pendingMutationAction = action
+      root.pendingMutationLabel = label
+      return true
+    }
+    root.feedbackText = presentation.message
+    root.pendingMutationAction = ""
+    root.pendingMutationLabel = ""
+    return false
+  }
+
+  function refreshPendingMutationFeedback() {
+    if (!root.pendingMutationAction || !root.applicationMutationController) return
+    var controller = root.applicationMutationController
+    var state = String(controller.settingsWriteState || "")
+    if (state === "saved" && controller.settingsPersisted === true) {
+      root.feedbackTitle = root.pendingMutationLabel
+      root.feedbackText = root.pendingMutationLabel + " saved."
+      root.pendingMutationAction = ""
+      root.pendingMutationLabel = ""
+    } else if (state === "error") {
+      root.feedbackTitle = root.pendingMutationLabel + " failed"
+      root.feedbackText = String(controller.settingsWriteError || "The change could not be saved.")
+      root.pendingMutationAction = ""
+      root.pendingMutationLabel = ""
+    }
+  }
+
+  function iconCommandSpec(action) {
+    return DockMenuModel.iconCommandSpec({
+      runtime: contextActions.runtimeMode,
+      instance: contextActions.instanceId,
+      desktopId: root.desktopId,
+      profile: root.copyProfileDirectory,
+      action: action
+    })
+  }
+
+  function copyIconCommand(action) {
+    var spec = root.iconCommandSpec(action)
+    if (!spec || !spec.text) {
+      root.feedbackTitle = "Copy failed"
+      root.feedbackText = "The current host or application selector is not available."
+      return false
+    }
+    if (clipboardProcess.running) {
+      root.feedbackTitle = "Clipboard busy"
+      root.feedbackText = "Finish the current clipboard request before copying another command."
+      return false
+    }
+    root.pendingClipboardText = spec.text
+    root.feedbackTitle = "Copy Icon Command"
+    root.feedbackText = "Copying command to the clipboard…"
+    clipboardProcess.command = [
+      "omarchy-clipboard-paste-text", "--copy-only", spec.text
+    ]
+    clipboardProcess.running = true
+    return true
+  }
+
+  function applicationActionRecords(prefix, targetContext) {
+    var controllerAvailable = root.applicationMutationController !== null
+      && root.applicationMutationController !== undefined
     var records = [
       DockMenuModel.actionRecord(
+        prefix + ":pin", root.pinnedItem ? "Unpin from Dock" : "Pin to Dock",
+        root.pinnedItem ? "pin-off" : "pin",
+        controllerAvailable && root.desktopId !== "",
+        root.pinnedItem ? "unpin-app" : "pin-app", targetContext),
+      DockMenuModel.actionRecord(
+        prefix + ":hide", "Hide App from Dock", "eye-off",
+        controllerAvailable && root.desktopId !== "",
+        "hide-app", targetContext),
+      DockMenuModel.actionRecord(
+        prefix + ":copy-icon", "Copy Icon Command", "",
+        root.desktopId !== "" && contextActions.runtimeMode !== ""
+          && contextActions.instanceId !== "",
+        "copy-icon-command", targetContext, { submenu: true }),
+      DockMenuModel.actionRecord(
         prefix + ":open-new", "Open New Window", "plus", true,
-        "open-new", null)
+        "open-new", targetContext)
     ]
-
-    records.push(DockMenuModel.actionRecord(
-      prefix + ":hide", "Hide from Dock", "eye-off", true,
-      "hide-from-dock", null))
-
-    if (root.pinnedItem) {
-      records.push(DockMenuModel.actionRecord(
-        prefix + ":remove", "Remove from Dock", "minus", true,
-        "remove-from-dock", null))
-    }
     return records
   }
 
   function appPageActions() {
+    var total = root.targetContexts.length
+    var subtitle = total === 0 ? "No open windows" : root.representedWorkspaceLabel()
+    if (total > 0) {
+      if (subtitle) subtitle += " · "
+      subtitle += total + (total === 1 ? " window" : " windows")
+    }
     var records = [
-      DockMenuModel.headerRecord(
-        "app:header",
-        "Open Windows",
-        root.targetContexts.length === 0
-          ? "No open windows"
-          : root.targetContexts.length + " open windows")
+      DockMenuModel.headerRecord("app:header", root.applicationName, subtitle)
     ]
 
-    if (root.targetContexts.length === 0) {
+    if (total > 1) {
       records.push(DockMenuModel.actionRecord(
-        "app:none", "No open windows", "app-window", false, "noop", null))
-    } else {
-      for (var i = 0; i < root.targetContexts.length; ++i) {
-        var target = root.targetContexts[i]
-        var status = targetStatusLabel(target)
-        var label = (target.toplevel && target.toplevel.activated ? "● " : "")
-          + (status !== "" ? status + " " : "")
-          + targetTitle(target, i)
-        records.push(DockMenuModel.actionRecord(
-          "app:window:" + target.key,
-          label,
-          "app-window",
-          true,
-          "open-window-page",
-          target,
-          { submenu: true }))
-      }
+        "app:choose", "Choose Window…", "app-window", true,
+        "open-chooser-page", null, { submenu: true }))
+      records.push(DockMenuModel.separatorRecord("app:window-actions"))
+      records.push(DockMenuModel.actionRecord(
+        "app:minimize-visible",
+        "Minimize " + root.visibleWindowCount + " Visible",
+        "minus", root.visibleWindowCount > 0,
+        "minimize-visible", null))
+      records.push(DockMenuModel.actionRecord(
+        "app:restore-minimized",
+        "Restore " + root.minimizedCount + " Minimized",
+        "maximize-2", root.minimizedCount > 0,
+        "restore-minimized", null))
+      records.push(DockMenuModel.separatorRecord("app:application-actions"))
     }
 
-    records.push(DockMenuModel.separatorRecord("app:application-actions"))
-    return records.concat(applicationActionRecords("app"))
+    records = records.concat(root.applicationActionRecords("app", null))
+    if (total > 1) {
+      records.push(DockMenuModel.separatorRecord("app:close-separator"))
+      records.push(DockMenuModel.actionRecord(
+        "app:close-represented",
+        "Close " + total + " Windows", "x", true,
+        "close-represented", null))
+    }
+    return records
+  }
+
+  function chooserPageActions() {
+    var records = [
+      DockMenuModel.actionRecord(
+        "chooser:back", "Back", "chevron-left", true, "back", null),
+      DockMenuModel.headerRecord(
+        "chooser:header", root.applicationName, "Choose Window")
+    ]
+    for (var i = 0; i < root.targetContexts.length; ++i) {
+      var target = root.targetContexts[i]
+      var status = root.windowStatusLabel(target.toplevel)
+      var title = (target.toplevel && target.toplevel.activated ? "● " : "")
+        + (status ? status + " " : "") + root.targetTitle(target, i)
+      records.push(DockMenuModel.actionRecord(
+        "chooser:" + target.key, title, "app-window",
+        root.targetIsValid(target), "open-window-page", target,
+        { submenu: true }))
+    }
+    return records
   }
 
   function windowPageActions() {
     var target = root.pageTarget
-    var valid = targetIsValid(target)
+    var valid = root.targetIsValid(target)
     var addressValid = valid && String(target ? target.address : "") !== ""
     var index = Math.max(0, root.targetContexts.indexOf(target))
+    var subtitle = root.targetTitle(target, index)
+    var workspace = root.workspaceLabel(target)
+    if (workspace) subtitle += " · " + workspace
+    var fullscreenMode = root.targetFullscreenMode(target)
     var records = []
 
     if (root.pageStack.length > 0) {
       records.push(DockMenuModel.actionRecord(
-        "window:back", "Back", "arrow-left", true, "back", null))
+        "window:back", "Back", "chevron-left", true, "back", null))
     }
-
     records.push(DockMenuModel.headerRecord(
-      "window:header",
-      "Window",
-      targetSubtitle(target, index)))
-
+      "window:header", root.applicationName, subtitle))
     records.push(DockMenuModel.actionRecord(
       "window:minimize",
-      targetMinimized(target) ? "Restore Window" : "Minimize",
-      targetMinimized(target) ? "maximize-2" : "minus",
-      addressValid,
-      "minimize-restore",
-      target))
-
+      root.targetMinimized(target) ? "Restore" : "Minimize",
+      root.targetMinimized(target) ? "maximize-2" : "minus",
+      addressValid, "minimize-restore", target))
     records.push(DockMenuModel.actionRecord(
-      "window:workspace",
-      "Move to Workspace…",
-      "arrow-right-left",
-      addressValid,
-      "open-workspaces-page",
-      target,
-      { submenu: true }))
-
+      "window:workspace", "Move to Workspace…", "arrow-right-left",
+      addressValid, "open-workspaces-page", target, { submenu: true }))
     records.push(DockMenuModel.actionRecord(
-      "window:fullscreen-bars",
-      targetFakeFullscreen(target) ? "Restore Size" : "Fullscreen (Keep Bars)",
-      targetFakeFullscreen(target) ? "minimize-2" : "maximize-2",
-      addressValid,
-      "toggle-fake-fullscreen",
-      target,
-      { checked: targetFakeFullscreen(target) }))
-
+      "window:fullscreen-keep-bars", "Fullscreen — Keep Bars", "maximize-2",
+      addressValid, "fullscreen-keep-bars", target,
+      { checked: fullscreenMode === "keep-bars" }))
+    records.push(DockMenuModel.actionRecord(
+      "window:fullscreen-hide-bars", "Fullscreen — Hide Bars", "maximize-2",
+      addressValid, "fullscreen-hide-bars", target,
+      { checked: fullscreenMode === "hide-bars" }))
     records.push(DockMenuModel.separatorRecord("window:application-actions"))
-    records = records.concat(applicationActionRecords("window"))
-
+    records = records.concat(root.applicationActionRecords("window", target))
     records.push(DockMenuModel.separatorRecord("window:close-separator"))
     records.push(DockMenuModel.actionRecord(
       "window:close", "Close Window", "x", valid,
@@ -400,25 +574,21 @@ PopupWindow {
 
   function workspacePageActions() {
     var target = root.pageTarget
-    var valid = targetIsValid(target)
-    var currentWorkspace = targetWorkspaceId(target)
+    var valid = root.targetIsValid(target)
+    var currentWorkspace = root.selectedWorkspaceId
     var index = Math.max(0, root.targetContexts.indexOf(target))
     var records = [
       DockMenuModel.actionRecord(
-        "workspace:back", "Back", "arrow-left", true, "back", null),
+        "workspace:back", "Back", "chevron-left", true, "back", null),
       DockMenuModel.headerRecord(
-        "workspace:header", "Move to Workspace", targetTitle(target, index))
+        "workspace:header", "Move to Workspace", root.targetTitle(target, index))
     ]
-
     for (var workspace = 1; workspace <= 10; ++workspace) {
       records.push(DockMenuModel.actionRecord(
-        "workspace:" + workspace,
-        "Workspace " + workspace,
-        "",
+        "workspace:" + workspace, "Workspace " + workspace, "",
         valid && String(target ? target.address : "") !== ""
           && workspace !== currentWorkspace,
-        "move-workspace",
-        target,
+        "move-workspace", target,
         {
           checked: workspace === currentWorkspace,
           workspace: workspace,
@@ -426,6 +596,29 @@ PopupWindow {
         }))
     }
     return records
+  }
+
+  function copyCommandPageActions() {
+    var profile = root.copyProfileDirectory
+    var subtitle = profile ? "Profile: " + profile : "Application icon"
+    return [
+      DockMenuModel.actionRecord(
+        "copy:back", "Back", "chevron-left", true, "back", null),
+      DockMenuModel.headerRecord(
+        "copy:header", "Copy Icon Command", subtitle),
+      DockMenuModel.actionRecord(
+        "copy:hint", "Replace <IMAGE_PATH> with a local PNG/SVG path before running.",
+        "", false, "noop", null),
+      DockMenuModel.actionRecord(
+        "copy:set", "Copy Set Icon Command", "", true,
+        "copy-icon-command", root.pageTarget, { iconAction: "set" }),
+      DockMenuModel.actionRecord(
+        "copy:reset", "Copy Reset Icon Command", "", true,
+        "copy-icon-command", root.pageTarget, { iconAction: "reset" }),
+      DockMenuModel.actionRecord(
+        "copy:reload", "Copy Reload Icon Command", "", true,
+        "copy-icon-command", root.pageTarget, { iconAction: "reload" })
+    ]
   }
 
   function controlPageActions() {
@@ -448,13 +641,21 @@ PopupWindow {
   }
 
   function buildPageActions() {
-    if (root.controlItem || root.page === "controls")
-      return controlPageActions()
-    if (root.page === "window")
-      return windowPageActions()
-    if (root.page === "workspaces")
-      return workspacePageActions()
-    return appPageActions()
+    if (root.controlItem || root.page === "controls") return root.controlPageActions()
+    if (root.page === "window") return root.windowPageActions()
+    if (root.page === "chooser") return root.chooserPageActions()
+    if (root.page === "workspaces") return root.workspacePageActions()
+    if (root.page === "copy-command") return root.copyCommandPageActions()
+    return root.appPageActions()
+  }
+
+  function decorateWithFeedback(records) {
+    if (!root.feedbackText) return records
+    return [
+      DockMenuModel.headerRecord(
+        "feedback:status", root.feedbackTitle || "Status", root.feedbackText),
+      DockMenuModel.separatorRecord("feedback:separator")
+    ].concat(records)
   }
 
   function setActiveMenuIndex(index) {
@@ -471,8 +672,6 @@ PopupWindow {
   function moveActiveMenuIndex(delta) {
     var step = DockMenuModel.cursorStep(
       root.pageActions, root.activeMenuIndex, delta, root.pageTarget)
-    // Cursor movement may change only the shared highlight. If that invariant
-    // is ever violated, close instead of silently retargeting an action.
     if (step.targetContext !== root.pageTarget) {
       root.dismiss()
       return
@@ -486,25 +685,19 @@ PopupWindow {
     var item = actionRepeater.itemAt(root.activeMenuIndex)
     if (!item) return
     menuList.contentY = DockMenuModel.contentYForRow(
-      menuList.contentY,
-      menuList.height,
-      item.y,
-      item.height,
-      actionColumn.height)
+      menuList.contentY, menuList.height, item.y, item.height, actionColumn.height)
   }
 
   function activateCurrentMenuItem() {
     var index = root.activeMenuIndex
     if (index < 0 || index >= root.pageActions.length) return
-    dispatchAction(root.pageActions[index], index)
+    root.dispatchAction(root.pageActions[index], index)
   }
 
   function dispatchAction(record, index) {
     if (!record || record.kind !== "action" || record.enabled === false)
       return false
-
     root.setActiveMenuIndex(index)
-
     var targetContext = record.targetContext || null
     if (targetContext && !root.targetIsValid(targetContext)) {
       root.dismiss()
@@ -512,63 +705,59 @@ PopupWindow {
     }
 
     switch (record.command) {
-    case "back":
-      return root.goBack()
+    case "back": return root.goBack()
     case "open-window-page":
-      root.pushPage("window", targetContext)
-      return true
+      root.pushPage("window", targetContext); return true
+    case "open-chooser-page":
+      root.pushPage("chooser", null); return true
     case "open-workspaces-page":
-      root.pushPage("workspaces", targetContext)
-      return true
-    case "minimize-restore":
-      return root.minimizeRestoreTarget(targetContext)
+      root.pushPage("workspaces", targetContext); return true
+    case "minimize-restore": return root.minimizeRestoreTarget(targetContext)
     case "move-workspace":
       return root.moveTargetToWorkspace(targetContext, record.workspace)
-    case "toggle-fake-fullscreen":
-      return root.toggleTargetFakeFullscreen(targetContext)
+    case "fullscreen-keep-bars":
+      return root.setTargetFullscreenMode(targetContext, "keep-bars")
+    case "fullscreen-hide-bars":
+      return root.setTargetFullscreenMode(targetContext, "hide-bars")
+    case "minimize-visible": return root.representedAction("minimize-visible")
+    case "restore-minimized": return root.representedAction("restore-minimized")
+    case "close-represented": return root.representedAction("close-represented")
     case "close-window":
-      root.windowActions.closeToplevel(targetContext.toplevel)
-      root.dismiss()
-      return true
+      if (!root.windowActions.closeToplevel(targetContext.toplevel)) {
+        root.feedbackTitle = "Close failed"
+        root.feedbackText = "The selected window could not be closed."
+        return false
+      }
+      root.dismiss(); return true
+    case "pin-app": return root.runApplicationMutation("pin")
+    case "unpin-app": return root.runApplicationMutation("unpin")
+    case "hide-app": return root.runApplicationMutation("hide")
+    case "copy-icon-command":
+      if (record.iconAction)
+        return root.copyIconCommand(record.iconAction)
+      root.pushPage("copy-command", targetContext); return true
     case "open-new":
-      root.dismiss()
-      root.openNewWindow()
-      return true
-    case "hide-from-dock":
-      root.dismiss()
-      root.hideFromDock()
-      return true
-    case "remove-from-dock":
-      root.dismiss()
-      root.removeFromDock()
-      return true
+      root.dismiss(); root.openNewWindow(); return true
     case "open-launcher":
-      root.dismiss()
-      Qt.callLater(function() { root.openLauncher() })
-      return true
+      root.dismiss(); Qt.callLater(function() { root.openLauncher() }); return true
     case "add-application":
-      root.dismiss()
-      root.addApplication()
-      return true
+      root.dismiss(); root.addApplication(); return true
     case "toggle-auto-hide":
-      root.toggleAutoHide()
-      root.dismiss()
-      return true
-    default:
-      return false
+      root.toggleAutoHide(); root.dismiss(); return true
+    default: return false
     }
   }
 
   onPageChanged: Qt.callLater(resetActiveMenuIndex)
   onPageActionsChanged: Qt.callLater(resetActiveMenuIndex)
   onInterfaceAnimationsEnabledChanged: {
-    if (!interfaceAnimationsEnabled) {
-      entranceOpacity = 1
-      entranceOffset = 0
+    if (!root.interfaceAnimationsEnabled) {
+      root.entranceOpacity = 1
+      root.entranceOffset = 0
     }
   }
 
-  implicitWidth: root.controlItem ? Style.space(210) : Style.space(300)
+  implicitWidth: root.controlItem ? Style.space(210) : Style.space(320)
   implicitHeight: Math.min(520, actionColumn.implicitHeight + 12)
   color: "transparent"
   grabFocus: true
@@ -583,7 +772,6 @@ PopupWindow {
 
     onAnchoring: {
       if (!root.anchorItem || !root.anchor.window) return
-
       var x = root.anchorItem.width / 2 - root.implicitWidth / 2
       var y = root.anchorItem.height + 8
       if (root.position === "bottom")
@@ -595,22 +783,13 @@ PopupWindow {
         x = -root.implicitWidth - 8
         y = root.anchorItem.height / 2 - root.implicitHeight / 2
       }
-
-      var point = root.anchor.window.contentItem.mapFromItem(
-        root.anchorItem, x, y)
+      var point = root.anchor.window.contentItem.mapFromItem(root.anchorItem, x, y)
       if (root.position === "top" || root.position === "bottom")
-        point.x = Math.max(
-          8,
-          Math.min(
-            point.x,
-            root.anchor.window.width - root.implicitWidth - 8))
+        point.x = Math.max(8, Math.min(
+          point.x, root.anchor.window.width - root.implicitWidth - 8))
       else
-        point.y = Math.max(
-          8,
-          Math.min(
-            point.y,
-            root.anchor.window.height - root.implicitHeight - 8))
-
+        point.y = Math.max(8, Math.min(
+          point.y, root.anchor.window.height - root.implicitHeight - 8))
       root.anchor.rect.x = Math.round(point.x)
       root.anchor.rect.y = Math.round(point.y)
     }
@@ -618,7 +797,6 @@ PopupWindow {
 
   BorderSurface {
     id: menuSurface
-
     anchors.fill: parent
     opacity: root.entranceOpacity
     transform: Translate {
@@ -647,127 +825,126 @@ PopupWindow {
 
     Keys.onPressed: function(event) {
       if (event.key === Qt.Key_Down) {
-        root.moveActiveMenuIndex(1)
-        event.accepted = true
+        root.moveActiveMenuIndex(1); event.accepted = true
       } else if (event.key === Qt.Key_Up) {
-        root.moveActiveMenuIndex(-1)
-        event.accepted = true
-      } else if (event.key === Qt.Key_Return
-                 || event.key === Qt.Key_Enter
+        root.moveActiveMenuIndex(-1); event.accepted = true
+      } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
                  || event.key === Qt.Key_Space) {
-        root.activateCurrentMenuItem()
-        event.accepted = true
+        root.activateCurrentMenuItem(); event.accepted = true
       } else if (event.key === Qt.Key_Escape
                  || event.key === Qt.Key_Backspace
                  || event.key === Qt.Key_Left) {
-        if (root.pageStack.length > 0)
-          root.goBack()
-        else
-          root.dismiss()
+        if (root.pageStack.length > 0) root.goBack()
+        else root.dismiss()
         event.accepted = true
       }
     }
 
     Flickable {
       id: menuList
-
       anchors.fill: parent
       anchors.margins: 6
       contentWidth: width
-      contentHeight: actionColumn.implicitHeight
+      contentHeight: actionColumn.height
       clip: true
       boundsBehavior: Flickable.StopAtBounds
 
       Column {
         id: actionColumn
-
         width: menuList.width
+        implicitHeight: childrenRect.height
 
         Repeater {
           id: actionRepeater
-
           model: root.pageActions
 
-          delegate: Item {
-            id: row
-
+          Item {
             required property var modelData
             required property int index
-
             width: actionColumn.width
             height: modelData.kind === "separator"
-              ? Style.spacing.md
+              ? Style.space(10)
               : modelData.kind === "header"
-                ? (modelData.subtitle !== "" ? Style.space(48) : Style.space(34))
+                ? (modelData.subtitle ? Style.space(52) : Style.space(34))
                 : Style.spacing.popupRowHeight
 
-            Text {
-              visible: row.modelData.kind === "header"
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.top: parent.top
-              anchors.leftMargin: Style.spacing.controlPaddingX
-              anchors.rightMargin: Style.spacing.controlPaddingX
-              anchors.topMargin: Style.spacing.xs
-              text: row.modelData.text || ""
-              textFormat: Text.PlainText
-              color: Color.menu.text
-              font.family: Style.font.family
-              font.pixelSize: Style.font.bodySmall
-              font.bold: true
-              elide: Text.ElideRight
-              maximumLineCount: 1
-            }
-
-            Text {
-              visible: row.modelData.kind === "header"
-                && String(row.modelData.subtitle || "") !== ""
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.bottom: parent.bottom
-              anchors.leftMargin: Style.spacing.controlPaddingX
-              anchors.rightMargin: Style.spacing.controlPaddingX
-              anchors.bottomMargin: Style.spacing.xs
-              text: row.modelData.subtitle || ""
-              textFormat: Text.PlainText
-              color: Util.alpha(Color.menu.text, 0.68)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              elide: Text.ElideRight
-              maximumLineCount: 1
-            }
-
             PanelSeparator {
-              visible: row.modelData.kind === "separator"
-              anchors.centerIn: parent
-              width: parent.width - Style.spacing.controlPaddingX * 2
+              visible: parent.modelData.kind === "separator"
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
               foreground: Color.menu.text
-              strength: 0.2
+            }
+
+            Column {
+              visible: parent.modelData.kind === "header"
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: Style.spacing.controlPaddingX
+              anchors.rightMargin: Style.spacing.controlPaddingX
+              spacing: Style.spacing.labelGap
+
+              Text {
+                width: parent.width
+                text: String(parent.parent.modelData.text || "")
+                textFormat: Text.PlainText
+                color: Color.menu.text
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+                elide: Text.ElideRight
+                maximumLineCount: 1
+              }
+              Text {
+                visible: String(parent.parent.modelData.subtitle || "") !== ""
+                width: parent.width
+                text: String(parent.parent.modelData.subtitle || "")
+                textFormat: Text.PlainText
+                color: Util.alpha(Color.menu.text, 0.68)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+                maximumLineCount: 1
+              }
             }
 
             DockMenuAction {
-              visible: row.modelData.kind === "action"
+              visible: parent.modelData.kind === "action"
               anchors.fill: parent
-              enabled: row.modelData.enabled !== false
-              text: row.modelData.text || ""
-              iconName: row.modelData.iconName || ""
-              iconText: row.modelData.iconText || ""
-              checked: row.modelData.checked === true
-              submenu: row.modelData.submenu === true
-              hasCursor: root.activeMenuIndex === row.index
-
-              onCursorRequested: {
-                if (root)
-                  root.setActiveMenuIndex(row.index)
-              }
-              onTriggered: {
-                if (root)
-                  root.dispatchAction(row.modelData, row.index)
-              }
+              text: String(parent.modelData.text || "")
+              iconName: String(parent.modelData.iconName || "")
+              iconText: String(parent.modelData.iconText || "")
+              enabled: parent.modelData.enabled !== false
+              checked: parent.modelData.checked === true
+              submenu: parent.modelData.submenu === true
+              hasCursor: root.activeMenuIndex === parent.index
+              onCursorRequested: root.setActiveMenuIndex(parent.index)
+              onTriggered: root.dispatchAction(parent.modelData, parent.index)
             }
           }
         }
       }
     }
+  }
+
+  Process {
+    id: clipboardProcess
+    command: []
+    onExited: function(exitCode) {
+      root.feedbackTitle = "Copy Icon Command"
+      if (exitCode === 0)
+        root.feedbackText = "Command copied to the clipboard."
+      else
+        root.feedbackText = "Clipboard command failed (exit " + exitCode + ")."
+      root.pendingClipboardText = ""
+    }
+  }
+
+  Connections {
+    target: root.applicationMutationController
+    function onSettingsWriteStateChanged() { root.refreshPendingMutationFeedback() }
+    function onSettingsPersistedChanged() { root.refreshPendingMutationFeedback() }
+    function onSettingsWriteErrorChanged() { root.refreshPendingMutationFeedback() }
   }
 }

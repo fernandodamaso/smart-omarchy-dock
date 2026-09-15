@@ -3,10 +3,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 menu="$repo_root/components/DockContextMenu.qml"
-item="$repo_root/components/DockItem.qml"
-dock="$repo_root/components/Dock.qml"
-actions="$repo_root/components/DockWindowActions.qml"
-model="$repo_root/components/DockModel.js"
+controller="$repo_root/components/DockContextActionController.qml"
+fullscreen_model="$repo_root/components/DockFullscreenModel.js"
 menu_model="$repo_root/components/DockMenuModel.js"
 
 status=0
@@ -20,21 +18,21 @@ for label in 'Fullscreen — Keep Bars' 'Fullscreen — Hide Bars' \
   grep -Fq "$label" "$menu" || fail "missing menu action: $label"
 done
 
-grep -q 'fullscreenModeRequest' "$model" \
+grep -q 'function request(address, targetModeValue, usingLua)' "$fullscreen_model" \
   || fail 'fullscreen modes must share one exact-address request builder'
-grep -q 'setFullscreenMode' "$actions" \
-  || fail 'window actions must own exact-target fullscreen transitions'
-grep -q 'minimizeVisibleToplevels' "$actions" \
+grep -q 'function setFullscreenMode' "$controller" \
+  || fail 'context action controller must own exact-target fullscreen transitions'
+grep -q 'function minimizeVisible' "$controller" \
   || fail 'represented groups need a counted visible-only minimize action'
-grep -q 'restoreMinimizedToplevels' "$actions" \
+grep -q 'function restoreMinimized' "$controller" \
   || fail 'represented groups need a counted minimized-only restore action'
+grep -q 'function closeRepresented' "$controller" \
+  || fail 'represented groups need an exact-membership close action'
 
+grep -q 'applicationMutationController' "$controller" \
+  || fail 'persistent app actions must delegate to the host-owned mutation controller'
 grep -q 'applicationMutationController' "$menu" \
-  || fail 'persistent app actions must consume the host-owned mutation controller'
-grep -q 'applicationMutationController' "$item" \
-  || fail 'DockItem must pass the host-owned mutation controller into its menu'
-grep -q 'applicationMutationController' "$dock" \
-  || fail 'Dock must route the host-owned mutation controller without adding a writer'
+  || fail 'menu must observe host persistence state rather than claiming optimistic success'
 
 grep -q 'iconCommandSpec' "$menu_model" \
   || fail 'icon-copy commands need a pure argv/text builder with shell-safe quoting'
@@ -55,5 +53,10 @@ fi
 if grep -Eq 'sh[[:space:]]+-c|execDetached\(\[[[:space:]]*"sh"' "$menu"; then
   fail 'copy-command actions must not execute copied shell text'
 fi
+
+grep -Fq 'omarchy-clipboard-paste-text' "$menu" \
+  || fail 'clipboard copy must use the Omarchy clipboard helper with exit status'
+grep -Fq -- '--copy-only' "$menu" \
+  || fail 'clipboard helper must copy without synthesizing paste input'
 
 exit "$status"
