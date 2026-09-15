@@ -54,4 +54,38 @@ assert.equal(keys(immediate), JSON.stringify(["a:in", "c:in"]))
 const fresh = model.reconcile(null, [item("z")], "identity", true)
 assert.equal(fresh.entries[0].animateEntrance, false)
 
+// Moving a workspace between monitor sections is an in-place presentation move.
+const workspaceState = model.reconcile(null, [
+  { identity: "id:1", monitorIdentity: "id:0" },
+  { identity: "id:2", monitorIdentity: "id:1" }
+], "identity", true)
+const workspaceTokens = Object.fromEntries(
+  workspaceState.entries.map(entry => [entry.key, entry.token]))
+const movedWorkspace = model.reconcile(workspaceState, [
+  { identity: "id:2", monitorIdentity: "id:0" },
+  { identity: "id:1", monitorIdentity: "id:1" }
+], "identity", true)
+assert.equal(movedWorkspace.entries.every(entry => entry.present), true,
+  "workspace transfer keeps both cards present")
+assert.equal(movedWorkspace.entries.every(entry => !entry.animateEntrance), true,
+  "workspace transfer does not replay entrance animation")
+assert.equal(movedWorkspace.entries.find(entry => entry.key === "id:1").token,
+  workspaceTokens["id:1"], "workspace 1 keeps its token across section transfer")
+assert.equal(movedWorkspace.entries.find(entry => entry.key === "id:2").token,
+  workspaceTokens["id:2"], "workspace 2 keeps its token across section transfer")
+assert.equal(movedWorkspace.entries.some(entry => !entry.present), false,
+  "workspace transfer creates no exiting copy")
+
+const appState = model.reconcile(null,
+  [{ presentationId: "id:1/demo", monitorIdentity: "id:0" }],
+  "presentationId", true)
+const appToken = appState.entries[0].token
+const movedApp = model.reconcile(appState,
+  [{ presentationId: "id:1/demo", monitorIdentity: "id:1" }],
+  "presentationId", true)
+assert.equal(movedApp.entries[0].token, appToken,
+  "application presentation id stays stable when its workspace moves")
+assert.equal(movedApp.entries[0].animateEntrance, false,
+  "application is not recreated for a monitor transfer")
+
 console.log("presentation model: PASS")
