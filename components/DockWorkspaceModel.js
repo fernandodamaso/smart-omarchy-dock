@@ -71,6 +71,18 @@ function monitorLabel(identity, connector, descriptor, ipc) {
   return "Monitor"
 }
 
+function monitorGroupForWorkspace(monitorGroups, workspaceIdentity, present) {
+  if (present !== true) return null
+  var identity = String(workspaceIdentity || "")
+  if (!identity) return null
+  var values = monitorGroups || []
+  for (var i = 0; i < values.length; ++i) {
+    var group = values[i]
+    if (group && group.firstWorkspaceIdentity === identity) return group
+  }
+  return null
+}
+
 function buildWorkspacePresentation(appItems, records, workspaces, context) {
   context = context || ({})
   var groups = []
