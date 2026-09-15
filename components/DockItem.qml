@@ -198,11 +198,12 @@ Item {
     if (!DockModel.applicationActionCanRun(action, runningCount)) return false
 
     var request = options || ({})
+    var activationMonitor = request.activationMonitor || ""
     switch (action) {
     case "cycle-windows":
       return root.windowActions.cycleToplevels(
         root.runningToplevels, request.direction, root.windowActions.activeToplevel,
-        root.originOnly, root.activationMonitor)
+        root.originOnly, activationMonitor)
     case "minimize-restore":
       return root.windowActions.minimizeRestoreToplevels(root.runningToplevels, root.originOnly)
     case "previews":
@@ -219,7 +220,7 @@ Item {
           root.lastActivatedToplevel, root.runningCount)
         return root.windowActions.activateToplevel(
           root.runningToplevels[root.lastActivatedToplevel], root.originOnly,
-          root.activationMonitor)
+          activationMonitor)
       }
       root.launch()
       return true
@@ -229,8 +230,12 @@ Item {
   }
 
   function dispatchPointerAction(input, modifiers, options) {
+    var keys = modifiers || ({})
+    var request = Object.assign({}, options || ({}))
+    if (keys.control === true)
+      request.activationMonitor = root.activationMonitor
     return dispatchApplicationAction(DockModel.resolveApplicationPointerAction(
-      applicationActions, input, modifiers), options)
+      applicationActions, input, modifiers), request)
   }
 
   onRunningToplevelsChanged: {
@@ -584,9 +589,23 @@ Item {
 
   TapHandler {
     enabled: root.presentationActive && !root.workspaceInputSuppressed
+    acceptedButtons: Qt.LeftButton
+    acceptedModifiers: Qt.ControlModifier
+    onTapped: root.dispatchPointerAction("left", { control: true })
+  }
+
+  TapHandler {
+    enabled: root.presentationActive && !root.workspaceInputSuppressed
     acceptedButtons: Qt.MiddleButton
     acceptedModifiers: Qt.NoModifier
     onTapped: root.dispatchPointerAction("middle", {})
+  }
+
+  TapHandler {
+    enabled: root.presentationActive && !root.workspaceInputSuppressed
+    acceptedButtons: Qt.MiddleButton
+    acceptedModifiers: Qt.ControlModifier
+    onTapped: root.dispatchPointerAction("middle", { control: true })
   }
 
   TapHandler {
