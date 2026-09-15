@@ -6,6 +6,8 @@ menu="$repo_root/components/DockContextMenu.qml"
 controller="$repo_root/components/DockContextActionController.qml"
 fullscreen_model="$repo_root/components/DockFullscreenModel.js"
 menu_model="$repo_root/components/DockMenuModel.js"
+window_actions="$repo_root/components/DockWindowActions.qml"
+host="$repo_root/DockHost.qml"
 
 status=0
 fail() {
@@ -29,10 +31,15 @@ grep -q 'function restoreMinimized' "$controller" \
 grep -q 'function closeRepresented' "$controller" \
   || fail 'represented groups need an exact-membership close action'
 
-grep -q 'applicationMutationController' "$controller" \
-  || fail 'persistent app actions must delegate to the host-owned mutation controller'
-grep -q 'applicationMutationController' "$menu" \
-  || fail 'menu must observe host persistence state rather than claiming optimistic success'
+grep -q 'property var applicationMutationController: null' "$window_actions" \
+  || fail 'shared window actions must declare the host mutation controller explicitly'
+grep -q 'applicationMutationController: root' "$host" \
+  || fail 'DockHost must explicitly inject the sole mutation/persistence owner'
+grep -q 'windowActions\.applicationMutationController' "$controller" \
+  || fail 'context actions must consume the explicitly injected host controller'
+if grep -q 'windowActions\.parent' "$controller"; then
+  fail 'context actions must not infer the host through QObject parent traversal'
+fi
 
 grep -q 'iconCommandSpec' "$menu_model" \
   || fail 'icon-copy commands need a pure argv/text builder with shell-safe quoting'

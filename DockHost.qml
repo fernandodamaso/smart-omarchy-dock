@@ -432,6 +432,7 @@ Item {
 
   DockWindowActions {
     id: windowActionsController
+    applicationMutationController: root
   }
 
   DockBadgeTracker {

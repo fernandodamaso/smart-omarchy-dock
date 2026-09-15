@@ -8,6 +8,7 @@ import "DockWindowModel.js" as DockWindowModel
 Item {
   id: root
 
+  property var applicationMutationController: null
   readonly property string minimizedWorkspace: "special:smartdock-minimized"
   property var minimizedOrigins: ({})
   readonly property var minimizedOriginsSnapshot: DockWindowModel.copyOriginSnapshot(minimizedOrigins)
