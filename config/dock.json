@@ -31,22 +31,16 @@
   "sortByWorkspace": false,
   "workspaceLayout": "flat",
   "workspaceMonitorScope": "all",
+  "workspaceMonitorOrder": [],
   "groupWindows": true,
   "interfaceAnimationsEnabled": true,
+  "browserProfileBadgesEnabled": true,
+  "browserActivityMutedServices": [],
   "windowScope": "all",
   "showUrgentOutsideScope": true,
   "attentionBadgesEnabled": true,
+  "launcherBadgeCountsEnabled": false,
   "urgentWindowAnimationEnabled": true,
-  "launcherBadgeMode": "automatic",
-  "browserProfileBadgesEnabled": true,
-  "browserActivityMutedServices": [],
   "hiddenApplications": [],
-  "pinned": [
-    "org.gnome.Nautilus",
-    "com.google.Chrome",
-    "com.mitchellh.ghostty",
-    "code",
-    "obsidian",
-    "chatgpt"
-  ]
+  "pinned": []
 }
