@@ -26,6 +26,7 @@ const batches = []
 const actions = methods('DockWindowActions.qml', {
   DockModel, DockWindowModel,
   minimizedOrigins: {}, minimizedWorkspace: 'special:smartdock-minimized',
+  windowWorkspacePins: {}, workspaceMonitorPins: {},
   activeToplevel: windows[0],
   ToplevelManager: { toplevels: { values: windows } },
   Quickshell: { execDetached: command => batches.push(command) },

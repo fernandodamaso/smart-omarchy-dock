@@ -138,6 +138,38 @@ function fixture(usingLua = false) {
     'unpinned workspace retains the existing pull behavior')
 }
 
+// Cycling and minimized activation share the same monitor-pin focus-only path.
+{
+  const f = fixture(false)
+  const { actions: a, A, C, handles, detached } = f
+  assert.equal(a.pinWorkspaceToMonitor('id:3'), true)
+  assert.equal(a.cycleToplevels([C, A], 1, C, true, 'id:1'), true)
+  assert.doesNotMatch(detached.flat().join(' '),
+    /movecurrentworkspacetomonitor|moveworkspacetomonitor/i,
+    'window cycling must not pull a pinned workspace')
+
+  detached.length = 0
+  assert.equal(a.minimizeToplevel(A, true), true)
+  handles[0].lastIpcObject.workspace = { name: 'special:smartdock-minimized' }
+  assert.equal(a.activateToplevel(A, true, 'id:1', true), true)
+  assert.doesNotMatch(detached.flat().join(' '),
+    /movecurrentworkspacetomonitor|moveworkspacetomonitor/i,
+    'minimized restore/focus must keep a pinned workspace on its monitor')
+}
+
+// Explicit compositor lifecycle signals clear exact pins without guessing from gaps.
+{
+  const f = fixture()
+  const { actions: a, A } = f
+  assert.equal(a.pinWindowToWorkspace(A), true)
+  assert.equal(a.confirmWindowClosed({ data: 'a1' }), true)
+  assert.equal(a.windowWorkspacePins['0xa1'], undefined)
+
+  assert.equal(a.pinWorkspaceToMonitor('id:3'), true)
+  assert.equal(a.confirmMonitorRemoved({ data: 'DP-1' }), true)
+  assert.equal(a.workspaceMonitorPins['id:3'], undefined)
+}
+
 // Reconciliation clears only confirmed changes; incomplete inventory is retained.
 {
   const f = fixture()
@@ -210,7 +242,8 @@ function fixture(usingLua = false) {
 }
 
 const menuSource = read('DockContextMenu.qml')
-assert.match(menuSource, /Pin Window to Workspace/)
+assert.match(menuSource, /windowPin \? \"Unpin Window from \" : \"Pin Window to \"/)
+assert.match(menuSource, /windowPinWorkspaceLabel\(reliableWorkspace\)/)
 assert.match(menuSource, /pin-window-workspace/)
 assert.match(menuSource, /unpin-window-workspace/)
 const moveBody = menuSource.match(/function moveTargetToWorkspace\([\s\S]*?\n  }/)?.[0] || ''
@@ -218,6 +251,16 @@ assert.match(moveBody, /windowActions\.moveToplevelToWorkspace/,
   'context-menu moves must delegate to the central controller')
 assert.doesNotMatch(moveBody, /DockModel\.moveWindowRequest|Hyprland\.dispatch/,
   'context menu must not retain a movement-dispatch bypass')
+
+const dockSource = read('Dock.qml')
+const headerActivationBody = dockSource.match(
+  /function focusWorkspaceOnDockMonitor\([\s\S]*?\n  }/)?.[0] || ''
+assert.match(headerActivationBody, /windowActions\.workspaceOnMonitorRequests/,
+  'workspace-header activation must use the central monitor-pin policy')
+assert.doesNotMatch(headerActivationBody, /moveWorkspaceToMonitorRequest|moveCurrentWorkspaceToMonitorRequest/,
+  'workspace-header activation must not bypass the central monitor-pin policy')
+assert.match(dockSource, /windowActions\.activateToplevel/,
+  'dock app/preview activation must retain the shared exact-window activation controller')
 
 const dragSource = read('DockWorkspaceDrag.qml')
 assert.match(dragSource, /workspaceMoveWouldChange\(members, destination\.identity\)/)

@@ -317,6 +317,30 @@ PopupWindow {
       && root.candidateSnapshotsEqual(root.groupCandidateSnapshot, current)
   }
 
+  function windowPinWorkspaceLabel(identity) {
+    var value = String(identity || "")
+    if (value.indexOf("id:") === 0) value = value.slice(3)
+    else if (value.indexOf("name:") === 0) value = value.slice(5)
+    return value ? "Workspace " + value : "Workspace"
+  }
+
+  function runWindowWorkspacePinMutation(action, targetContext) {
+    if (!targetContext || !root.targetIsValid(targetContext)) {
+      root.dismiss()
+      return false
+    }
+    var changed = action === "pin"
+      ? root.windowActions.pinWindowToWorkspace(targetContext.toplevel)
+      : root.windowActions.unpinWindowFromWorkspace(targetContext.toplevel)
+    if (!changed) {
+      root.feedbackTitle = action === "pin" ? "Pin Window" : "Unpin Window"
+      root.feedbackText = "The exact window or its workspace is no longer available."
+      return false
+    }
+    root.dismiss()
+    return true
+  }
+
   function profileDirectoryForTarget(targetContext) {
     if (root.controlItem || !root.anchorItem) return ""
     var service = root.anchorItem.browserProfileService
@@ -400,15 +424,14 @@ PopupWindow {
       root.dismiss()
       return false
     }
-    var request = DockModel.moveWindowRequest(
-      targetContext.address, workspace, Hyprland.usingLua)
-    if (!request) {
-      root.feedbackTitle = "Move failed"
-      root.feedbackText = "The workspace target is no longer valid."
+    if (!root.windowActions.moveToplevelToWorkspace(
+        targetContext.toplevel, targetContext.address, workspace)) {
+      root.feedbackTitle = "Move blocked"
+      root.feedbackText = root.windowActions.windowWorkspacePin(targetContext.toplevel)
+        ? "This window is pinned to its workspace for this SmartDock session."
+        : "The workspace target is no longer valid."
       return false
     }
-    root.windowActions.forgetOrigin(targetContext.toplevel)
-    root.dispatchRequest(request)
     root.dismiss()
     return true
   }
@@ -692,6 +715,16 @@ PopupWindow {
     records.push(DockMenuModel.actionRecord(
       "window:workspace", "Move to Workspace…", "arrow-right-left",
       addressValid, "open-workspaces-page", target, { submenu: true }))
+    var windowPin = valid ? root.windowActions.windowWorkspacePin(target.toplevel) : null
+    var reliableWorkspace = windowPin ? windowPin.workspace
+      : root.workspaceIdentityForToplevel(target ? target.toplevel : null)
+    records.push(DockMenuModel.actionRecord(
+      "window:workspace-pin",
+      (windowPin ? "Unpin Window from " : "Pin Window to ")
+        + root.windowPinWorkspaceLabel(reliableWorkspace),
+      windowPin ? "pin-off" : "pin",
+      valid && reliableWorkspace !== "",
+      windowPin ? "unpin-window-workspace" : "pin-window-workspace", target))
     if (root.representedWorkspaceGrouped()) {
       records.push(DockMenuModel.actionRecord(
         "window:ungroup", "Ungroup", "", valid,
@@ -733,7 +766,9 @@ PopupWindow {
       records.push(DockMenuModel.actionRecord(
         "workspace:" + workspace, "Workspace " + workspace, "",
         valid && String(target ? target.address : "") !== ""
-          && workspace !== currentWorkspace,
+          && workspace !== currentWorkspace
+          && root.windowActions.canMoveToplevelToWorkspace(
+            target.toplevel, workspace),
         "move-workspace", target,
         {
           checked: workspace === currentWorkspace,
@@ -861,6 +896,10 @@ PopupWindow {
     case "minimize-restore": return root.minimizeRestoreTarget(targetContext)
     case "move-workspace":
       return root.moveTargetToWorkspace(targetContext, record.workspace)
+    case "pin-window-workspace":
+      return root.runWindowWorkspacePinMutation("pin", targetContext)
+    case "unpin-window-workspace":
+      return root.runWindowWorkspacePinMutation("unpin", targetContext)
     case "fullscreen-keep-bars":
       return root.setTargetFullscreenMode(targetContext, "keep-bars")
     case "fullscreen-hide-bars":

@@ -739,14 +739,25 @@ members; hide and launcher pinning remain application-wide. Pinned reordering
 and redundant per-icon workspace labels are disabled in grouped mode; running-
 window dragging is described below.
 
-On this source base, clicking a grouped workspace header uses the existing
-central workspace-on-monitor path: it pulls that workspace onto the clicked dock
-monitor and focuses it. A window icon inside a workspace card likewise uses the
-card workspace as its activation target, so an ordinary card-window click pulls
-that workspace before focusing the exact window. FDM-942/FDM-943 pin-aware
-workspace activation and workspace-header context menus are not integrated in
-this base; their focus-in-place/menu behavior remains an explicit integration
-and real-host gate for WS-MON-04 rather than being duplicated in this layout.
+Clicking a grouped workspace header and activating a window both use one shared
+workspace-on-monitor path. By default that keeps the existing pull-and-focus
+behavior. SmartDock now also has **session-only movement pins** owned by the
+shared window-action controller: an individual window can be pinned to its
+current reliable workspace from its context menu, and a workspace can be pinned
+to its current monitor through the shared API consumed by the workspace-header
+menu added in FDM-943. These pins are deliberately not settings, Hyprland rules,
+or persistent configuration; restarting the SmartDock host clears them.
+
+A window workspace pin blocks SmartDock menu and drag relocations to another
+workspace, including represented groups when any captured member is pinned.
+SmartDock minimize/restore keeps the recorded origin and does not clear the pin.
+A workspace monitor pin makes workspace-header, app-icon, preview, cycling and
+restore activation focus the workspace where it already lives instead of
+pulling it to the dock monitor. External Hyprland shortcuts/tools remain free to
+move windows and workspaces; once SmartDock observes a confirmed external move,
+close, or monitor disconnect it drops only the affected session pin. Transient
+or incomplete refreshes do not by themselves clear pin state. Group/Ungroup
+changes leave window pins untouched.
 
 Grouped minimize/restore requires a validated recorded workspace: an unknown
 origin never moves a window to a guessed focused workspace. Flat mode retains
