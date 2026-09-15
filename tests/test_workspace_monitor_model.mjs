@@ -187,6 +187,37 @@ const conflicted = WorkspaceModel.buildWorkspacePresentation(
 assert.equal(conflicted.groups.find(group => group.identity === 'id:7')?.monitorIdentity, '',
   'conflicting live window owners remain unresolved instead of first-record wins')
 
+const unknownWindow = { appId: 'unknown' }
+const unknownLive = WorkspaceModel.buildWorkspacePresentation(
+  [app('unknown', unknownWindow)],
+  [record(unknownWindow, 'id:9', 'MISSING-CONNECTOR')],
+  [], {
+    monitorScope: 'all', monitor: 'id:0', activeWorkspace: 'id:1',
+    monitors, groupWindows: true
+  })
+assert.equal(unknownLive.groups.find(group => group.identity === 'id:9')?.monitorIdentity, '',
+  'known live workspace remains present when monitor ownership is temporarily unknown')
+assert.equal(unknownLive.groups.find(group => group.identity === 'id:9')?.count, 1)
+assert.equal(unknownLive.fallbackItems.length, 0,
+  'known workspace with unknown monitor does not fall into Other windows')
+assert.deepEqual(monitorGroupSummary(unknownLive).slice(-1), [
+  ['', '', 'Unknown monitor', false, '', 'id:9']
+])
+
+const partialA = { appId: 'partial-a' }
+const partialB = { appId: 'partial-b' }
+const partiallyUnresolved = WorkspaceModel.buildWorkspacePresentation(
+  [app('partial-a', partialA), app('partial-b', partialB)],
+  [record(partialA, 'id:11', 'id:0'), record(partialB, 'id:11', 'MISSING-CONNECTOR')],
+  [], {
+    monitorScope: 'all', monitor: 'id:0', activeWorkspace: 'id:1',
+    monitors, groupWindows: true
+  })
+assert.equal(partiallyUnresolved.groups.find(group => group.identity === 'id:11')?.monitorIdentity, '',
+  'mixed known and unknown live owners stay unresolved rather than guessing the known owner')
+assert.equal(partiallyUnresolved.groups.find(group => group.identity === 'id:11')?.count, 2)
+assert.equal(partiallyUnresolved.fallbackItems.length, 0)
+
 const minimizedWindow = { appId: 'minimized' }
 const liveOwned = WorkspaceModel.buildWorkspacePresentation(
   [app('minimized', minimizedWindow)],
