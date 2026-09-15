@@ -53,7 +53,13 @@ function normalizeRow(value) {
   }
 }
 
-function presentation(values) {
+function presentation(values, mutedServiceIds) {
+  var muted = Object.create(null)
+  var mutedSource = Array.isArray(mutedServiceIds) ? mutedServiceIds : []
+  for (var m = 0; m < mutedSource.length; ++m) {
+    var mutedId = String(mutedSource[m] || "").trim().toLowerCase()
+    if (mutedId) muted[mutedId] = true
+  }
   var byOwner = Object.create(null)
   var source = Array.isArray(values) ? values : []
   for (var i = 0; i < source.length; ++i) {
@@ -67,13 +73,18 @@ function presentation(values) {
         || (row.count === current.count && row.targetId < current.targetId))
       byOwner[key] = row
   }
-  var rows = Object.keys(byOwner).map(function(key) { return byOwner[key] })
+  var rows = Object.keys(byOwner).map(function(key) {
+    var value = byOwner[key]
+    return Object.assign({}, value, { muted: muted[value.serviceId] === true })
+  })
   rows.sort(function(a, b) {
     return b.count - a.count || a.label.localeCompare(b.label)
       || a.targetId.localeCompare(b.targetId)
   })
   var total = 0
-  for (var n = 0; n < rows.length; ++n) total += rows[n].count
+  for (var n = 0; n < rows.length; ++n) {
+    if (!rows[n].muted) total += rows[n].count
+  }
   return { rows: rows, total: total }
 }
 

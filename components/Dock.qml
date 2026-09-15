@@ -30,10 +30,13 @@ PanelWindow {
   property int iconReloadRevision: 0
   property var browserProfileService: null
   property bool browserProfileBadgesEnabled: true
+  readonly property var browserActivityMutedServices: DockModel.normalizeSetting(
+    "browserActivityMutedServices", settings.browserActivityMutedServices)
   signal reorderRequested(string sourceDesktopId, string targetDesktopId)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
   signal hideRequested(string desktopId)
+  signal browserActivityMuteToggled(string serviceId)
   signal autoHideRequested(bool enabled)
   signal openTrashRequested()
   signal emptyTrashRequested()
@@ -1188,8 +1191,10 @@ PanelWindow {
     clipItem: root.grouped ? groupedLayout : null
     iconOverrides: root.iconOverrides
     iconReloadRevision: root.iconReloadRevision
+    mutedServices: root.browserActivityMutedServices
     onActivityRequested: activity => root.activateBrowserActivity(
       activity, windowPreview.members)
+    onActivityMuteToggled: serviceId => root.browserActivityMuteToggled(serviceId)
   }
 
   DockAppPicker {

@@ -238,6 +238,56 @@ function removeHiddenApplication(ids, desktopId) {
   return remaining
 }
 
+function normalizeBrowserActivityServiceId(value) {
+  var id = String(value === undefined || value === null ? "" : value)
+    .trim().toLowerCase()
+  if (!id || id.length > 64 || !/^[a-z0-9][a-z0-9_-]*$/.test(id)) return ""
+  return id
+}
+
+function normalizeBrowserActivityMutedServices(value) {
+  if (!Array.isArray(value)) return []
+  var normalized = []
+  for (var i = 0; i < value.length; ++i) {
+    var id = normalizeBrowserActivityServiceId(value[i])
+    if (!id || normalized.indexOf(id) >= 0) continue
+    normalized.push(id)
+  }
+  return normalized
+}
+
+function isBrowserActivityServiceMuted(ids, serviceId) {
+  var wanted = normalizeBrowserActivityServiceId(serviceId)
+  if (!wanted) return false
+  var list = normalizeBrowserActivityMutedServices(ids)
+  return list.indexOf(wanted) >= 0
+}
+
+function muteBrowserActivityService(ids, serviceId) {
+  var normalized = normalizeBrowserActivityMutedServices(ids)
+  var id = normalizeBrowserActivityServiceId(serviceId)
+  if (!id || normalized.indexOf(id) >= 0) return normalized
+  normalized.push(id)
+  return normalized
+}
+
+function unmuteBrowserActivityService(ids, serviceId) {
+  var normalized = normalizeBrowserActivityMutedServices(ids)
+  var id = normalizeBrowserActivityServiceId(serviceId)
+  if (!id) return normalized
+  var remaining = []
+  for (var i = 0; i < normalized.length; ++i) {
+    if (normalized[i] !== id) remaining.push(normalized[i])
+  }
+  return remaining
+}
+
+function toggleBrowserActivityServiceMute(ids, serviceId) {
+  return isBrowserActivityServiceMuted(ids, serviceId)
+    ? unmuteBrowserActivityService(ids, serviceId)
+    : muteBrowserActivityService(ids, serviceId)
+}
+
 function reorderPinnedById(pinnedIds, sourceDesktopId, targetDesktopId) {
   if (!Array.isArray(pinnedIds)) return []
 
@@ -530,6 +580,8 @@ function normalizeSetting(key, value) {
     return controlCommand({ controlCommand: value })
   case "hiddenApplications":
     return normalizeApplicationIds(value)
+  case "browserActivityMutedServices":
+    return normalizeBrowserActivityMutedServices(value)
   default:
     return value
   }

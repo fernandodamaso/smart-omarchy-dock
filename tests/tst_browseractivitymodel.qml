@@ -100,4 +100,22 @@ TestCase {
     ]).rows
     compare(rows.length, 2)
   }
+
+  function test_excludesMutedServicesFromTotal() {
+    var gmail = {
+      targetId: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      serviceId: "gmail",
+      label: "Gmail",
+      profileKey: "Profile 1",
+      domain: "mail.google.com",
+      count: 13,
+      windowAddress: "0x2"
+    }
+    var result = ActivityModel.presentation([whatsapp, gmail], ["gmail"])
+    compare(result.rows.length, 2)
+    verify(result.rows[0].muted === true || result.rows[1].muted === true)
+    compare(result.rows.filter(function(row) { return row.serviceId === "gmail" })[0].muted, true)
+    compare(result.rows.filter(function(row) { return row.serviceId === "whatsapp" })[0].muted, false)
+    compare(result.total, 10)
+  }
 }

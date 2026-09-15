@@ -188,6 +188,20 @@ TestCase {
       removed, "missing")), JSON.stringify(removed))
   }
 
+  function test_normalizesAndTogglesBrowserActivityMutedServices() {
+    compare(JSON.stringify(DockModel.normalizeSetting(
+      "browserActivityMutedServices",
+      [" Gmail ", "gmail", "WhatsApp", "", "bad id", "ok_service-1"])),
+      JSON.stringify(["gmail", "whatsapp", "ok_service-1"]))
+    var muted = DockModel.muteBrowserActivityService(["gmail"], "WhatsApp")
+    compare(JSON.stringify(muted), JSON.stringify(["gmail", "whatsapp"]))
+    verify(DockModel.isBrowserActivityServiceMuted(muted, "gmail"))
+    compare(JSON.stringify(DockModel.toggleBrowserActivityServiceMute(
+      muted, "gmail")), JSON.stringify(["whatsapp"]))
+    compare(JSON.stringify(DockModel.unmuteBrowserActivityService(
+      muted, "missing")), JSON.stringify(["gmail", "whatsapp"]))
+  }
+
   function test_reordersPinnedApplicationsByVisibleIdentityWithHiddenEntries() {
     var hiddenBefore = ["hidden-before", "source", "target"]
     var hiddenBetween = ["source", "hidden-between", "target"]
@@ -368,6 +382,7 @@ TestCase {
     verify(reset.pinned === undefined)
     verify(reset.margin === undefined)
     verify(reset.hiddenApplications === undefined)
+    verify(reset.browserActivityMutedServices === undefined)
   }
 
   function test_mergesSettingsWithoutDroppingPinnedOrUnknownKeys() {

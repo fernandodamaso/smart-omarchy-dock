@@ -6,7 +6,7 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 41 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 43 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
@@ -50,6 +50,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 41 rows 
 | `urgentWindowAnimationEnabled` | `true` | Boolean; existing bounded attention motion, also gated by attentionBadgesEnabled in rendering. |
 | `launcherBadgeMode` | `"automatic"` | String: automatic or dots-only. Uses an already-available provider; does not start/install one. |
 | `browserProfileBadgesEnabled` | `true` | Boolean; per-window browser profile corner badges (photo or initial) from the browser-profile provider. No provider or DevTools endpoint means no badges; the setting installs nothing. |
+| `browserActivityMutedServices` | `[]` | Safe service ID array (`gmail`, `whatsapp`, …). Muted rows stay visible and openable but are excluded from Chrome activity header and dock badge totals; retained by preference reset. |
 | `hiddenApplications` | `[]` | Safe desktop ID array with no new canonical duplicates; independent of pins and retained by preference reset. |
 | `pinned` | `["org.gnome.Nautilus","com.google.Chrome","com.mitchellh.ghostty","code","obsidian","chatgpt"]` | Ordered safe desktop ID array, including unavailable/hidden apps; no new canonical duplicates; retained by preference reset. |
 
@@ -85,7 +86,7 @@ Icon overrides are app-wide and SmartDock-only. Set/reset changes one latest-map
 
 ## Reset, preservation and executable settings
 
-`config reset --preferences` preserves pinned, hiddenApplications, iconOverrides, margin and unknown extension keys; **controlCommand is reset** along with other preferences. `config reset KEY` explicitly resets that key even if it is normally preserved. Do not perform a broad reset for a narrow request.
+`config reset --preferences` preserves pinned, hiddenApplications, browserActivityMutedServices, iconOverrides, margin and unknown extension keys; **controlCommand is reset** along with other preferences. `config reset KEY` explicitly resets that key even if it is normally preserved. Do not perform a broad reset for a narrow request.
 
 Existing unknown keys and untouched legacy values survive minimal mutations. New unknown keys are rejected. An explicit array/object patch replaces that whole key, not a deep merge. Prefer `apps`/`icons` commands for individual membership/order/artwork changes and touched-key rollback after fresh readback.
 

@@ -17,6 +17,7 @@ Item {
   property var notificationService: null
   property var launcherBadgeService: null
   property var browserProfileService: null
+  property var browserActivityMutedServices: []
   property string launcherBadgeMode: BadgeModel.BADGE_COUNT_MODE_AUTOMATIC
   property var identityAliases: ({})
   property int revision: 0
@@ -221,7 +222,8 @@ Item {
     if (!service || !service.available) return null
     var rows = typeof service.allActivityRows === "function"
       ? service.allActivityRows() : []
-    var total = ActivityModel.presentation(rows).total
+    var total = ActivityModel.presentation(
+      rows, root.browserActivityMutedServices).total
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     return BadgeModel.browserCountState(
       desktopId, entry, service.classes, total, service.available,
@@ -290,6 +292,7 @@ Item {
   onNotificationServiceChanged: Qt.callLater(captureNotifications)
   onLauncherBadgeServiceChanged: bumpRevision()
   onLauncherBadgeModeChanged: bumpRevision()
+  onBrowserActivityMutedServicesChanged: bumpRevision()
   onApplicationsChanged: {
     reconcileUrgentStates()
     bumpRevision()

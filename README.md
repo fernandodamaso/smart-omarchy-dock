@@ -202,14 +202,19 @@ When the provider is not installed, these keys stay inert.
 The same provider can publish strict unread activity for WhatsApp and Gmail.
 When those rows are available, hovering Chrome opens a compact card with the
 profile label, unread count, and matching window previews; selecting a row
-activates that exact browser tab and owning window. Only HTTPS pages with the
-recognized service hosts and title signals are accepted, and no message
-contents or account data leave the browser. If the activity provider is
-unavailable or a row cannot be matched exactly, previews and ordinary
-attention dots continue and Chrome may use an aggregate activity badge only
-when no authoritative LauncherEntry count is present (including an explicit
-zero or hidden state). See [`docs/browser-activity.md`](docs/browser-activity.md)
-for the provider contract and validation boundary.
+activates that exact browser tab and owning window. Hover a row to reveal an
+eye control that mutes that service from the header total and Chrome badge
+fallback; muted rows stay visible and dimmed with eye-off until unmuted. Mute
+state is stored as `browserActivityMutedServices` in user settings and survives
+preference reset (`smartdock config get/set browserActivityMutedServices`).
+Only HTTPS pages with the recognized service hosts and title signals are
+accepted, and no message contents or account data leave the browser. If the
+activity provider is unavailable or a row cannot be matched exactly, previews
+and ordinary attention dots continue and Chrome may use an aggregate activity
+badge only when no authoritative LauncherEntry count is present (including an
+explicit zero or hidden state). See
+[`docs/browser-activity.md`](docs/browser-activity.md) for the provider
+contract and validation boundary.
 
 ### Terminal-agent launchers
 
@@ -277,7 +282,7 @@ preserved in this repository.
 ## Configure
 
 The [CLI reference](docs/CLI_REFERENCE.md) describes commands, JSON fields and
-errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 41
+errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 43
 settings, declared defaults and dependencies. Both ship beside the offline
 [agent guide](docs/AGENT_CONFIGURATION.md). Its recipes are executed against
 the real CLI parser and production host/model harness in the existing CI;
@@ -378,6 +383,7 @@ apply. Read the running host's schema/defaults and preserve the user's values:
   "attentionBadgesEnabled": true,
   "urgentWindowAnimationEnabled": true,
   "launcherBadgeMode": "automatic",
+  "browserActivityMutedServices": [],
   "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",
@@ -430,6 +436,7 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 | `attentionBadgesEnabled` | Show application attention badges. FDM-809 dot severity remains the fallback; in automatic mode an authoritative positive visible launcher count may replace that dot. |
 | `urgentWindowAnimationEnabled` | When `true`, active SNI, critical local-notification, or Hyprland urgent attention may nudge the owning application icon, no more than once every 3000 ms while attention remains. A launcher count alone never animates; a count with attention still does. Motion is effective only while `attentionBadgesEnabled` is also enabled; disabling it leaves the static badge intact. |
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
+| `browserActivityMutedServices` | Service IDs muted from Chrome activity header and badge totals (`gmail`, `whatsapp`, …); rows stay visible/dimmed and openable; retained by preference reset |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 

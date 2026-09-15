@@ -38,6 +38,19 @@ identifiers, or page content. A click is accepted only when the target ID and
 window address still exist in the current snapshot; SmartDock then activates
 the Hyprland window and sends `Target.activateTarget` through the provider.
 
+Users can mute individual services from the activity card with the eye /
+eye-off control on each row. Mute is keyed by `serviceId` only (for example
+`gmail` or `whatsapp`), not by profile. Muted rows stay in the list and remain
+clickable, but they are dimmed and excluded from the card header total and the
+Chrome dock badge fallback. The muted set is stored as
+`browserActivityMutedServices` in user `dock.json`, survives preference reset,
+and can be read or written with the ordinary CLI:
+
+```bash
+smartdock config get browserActivityMutedServices --json
+smartdock config set browserActivityMutedServices '["gmail"]' --json
+```
+
 The provider executable is optional. If it is absent, unreachable, or emits an
 invalid optional `activities` field, profile/window previews remain usable and
 activity rows are cleared. A validated Chrome activity total is only a fallback

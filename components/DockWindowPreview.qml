@@ -19,6 +19,7 @@ PopupWindow {
   property string activationMonitor: ""
   property bool previewCaptureEnabled: true
   property var previewArtwork: ({})
+  property var mutedServices: []
 
   property Item anchorItem: null
   property DockWorkspaceLayout clipItem: null
@@ -56,7 +57,7 @@ PopupWindow {
   readonly property int windowLabelHeight: Style.space(18)
   readonly property var activityPresentation: ActivityModel.presentation(
     root.anchorItem && Array.isArray(root.anchorItem["previewActivities"])
-      ? root.anchorItem["previewActivities"] : [])
+      ? root.anchorItem["previewActivities"] : [], root.mutedServices)
   readonly property var activityRows: activityPresentation.rows
   readonly property int activityTotal: activityPresentation.total
   readonly property bool showWindowPreviews: root.members.length >= 2
@@ -120,6 +121,7 @@ PopupWindow {
     : root.previewFlowHeight
 
   signal activityRequested(var activity)
+  signal activityMuteToggled(string serviceId)
 
   function serviceArtwork(serviceId) {
     if (serviceId === "gmail")
@@ -187,7 +189,7 @@ PopupWindow {
     var requested = root.liveMembers(toplevels)
     var requestedActivities = ActivityModel.presentation(
       anchorItem && Array.isArray(anchorItem["previewActivities"])
-        ? anchorItem["previewActivities"] : []).rows
+        ? anchorItem["previewActivities"] : [], root.mutedServices).rows
     if (!anchorItem
         || !PreviewModel.hasPreviewContent(
           requested.length, requestedActivities.length)
@@ -461,6 +463,8 @@ PopupWindow {
               id: activityRow
               required property var modelData
               required property int index
+              readonly property bool muted: modelData.muted === true
+              readonly property real contentOpacity: muted ? 0.45 : 1
 
               width: activityList.width
               height: root.activityRowHeight
@@ -475,6 +479,7 @@ PopupWindow {
 
               Accessible.role: Accessible.Button
               Accessible.name: ActivityModel.accessibleName(modelData)
+                + (muted ? ", muted" : "")
               Accessible.onPressAction: root.activityRequested(modelData)
 
               HoverHandler {
@@ -483,7 +488,9 @@ PopupWindow {
               }
 
               TapHandler {
+                id: activityRowTap
                 acceptedButtons: Qt.LeftButton
+                enabled: !muteTap.pressed
                 onTapped: root.activityRequested(activityRow.modelData)
               }
 
@@ -494,6 +501,7 @@ PopupWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Style.space(38)
                 height: width
+                opacity: activityRow.contentOpacity
 
                 Image {
                   id: serviceArtwork
@@ -527,6 +535,7 @@ PopupWindow {
                 anchors.rightMargin: Style.space(8)
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Style.space(2)
+                opacity: activityRow.contentOpacity
 
                 Text {
                   width: parent.width
@@ -554,13 +563,14 @@ PopupWindow {
 
               Rectangle {
                 id: countPill
-                anchors.right: activityChevron.left
+                anchors.right: muteControl.left
                 anchors.rightMargin: Style.space(8)
                 anchors.verticalCenter: parent.verticalCenter
                 width: Math.max(Style.space(32),
                   countLabel.implicitWidth + Style.space(12))
                 height: Style.space(26)
                 radius: Style.space(7)
+                opacity: activityRow.contentOpacity
                 color: Util.alpha(Color.accent, 0.12)
                 border.width: Style.spacing.hairline
                 border.color: Util.alpha(Color.accent, 0.28)
@@ -577,6 +587,52 @@ PopupWindow {
                 }
               }
 
+              Item {
+                id: muteControl
+                anchors.right: activityChevron.left
+                anchors.rightMargin: Style.space(4)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(22)
+                height: width
+                z: 2
+                opacity: activityRow.muted || activityHover.hovered
+                  || muteHover.hovered ? 1 : 0
+
+                Accessible.role: Accessible.Button
+                Accessible.name: activityRow.muted
+                  ? "Show " + String(activityRow.modelData.label || "service")
+                    + " in totals"
+                  : "Hide " + String(activityRow.modelData.label || "service")
+                    + " from totals"
+                Accessible.onPressAction: root.activityMuteToggled(
+                  String(activityRow.modelData.serviceId || ""))
+
+                HoverHandler {
+                  id: muteHover
+                  enabled: muteControl.opacity > 0
+                  cursorShape: Qt.PointingHandCursor
+                }
+
+                TapHandler {
+                  id: muteTap
+                  enabled: muteControl.opacity > 0
+                  acceptedButtons: Qt.LeftButton
+                  gesturePolicy: TapHandler.WithinBounds
+                  onTapped: root.activityMuteToggled(
+                    String(activityRow.modelData.serviceId || ""))
+                }
+
+                DockLucideIcon {
+                  anchors.centerIn: parent
+                  width: Style.space(16)
+                  height: width
+                  iconName: activityRow.muted ? "eye-off" : "eye"
+                  tint: muteHover.hovered || activityHover.hovered
+                    ? Color.menu.selectedText
+                    : Util.alpha(Color.menu.text, 0.7)
+                }
+              }
+
               DockLucideIcon {
                 id: activityChevron
                 anchors.right: parent.right
@@ -584,6 +640,7 @@ PopupWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Style.space(16)
                 height: width
+                opacity: activityRow.contentOpacity
                 iconName: "chevron-right"
                 tint: activityHover.hovered
                   ? Color.menu.selectedText : Util.alpha(Color.menu.text, 0.55)
