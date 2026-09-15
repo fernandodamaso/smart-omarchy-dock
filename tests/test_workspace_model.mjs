@@ -283,7 +283,7 @@ let left = mirrored('DP-1')
 let right = mirrored('HDMI-A-1')
 assert.equal(model.presentationsEqual(left, right), true)
 assert.deepEqual(Array.from(left.groups, g => g.identity),
-  ['id:1', 'id:2', 'id:3', 'id:10', 'name:Design', 'name:Retained'])
+  ['id:1', 'id:10', 'id:2', 'id:3', 'name:Design', 'name:Retained'])
 assert.equal(left.groups.find(g => g.identity === 'id:10').count, 0)
 assert.equal(left.groups.find(g => g.identity === 'id:3').items[0].toplevels[0], mirrorWindows[1],
   'sticky follows owner active workspace, once')
