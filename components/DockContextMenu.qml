@@ -104,7 +104,8 @@ PopupWindow {
     root.groupCandidateSnapshot = root.captureGroupCandidateSnapshot()
     root.openedWorkspaceGroupsSignature = root.workspaceGroupsSignature()
     root.page = DockMenuModel.initialPage(
-      root.controlItem, root.targetContexts.length, root.pageTarget !== null)
+      root.controlItem, root.targetContexts.length, root.pageTarget !== null,
+      root.representedWorkspaceGrouped())
     root.feedbackTitle = ""
     root.feedbackText = ""
     root.pendingMutationAction = ""

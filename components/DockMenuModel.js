@@ -102,8 +102,9 @@ function targetSnapshotsEqual(left, right) {
   return true
 }
 
-function initialPage(controlItem, targetCount, preferredTargetValid) {
+function initialPage(controlItem, targetCount, preferredTargetValid, groupedRepresentation) {
   if (controlItem) return "controls"
+  if (groupedRepresentation === true) return "app"
   if (preferredTargetValid || Number(targetCount) === 1) return "window"
   return "app"
 }
