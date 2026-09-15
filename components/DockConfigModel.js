@@ -1,5 +1,6 @@
 .pragma library
 .import "DockIconModel.js" as DockIconModel
+.import "DockWorkspaceGroupModel.js" as DockWorkspaceGroupModel
 
 // Strict validation applies only to new intents. Untouched legacy values and
 // extension keys stay byte-for-value equivalent in the requested snapshot.
@@ -35,6 +36,8 @@ function valueError(value, spec) {
     return "Expected empty, #RRGGBB, Qt #AARRGGBB or @theme.token"
   if (spec.type === "array") {
     if (!Array.isArray(value)) return "Expected an array"
+    if (spec.format === "workspace-groups")
+      return DockWorkspaceGroupModel.workspaceGroupsError(value)
     if (spec.format === "application-ids") {
       var seen = Object.create(null)
       for (var i = 0; i < value.length; ++i) {
@@ -101,6 +104,8 @@ function validatePatch(patch, schema) {
     var error = ""
     if (key === "__proto__" || key === "constructor" || key === "prototype"
         || !own(schema.settings, key)) error = "Unknown or reserved setting"
+    else if (key === "groupWindows" && patch[key] === true)
+      error = "Global grouping is deprecated and inactive; use workspaceGroups or the local Group Windows action"
     else error = valueError(patch[key], schema.settings[key])
     if (error) errors.push({ key: key, message: error })
   }
@@ -217,6 +222,38 @@ function applicationIntent(current, entries, action, args) {
   var patch = Object.create(null)
   patch[field] = list
   return withPatch(current, patch)
+}
+
+function workspaceGroupIntent(current, entries, action, args) {
+  var desktopKey = canonicalApplicationId(args && args.desktopId)
+  var workspace = DockWorkspaceGroupModel.canonicalWorkspaceTarget(args && args.workspace)
+  if (!desktopKey) return rejectedIntent("desktopId", "Invalid application ID")
+  if (!workspace) return rejectedIntent("workspace", "Invalid canonical workspace identity")
+  var existing = own(current, "workspaceGroups") ? current.workspaceGroups : []
+  var existingError = DockWorkspaceGroupModel.workspaceGroupsError(existing)
+  if (existingError) return rejectedIntent("workspaceGroups", "Repair workspaceGroups first: " + existingError)
+  var list = existing.map(function(entry) {
+    return { desktopId: entry.desktopId, workspace: entry.workspace }
+  })
+  var index = -1
+  for (var i = 0; i < list.length; ++i) {
+    if (canonicalApplicationId(list[i].desktopId) === desktopKey
+        && list[i].workspace === workspace) {
+      index = i
+      break
+    }
+  }
+  if (action === "group") {
+    if (index < 0) {
+      var desktopId = storedIdentity(current, entries || [], args.desktopId)
+      if (!DockWorkspaceGroupModel.persistedApplicationId(desktopId))
+        return rejectedIntent("desktopId", "Application identity cannot be persisted canonically")
+      list.push({ desktopId: desktopId, workspace: workspace })
+    }
+  } else if (action === "ungroup") {
+    if (index >= 0) list.splice(index, 1)
+  } else return rejectedIntent("action", "Unsupported workspace group intent")
+  return withPatch(current, { workspaceGroups: list })
 }
 
 function effectiveIcons(value) {

@@ -14,15 +14,18 @@ const DockIconModel = model('DockIconModel.js')
 const DockModel = model('DockModel.js')
 const DockWindowModel = model('DockWindowModel.js', { DockModel })
 const WorkspaceModel = model('DockWorkspaceModel.js', { DockModel, DockWindowModel })
-const ConfigModel = model('DockConfigModel.js', { DockIconModel, DockModel })
+const DockWorkspaceGroupModel = model('DockWorkspaceGroupModel.js', { DockModel })
+const ConfigModel = model('DockConfigModel.js', {
+  DockIconModel, DockWorkspaceGroupModel
+})
 const schema = JSON.parse(fs.readFileSync(
   new URL('../config/settings-schema.json', import.meta.url), 'utf8'))
 
-assert.equal(typeof DockModel.normalizeWorkspaceGroups, 'function',
+assert.equal(typeof DockWorkspaceGroupModel.normalizeWorkspaceGroups, 'function',
   'CM-03 exposes strict runtime workspace-group normalization')
-assert.equal(typeof DockModel.workspaceGroupEnabled, 'function',
+assert.equal(typeof DockWorkspaceGroupModel.workspaceGroupEnabled, 'function',
   'CM-03 exposes exact app/workspace policy lookup')
-assert.equal(typeof WorkspaceModel.buildFlatPresentation, 'function',
+assert.equal(typeof DockWorkspaceGroupModel.buildFlatPresentation, 'function',
   'flat layout has the same local grouping policy as workspace cards')
 assert.equal(typeof ConfigModel.workspaceGroupIntent, 'function',
   'host mutations use a latest-settings workspace-group intent')
@@ -57,18 +60,19 @@ function individualBase() {
     ['com.google.Chrome'], windows, [], handles, false, false, [])
 }
 function flat(groups = onlyWorkspace3, origins = {}) {
-  return WorkspaceModel.buildFlatPresentation(
+  return DockWorkspaceGroupModel.buildFlatPresentation(
     individualBase(), records(origins), groups, false)
 }
 function cards(groups = onlyWorkspace3, origins = {}) {
-  return WorkspaceModel.buildWorkspacePresentation(
-    individualBase(), records(origins), workspaces, {
-      monitorScope: 'all',
-      monitor: 'id:0',
-      monitors,
-      activeWorkspace: 'id:3',
-      workspaceGroups: groups
+  const locations = records(origins)
+  const localized = DockWorkspaceGroupModel.prepareWorkspaceItems(
+    individualBase(), locations, groups)
+  const presentation = WorkspaceModel.buildWorkspacePresentation(
+    localized, locations, workspaces, {
+      monitorScope: 'all', monitor: 'id:0', monitors,
+      activeWorkspace: 'id:3', groupWindows: false
     })
+  return DockWorkspaceGroupModel.decorateWorkspacePresentation(presentation, groups)
 }
 function matching(items, workspace) {
   return items.filter(item => String(item.presentationId || '').startsWith(`${workspace}/com.google.Chrome`))
@@ -89,9 +93,9 @@ const card3 = grouped.groups.find(group => group.identity === 'id:3')
 const card4 = grouped.groups.find(group => group.identity === 'id:4')
 assert.equal(card3.items.length, 1, 'workspace-card layout agrees with flat grouping')
 assert.deepEqual(Array.from(card3.items[0].toplevels), [A, B])
+assert.equal(card3.items[0].identityToplevel, null)
 assert.equal(card4.items.length, 2)
 
-// New arrivals join the saved pair without mutating policy.
 const E = chrome('E')
 windows = windows.concat([E])
 handles.push({ wayland: E, address: '0xe5',
@@ -101,8 +105,6 @@ w3 = matching(result, 'id:3')
 assert.equal(w3.length, 1)
 assert.deepEqual(Array.from(w3[0].toplevels), [A, B, E])
 
-// Moves follow destination policy. The source pair remains saved; Workspace 4
-// stays individual until its own pair is explicitly present.
 handles[1].lastIpcObject.workspace = { id: 4 }
 result = flat()
 w3 = matching(result, 'id:3')
@@ -119,34 +121,33 @@ w4 = matching(result, 'id:4')
 assert.equal(w4.length, 1)
 assert.deepEqual(Array.from(w4[0].toplevels), [B, C, D])
 
-// Moving back into the saved destination joins it again.
 handles[1].lastIpcObject.workspace = { id: 3 }
 assert.deepEqual(Array.from(matching(flat(), 'id:3')[0].toplevels), [A, B, E])
 
-// Minimized windows retain local group membership through the shared origin map.
 handles[1].lastIpcObject.workspace = { name: 'special:smartdock-minimized' }
 const minimized = flat(onlyWorkspace3, {
   '0xb2': { workspace: '3', monitor: '0' }
 })
 assert.deepEqual(Array.from(matching(minimized, 'id:3')[0].toplevels), [A, B, E])
 
-// Unresolved/special workspace membership never gets folded into a configured group.
 handles[3].lastIpcObject.workspace = { name: 'special:scratch' }
 const unresolved = flat(bothWorkspaces)
 const dItem = unresolved.find(item => item.toplevels.indexOf(D) >= 0)
 assert.equal(dItem.toplevels.length, 1)
 assert.equal(dItem.identityToplevel, D)
 
-// Browser-profile metadata is intentionally not a grouping dimension.
 A.browserProfileKey = 'Profile 1'
 E.browserProfileKey = 'Profile 2'
 const profileMixed = matching(flat(), 'id:3')[0]
 assert.deepEqual(Array.from(profileMixed.toplevels), [A, B, E])
 
-assert.equal(DockModel.workspaceGroupEnabled(onlyWorkspace3, 'COM.GOOGLE.CHROME', 'id:3'), true)
-assert.equal(DockModel.workspaceGroupEnabled(onlyWorkspace3, 'com.google.Chrome', 'id:4'), false)
-assert.equal(DockModel.workspaceGroupEnabled(onlyWorkspace3, 'com.google.Chrome', 'special:x'), false)
-assert.deepEqual(Array.from(DockModel.normalizeWorkspaceGroups(onlyWorkspace3), entry =>
+assert.equal(DockWorkspaceGroupModel.workspaceGroupEnabled(
+  onlyWorkspace3, 'COM.GOOGLE.CHROME', 'id:3'), true)
+assert.equal(DockWorkspaceGroupModel.workspaceGroupEnabled(
+  onlyWorkspace3, 'com.google.Chrome', 'id:4'), false)
+assert.equal(DockWorkspaceGroupModel.workspaceGroupEnabled(
+  onlyWorkspace3, 'com.google.Chrome', 'special:x'), false)
+assert.deepEqual(Array.from(DockWorkspaceGroupModel.normalizeWorkspaceGroups(onlyWorkspace3), entry =>
   [entry.desktopId, entry.workspace]), [['com.google.Chrome', 'id:3']])
 
 const valid = ConfigModel.validatePatch({ workspaceGroups: bothWorkspaces }, schema)
@@ -170,11 +171,8 @@ for (const invalidGroups of [
     `invalid workspaceGroups must reject atomically: ${JSON.stringify(invalidGroups)}`)
 }
 
-// Pair mutations operate on the latest settings snapshot and preserve every
-// unrelated/legacy value and pair order.
 const current = {
-  pinned: ['org.example.One'],
-  hiddenApplications: ['org.example.Hidden'],
+  pinned: ['org.example.One'], hiddenApplications: ['org.example.Hidden'],
   groupWindows: true,
   workspaceGroups: [{ desktopId: 'org.mozilla.firefox', workspace: 'id:8' }],
   concurrentExtensionValue: { keep: 'exactly' }
@@ -193,9 +191,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(intent.settings.concurrentExtensionVa
 assert.equal(intent.settings.margin, 77)
 assert.deepEqual(Array.from(intent.settings.workspaceGroups, entry => entry.workspace), ['id:8'])
 
-// The legacy Boolean is read/preserved but has no effective presentation role.
-assert.equal(DockModel.normalizeSetting('groupWindows', true), false)
-assert.equal(DockModel.normalizeSetting('groupWindows', false), false)
+assert.equal(DockWorkspaceGroupModel.legacyGroupingActive(true), false)
 assert.equal(flat([]).filter(item => item.toplevels.length > 1).length, 0,
   'old groupWindows=true cannot create local groups when workspaceGroups is empty')
 const deprecatedEnable = ConfigModel.validatePatch({ groupWindows: true }, schema)
