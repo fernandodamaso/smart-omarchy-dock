@@ -92,7 +92,8 @@ assert.deepEqual(revealed, [[cards[1], 45]], 'workspace switch reveals the activ
 // Unmodified clicks focus in place; Ctrl+click keeps workspace-to-monitor pull.
 preview.dismissImmediately = () => {}
 item.applicationActions = DockModel.normalizeApplicationActionConfig({
-  clickAction: 'focus-or-launch', middleClickAction: 'focus-or-launch' })
+  clickAction: 'focus-or-launch', middleClickAction: 'focus-or-launch',
+  scrollAction: 'cycle-windows' })
 item.activationMonitor = 'id:0'
 preview.activationMonitor = 'id:0'
 item.runningToplevels = [windows[0]]
@@ -193,6 +194,12 @@ for (const usingLua of [false, true]) {
     `Ctrl+click icon activation (${usingLua ? 'lua' : 'legacy'})`)
 
   clearSubmissions()
+  assert.equal(item.dispatchPointerAction('middle', { control: true }), true)
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x1')], usingLua,
+    `Ctrl+middle click icon activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  clearSubmissions()
   assert.equal(preview.activateToplevel(windows[0]), true)
   expectInPlace(focusWindow('0x1'),
     `ordinary preview activation focuses in place (${usingLua ? 'lua' : 'legacy'})`)
@@ -261,20 +268,36 @@ for (const usingLua of [false, true]) {
   item.runningToplevels = windows
   item.runningCount = 2
   clearSubmissions()
-  assert.equal(item.dispatchApplicationAction('cycle-windows', { direction: 1 }), true)
-  expectRequests(requests, [restoreWindow('0x2', '5'), focusWindow('0x2')],
-    `minimized cycle restore stays in place (${usingLua ? 'lua' : 'legacy'})`)
-  expectRequests(batches, [],
-    `minimized cycle restore does not spawn hyprctl (${usingLua ? 'lua' : 'legacy'})`)
+  assert.equal(item.dispatchPointerAction('scroll', {}, { direction: 1 }), true)
+  expectSequence([focusWorkspace('5'), moveWorkspace('5'),
+    focusWorkspace('5'), restoreWindow('0x2', '5'), focusWindow('0x2')], usingLua,
+    `minimized scroll cycle keeps dock monitor routing (${usingLua ? 'lua' : 'legacy'})`)
+  assert.equal(actions.minimizedOrigins['0x2'], undefined,
+    'successful scroll restore forgets the minimized origin')
 
   handles[0].lastIpcObject = { workspace: { id: 8 }, monitor: 1 }
   handles[1].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
   actions.minimizedOrigins = {}
   actions.activeToplevel = windows[0]
   clearSubmissions()
-  assert.equal(item.dispatchApplicationAction('cycle-windows', { direction: 1 }), true)
-  expectInPlace(focusWindow('0x2'),
-    `ordinary cycle activation stays in place (${usingLua ? 'lua' : 'legacy'})`)
+  assert.equal(item.dispatchPointerAction('scroll', {}, { direction: 1 }), true)
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x2')], usingLua,
+    `ordinary scroll cycle keeps dock monitor routing (${usingLua ? 'lua' : 'legacy'})`)
+
+  for (const modifiers of [{ control: true }, { shift: true }, { alt: true },
+    { meta: true }, { control: true, shift: true }]) {
+    clearSubmissions()
+    assert.equal(item.dispatchPointerAction('scroll', modifiers, { direction: 1 }), false)
+    expectRequests(requests, [], 'modified scrolling does not dispatch')
+    expectRequests(batches, [], 'modified scrolling does not spawn hyprctl')
+  }
+  item.applicationActions.scrollAction = 'none'
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('scroll', {}, { direction: 1 }), false)
+  expectRequests(requests, [], 'disabled scrolling does not dispatch')
+  expectRequests(batches, [], 'disabled scrolling does not spawn hyprctl')
+  item.applicationActions.scrollAction = 'cycle-windows'
 
   // Context-menu / minimize-restore paths omit activationMonitor and keep old restore.
   actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
