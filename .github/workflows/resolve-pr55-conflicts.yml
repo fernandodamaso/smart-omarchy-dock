@@ -1,0 +1,191 @@
+name: Resolve PR 55 conflicts
+
+on:
+  push:
+    branches:
+      - feat/chrome-activity-hover
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    name: Reconcile main into PR 55
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: feat/chrome-activity-hover
+
+      - name: Merge main and resolve known overlaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "main is already integrated"
+            exit 0
+          fi
+
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_status=$?
+          set -e
+
+          conflicts="$(git diff --name-only --diff-filter=U || true)"
+          if [[ -n "$conflicts" ]]; then
+            unexpected="$(printf '%s\n' "$conflicts" | grep -Ev '^(README\.md|components/DockItem\.qml|components/DockModel\.js|components/DockWindowPreview\.qml|components/DockWindowPreviewTile\.qml)$' || true)"
+            if [[ -n "$unexpected" ]]; then
+              echo "Unexpected merge conflicts:" >&2
+              printf '%s\n' "$unexpected" >&2
+              exit 1
+            fi
+            while IFS= read -r path; do
+              [[ -z "$path" ]] && continue
+              git checkout --ours -- "$path"
+            done <<< "$conflicts"
+          elif [[ $merge_status -ne 0 ]]; then
+            echo "git merge failed without conflict paths" >&2
+            exit "$merge_status"
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text()
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(f"{path}: cannot locate {label}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "components/DockModel.js",
+              '''  if (kind === "right") return "context-menu"\n  if (control || alt || meta) return "none"\n\n  if (kind === "left")\n    return shift ? "none" : actionConfig.clickAction\n  if (kind === "middle")\n    return shift ? "none" : actionConfig.middleClickAction\n  if (kind === "scroll")\n    return shift ? "none" : actionConfig.scrollAction\n''',
+              '''  if (kind === "right") return "context-menu"\n  if (alt || meta) return "none"\n\n  if (kind === "left")\n    return shift ? "none" : actionConfig.clickAction\n  if (kind === "middle")\n    return shift ? "none" : actionConfig.middleClickAction\n  if (kind === "scroll")\n    return shift || control ? "none" : actionConfig.scrollAction\n''',
+              "modifier-aware pointer action logic")
+
+          replace_once(
+              "components/DockItem.qml",
+              '''    var request = options || ({})\n    switch (action) {\n    case "cycle-windows":\n      return root.windowActions.cycleToplevels(\n''',
+              '''    var request = options || ({})\n    var activationMonitor = request.activationMonitor || ""\n    switch (action) {\n    case "cycle-windows":\n      // Scrolling retains its monitor pull; Ctrl only gates click activation.\n      return root.windowActions.cycleToplevels(\n''',
+              "activation monitor selection")
+
+          replace_once(
+              "components/DockItem.qml",
+              '''        return root.windowActions.activateToplevel(\n          root.runningToplevels[root.lastActivatedToplevel], root.originOnly,\n          root.activationMonitor)\n''',
+              '''        return root.windowActions.activateToplevel(\n          root.runningToplevels[root.lastActivatedToplevel], root.originOnly,\n          activationMonitor)\n''',
+              "focus-or-launch monitor routing")
+
+          replace_once(
+              "components/DockItem.qml",
+              '''  function dispatchPointerAction(input, modifiers, options) {\n    return dispatchApplicationAction(DockModel.resolveApplicationPointerAction(\n      applicationActions, input, modifiers), options)\n  }\n''',
+              '''  function dispatchPointerAction(input, modifiers, options) {\n    var keys = modifiers || ({})\n    var request = Object.assign({}, options || ({}))\n    if (keys.control === true)\n      request.activationMonitor = root.activationMonitor\n    return dispatchApplicationAction(DockModel.resolveApplicationPointerAction(\n      applicationActions, input, modifiers), request)\n  }\n''',
+              "Ctrl click monitor routing")
+
+          replace_once(
+              "components/DockItem.qml",
+              '''  TapHandler {\n    enabled: root.presentationActive && !root.workspaceInputSuppressed\n    acceptedButtons: Qt.LeftButton\n    acceptedModifiers: Qt.NoModifier\n    onTapped: root.dispatchPointerAction("left", {})\n  }\n\n  TapHandler {\n    enabled: root.presentationActive && !root.workspaceInputSuppressed\n    acceptedButtons: Qt.MiddleButton\n    acceptedModifiers: Qt.NoModifier\n    onTapped: root.dispatchPointerAction("middle", {})\n  }\n''',
+              '''  TapHandler {\n    enabled: root.presentationActive && !root.workspaceInputSuppressed\n    acceptedButtons: Qt.LeftButton\n    acceptedModifiers: Qt.NoModifier\n    onTapped: root.dispatchPointerAction("left", {})\n  }\n\n  TapHandler {\n    enabled: root.presentationActive && !root.workspaceInputSuppressed\n    acceptedButtons: Qt.LeftButton\n    acceptedModifiers: Qt.ControlModifier\n    onTapped: root.dispatchPointerAction("left", { control: true })\n  }\n\n  TapHandler {\n    enabled: root.presentationActive && !root.workspaceInputSuppressed\n    acceptedButtons: Qt.MiddleButton\n    acceptedModifiers: Qt.NoModifier\n    onTapped: root.dispatchPointerAction("middle", {})\n  }\n\n  TapHandler {\n    enabled: root.presentationActive && !root.workspaceInputSuppressed\n    acceptedButtons: Qt.MiddleButton\n    acceptedModifiers: Qt.ControlModifier\n    onTapped: root.dispatchPointerAction("middle", { control: true })\n  }\n''',
+              "Ctrl tap handlers")
+
+          replace_once(
+              "components/DockWindowPreview.qml",
+              '''  function activateToplevel(toplevel) {\n    if (!root.windowActions\n        || !root.windowActions.activateToplevel(\n          toplevel, root.originOnly, root.activationMonitor)) return false\n    root.dismissImmediately()\n    return true\n  }\n''',
+              '''  function activateToplevel(toplevel, pullToDockMonitor) {\n    var monitor = pullToDockMonitor === true ? root.activationMonitor : ""\n    if (!root.windowActions\n        || !root.windowActions.activateToplevel(\n          toplevel, root.originOnly, monitor)) return false\n    root.dismissImmediately()\n    return true\n  }\n''',
+              "preview activation monitor selection")
+
+          replace_once(
+              "components/DockWindowPreview.qml",
+              '''                onActivateRequested: toplevel => root.activateToplevel(toplevel)\n''',
+              '''                onActivateRequested: (toplevel, pullToDockMonitor) =>\n                  root.activateToplevel(toplevel, pullToDockMonitor)\n''',
+              "preview tile activation forwarding")
+
+          replace_once(
+              "components/DockWindowPreviewTile.qml",
+              '''  signal activateRequested(var toplevel)\n''',
+              '''  signal activateRequested(var toplevel, bool pullToDockMonitor)\n''',
+              "preview activation signal")
+
+          replace_once(
+              "components/DockWindowPreviewTile.qml",
+              '''  Accessible.onPressAction: root.activateRequested(root.toplevel)\n''',
+              '''  Accessible.onPressAction: root.activateRequested(root.toplevel, false)\n''',
+              "accessible preview activation")
+
+          replace_once(
+              "components/DockWindowPreviewTile.qml",
+              '''    onClicked: root.activateRequested(root.toplevel)\n''',
+              '''    onClicked: mouse => {\n      var keys = mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier\n        | Qt.AltModifier | Qt.MetaModifier)\n      root.activateRequested(root.toplevel, keys === Qt.ControlModifier)\n    }\n''',
+              "modifier-aware preview click")
+
+          replace_once(
+              "README.md",
+              '''- Right click always opens the existing application context menu.\n- Left click with no modifier uses `clickAction`.\n- Middle click with no modifier uses `middleClickAction`.\n- Vertical-dominant scrolling uses `scrollAction`; horizontal/tied gestures pass through.\n- Ctrl, Alt, Meta, Shift, and mixed modifier combinations do not trigger scroll actions.\n''',
+              '''- Right click always opens the existing application context menu.\n- Left click with no modifier uses `clickAction`.\n- Ctrl+Left click uses the same `clickAction`; `focus-or-launch` also moves that window's workspace onto the clicked dock monitor.\n- Middle click with no modifier uses `middleClickAction`.\n- Ctrl+Middle click uses the same `middleClickAction`, including the workspace pull when that action is `focus-or-launch`.\n- Vertical-dominant scrolling uses `scrollAction`; horizontal/tied gestures pass through.\n- Alt, Meta, Shift, and mixed modifier combinations do not trigger click or scroll actions. Ctrl does not trigger scroll actions.\n''',
+              "pointer input documentation")
+
+          replace_once(
+              "README.md",
+              '''- `focus-or-launch`: preserves the legacy Left click behavior exactly: repeated\n  clicks focus successive windows in a running group in dock order, while a closed pinned\n  application launches.\n''',
+              '''- `focus-or-launch`: unmodified clicks focus successive windows in a running\n  group in dock order without moving workspaces; a closed pinned application\n  launches. Ctrl+click also moves that window's workspace onto the clicked dock.\n''',
+              "focus-or-launch documentation")
+          PY
+
+          git add README.md components/DockItem.qml components/DockModel.js \
+            components/DockWindowPreview.qml components/DockWindowPreviewTile.qml
+
+          remaining="$(git diff --name-only --diff-filter=U || true)"
+          if [[ -n "$remaining" ]]; then
+            echo "Unresolved merge paths remain:" >&2
+            printf '%s\n' "$remaining" >&2
+            exit 1
+          fi
+
+      - name: Install headless test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            qml6-module-qtqml-workerscript \
+            qml6-module-qtquick \
+            qml6-module-qtquick-window \
+            qml6-module-qttest \
+            qt6-declarative-dev-tools \
+            ripgrep
+
+      - name: Verify resolved tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh; do
+            bash -n "$script"
+          done
+          for test_script in tests/check_*.sh; do
+            bash "$test_script"
+          done
+          for test_script in tests/test_*.mjs; do
+            node "$test_script"
+          done
+          python3 -m unittest discover -s tests -p 'test_*.py'
+          python3 -m unittest discover -s provider/browser-profiles/tests -p 'test_*.py'
+          /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+          git diff --check
+
+      - name: Commit resolved merge and remove resolver
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/resolve-pr55-conflicts.yml
+          git add -A
+          git config user.name "SmartDock-Live"
+          git config user.email "smartdock-live@example.invalid"
+          git commit -m "merge: reconcile main into Chrome activity hover"
+          git push origin HEAD:feat/chrome-activity-hover
