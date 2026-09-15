@@ -319,8 +319,11 @@ TestCase {
 
     var refreshEvents = [
       "openwindow", "closewindow", "movewindow", "movewindowv2",
-      "workspace", "workspacev2", "focusedmon", "urgent", "fullscreen",
-      "monitoradded", "monitoraddedv2", "monitorremoved", "monitorremovedv2"
+      "workspace", "workspacev2", "createworkspace", "createworkspacev2",
+      "destroyworkspace", "destroyworkspacev2", "moveworkspace", "moveworkspacev2",
+      "renameworkspace", "focusedmon", "focusedmonv2", "configreloaded",
+      "urgent", "fullscreen", "monitoradded", "monitoraddedv2",
+      "monitorremoved", "monitorremovedv2"
     ]
     for (var i = 0; i < refreshEvents.length; ++i)
       compare(DockWindowModel.shouldRefreshWindowScope(refreshEvents[i]), true,
