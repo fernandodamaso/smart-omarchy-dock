@@ -21,6 +21,7 @@ Item {
   property bool providerExecutable: false
   property bool shuttingDown: false
   property int restartAttempts: 0
+  readonly property bool activationInFlight: activationProcess.running
 
   readonly property string dataHome: Quickshell.env("XDG_DATA_HOME") !== ""
     ? Quickshell.env("XDG_DATA_HOME")

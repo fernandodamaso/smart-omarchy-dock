@@ -158,6 +158,36 @@ class BrowserProfileProviderTest(unittest.TestCase):
         self.assertFalse(provider.activate_target(0, "AABBCCDD", FakeClient))
         self.assertFalse(provider.activate_target(9222, "$(bad)", FakeClient))
 
+    def test_rejects_oversized_digit_strings_without_raising(self):
+        self.assertIsNone(provider.activity_for_target(
+            {"targetId": "A" * 32, "url": "https://web.whatsapp.com/",
+             "title": "(" + ("9" * 5000) + ") WhatsApp"}, "Default", "0x1"))
+
+    def test_empty_profile_keys_do_not_collapse_distinct_windows(self):
+        rows = [
+            {"targetId": "A" * 32, "serviceId": "whatsapp", "label": "WhatsApp",
+             "profileKey": "", "domain": "web.whatsapp.com", "count": 5,
+             "windowAddress": "0x1"},
+            {"targetId": "B" * 32, "serviceId": "whatsapp", "label": "WhatsApp",
+             "profileKey": "", "domain": "web.whatsapp.com", "count": 8,
+             "windowAddress": "0x2"},
+        ]
+        reduced = provider.reduce_activities(rows)
+        self.assertEqual(len(reduced), 2)
+
+    def test_activate_target_returns_false_on_cdp_error(self):
+        class FakeClient:
+            def __init__(self, port):
+                self.port = port
+
+            def call(self, method, params):
+                raise provider.CdpError("No target with given id found")
+
+            def close(self):
+                pass
+
+        self.assertFalse(provider.activate_target(9222, "AABBCCDD", FakeClient))
+
 
 if __name__ == "__main__":
     unittest.main()

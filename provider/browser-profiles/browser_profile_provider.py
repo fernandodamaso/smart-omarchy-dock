@@ -45,7 +45,10 @@ def valid_target_id(value):
 
 
 def _unread_count(match):
-    count = int(match.group(1))
+    digits = match.group(1)
+    if len(digits) > 6:
+        return None
+    count = int(digits)
     return count if 1 <= count <= MAX_UNREAD_COUNT else None
 
 
@@ -99,7 +102,10 @@ def reduce_activities(rows):
             continue
         if not 1 <= count <= MAX_UNREAD_COUNT:
             continue
-        key = (str(row.get("serviceId", "")), str(row.get("profileKey", "")))
+        profile_key = str(row.get("profileKey", "")).strip()
+        address = str(row.get("windowAddress", "")).strip().lower()
+        key = (str(row.get("serviceId", "")), profile_key) if profile_key else (
+            str(row.get("serviceId", "")), "", address)
         current = selected.get(key)
         if current is None or count > int(current.get("count", 0)) \
                 or (count == int(current.get("count", 0))

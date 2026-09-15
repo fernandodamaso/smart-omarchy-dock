@@ -84,4 +84,20 @@ TestCase {
     compare(ActivityModel.activationCommand(
       "/tmp/provider", "$(touch /tmp/no)", 9222).length, 0)
   }
+
+  function test_rejectsFractionalCounts() {
+    compare(ActivityModel.presentation([
+      Object.assign({}, whatsapp, { count: 0.5 })
+    ]).rows.length, 0)
+  }
+
+  function test_keepsDistinctWindowsWhenProfileKeyEmpty() {
+    var rows = ActivityModel.presentation([
+      Object.assign({}, whatsapp, { profileKey: "", count: 5, windowAddress: "0x1",
+        targetId: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }),
+      Object.assign({}, whatsapp, { profileKey: "", count: 8, windowAddress: "0x2",
+        targetId: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" })
+    ]).rows
+    compare(rows.length, 2)
+  }
 }

@@ -16,12 +16,9 @@ PopupWindow {
   required property var visibleItems
   property var iconOverrides: ({})
   property int iconReloadRevision: 0
-<<<<<<< HEAD
   property string activationMonitor: ""
-=======
   property bool previewCaptureEnabled: true
   property var previewArtwork: ({})
->>>>>>> c06fccb (local visual verification)
 
   property Item anchorItem: null
   property DockWorkspaceLayout clipItem: null
@@ -70,19 +67,27 @@ PopupWindow {
     root.activityRows.length, root.activityRowHeight,
     root.separatorHeight, root.maxVisibleActivityRows)
   readonly property int previewContentWidth: !root.showWindowPreviews ? 0
-    : root.hasActivity || root.orientationHorizontal
+    : root.orientationHorizontal
       ? root.members.length * root.tileWidth
         + Math.max(0, root.members.length - 1) * root.tileSpacing
       : root.tileWidth
+  readonly property int previewContentHeight: !root.showWindowPreviews ? 0
+    : root.orientationHorizontal ? root.tileHeight
+    : root.members.length * root.tileHeight
+      + Math.max(0, root.members.length - 1) * root.tileSpacing
+  readonly property int maxVisiblePreviewTiles: 2
   readonly property int previewFlowWidth: !root.showWindowPreviews ? 0
-    : root.hasActivity ? root.activityWidth
-      : root.orientationHorizontal ? root.previewContentWidth
-      : root.tileWidth
+    : root.hasActivity && root.orientationHorizontal ? root.activityWidth
+    : root.orientationHorizontal ? root.previewContentWidth
+    : root.tileWidth
   readonly property int previewFlowHeight: !root.showWindowPreviews ? 0
-    : root.hasActivity || root.orientationHorizontal
-      ? root.tileHeight
-      : root.members.length * root.tileHeight
-        + Math.max(0, root.members.length - 1) * root.tileSpacing
+    : root.orientationHorizontal ? root.tileHeight
+    : root.hasActivity
+      ? Math.min(root.members.length, root.maxVisiblePreviewTiles)
+        * root.tileHeight
+        + Math.max(0, Math.min(root.members.length, root.maxVisiblePreviewTiles) - 1)
+          * root.tileSpacing
+    : root.previewContentHeight
   readonly property int contentWidth: root.hasActivity
     ? Math.max(root.activityWidth, root.previewFlowWidth)
     : root.previewFlowWidth
@@ -105,11 +110,10 @@ PopupWindow {
     root.anchorScreen ? root.anchorScreen.width : root.desiredWidth,
     root.anchorScreen ? root.anchorScreen.height : root.desiredHeight,
     root.desiredWidth, root.desiredHeight, root.popupPadding)
+  // Prefer the natural activity list; let the outer Flickable own short-screen
+  // overflow instead of starving rows to fit unbounded preview tiles.
   readonly property int activityListHeight: root.hasActivity
-    ? Math.min(root.naturalActivityListHeight, Math.max(0,
-      root.previewViewport.height - root.popupPadding * 2
-      - root.headerHeight - root.sectionSpacing
-      - root.previewSectionHeight)) : 0
+    ? root.naturalActivityListHeight : 0
   readonly property int contentHeight: root.hasActivity
     ? root.headerHeight + root.sectionSpacing + root.activityListHeight
       + root.previewSectionHeight
@@ -298,11 +302,13 @@ PopupWindow {
 
   BorderSurface {
     anchors.fill: parent
-    radius: Math.max(Style.cornerRadius, Style.space(10))
+    radius: root.hasActivity
+      ? Math.max(Style.cornerRadius, Style.space(10)) : Style.cornerRadius
     color: Color.menu.background
     borderSpec: Border.surfaceSpec(
-      "menu", "border", Util.alpha(Color.menu.border, 0.38),
-      Style.spacing.hairline)
+      "menu", "border",
+      root.hasActivity ? Util.alpha(Color.menu.border, 0.38) : Color.menu.border,
+      root.hasActivity ? Style.spacing.hairline : Math.max(1, Style.space(2)))
 
     HoverHandler {
       id: popupHover
@@ -322,11 +328,9 @@ PopupWindow {
       contentWidth: contentFlow.width
       contentHeight: contentFlow.height
       boundsBehavior: Flickable.StopAtBounds
-      interactive: !root.hasActivity
-        && (contentWidth > width || contentHeight > height)
+      interactive: contentWidth > width || contentHeight > height
 
       WheelHandler {
-        enabled: !root.hasActivity
         target: null
         onWheel: event => {
           event.accepted = false
@@ -636,22 +640,34 @@ PopupWindow {
           Flickable {
             id: previewList
             anchors.fill: parent
-            contentWidth: root.previewContentWidth
-            contentHeight: root.previewFlowHeight
+            contentWidth: root.orientationHorizontal
+              ? root.previewContentWidth : root.tileWidth
+            contentHeight: root.previewContentHeight
             boundsBehavior: Flickable.StopAtBounds
-            flickableDirection: Flickable.HorizontalFlick
-            interactive: root.hasActivity && contentWidth > width
+            flickableDirection: root.orientationHorizontal
+              ? Flickable.HorizontalFlick : Flickable.VerticalFlick
+            interactive: contentWidth > width || contentHeight > height
 
             WheelHandler {
               enabled: previewList.contentWidth > previewList.width
+                || previewList.contentHeight > previewList.height
               target: null
               onWheel: event => {
                 var delta = Math.abs(event.angleDelta.x) > Math.abs(event.angleDelta.y)
                   ? event.angleDelta.x : event.angleDelta.y
-                var maxX = previewList.contentWidth - previewList.width
-                previewList.contentX = Math.max(
-                  0, Math.min(maxX, previewList.contentX - delta))
-                event.accepted = true
+                if (root.orientationHorizontal
+                    && previewList.contentWidth > previewList.width) {
+                  var maxX = previewList.contentWidth - previewList.width
+                  previewList.contentX = Math.max(
+                    0, Math.min(maxX, previewList.contentX - delta))
+                  event.accepted = true
+                } else if (!root.orientationHorizontal
+                           && previewList.contentHeight > previewList.height) {
+                  var maxY = previewList.contentHeight - previewList.height
+                  previewList.contentY = Math.max(
+                    0, Math.min(maxY, previewList.contentY - delta))
+                  event.accepted = true
+                }
               }
             }
 
@@ -674,9 +690,9 @@ PopupWindow {
                 previewHeight: root.tilePreviewHeight
                 width: root.tileWidth
                 height: root.tileHeight
-                x: root.hasActivity || root.orientationHorizontal
+                x: root.orientationHorizontal
                   ? index * (root.tileWidth + root.tileSpacing) : 0
-                y: root.hasActivity || root.orientationHorizontal
+                y: root.orientationHorizontal
                   ? 0 : index * (root.tileHeight + root.tileSpacing)
                 onActivateRequested: toplevel => root.activateToplevel(toplevel)
                 onCloseRequested: toplevel => root.closeToplevel(toplevel)

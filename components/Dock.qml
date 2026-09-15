@@ -98,7 +98,8 @@ PanelWindow {
   function activateBrowserActivity(activity, members) {
     var service = root.browserProfileService
     if (!service || !service.available
-        || typeof service.allActivityRows !== "function") return false
+        || typeof service.allActivityRows !== "function"
+        || service.activationInFlight === true) return false
     var targetId = String(activity && activity.targetId || "")
     var address = String(activity && activity.windowAddress || "")
     var rows = service.allActivityRows()
@@ -110,7 +111,9 @@ PanelWindow {
     var member = PreviewModel.memberForAddress(
       members, address, root.hyprAddressFor)
     if (!member) return false
-    if (!root.windowActions.activateToplevel(member, windowPreview.originOnly)) return false
+    if (!root.windowActions.activateToplevel(
+        member, windowPreview.originOnly, windowPreview.activationMonitor))
+      return false
     if (!service.activateTarget(targetId)) return false
     windowPreview.dismissImmediately()
     return true

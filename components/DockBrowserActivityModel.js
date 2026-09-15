@@ -39,6 +39,7 @@ function normalizeRow(value) {
   var label = String(source.label || "").trim()
   var count = Number(source.count)
   if (!serviceId || !label || !isFinite(count)
+      || Math.floor(count) !== count
       || count <= 0 || count > MAX_UNREAD_COUNT) return null
   count = Math.floor(count)
   return {
@@ -58,7 +59,9 @@ function presentation(values) {
   for (var i = 0; i < source.length; ++i) {
     var row = normalizeRow(source[i])
     if (!row) continue
-    var key = JSON.stringify([row.serviceId, row.profileKey])
+    var key = row.profileKey
+      ? JSON.stringify([row.serviceId, row.profileKey])
+      : JSON.stringify([row.serviceId, "", row.windowAddress])
     var current = byOwner[key]
     if (!current || row.count > current.count
         || (row.count === current.count && row.targetId < current.targetId))

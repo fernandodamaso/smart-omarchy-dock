@@ -239,7 +239,9 @@ Item {
     lastActivatedToplevel = -1
     wheelRemainder = 0
     lastWheelTimestamp = 0
-    if (runningCount < 2) root.previewDismissRequested()
+    if (runningCount === 0
+        || (runningCount < 2 && root.previewActivities.length === 0))
+      root.previewDismissRequested()
   }
 
   onPresentationActiveChanged: {

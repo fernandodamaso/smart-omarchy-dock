@@ -50,8 +50,11 @@ Item {
       ? Style.space(8) : Style.cornerRadius
     color: Color.menu.background
     borderSpec: Border.surfaceSpec(
-      "menu", "border", Util.alpha(Color.menu.border, 0.38),
-      Style.spacing.hairline)
+      "menu", "border",
+      root.compactActivityLayout
+        ? Util.alpha(Color.menu.border, 0.38) : Color.menu.border,
+      root.compactActivityLayout
+        ? Style.spacing.hairline : Math.max(1, Style.space(1)))
   }
 
   Rectangle {
