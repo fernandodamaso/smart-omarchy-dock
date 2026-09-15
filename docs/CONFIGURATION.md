@@ -6,7 +6,7 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 43 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 44 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 43 rows 
 | `sortByWorkspace` | `false` | Boolean; flat-layout workspace sorting; closed pins remain first. |
 | `workspaceLayout` | `"flat"` | String: flat or grouped. Grouped cards render on top/bottom only. |
 | `workspaceMonitorScope` | `"all"` | String: all or current-monitor; grouped cards only. |
+| `workspaceMonitorOrder` | `[]` | Exact case-sensitive connector-name array. Empty uses automatic physical x/y order; configured connected monitors lead, unlisted connected monitors append automatically, and disconnected names remain saved for reconnect. Grouped/all presentation only; never reconfigures Hyprland monitors. |
 | `groupWindows` | `true` | Boolean; group an application's windows; applies in both layouts. |
 | `interfaceAnimationsEnabled` | `true` | Boolean; interface transitions, not every compositor animation or attention nudge. |
 | `windowScope` | `"all"` | String: all, workspace, monitor, workspace-monitor; flat-layout running-window filtering. |
@@ -57,6 +58,8 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 43 rows 
 ## Requested, effective and rendered
 
 Requested settings retain accepted intent: `hoverGlowOpacity: 0.72` projects to 0.70, `hoverGlowRadius: 28` to 30, and `backgroundOpacity: 0.88` to 0.90. A requested grouped layout survives moving to a vertical edge; effective layout becomes flat and effective workspaceMonitorScope becomes all. Auto-hide makes effective reserveSpace false without rewriting the requested value. New pointer writes require canonical values; stored legacy `focus`/`launch` aliases read effectively as `focus-or-launch` without an unrelated rewrite.
+
+`workspaceMonitorOrder` is normalized only for effective/rendered use. Missing or malformed legacy stored values read effectively as `[]` without startup rewrite; requested readback still exposes the stored bytes so an agent can decide whether to repair them. New writes are atomic: connector entries must be trimmed nonempty strings with no control characters or exact duplicates. Connector matching is case-sensitive, and valid virtual connector names are allowed.
 
 Effective output is a headless projection, not complete rendered truth. Theme-owned/token colors and theme-owned border width are null with a warning. The normalized urgentWindowAnimationEnabled flag does not by itself report badge-gated animation eligibility; the renderer also requires attentionBadgesEnabled and eligible live attention. Numeric launcher counts alone do not trigger motion. Standalone remains dot-only without the plugin-owned provider. Report these dependencies rather than inventing a fully resolved effective value.
 
@@ -80,13 +83,15 @@ Colors remain live theme bindings after Settings removal. Custom background alph
 
 Workspace cards and window filtering are different features. Grouped cards organize all matching workspace members using workspaceMonitorScope; flat layout retains windowScope, sortByWorkspace and urgent-outside-scope filtering. Do not move a vertical dock without authorization merely to make cards visible. In flat layout, workspace scope uses the focused monitor's active workspace, monitor scope uses each dock's screen, and combined scope requires both. Closed pinned launchers remain visible; explicitly hidden applications remain hidden. Minimized origins and transient location fallbacks remain owned by the shared window controller.
 
+In grouped `workspaceMonitorScope: all`, monitor sections use `workspaceMonitorOrder`. With `[]`, connected monitors with usable finite positions are sorted numerically by x then y, followed by deterministic connector/identity ties; monitors without usable positions follow positioned monitors. A saved order such as `["HDMI-A-1","DP-1"]` puts those connected connectors first and appends other connected monitors using the same automatic geometry order. A disconnected listed connector is not rendered but stays saved and resumes its configured slot after reconnect. This setting never dispatches monitor/workspace moves and has no visual effect in flat or `current-monitor` layouts. Workspace/application presentation identities and global badge traversal remain independent from section order.
+
 Right click remains the context menu. Existing modifier precedence, grouped close/minimize/restore and wheel rules remain unchanged. Pinning does not show a hidden app; hiding does not unpin/close it; unpinning does not hide a running app. Restore and move use exact host-discovered IDs and preserve unrelated order, including unavailable entries. Application display-name queries are discovery, not mutation identities.
 
 Icon overrides are app-wide and SmartDock-only. Set/reset changes one latest-map entry, including for an unavailable safe identity, without changing desktop files, launch commands, grouping or screenshots. The local PNG/SVG is referenced in place. Use explicit reload after same-path byte replacement. Missing/corrupt artwork retains the mapping and uses the bounded original/generic/bundled-glyph fallback. All CLI icon acknowledgments retain `renderVerified: false`.
 
 ## Reset, preservation and executable settings
 
-`config reset --preferences` preserves pinned, hiddenApplications, browserActivityMutedServices, iconOverrides, margin and unknown extension keys; **controlCommand is reset** along with other preferences. `config reset KEY` explicitly resets that key even if it is normally preserved. Do not perform a broad reset for a narrow request.
+`config reset --preferences` preserves pinned, hiddenApplications, browserActivityMutedServices, iconOverrides, margin and unknown extension keys; **controlCommand is reset** along with other preferences. `workspaceMonitorOrder` is an ordinary preference, so preference reset and `config reset workspaceMonitorOrder` both restore `[]` automatic ordering. Do not perform a broad reset for a narrow request.
 
 Existing unknown keys and untouched legacy values survive minimal mutations. New unknown keys are rejected. An explicit array/object patch replaces that whole key, not a deep merge. Prefer `apps`/`icons` commands for individual membership/order/artwork changes and touched-key rollback after fresh readback.
 
