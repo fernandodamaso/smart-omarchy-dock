@@ -18,7 +18,7 @@ assert.equal(typeof WorkspaceModel.monitorGroupForWorkspace, 'function',
   'workspace model exposes the section-prefix lookup used by the retained card delegate')
 
 function monitor(id, name, description, workspace, focused = false) {
-  return { id, name, description, focused,
+  return { id, name, description, focused, x: id * 1000, y: 0,
     activeWorkspace: { id: workspace, name: String(workspace) } }
 }
 
