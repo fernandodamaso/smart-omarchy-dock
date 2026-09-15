@@ -37,7 +37,7 @@ from urllib.parse import urlsplit
 TITLE_SUFFIXES = (" - Google Chrome", " - Chromium", " - Brave", " - Microsoft Edge")
 MAX_UNREAD_COUNT = 999999
 WHATSAPP_TITLE = re.compile(r"^\((\d+)\)\s+WhatsApp$")
-INSTAGRAM_TITLE = re.compile(r"^\((\d+)\)\s+Instagram$")
+INSTAGRAM_TITLE = re.compile(r"^\((\d+)\)\s+Instagram(?: • [^\r\n]+)?$")
 # Only the supported inbox title is an unread signal. Other mailbox counts
 # and parenthesized numbers in message subjects are not unread evidence.
 GMAIL_TITLE = re.compile(
