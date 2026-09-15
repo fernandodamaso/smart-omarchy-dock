@@ -61,8 +61,14 @@ assert.equal(WorkspaceModel.monitorGroupForWorkspace(initial.monitorGroups, 'id:
 assert.equal(WorkspaceModel.monitorGroupForWorkspace(initial.monitorGroups, 'id:1', false), null,
   'an exiting first card immediately relinquishes its prefix')
 
-const withoutFirst = build(monitors, workspaces.filter(workspace => workspace.id !== 1))
-const promoted = WorkspaceModel.monitorGroupForWorkspace(withoutFirst.monitorGroups, 'id:2', true)
+const promotedMonitors = monitors.map(value => ({
+  ...value, activeWorkspace: { ...value.activeWorkspace }
+}))
+promotedMonitors[0].activeWorkspace = { id: 2, name: '2' }
+const withoutFirst = build(promotedMonitors,
+  workspaces.filter(workspace => workspace.id !== 1))
+const promoted = WorkspaceModel.monitorGroupForWorkspace(
+  withoutFirst.monitorGroups, 'id:2', true)
 assert.equal(promoted?.identity, 'id:0',
   'the next present workspace gains the section prefix when the old first card exits')
 assert.equal(promoted?.firstWorkspaceIdentity, 'id:2')
