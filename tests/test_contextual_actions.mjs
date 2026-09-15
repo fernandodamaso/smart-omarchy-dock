@@ -68,6 +68,24 @@ const handles = windows.map((wayland, index) => ({
   }
 }))
 const requests = []
+const mutationCalls = []
+const hostController = {
+  runtimeMode: 'plugin',
+  pinApplication(id) {
+    mutationCalls.push(['pin', id])
+    return { ok: true, data: { applied: true, persisted: true, writeState: 'saved' } }
+  },
+  unpinApplication(id) {
+    mutationCalls.push(['unpin', id])
+    return { ok: false, error: { code: 'E_BUSY', message: 'save pending' },
+      data: { applied: true, persisted: false, writeState: 'saving' } }
+  },
+  hideApplication(id) {
+    mutationCalls.push(['hide', id])
+    return { ok: false, error: { code: 'E_PERSISTENCE', message: 'disk full' },
+      data: { applied: true, persisted: false, writeState: 'error' } }
+  }
+}
 const actions = methods('DockWindowActions.qml', {
   DockModel,
   DockWindowModel,
@@ -88,6 +106,7 @@ const actions = methods('DockWindowActions.qml', {
 const context = methods('DockContextActionController.qml', {
   FullscreenModel,
   windowActions: actions,
+  applicationMutationController: hostController,
   Hyprland: actions.Hyprland
 })
 
@@ -116,16 +135,31 @@ actions.minimizedOrigins = {
 assert.equal(context.minimizeVisible(represented, true), true)
 assert.equal(requests.length, 1)
 assert.match(requests[0], /address:0x1/)
+assert.doesNotMatch(requests[0], /address:0x2/)
 assert.doesNotMatch(requests[0], /address:0x3/)
 requests.length = 0
 assert.equal(context.restoreMinimized(represented, true), true)
-assert.equal(requests.length, 1)
-assert.match(requests[0], /address:0x2/)
-assert.doesNotMatch(requests[0], /address:0x3/)
+assert.equal(requests.length, 2,
+  'restore acts on both represented members after minimize-visible made both minimized')
+const restoreRequests = requests.join('\n')
+assert.match(restoreRequests, /address:0x1/)
+assert.match(restoreRequests, /address:0x2/)
+assert.doesNotMatch(restoreRequests, /address:0x3/)
 assert.equal(context.closeRepresented(represented), true)
 assert.equal(windows[0].closeCount, 1)
 assert.equal(windows[1].closeCount, 1)
 assert.equal(windows[2].closeCount, 0)
+
+// Persistent application operations keep application scope and delegate to
+// the existing host controller rather than creating a menu-owned writer.
+assert.equal(context.mutateApplication('pin', 'com.example.App').ok, true)
+assert.equal(context.mutateApplication('unpin', 'com.example.App').error.code, 'E_BUSY')
+assert.equal(context.mutateApplication('hide', 'com.example.App').error.code, 'E_PERSISTENCE')
+assert.deepEqual(mutationCalls, [
+  ['pin', 'com.example.App'],
+  ['unpin', 'com.example.App'],
+  ['hide', 'com.example.App']
+])
 
 const hostileProfile = `Profile O'Malley \"$HOME\" \`echo nope\`; still-data`
 const setSpec = MenuModel.iconCommandSpec({
@@ -139,10 +173,9 @@ assert.deepEqual(Array.from(setSpec.argv), [
   'smartdock', '--runtime', 'plugin', '--instance', '4242',
   'icons', 'set', 'com.google.Chrome', '<IMAGE_PATH>', '--profile', hostileProfile
 ], 'command argv round-trips hostile profile text as data')
-assert.match(setSpec.text, /'<IMAGE_PATH>'/,
-  'custom image path placeholder must be quoted, not shell syntax')
-assert.match(setSpec.text, /'"'"'/,
-  'apostrophes must use POSIX single-quote escaping')
+assert.equal(setSpec.text,
+  `'smartdock' '--runtime' 'plugin' '--instance' '4242' 'icons' 'set' 'com.google.Chrome' '<IMAGE_PATH>' '--profile' 'Profile O'"'"'Malley \"$HOME\" \`echo nope\`; still-data'`,
+  'every hostile argument stays independently single-quoted in copied shell text')
 assert.ok(!setSpec.text.includes('sh -c'), 'copied commands are data and never shell-executed in tests')
 
 const resetSpec = MenuModel.iconCommandSpec({
