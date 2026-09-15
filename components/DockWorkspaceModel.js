@@ -7,16 +7,75 @@ function activationTarget(identity) {
     identity.indexOf("id:") === 0 ? identity.slice(3) : identity)
 }
 
+function workspaceCompare(a, b) {
+  var left = typeof a === "string" ? a : a.identity
+  var right = typeof b === "string" ? b : b.identity
+  var leftNumeric = left.indexOf("id:") === 0
+  var rightNumeric = right.indexOf("id:") === 0
+  if (leftNumeric && rightNumeric)
+    return Number(left.slice(3)) - Number(right.slice(3))
+  if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function monitorCompare(left, right) {
+  var leftNumeric = /^id:[0-9]+$/.test(left)
+  var rightNumeric = /^id:[0-9]+$/.test(right)
+  if (leftNumeric && rightNumeric)
+    return Number(left.slice(3)) - Number(right.slice(3))
+  if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+function ownerEvidence(map, workspace) {
+  if (!map[workspace]) map[workspace] = { seen: false, unresolved: false, owners: Object.create(null) }
+  return map[workspace]
+}
+
+function addOwnerEvidence(map, workspace, owner, unresolved) {
+  if (!workspace || !activationTarget(workspace)) return
+  var evidence = ownerEvidence(map, workspace)
+  evidence.seen = true
+  if (unresolved === true || !owner) evidence.unresolved = true
+  else evidence.owners[owner] = true
+}
+
+function resolvedOwner(evidence) {
+  if (!evidence || !evidence.seen) return { seen: false, owner: "" }
+  var owners = Object.keys(evidence.owners)
+  if (evidence.unresolved || owners.length !== 1) return { seen: true, owner: "" }
+  return { seen: true, owner: owners[0] }
+}
+
+function monitorLabel(identity, connector, descriptor, ipc) {
+  var description = String(
+    ipc && ipc.description !== undefined ? ipc.description
+      : descriptor && descriptor.description !== undefined ? descriptor.description : ""
+  ).trim()
+  if (description) return description
+  if (connector) return connector
+  if (identity.indexOf("name:") === 0) return identity.slice(5)
+  if (identity.indexOf("id:") === 0) return "Monitor " + identity.slice(3)
+  return "Monitor"
+}
+
 function buildWorkspacePresentation(appItems, records, workspaces, context) {
+  context = context || ({})
   var groups = []
   var globalLaunchers = []
   var fallbackItems = []
   var byWorkspace = Object.create(null)
   var allMonitors = context.monitorScope !== "current-monitor"
-  var active = context.activeWorkspace || ""
+  var primaryWorkspaceIdentity = DockWindowModel.workspaceIdentity(context.activeWorkspace)
   var monitor = DockWindowModel.canonicalMonitorIdentity(context.monitor, context.monitors)
-  var workspaceMonitors = Object.create(null)
+  var descriptorOwners = Object.create(null)
+  var activeOwners = Object.create(null)
+  var liveOwners = Object.create(null)
+  var originOwners = Object.create(null)
+  var monitorActiveEvidence = Object.create(null)
   var monitorWorkspaces = Object.create(null)
+  var monitorMetadata = Object.create(null)
+  var focusedMonitorEvidence = Object.create(null)
 
   function addWorkspace(identity, displayName) {
     var target = activationTarget(identity)
@@ -34,62 +93,154 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       return
     }
     var group = {
-      identity: identity, label: label,
+      identity: identity,
+      monitorIdentity: "",
+      label: label,
       showFullLabel: showFullLabel,
-      activationTarget: target, active: identity === active, items: [], count: 0, urgent: false
+      activationTarget: target,
+      active: false,
+      items: [],
+      count: 0,
+      urgent: false
     }
     byWorkspace[identity] = group
     groups.push(group)
   }
 
+  function addMonitorActiveEvidence(owner, workspace) {
+    if (!owner) return
+    if (!monitorActiveEvidence[owner])
+      monitorActiveEvidence[owner] = { seen: false, values: Object.create(null) }
+    var evidence = monitorActiveEvidence[owner]
+    evidence.seen = true
+    if (workspace) evidence.values[workspace] = true
+  }
+
   var monitors = context.monitors || []
   for (var m = 0; m < monitors.length; ++m) {
-    var descriptor = monitors[m]
-    var ipc = descriptor.lastIpcObject || descriptor
-    var owner = DockWindowModel.canonicalMonitorIdentity(descriptor, context.monitors)
-    var activeDescriptor = ipc.activeWorkspace || descriptor.activeWorkspace
-    var workspace = DockWindowModel.workspaceIdentity(activeDescriptor)
-    if (owner) monitorWorkspaces[owner] = workspace
-    if (allMonitors) addWorkspace(workspace, activeDescriptor ? activeDescriptor.name : "")
+    var monitorDescriptor = monitors[m]
+    if (!monitorDescriptor) continue
+    var monitorIpc = monitorDescriptor.lastIpcObject || monitorDescriptor
+    var owner = DockWindowModel.canonicalMonitorIdentity(monitorDescriptor, context.monitors)
+    if (!owner) continue
+    var connector = String(
+      monitorIpc.name !== undefined ? monitorIpc.name : monitorDescriptor.name || ""
+    ).trim()
+    var activeDescriptor = monitorIpc.activeWorkspace !== undefined
+      ? monitorIpc.activeWorkspace : monitorDescriptor.activeWorkspace
+    var activeWorkspace = DockWindowModel.workspaceIdentity(activeDescriptor)
+    addMonitorActiveEvidence(owner, activeWorkspace)
+    if (activeWorkspace) addOwnerEvidence(activeOwners, activeWorkspace, owner, false)
+    if (allMonitors) addWorkspace(activeWorkspace,
+      activeDescriptor ? activeDescriptor.name : "")
+    var focused = monitorIpc.focused !== undefined
+      ? monitorIpc.focused === true : monitorDescriptor.focused === true
+    if (focused) focusedMonitorEvidence[owner] = true
+    monitorMetadata[owner] = {
+      identity: owner,
+      connector: connector,
+      label: monitorLabel(owner, connector, monitorDescriptor, monitorIpc)
+    }
   }
 
-  for (var w = 0; w < workspaces.length; ++w) {
-    var descriptor = workspaces[w]
-    var ipc = descriptor.lastIpcObject || descriptor
-    var owner = DockWindowModel.canonicalMonitorIdentity(
-      ipc.monitorID !== undefined ? ipc.monitorID
-        : ipc.monitor !== undefined ? ipc.monitor : descriptor.monitor, context.monitors)
-    var identity = DockWindowModel.workspaceIdentity(descriptor)
-    if (owner) workspaceMonitors[identity] = owner
-    if (allMonitors || owner && owner === monitor) addWorkspace(identity, ipc.name)
+  var monitorOwnerKeys = Object.keys(monitorActiveEvidence)
+  for (var mo = 0; mo < monitorOwnerKeys.length; ++mo) {
+    var monitorOwner = monitorOwnerKeys[mo]
+    var activeValues = Object.keys(monitorActiveEvidence[monitorOwner].values)
+    monitorWorkspaces[monitorOwner] = activeValues.length === 1 ? activeValues[0] : ""
   }
-  addWorkspace(active)
-  // Live workspace ownership wins over a saved minimized-origin connector.
-  records = records.map(function(record) {
-    var owner = record.minimized && workspaceMonitors[record.workspace]
-      || DockWindowModel.canonicalMonitorIdentity(record.monitor, context.monitors)
+
+  workspaces = workspaces || []
+  for (var w = 0; w < workspaces.length; ++w) {
+    var workspaceDescriptor = workspaces[w]
+    if (!workspaceDescriptor) continue
+    var workspaceIpc = workspaceDescriptor.lastIpcObject || workspaceDescriptor
+    var rawOwner = workspaceIpc.monitorID !== undefined ? workspaceIpc.monitorID
+      : workspaceIpc.monitor !== undefined ? workspaceIpc.monitor : workspaceDescriptor.monitor
+    var descriptorOwner = DockWindowModel.canonicalMonitorIdentity(rawOwner, context.monitors)
+    var identity = DockWindowModel.workspaceIdentity(workspaceDescriptor)
+    if (!activationTarget(identity)) continue
+    addOwnerEvidence(descriptorOwners, identity, descriptorOwner, !descriptorOwner)
+    if (allMonitors || descriptorOwner && descriptorOwner === monitor)
+      addWorkspace(identity, workspaceIpc.name)
+  }
+
+  addWorkspace(primaryWorkspaceIdentity)
+
+  // Resolve record locations without mutating the caller's snapshots. A live
+  // workspace descriptor, even an unresolved one, outranks a minimized origin.
+  records = (records || []).map(function(record) {
+    var descriptorEvidence = resolvedOwner(descriptorOwners[record.workspace])
+    var owner = record.minimized && descriptorEvidence.seen
+      ? descriptorEvidence.owner
+      : DockWindowModel.canonicalMonitorIdentity(record.monitor, context.monitors)
     var workspace = record.sticky && !record.minimized
-      ? (allMonitors ? monitorWorkspaces[owner] || "" : owner && owner === monitor ? active : record.workspace)
+      ? (allMonitors ? monitorWorkspaces[owner] || ""
+        : owner && owner === monitor ? primaryWorkspaceIdentity : record.workspace)
       : record.minimized && record.originValid === false ? "" : record.workspace
-    var resolved = Object.assign({}, record, { monitor: owner, monitorKnown: !!owner,
-      workspace: workspace, workspaceKnown: workspace !== "",
-      sticky: record.sticky === true && !record.minimized })
-    // A live window can arrive before its workspace descriptor does.
-    if (owner && (allMonitors || owner === monitor) && resolved.workspaceKnown)
-      addWorkspace(workspace)
+    var resolved = Object.assign({}, record, {
+      monitor: owner,
+      monitorKnown: !!owner,
+      workspace: workspace,
+      workspaceKnown: workspace !== "",
+      sticky: record.sticky === true && !record.minimized
+    })
+    if (owner && activationTarget(workspace)) {
+      if (record.minimized) addOwnerEvidence(originOwners, workspace, owner, false)
+      else addOwnerEvidence(liveOwners, workspace, owner, false)
+      if (allMonitors || owner === monitor) addWorkspace(workspace)
+    }
     return resolved
   })
-  groups.sort(function(a, b) {
-    var an = a.identity.indexOf("id:") === 0
-    var bn = b.identity.indexOf("id:") === 0
-    if (an && bn) return Number(a.identity.slice(3)) - Number(b.identity.slice(3))
-    if (an !== bn) return an ? -1 : 1
-    return a.identity < b.identity ? -1 : a.identity > b.identity ? 1 : 0
+
+  function ownerForWorkspace(identity) {
+    var evidence = resolvedOwner(descriptorOwners[identity])
+    if (evidence.seen) return evidence.owner
+    evidence = resolvedOwner(activeOwners[identity])
+    if (evidence.seen) return evidence.owner
+    evidence = resolvedOwner(liveOwners[identity])
+    if (evidence.seen) return evidence.owner
+    evidence = resolvedOwner(originOwners[identity])
+    return evidence.seen ? evidence.owner : ""
+  }
+
+  for (var g = 0; g < groups.length; ++g)
+    groups[g].monitorIdentity = ownerForWorkspace(groups[g].identity)
+
+  if (!allMonitors) {
+    groups = groups.filter(function(group) {
+      return group.identity === primaryWorkspaceIdentity
+        || group.monitorIdentity && group.monitorIdentity === monitor
+    })
+  }
+
+  groups.sort(function(left, right) {
+    if (!allMonitors) return workspaceCompare(left, right)
+    if (left.monitorIdentity === right.monitorIdentity)
+      return workspaceCompare(left, right)
+    if (!left.monitorIdentity) return 1
+    if (!right.monitorIdentity) return -1
+    return monitorCompare(left.monitorIdentity, right.monitorIdentity)
   })
 
-  var pinnedIds = appItems.filter(function(item) { return item.pinned })
+  var visibleByWorkspace = Object.create(null)
+  for (var vg = 0; vg < groups.length; ++vg) {
+    var visibleGroup = groups[vg]
+    visibleByWorkspace[visibleGroup.identity] = visibleGroup
+    if (!allMonitors) {
+      visibleGroup.active = visibleGroup.identity === primaryWorkspaceIdentity
+      continue
+    }
+    var ownerActive = visibleGroup.monitorIdentity
+      ? monitorWorkspaces[visibleGroup.monitorIdentity] || "" : ""
+    visibleGroup.active = ownerActive
+      ? ownerActive === visibleGroup.identity
+      : visibleGroup.identity === primaryWorkspaceIdentity
+  }
+
+  var pinnedIds = (appItems || []).filter(function(item) { return item.pinned })
     .map(function(item) { return DockModel.normalizedId(item.desktopId) })
-  var orderedItems = appItems.slice().sort(function(a, b) {
+  var orderedItems = (appItems || []).slice().sort(function(a, b) {
     var aPin = pinnedIds.indexOf(DockModel.normalizedId(a.desktopId))
     var bPin = pinnedIds.indexOf(DockModel.normalizedId(b.desktopId))
     return (aPin < 0 ? pinnedIds.length : aPin)
@@ -105,51 +256,134 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       var record = records.find(function(value) { return value.toplevel === toplevel })
       if (!allMonitors && record && record.monitorKnown && record.monitor !== monitor) continue
       var key = record && record.monitorKnown && record.workspaceKnown
-        && byWorkspace[record.workspace] ? record.workspace : "other"
+        && visibleByWorkspace[record.workspace] ? record.workspace : "other"
       if (!partitions[key]) partitions[key] = []
       partitions[key].push(toplevel)
     }
     for (var key in partitions) {
       var members = partitions[key]
-      var identity = key + "/" + item.desktopId
+      var presentationIdentity = key + "/" + item.desktopId
       if (context.groupWindows === false && members.length) {
-        var record = records.find(function(value) { return value.toplevel === members[0] })
+        var firstRecord = records.find(function(value) { return value.toplevel === members[0] })
         // Object identity remains available to preview lookup while a handle is pending.
-        identity += "/" + (record && record.address || "pending")
+        presentationIdentity += "/" + (firstRecord && firstRecord.address || "pending")
       }
       var scoped = Object.assign({}, item, {
         pinned: pinnedIds.indexOf(DockModel.normalizedId(item.desktopId)) >= 0,
-        toplevels: members, presentationId: identity,
+        toplevels: members,
+        presentationId: presentationIdentity,
         identityToplevel: context.groupWindows === false ? members[0] : null,
-        localUrgent: false, sticky: false, urgentAddresses: []
+        localUrgent: false,
+        sticky: false,
+        urgentAddresses: []
       })
-      for (var m = 0; m < members.length; ++m) {
-        var member = records.find(function(value) { return value.toplevel === members[m] })
+      for (var memberIndex = 0; memberIndex < members.length; ++memberIndex) {
+        var member = records.find(function(value) {
+          return value.toplevel === members[memberIndex]
+        })
         if (!member) continue
         scoped.sticky = scoped.sticky || member.sticky === true
         if (member.urgent === true) {
           scoped.localUrgent = true
-          scoped.urgentAddresses.push(member.address || "pending:" + m)
+          scoped.urgentAddresses.push(member.address || "pending:" + memberIndex)
         }
       }
       if (key === "global") globalLaunchers.push(scoped)
       else if (key === "other") fallbackItems.push(scoped)
       else {
-        byWorkspace[key].items.push(scoped)
-        byWorkspace[key].count += members.length
-        byWorkspace[key].urgent = byWorkspace[key].urgent || scoped.localUrgent
+        visibleByWorkspace[key].items.push(scoped)
+        visibleByWorkspace[key].count += members.length
+        visibleByWorkspace[key].urgent = visibleByWorkspace[key].urgent || scoped.localUrgent
       }
     }
   }
+
+  var monitorGroups = []
+  if (allMonitors) {
+    var sectionOwners = []
+    for (var sectionIndex = 0; sectionIndex < groups.length; ++sectionIndex) {
+      var sectionOwner = groups[sectionIndex].monitorIdentity
+      if (sectionOwner && sectionOwners.indexOf(sectionOwner) < 0)
+        sectionOwners.push(sectionOwner)
+    }
+    sectionOwners.sort(monitorCompare)
+
+    var focusedOwners = Object.keys(focusedMonitorEvidence)
+    var focusedOwner = focusedOwners.length === 1 ? focusedOwners[0] : ""
+    if (!focusedOwner && focusedOwners.length === 0) {
+      var primaryGroup = visibleByWorkspace[primaryWorkspaceIdentity]
+      focusedOwner = primaryGroup ? primaryGroup.monitorIdentity : ""
+    }
+
+    for (var section = 0; section < sectionOwners.length; ++section) {
+      var sectionIdentity = sectionOwners[section]
+      var metadata = monitorMetadata[sectionIdentity] || ({
+        identity: sectionIdentity,
+        connector: sectionIdentity.indexOf("name:") === 0 ? sectionIdentity.slice(5) : "",
+        label: monitorLabel(sectionIdentity, "", null, null)
+      })
+      var firstWorkspaceIdentity = ""
+      for (var firstIndex = 0; firstIndex < groups.length; ++firstIndex) {
+        if (groups[firstIndex].monitorIdentity === sectionIdentity) {
+          firstWorkspaceIdentity = groups[firstIndex].identity
+          break
+        }
+      }
+      monitorGroups.push({
+        identity: sectionIdentity,
+        connector: metadata.connector,
+        label: metadata.label,
+        focused: focusedOwner === sectionIdentity,
+        activeWorkspace: monitorWorkspaces[sectionIdentity] || "",
+        firstWorkspaceIdentity: firstWorkspaceIdentity
+      })
+    }
+
+    var firstUnknown = ""
+    for (var unknownIndex = 0; unknownIndex < groups.length; ++unknownIndex) {
+      if (!groups[unknownIndex].monitorIdentity) {
+        firstUnknown = groups[unknownIndex].identity
+        break
+      }
+    }
+    if (firstUnknown) {
+      monitorGroups.push({
+        identity: "",
+        connector: "",
+        label: "Unknown monitor",
+        focused: false,
+        activeWorkspace: "",
+        firstWorkspaceIdentity: firstUnknown
+      })
+    }
+  }
+
+  // Badge/preview traversal remains globally primary-first, independent of the
+  // per-monitor visual ordering and the number of cards with active styling.
+  var badgeGroups = groups.slice().sort(workspaceCompare)
   var renderedItems = []
-  for (var g = 0; g < groups.length; ++g) {
-    if (groups[g].active) renderedItems = renderedItems.concat(groups[g].items)
+  var primaryGroupIndex = -1
+  for (var badgeIndex = 0; badgeIndex < badgeGroups.length; ++badgeIndex) {
+    if (badgeGroups[badgeIndex].identity === primaryWorkspaceIdentity) {
+      primaryGroupIndex = badgeIndex
+      break
+    }
   }
-  for (var g = 0; g < groups.length; ++g) {
-    if (!groups[g].active) renderedItems = renderedItems.concat(groups[g].items)
+  if (primaryGroupIndex >= 0)
+    renderedItems = renderedItems.concat(badgeGroups[primaryGroupIndex].items)
+  for (var remainingIndex = 0; remainingIndex < badgeGroups.length; ++remainingIndex) {
+    if (remainingIndex === primaryGroupIndex) continue
+    renderedItems = renderedItems.concat(badgeGroups[remainingIndex].items)
   }
-  return { globalLaunchers: globalLaunchers, fallbackItems: fallbackItems,
-    groups: groups, renderedItems: renderedItems.concat(globalLaunchers, fallbackItems) }
+
+  return {
+    primaryWorkspaceIdentity: primaryWorkspaceIdentity,
+    monitorGroups: monitorGroups,
+    globalLaunchers: globalLaunchers,
+    fallbackItems: fallbackItems,
+    groups: groups,
+    renderedItems: renderedItems.concat(globalLaunchers, fallbackItems)
+  }
 }
 
 function scopedItemsEqual(a, b) {
@@ -162,14 +396,34 @@ function scopedItemsEqual(a, b) {
   return true
 }
 
+function monitorGroupsEqual(a, b) {
+  var leftGroups = a || []
+  var rightGroups = b || []
+  if (leftGroups.length !== rightGroups.length) return false
+  for (var i = 0; i < leftGroups.length; ++i) {
+    var left = leftGroups[i]
+    var right = rightGroups[i]
+    if (left.identity !== right.identity || left.connector !== right.connector
+        || left.label !== right.label || left.focused !== right.focused
+        || left.activeWorkspace !== right.activeWorkspace
+        || left.firstWorkspaceIdentity !== right.firstWorkspaceIdentity)
+      return false
+  }
+  return true
+}
+
 function presentationsEqual(a, b) {
-  if (!scopedItemsEqual(a.globalLaunchers, b.globalLaunchers)
+  if (String(a.primaryWorkspaceIdentity || "") !== String(b.primaryWorkspaceIdentity || "")
+      || !monitorGroupsEqual(a.monitorGroups, b.monitorGroups)
+      || !scopedItemsEqual(a.globalLaunchers, b.globalLaunchers)
       || !scopedItemsEqual(a.fallbackItems, b.fallbackItems)
       || a.groups.length !== b.groups.length) return false
   for (var i = 0; i < a.groups.length; ++i) {
     var left = a.groups[i]
     var right = b.groups[i]
-    if (left.identity !== right.identity || left.label !== right.label
+    if (left.identity !== right.identity
+        || String(left.monitorIdentity || "") !== String(right.monitorIdentity || "")
+        || left.label !== right.label
         || left.showFullLabel !== right.showFullLabel || left.active !== right.active
         || left.count !== right.count || left.urgent !== right.urgent
         || !scopedItemsEqual(left.items, right.items))
