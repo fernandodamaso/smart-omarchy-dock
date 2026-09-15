@@ -236,10 +236,14 @@ Item {
   function dispatchPointerAction(input, modifiers, options) {
     var keys = modifiers || ({})
     var request = Object.assign({}, options || ({}))
-    if (keys.control === true) {
+    // Workspace-card windows pull their workspace to the dock monitor on any
+    // click, matching the card name; the panel has no keyboard focus, so
+    // modifiers never reach these handlers and cannot gate the pull.
+    var cardTarget = root.workspaceActivationTarget || ""
+    if (keys.control === true || cardTarget !== "") {
       request.activationMonitor = root.activationMonitor
-      if (root.workspaceActivationTarget !== "")
-        request.workspaceTargetOverride = root.workspaceActivationTarget
+      if (cardTarget !== "")
+        request.workspaceTargetOverride = cardTarget
     }
     return dispatchApplicationAction(DockModel.resolveApplicationPointerAction(
       applicationActions, input, modifiers), request)

@@ -510,7 +510,7 @@ Input precedence is intentionally strict:
 
 - Right click always opens the existing application context menu.
 - Left click with no modifier uses `clickAction`.
-- Ctrl+Left click uses the same `clickAction`; `focus-or-launch` also moves that window's workspace onto the clicked dock monitor.
+- Ctrl+Left click uses the same `clickAction`; `focus-or-launch` also moves that window's workspace onto the clicked dock monitor. In grouped workspace cards, window icons pull their workspace on any click, matching the card name; the dock panel never takes keyboard focus, so modifier keys cannot gate card clicks.
 - Middle click with no modifier uses `middleClickAction`.
 - Ctrl+Middle click uses the same `middleClickAction`, including the workspace pull when that action is `focus-or-launch`.
 - Vertical-dominant scrolling uses `scrollAction`; horizontal/tied gestures pass through.
