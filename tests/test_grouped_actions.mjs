@@ -77,12 +77,9 @@ assert.equal(Object.keys(actions.minimizedOrigins).length, 0, 'no guessed minimi
 assert.equal(actions.minimizeToplevel(windows[0]), true)
 assert.equal(actions.minimizedOrigins['0x1'].workspace, '3')
 
-const dropCards = [{ id: 'drop-1' }, { id: 'drop-3' }]
 const cards = [
-  { active: true, present: true, workspaceIdentity: 'id:1', headerWidth: 30,
-    dropCard: dropCards[0] },
-  { active: true, present: true, workspaceIdentity: 'id:3', headerWidth: 45,
-    dropCard: dropCards[1] }
+  { active: true, present: true, workspaceIdentity: 'id:1', headerWidth: 30 },
+  { active: true, present: true, workspaceIdentity: 'id:3', headerWidth: 45 }
 ]
 const revealed = []
 const hyprland = actions.Hyprland
@@ -94,8 +91,8 @@ const dock = methods('Dock.qml', {
   dockHyprMonitor: { id: 0, name: 'DP-1' }
 })
 dock.revealActiveWorkspace()
-assert.deepEqual(revealed, [[dropCards[1], 45]],
-  'workspace switch reveals only the globally focused actual card header when multiple cards are active')
+assert.deepEqual(revealed, [[cards[1], 45]],
+  'workspace switch reveals only the globally focused header when multiple cards are active')
 
 // Unmodified clicks focus in place; Ctrl+click keeps workspace-to-monitor pull.
 preview.dismissImmediately = () => {}
@@ -153,36 +150,434 @@ for (const usingLua of [false, true]) {
   const moveCurrentWorkspace = usingLua
     ? 'hl.dsp.workspace.move({ monitor = "0" })'
     : 'movecurrentworkspacetomonitor 0'
+  const focusWindow = address => usingLua
+    ? `hl.dsp.focus({ window = "address:${address}" })`
+    : `focuswindow address:${address}`
+  const restoreWindow = (address, workspace) => usingLua
+    ? `hl.dsp.window.move({ window = "address:${address}", workspace = "${workspace}", follow = true })`
+    : `movetoworkspace ${workspace},address:${address}`
+  function expectInPlace(request, label) {
+    expectRequests(requests, [request], label)
+    expectRequests(batches, [], `${label} does not spawn hyprctl`)
+  }
+
+  clearSubmissions()
+  dock.focusWorkspaceOnDockMonitor('name:Design work')
+  expectSequence(usingLua
+    ? [focusWorkspace('name:Design work'), moveWorkspace('name:Design work'),
+        focusWorkspace('name:Design work')]
+    : [focusWorkspace('name:Design work'), moveCurrentWorkspace,
+        focusWorkspace('name:Design work')], usingLua,
+    `workspace switch order (${usingLua ? 'lua' : 'legacy'})`)
+
+  const previousMonitor = dock.dockHyprMonitor
+  dock.dockHyprMonitor = null
+  clearSubmissions()
+  dock.focusWorkspaceOnDockMonitor('name:Design work')
+  expectRequests(requests, [],
+    `workspace switch emits nothing without monitor (${usingLua ? 'lua' : 'legacy'})`)
+  expectRequests(batches, [],
+    `workspace switch spawns nothing without monitor (${usingLua ? 'lua' : 'legacy'})`)
+  dock.dockHyprMonitor = previousMonitor
+
   handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+  actions.minimizedOrigins = {}
   clearSubmissions()
-  assert.equal(actions.activateToplevel(windows[0], true, 'id:0'), true)
-  expectSequence([
-    focusWorkspace('9'), moveWorkspace('9'), focusWorkspace('9'),
-    usingLua
-      ? 'hl.dsp.focus({ window = "address:0x1" })'
-      : 'focuswindow address:0x1'
-  ], usingLua, 'grouped Ctrl+click pulls workspace then focuses exact window')
-  handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 0 }
+  assert.equal(item.dispatchPointerAction('left', {}), true)
+  expectInPlace(focusWindow('0x1'),
+    `ordinary icon activation focuses in place (${usingLua ? 'lua' : 'legacy'})`)
+
   clearSubmissions()
-  assert.equal(actions.activateToplevel(windows[0], true, 'id:0'), true)
-  expectSequence([
-    usingLua
-      ? 'hl.dsp.focus({ window = "address:0x1" })'
-      : 'focuswindow address:0x1'
-  ], usingLua, 'same-monitor grouped activation focuses only')
+  assert.equal(item.dispatchPointerAction('middle', {}), true)
+  expectInPlace(focusWindow('0x1'),
+    `ordinary middle click focuses in place (${usingLua ? 'lua' : 'legacy'})`)
+
   clearSubmissions()
-  assert.equal(actions.workspaceOnMonitorRequests('9', 'id:0').length, 3)
-  expectRequests(requests, [], 'building grouped workspace request sequence is pure')
-  expectRequests(batches, [], 'building grouped workspace request sequence spawns nothing')
-  const workspaceSteps = actions.workspaceOnMonitorRequests('9', 'id:0')
-  assert.deepEqual(Array.from(workspaceSteps), [
-    focusWorkspace('9'), moveWorkspace('9'), focusWorkspace('9')
-  ])
+  assert.equal(item.dispatchPointerAction('left', { control: true }), true)
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x1')], usingLua,
+    `Ctrl+click icon activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  item.workspaceActivationTarget = 'name:Design work'
+  handles[0].lastIpcObject = { monitor: 1 }
+  actions.minimizedOrigins = {}
   clearSubmissions()
-  assert.equal(actions.currentWorkspaceOnMonitorRequests('id:0').length, 2)
-  assert.deepEqual(Array.from(actions.currentWorkspaceOnMonitorRequests('id:0')), [
-    moveCurrentWorkspace, usingLua ? 'hl.dsp.focus({ monitor = "0" })' : 'focusmonitor 0'
-  ])
+  assert.equal(item.dispatchPointerAction('left', { control: true }), true)
+  expectSequence(usingLua
+    ? [focusWorkspace('name:Design work'), moveWorkspace('name:Design work'),
+        focusWorkspace('name:Design work'), focusWindow('0x1')]
+    : [focusWorkspace('name:Design work'), moveCurrentWorkspace,
+        focusWorkspace('name:Design work'), focusWindow('0x1')], usingLua,
+    `card-window Ctrl+click uses card workspace override (${usingLua ? 'lua' : 'legacy'})`)
+
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('left', {}), true)
+  expectSequence(usingLua
+    ? [focusWorkspace('name:Design work'), moveWorkspace('name:Design work'),
+        focusWorkspace('name:Design work'), focusWindow('0x1')]
+    : [focusWorkspace('name:Design work'), moveCurrentWorkspace,
+        focusWorkspace('name:Design work'), focusWindow('0x1')], usingLua,
+    `card-window plain click pulls like the card name (${usingLua ? 'lua' : 'legacy'})`)
+  item.workspaceActivationTarget = ''
+  handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('middle', { control: true }), true)
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x1')], usingLua,
+    `Ctrl+middle click icon activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  clearSubmissions()
+  assert.equal(preview.activateToplevel(windows[0]), true)
+  expectInPlace(focusWindow('0x1'),
+    `ordinary preview activation focuses in place (${usingLua ? 'lua' : 'legacy'})`)
+
+  clearSubmissions()
+  assert.equal(preview.activateToplevel(windows[0], true), true)
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x1')], usingLua,
+    `Ctrl+click preview activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  actions.activeToplevel = windows[0]
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('left', {}), true)
+  expectInPlace(focusWindow('0x1'),
+    `active-other-monitor icon activation focuses in place (${usingLua ? 'lua' : 'legacy'})`)
+
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('left', { control: true }), true)
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x1')], usingLua,
+    `Ctrl+click active-other-monitor icon activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('left', {}), true)
+  expectInPlace(restoreWindow('0x1', '4'),
+    `unmodified minimized icon restore omits monitor routing (${usingLua ? 'lua' : 'legacy'})`)
+
+  actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('left', { control: true }), true)
+  expectSequence([focusWorkspace('4'), moveWorkspace('4'),
+    focusWorkspace('4'), restoreWindow('0x1', '4')], usingLua,
+    `Ctrl+click minimized icon activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  clearSubmissions()
+  assert.equal(preview.activateToplevel(windows[0]), true)
+  expectInPlace(restoreWindow('0x1', '4'),
+    `unmodified minimized preview restore omits monitor routing (${usingLua ? 'lua' : 'legacy'})`)
+
+  actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  clearSubmissions()
+  assert.equal(preview.activateToplevel(windows[0], true), true)
+  expectSequence([focusWorkspace('4'), moveWorkspace('4'),
+    focusWorkspace('4'), restoreWindow('0x1', '4')], usingLua,
+    `Ctrl+click minimized preview activation (${usingLua ? 'lua' : 'legacy'})`)
+
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  handles[1].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  actions.minimizedOrigins = {
+    '0x1': { workspace: '4', monitor: 'id:1' },
+    '0x2': { workspace: '5', monitor: 'id:1' }
+  }
+  actions.activeToplevel = windows[0]
+  item.runningToplevels = windows
+  item.runningCount = 2
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('scroll', {}, { direction: 1 }), true)
+  expectSequence([focusWorkspace('5'), moveWorkspace('5'),
+    focusWorkspace('5'), restoreWindow('0x2', '5'), focusWindow('0x2')], usingLua,
+    `minimized scroll cycle keeps dock monitor routing (${usingLua ? 'lua' : 'legacy'})`)
+  assert.equal(actions.minimizedOrigins['0x2'], undefined,
+    'successful scroll restore forgets the minimized origin')
+
+  handles[0].lastIpcObject = { workspace: { id: 8 }, monitor: 1 }
+  handles[1].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+  actions.minimizedOrigins = {}
+  actions.activeToplevel = windows[0]
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('scroll', {}, { direction: 1 }), true)
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9'), focusWindow('0x2')], usingLua,
+    `ordinary scroll cycle keeps dock monitor routing (${usingLua ? 'lua' : 'legacy'})`)
+
+  for (const modifiers of [{ control: true }, { shift: true }, { alt: true },
+    { meta: true }, { control: true, shift: true }]) {
+    clearSubmissions()
+    assert.equal(item.dispatchPointerAction('scroll', modifiers, { direction: 1 }), false)
+    expectRequests(requests, [], 'modified scrolling does not dispatch')
+    expectRequests(batches, [], 'modified scrolling does not spawn hyprctl')
+  }
+  item.applicationActions.scrollAction = 'none'
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('scroll', {}, { direction: 1 }), false)
+  expectRequests(requests, [], 'disabled scrolling does not dispatch')
+  expectRequests(batches, [], 'disabled scrolling does not spawn hyprctl')
+  item.applicationActions.scrollAction = 'cycle-windows'
+
+  // Context-menu / minimize-restore paths omit activationMonitor and keep old restore.
+  actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  clearSubmissions()
+  assert.equal(actions.restoreToplevel(windows[0], true), true)
+  expectRequests(requests, [restoreWindow('0x1', '4')],
+    `explicit restore omits monitor routing (${usingLua ? 'lua' : 'legacy'})`)
+  expectRequests(batches, [],
+    `explicit restore stays a single IPC request (${usingLua ? 'lua' : 'legacy'})`)
+
+  item.runningToplevels = [windows[0]]
+  item.runningCount = 1
 }
+assert.equal(read('Dock.qml').includes('indexOf(modelData)'), false)
+assert.equal(read('Dock.qml').includes('workspaceScopeKey(root.screen.name, modelData.presentationId)'), true)
+// Fullscreen presentation is scoped by workspace-card identity. Global
+// launchers and fallback windows remain neutral, and drag snapshots freeze it.
+const fullscreenDockSource = read('Dock.qml')
+const aOwner = {}, aSibling = {}, bOwner = {}, bSibling = {}, neutralWindow = {}
+const fullscreenGroups = [
+  { identity: 'id:1', items: [{ toplevels: [aSibling, aOwner] }] },
+  { identity: 'id:2', items: [{ toplevels: [bSibling, bOwner] }] },
+  { identity: 'id:3', items: [{ toplevels: [neutralWindow] }] }
+]
+const fullscreenHandles = [
+  { wayland: aOwner, lastIpcObject: { fullscreen: 1, fullscreenClient: 0 } },
+  { wayland: aSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: bOwner, lastIpcObject: { fullscreen: 1, fullscreenClient: 1 } },
+  { wayland: bSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: neutralWindow, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } }
+]
+const cardOwners = DockModel.workspaceFullscreenOwners(
+  fullscreenGroups, fullscreenHandles, null, [])
+assert.equal(cardOwners['id:1'], aOwner)
+assert.equal(cardOwners['id:2'], bOwner)
+assert.equal(cardOwners['id:3'], undefined)
+function cardPresentation(identity, toplevels) {
+  const owner = cardOwners[identity]
+  return DockModel.fullscreenIconPresentation(
+    owner !== undefined, owner !== undefined && toplevels.includes(owner), false)
+}
+const emphasizedPresentation = cardPresentation('id:1', [aOwner])
+const siblingPresentation = cardPresentation('id:1', [aSibling])
+const neutralCardPresentation = cardPresentation('id:3', [neutralWindow])
+assert.equal(emphasizedPresentation.scale, 1.15)
+assert.equal(emphasizedPresentation.opacity, 1)
+assert.equal(siblingPresentation.scale, 0.9)
+assert.equal(siblingPresentation.opacity, 0.45)
+assert.equal(neutralCardPresentation.scale, 1)
+assert.equal(neutralCardPresentation.opacity, 1)
+assert.ok(fullscreenDockSource.includes(
+  'root.workspaceFullscreenOwners[workspaceCard.modelData.identity]'),
+  'grouped card delegate must read only its local owner')
+assert.ok(fullscreenDockSource.includes(
+  'return windowActions.isMinimized(toplevel)'),
+  'grouped ownership must reuse DockWindowActions.isMinimized()')
+assert.ok(fullscreenDockSource.includes(
+  'readonly property bool groupedFullscreenModeActive:'),
+  'grouped padding must react to any card owner')
+assert.ok(fullscreenDockSource.includes(
+  'workspaceDragActive ? dragWorkspaceFullscreenOwners : liveWorkspaceFullscreenOwners'),
+  'workspace drag must freeze the per-card fullscreen snapshot')
+assert.ok(fullscreenDockSource.includes(
+  'root.dragWorkspaceFullscreenOwners = root.liveWorkspaceFullscreenOwners'),
+  'drag preparation must capture the per-card fullscreen snapshot')
+assert.ok(fullscreenDockSource.includes(`model: root.groupedRequested ? root.workspacePresentation.globalLaunchers : []
+          AppIcon {
+            y: 2
+            fullscreenModeActive: false
+            fullscreenEmphasized: false
+          }`), 'global launchers stay neutral')
+assert.ok(fullscreenDockSource.includes(`model: root.groupedRequested ? root.workspacePresentation.fallbackItems : []
+            AppIcon {
+              fullscreenModeActive: false
+              fullscreenEmphasized: false
+            }`), 'fallback icons stay neutral')
+
+// Evaluate the production marker bindings: grouped magnification must not push
+// the focus underline outside the compact surface, even with zero edge margin.
+const markerBlock = read('DockItem.qml').split('id: applicationStateIndicator')[1].split('\n    }')[0]
+function markerBinding(name, fallback, scope) {
+  const expression = markerBlock.match(new RegExp(`^      ${name}: (.+)$`, 'm'))?.[1]
+  return expression ? vm.runInNewContext(expression, scope) : fallback
+}
+for (const iconSize of [24, 31, 64, 96]) for (const position of ['top', 'bottom']) {
+  const slot = { originOnly: true }
+  const iconContainer = { x: 7, y: 10, opacity: 0.4 }
+  const geometry = DockModel.applicationStateIndicatorGeometry(position, iconSize, iconSize, true, true)
+  const scope = { root: slot, iconContainer, indicatorGeometry: geometry }
+  const markerParent = markerBinding('parent', iconContainer, scope)
+  const markerY = markerBinding('y', geometry.y, scope)
+  for (const magnification of [1, 2]) {
+    const scale = markerParent === iconContainer ? magnification : 1
+    const origin = position === 'bottom' ? iconSize : 0
+    const top = markerParent === iconContainer
+      ? iconContainer.y + origin + (markerY - origin) * scale : markerY
+    // Actual source surface height; the item has six extra cross-axis pixels.
+    const backgroundHeight = vm.runInNewContext(read('Dock.qml').split('id: dockBackground')[1].match(/height: root.vertical \? parent.height : (.+)/)[1],
+      { root: { iconSize, grouped: true } })
+    const itemHeight = iconSize + 20
+    assert.ok(top + (backgroundHeight - itemHeight) / 2 >= 0, 'top marker fits compact surface')
+    assert.ok(top + geometry.height * scale <= (backgroundHeight + itemHeight) / 2,
+      'bottom marker fits compact surface')
+  }
+  assert.equal(markerBinding('opacity', 1, scope), 0.4, 'reparented marker retains fullscreen opacity')
+}
+// Trailing whitespace stays compact, while fullscreen emphasis still fits at
+// maximum magnification. Evaluate the host binding rather than a copied formula.
+const paddingExpression = read('Dock.qml').split('id: groupedLayout')[1]
+  .match(/contentPadding: ([\s\S]*?)\n        foreground:/)[1]
+const paddingFor = root => vm.runInNewContext(paddingExpression, { root, DockModel })
+assert.ok(paddingFor({ iconSize: 24, magnification: 1.2, groupedFullscreenModeActive: false }) <= 4,
+  'default grouped spacing must not add redundant viewport padding')
+assert.ok(paddingFor({ iconSize: 24, magnification: 2, groupedFullscreenModeActive: false }) + 7 >= 12 + 8,
+  'global launcher hover tile fits its slot inset plus viewport allowance')
+const largeOwnerScale = DockModel.fullscreenIconPresentation(true, true, false).scale * 2
+const largeOwnerOverhang = 96 * (largeOwnerScale - 1) / 2
+assert.ok(paddingFor({ iconSize: 96, magnification: 2, groupedFullscreenModeActive: true }) + 13 >= largeOwnerOverhang,
+  'fullscreen artwork fits the trailing card inset plus viewport allowance')
+const inactiveOnlyHandles = [
+  { wayland: aOwner, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: aSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: bOwner, lastIpcObject: { fullscreen: 1, fullscreenClient: 0 } },
+  { wayland: bSibling, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } },
+  { wayland: neutralWindow, lastIpcObject: { fullscreen: 0, fullscreenClient: 0 } }
+]
+const noOwnerHandles = inactiveOnlyHandles.map(handle => ({
+  wayland: handle.wayland,
+  lastIpcObject: { fullscreen: 0, fullscreenClient: handle.lastIpcObject.fullscreenClient }
+}))
+const inactiveOwners = DockModel.workspaceFullscreenOwners(
+  fullscreenGroups, inactiveOnlyHandles, aSibling, [])
+assert.equal(inactiveOwners['id:2'], bOwner)
+assert.equal(inactiveOwners['id:1'], undefined)
+const noOwners = DockModel.workspaceFullscreenOwners(
+  fullscreenGroups, noOwnerHandles, aSibling, [])
+const oneOwnerPadding = paddingFor({
+  iconSize: 96, magnification: 2,
+  groupedFullscreenModeActive: Object.keys(inactiveOwners).length > 0
+})
+const twoOwnerPadding = paddingFor({
+  iconSize: 96, magnification: 2,
+  groupedFullscreenModeActive: Object.keys(cardOwners).length > 0
+})
+const clearedPadding = paddingFor({
+  iconSize: 96, magnification: 2,
+  groupedFullscreenModeActive: Object.keys(noOwners).length > 0
+})
+const normalPadding = paddingFor({
+  iconSize: 96, magnification: 2, groupedFullscreenModeActive: false
+})
+assert.ok(oneOwnerPadding > clearedPadding,
+  'inactive-card owner reserves fullscreen padding')
+assert.equal(oneOwnerPadding, twoOwnerPadding,
+  'multiple owners reserve the same padding as one owner')
+assert.equal(clearedPadding, normalPadding,
+  'padding returns to normal after the final owner clears')
 
 console.log('grouped action routes and compact geometry: PASS')
+
+// Execute the geometry bindings from QML. This catches trimming the logical
+// layout with the surface, which silently reintroduces the trailing gap.
+function binding(block, name, scope) {
+  const expression = block.match(new RegExp(`^( *)${name}: ([^\\n]*(?:\\n\\1 +[^\\n]+)*)`, 'm'))?.[2]
+  assert.ok(expression, `missing binding ${name}`)
+  return vm.runInNewContext(expression, scope)
+}
+const dockSource = read('Dock.qml')
+const backgroundSource = dockSource.split('id: dockBackground')[1]
+const layoutSource = dockSource.split('id: dockLayout')[1]
+const groupedSource = dockSource.split('id: groupedLayout')[1]
+function dockGeometry(options = {}) {
+  const root = { iconSize: 24, magnification: 1.2, groupedFullscreenModeActive: false,
+    grouped: true, vertical: false, fullLength: false, showTrash: false,
+    screen: { width: 1920 }, ...options }
+  const groupedLayout = { contentPadding: paddingFor(root) }
+  groupedLayout.desiredWidth = binding(read('DockWorkspaceLayout.qml'),
+    'readonly property real desiredWidth', { content: { implicitWidth: 300 }, ...groupedLayout })
+  Object.assign(root, { itemSize: root.iconSize + (root.grouped ? 14 : 22),
+    mainPadding: root.grouped ? 8 : 16, appMainExtent: groupedLayout.desiredWidth,
+    trailingMainExtent: root.showTrash ? 70 : root.grouped ? 0 : 90, crossExtent: 200 })
+  const scope = { root, groupedLayout, ...root }
+  root.compactMainExtent = binding(dockSource, 'readonly property int compactMainExtent', scope)
+  // Bind any surface geometry properties in source order, as QML dependencies.
+  for (const name of ['groupedSurfaceTrim', 'groupedSurfaceGutter', 'compactGroupedSurface', 'compactPanelExtent']) {
+    const declaration = `readonly property ${name === 'compactGroupedSurface' ? 'bool' : 'int'} ${name}`
+    if (dockSource.includes(declaration)) {
+      root[name] = binding(dockSource, declaration, { ...scope, ...root })
+    }
+  }
+  const panelWidth = root.fullLength ? root.screen.width
+    : binding(dockSource, 'implicitWidth', { ...scope, ...root })
+  const parent = { width: panelWidth }
+  const inputSource = dockSource.split('id: interactionArea')[1]
+  const interactionArea = { width: binding(inputSource, 'width', { root, parent }) }
+  interactionArea.x = binding(inputSource, 'x', { parent, ...interactionArea })
+  const surfaceWidth = binding(backgroundSource, 'width', { root, parent, interactionArea })
+  const surfaceX = binding(backgroundSource, 'x', { root, parent, interactionArea, width: surfaceWidth })
+  const layoutWidth = layoutSource.trimStart().startsWith('anchors.fill: parent') ? surfaceWidth
+    : binding(layoutSource, 'width', { root, parent: { width: surfaceWidth } })
+  const dockLayout = { width: layoutWidth, height: 200 }
+  for (const name of ['leadingEnd', 'trailingStart', 'centeredAppStart', 'appStart'])
+    dockLayout[name] = binding(layoutSource, `readonly property real ${name}`, { root, ...dockLayout })
+  const viewportX = binding(groupedSource, 'x', { dockLayout })
+  const viewportWidth = binding(groupedSource, 'width', { dockLayout, x: viewportX,
+    desiredWidth: groupedLayout.desiredWidth })
+  return { root, panelWidth, interactionArea, surfaceWidth, surfaceX, layoutWidth, viewportX, viewportWidth,
+    visibleRight: surfaceX + viewportX + groupedLayout.contentPadding + 300,
+    desiredWidth: groupedLayout.desiredWidth }
+}
+for (const iconSize of [24, 31, 64, 96]) for (const magnification of [1, 1.2, 2])
+  for (const groupedFullscreenModeActive of [false, true]) {
+    const g = dockGeometry({ iconSize, magnification, groupedFullscreenModeActive })
+    assert.equal(g.surfaceX + g.surfaceWidth - g.visibleRight, 4, 'visible right inset is exactly 4px')
+    assert.equal(g.surfaceX * 2 + g.surfaceWidth, g.panelWidth, 'visible surface is centered')
+    assert.equal(g.layoutWidth, g.root.compactMainExtent, 'logical layout retains its original width')
+    assert.equal(g.viewportWidth, g.desiredWidth, 'magnification viewport is not reduced')
+    assert.equal(g.panelWidth, 1920, 'workspace content does not resize the native panel')
+    assert.equal(g.interactionArea.width, g.root.compactPanelExtent, 'transparent sides are click-through')
+    assert.ok(g.surfaceX >= 0 && g.surfaceX + g.surfaceWidth <= g.panelWidth)
+    assert.ok(g.surfaceX + g.viewportX + g.viewportWidth <= g.panelWidth, 'viewport fits outer panel')
+    if (g.root.groupedSurfaceGutter > 0) {
+      const dockLayout = { x: g.surfaceX, width: g.layoutWidth }
+      const dockBackground = { x: g.surfaceX, width: g.surfaceWidth }
+      const pointerParent = binding(dockSource.split('id: pointer')[1], 'parent',
+        { root: g.root, dockLayout, dockBackground })
+      const pointX = g.viewportX + g.viewportWidth - 1
+      const pointer = { hovered: pointX < pointerParent.width,
+        point: { position: { x: pointX, y: 30 } } }
+      assert.ok(pointer.hovered, 'tracking covers transparent magnification allowance')
+      assert.equal(binding(dockSource, 'readonly property real pointerPosition',
+        { pointer, vertical: false }), pointX, 'control pointer retains logical origin')
+      const appParentX = g.surfaceX + g.viewportX + paddingFor(g.root)
+      const parent = { mapFromItem: (source, x, y) => ({ x: source.x + x - appParentX, y }) }
+      assert.equal(binding(dockSource.split('component AppIcon:')[1], 'pointerPosition',
+        { pointer, root: g.root, parent, dockLayout, dockBackground }),
+      g.viewportWidth - paddingFor(g.root) - 1, 'app pointer mapping includes gutter exactly once')
+    }
+  }
+for (const options of [{ grouped: false }, { showTrash: true },
+  { fullLength: true }, { screen: { width: 200 } },
+  { iconSize: 96, magnification: 2, screen: { width: 540 } }]) {
+  const g = dockGeometry(options)
+  assert.equal(g.surfaceX, g.interactionArea.x, 'untrimmed surface follows the input region')
+  assert.equal(g.surfaceWidth, g.interactionArea.width)
+  assert.ok(g.viewportWidth >= 0)
+}
+
+const verticalBackground = {}
+assert.equal(binding(dockSource.split('id: pointer')[1], 'parent',
+  { root: { vertical: true }, dockBackground: verticalBackground, dockLayout: {} }), verticalBackground,
+'Vertical pointer parent is unchanged')
+console.log('grouped visible surface and magnification bounds: PASS')
