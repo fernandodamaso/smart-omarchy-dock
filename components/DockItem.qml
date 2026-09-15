@@ -53,6 +53,7 @@ Item {
   property var browserProfileService: null
   property string browserProfileKey: ""
   property bool browserProfileBadgesEnabled: true
+  property var previewActivities: []
   readonly property var browserProfileEntry: browserProfileKey && browserProfileService
     ? browserProfileService.profileFor(browserProfileKey) : null
   property bool presentationActive: true
@@ -208,7 +209,8 @@ Item {
     case "minimize-restore":
       return root.windowActions.minimizeRestoreToplevels(root.runningToplevels, root.originOnly)
     case "previews":
-      if (!root.showPreviews || root.runningCount < 2) return false
+      if (!root.showPreviews || root.runningCount === 0
+          || (root.runningCount < 2 && root.previewActivities.length === 0)) return false
       root.previewRequested(root, root.desktopId, root.runningToplevels, root.entry)
       return true
     case "close":
@@ -243,7 +245,9 @@ Item {
     lastActivatedToplevel = -1
     wheelRemainder = 0
     lastWheelTimestamp = 0
-    if (runningCount < 2) root.previewDismissRequested()
+    if (runningCount === 0
+        || (runningCount < 2 && root.previewActivities.length === 0))
+      root.previewDismissRequested()
   }
 
   onPresentationActiveChanged: {
@@ -571,11 +575,13 @@ Item {
     cursorShape: Qt.PointingHandCursor
     onHoveredChanged: {
       if (hovered) {
-        if (root.showPreviews && root.runningCount >= 2
+        if (root.showPreviews && root.runningCount > 0
+            && (root.runningCount >= 2 || root.previewActivities.length > 0)
             && !contextMenu.visible && !dragHandler.active && !root.workspaceInputSuppressed)
           root.previewRequested(root, root.desktopId,
             root.runningToplevels, root.entry)
-      } else if (root.previewActive || root.runningCount >= 2) {
+      } else if (root.previewActive || root.runningCount >= 2
+          || root.previewActivities.length > 0) {
         root.previewReleased(root)
       }
     }

@@ -39,6 +39,7 @@
   "urgentWindowAnimationEnabled": true,
   "launcherBadgeMode": "automatic",
   "browserProfileBadgesEnabled": true,
+  "browserActivityMutedServices": [],
   "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",

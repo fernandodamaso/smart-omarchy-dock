@@ -72,4 +72,26 @@ TestCase {
     compare(presentation.kind, "dot")
     compare(presentation.severity, "attention")
   }
+
+  function test_browserCountIsStrictChromeFallback() {
+    var chrome = {
+      id: "com.google.Chrome", startupClass: "google-chrome",
+      name: "Google Chrome"
+    }
+    var browser = BadgeModel.browserCountState(
+      chrome.id, chrome, ["google-chrome"], 23, true, {})
+    compare(browser.count, 23)
+    verify(browser.visible)
+    verify(!BadgeModel.browserCountState(
+      "org.mozilla.firefox", { id: "org.mozilla.firefox", startupClass: "firefox" },
+      ["google-chrome"], 23, true, {}).visible)
+  }
+
+  function test_launcherCountWinsOverBrowserFallback() {
+    var launcher = { authoritative: true, count: 4, visible: true }
+    var browser = { authoritative: true, count: 23, visible: true }
+    compare(BadgeModel.preferredCountState(launcher, browser).count, 4)
+    compare(BadgeModel.preferredCountState(
+      { authoritative: false, count: 0, visible: false }, browser).count, 23)
+  }
 }

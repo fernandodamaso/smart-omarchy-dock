@@ -9,12 +9,15 @@ import Quickshell.Services.SystemTray
 import "DockBadgeModel.js" as BadgeModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockModel.js" as DockModel
+import "DockBrowserActivityModel.js" as ActivityModel
 
 Item {
   id: root
 
   property var notificationService: null
   property var launcherBadgeService: null
+  property var browserProfileService: null
+  property var browserActivityMutedServices: []
   property string launcherBadgeMode: BadgeModel.BADGE_COUNT_MODE_AUTOMATIC
   property var identityAliases: ({})
   property int revision: 0
@@ -213,6 +216,20 @@ Item {
       counts, desktopId, !!(service && service.available))
   }
 
+  function browserCountFor(desktopId) {
+    var service = root.browserProfileService
+    var providerRevision = service ? Number(service.revision || 0) : 0
+    if (!service || !service.available) return null
+    var rows = typeof service.allActivityRows === "function"
+      ? service.allActivityRows() : []
+    var total = ActivityModel.presentation(
+      rows, root.browserActivityMutedServices).total
+    var entry = BadgeModel.entryForDesktopId(desktopId, applications)
+    return BadgeModel.browserCountState(
+      desktopId, entry, service.classes, total, service.available,
+      identityAliases)
+  }
+
   function motionAttentionFor(desktopId, scope) {
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     var local = BadgeModel.localSeverity(
@@ -232,9 +249,13 @@ Item {
     var severity = BadgeModel.scopedBadgeSeverity(
       sniNeedsAttentionFor(desktopId, entry),
       hyprUrgentFor(desktopId, entry), local, scope)
+    var launcher = !scope || scope.primaryOwner === true
+      ? launcherCountFor(desktopId) : null
+    var browser = !scope || scope.primaryOwner === true
+      ? browserCountFor(desktopId) : null
     return BadgeModel.applicationBadgeToken(
-      true, launcherBadgeMode, !scope || scope.primaryOwner === true
-        ? launcherCountFor(desktopId) : null, severity)
+      true, launcherBadgeMode,
+      BadgeModel.preferredCountState(launcher, browser), severity)
   }
 
   function focusedEntry() {
@@ -271,6 +292,7 @@ Item {
   onNotificationServiceChanged: Qt.callLater(captureNotifications)
   onLauncherBadgeServiceChanged: bumpRevision()
   onLauncherBadgeModeChanged: bumpRevision()
+  onBrowserActivityMutedServicesChanged: bumpRevision()
   onApplicationsChanged: {
     reconcileUrgentStates()
     bumpRevision()
@@ -297,6 +319,15 @@ Item {
       root.bumpRevision()
       root.restartFocusDwell()
     }
+  }
+
+  Connections {
+    target: root.browserProfileService
+    ignoreUnknownSignals: true
+    function onRevisionChanged() { root.bumpRevision() }
+    function onAvailableChanged() { root.bumpRevision() }
+    function onActivitiesChanged() { root.bumpRevision() }
+    function onClassesChanged() { root.bumpRevision() }
   }
 
   Connections {

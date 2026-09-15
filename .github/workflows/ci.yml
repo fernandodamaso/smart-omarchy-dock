@@ -92,6 +92,11 @@ jobs:
         shell: bash
         run: python3 -m unittest discover -s tests -p 'test_*.py'
 
+      - name: Run browser provider tests
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: python3 -m unittest discover -s provider/browser-profiles/tests -p 'test_*.py'
+
       - name: Run pure QML tests
         if: ${{ !cancelled() }}
         shell: bash

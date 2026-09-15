@@ -110,6 +110,15 @@ Item {
     return changeApplication("hide", { id: desktopId })
   }
 
+  function toggleBrowserActivityMute(serviceId) {
+    var blocked = mutationBlocked()
+    if (blocked) return blocked
+    var current = DockModel.normalizeSetting(
+      "browserActivityMutedServices", settings.browserActivityMutedServices)
+    return saveSetting("browserActivityMutedServices",
+      DockModel.toggleBrowserActivityServiceMute(current, serviceId))
+  }
+
   function changeApplication(action, args) {
     var blocked = mutationBlocked()
     if (blocked) return blocked
@@ -429,6 +438,9 @@ Item {
     id: badgeTrackerController
     notificationService: root.notificationService
     launcherBadgeService: root.launcherBadgeService
+    browserProfileService: root.browserProfileService
+    browserActivityMutedServices: DockModel.normalizeSetting(
+      "browserActivityMutedServices", root.settings.browserActivityMutedServices)
     launcherBadgeMode: root.settings.launcherBadgeMode === "dots-only" ? "dots-only" : "automatic"
   }
 
@@ -456,6 +468,7 @@ Item {
         onPinRequested: desktopId => root.pinApplication(desktopId)
         onUnpinRequested: desktopId => root.unpinApplication(desktopId)
         onHideRequested: desktopId => root.hideApplication(desktopId)
+        onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
         onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
         onOpenTrashRequested: root.openTrash()
         onEmptyTrashRequested: root.emptyTrash()

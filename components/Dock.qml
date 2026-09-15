@@ -30,10 +30,13 @@ PanelWindow {
   property int iconReloadRevision: 0
   property var browserProfileService: null
   property bool browserProfileBadgesEnabled: true
+  readonly property var browserActivityMutedServices: DockModel.normalizeSetting(
+    "browserActivityMutedServices", settings.browserActivityMutedServices)
   signal reorderRequested(string sourceDesktopId, string targetDesktopId)
   signal pinRequested(string desktopId)
   signal unpinRequested(string desktopId)
   signal hideRequested(string desktopId)
+  signal browserActivityMuteToggled(string serviceId)
   signal autoHideRequested(bool enabled)
   signal openTrashRequested()
   signal emptyTrashRequested()
@@ -75,6 +78,48 @@ PanelWindow {
       else if (key !== windowKey) return ""
     }
     return key
+  }
+
+  function addressesForItem(item) {
+    var addresses = []
+    var toplevels = item && item.toplevels ? item.toplevels : []
+    for (var i = 0; i < toplevels.length; ++i) {
+      var address = hyprAddressFor(toplevels[i])
+      if (address && addresses.indexOf(address) < 0) addresses.push(address)
+    }
+    return addresses
+  }
+
+  function browserActivitiesFor(item) {
+    var service = root.browserProfileService
+    var serviceRevision = service ? Number(service.revision || 0) : 0
+    if (!service || !service.available
+        || typeof service.activityRowsForAddresses !== "function") return []
+    return service.activityRowsForAddresses(root.addressesForItem(item))
+  }
+
+  function activateBrowserActivity(activity, members) {
+    var service = root.browserProfileService
+    if (!service || !service.available
+        || typeof service.allActivityRows !== "function"
+        || service.activationInFlight === true) return false
+    var targetId = String(activity && activity.targetId || "")
+    var address = String(activity && activity.windowAddress || "")
+    var rows = service.allActivityRows()
+    var verified = rows.some(function(row) {
+      return String(row.targetId || "") === targetId
+        && String(row.windowAddress || "").toLowerCase() === address.toLowerCase()
+    })
+    if (!verified) return false
+    var member = PreviewModel.memberForAddress(
+      members, address, root.hyprAddressFor)
+    if (!member) return false
+    if (!root.windowActions.activateToplevel(
+        member, windowPreview.originOnly, windowPreview.activationMonitor))
+      return false
+    if (!service.activateTarget(targetId)) return false
+    windowPreview.dismissImmediately()
+    return true
   }
 
   readonly property int iconSize: DockModel.normalizeSetting(
@@ -1057,6 +1102,7 @@ PanelWindow {
     browserProfileService: root.browserProfileService
     browserProfileKey: root.profileKeyFor(modelData)
     browserProfileBadgesEnabled: root.browserProfileBadgesEnabled
+    previewActivities: root.browserActivitiesFor(modelData)
     pinnedItem: modelData.pinned
     runningToplevels: modelData.toplevels
     focused: root.activeToplevel !== null
@@ -1145,6 +1191,10 @@ PanelWindow {
     clipItem: root.grouped ? groupedLayout : null
     iconOverrides: root.iconOverrides
     iconReloadRevision: root.iconReloadRevision
+    mutedServices: root.browserActivityMutedServices
+    onActivityRequested: activity => root.activateBrowserActivity(
+      activity, windowPreview.members)
+    onActivityMuteToggled: serviceId => root.browserActivityMuteToggled(serviceId)
   }
 
   DockAppPicker {

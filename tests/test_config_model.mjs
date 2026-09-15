@@ -62,11 +62,18 @@ for (const patch of [{ hoverGlowOpacity: .72 }, { margin: 1000000 },
   { backgroundColor: '#80112233', backgroundColorEnabled: true },
   { backgroundColor: '@menu.background' }, { backgroundColor: '' },
   { pinned: ['Code.desktop', 'Unavailable App'] },
-  { controlCommand: 'literal $(not-executed); command' }])
+  { controlCommand: 'literal $(not-executed); command' },
+  { browserActivityMutedServices: ['gmail', 'whatsapp'] }])
   assert.equal(model.validatePatch(patch, schema).ok, true, JSON.stringify(patch));
+for (const patch of [{ browserActivityMutedServices: ['Gmail'] },
+  { browserActivityMutedServices: [1] },
+  { browserActivityMutedServices: ['gmail', 'gmail'] },
+  { browserActivityMutedServices: ['bad id'] }])
+  assert.equal(model.validatePatch(patch, schema).ok, false, JSON.stringify(patch));
 
 const preferences = model.preferenceResetPatch(defaults, schema);
-for (const key of ['pinned', 'hiddenApplications', 'margin', 'iconOverrides', 'extensionData'])
+for (const key of ['pinned', 'hiddenApplications', 'browserActivityMutedServices',
+  'margin', 'iconOverrides', 'extensionData'])
   assert.equal(Object.hasOwn(preferences, key), false, key);
 const reset = model.applyPatch(current, preferences, schema);
 assert.equal(reset.ok, true);

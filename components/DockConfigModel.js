@@ -48,6 +48,22 @@ function valueError(value, spec) {
         seen[id] = true
       }
     }
+    if (spec.format === "browser-activity-service-ids") {
+      var seenServices = Object.create(null)
+      for (var s = 0; s < value.length; ++s) {
+        if (typeof value[s] !== "string")
+          return "Expected a string service ID at index " + s
+        var serviceId = value[s].trim().toLowerCase()
+        if (!serviceId || serviceId.length > 64
+            || !/^[a-z0-9][a-z0-9_-]*$/.test(serviceId))
+          return "Invalid browser activity service ID at index " + s
+        if (value[s] !== serviceId)
+          return "Service ID must be trimmed lowercase at index " + s
+        if (own(seenServices, serviceId))
+          return "Duplicate browser activity service ID: " + value[s]
+        seenServices[serviceId] = true
+      }
+    }
   }
   if (spec.type === "object" && !isObject(value)) return "Expected an object"
   if (spec.format === "icon-overrides") {
