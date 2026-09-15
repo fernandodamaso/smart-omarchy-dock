@@ -1,0 +1,32 @@
+name: FDM-941 final red
+
+on:
+  push:
+    branches:
+      - feature/fdm-938-context-menus-local-grouping-workspace-pins
+    paths:
+      - scripts/fdm941_final_red.py
+      - .github/workflows/fdm941-final-red.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/fdm-938-context-menus-local-grouping-workspace-pins
+          fetch-depth: 0
+      - run: python3 scripts/fdm941_final_red.py
+      - name: Commit tests and remove one-shot scaffolding
+        run: |
+          set -euo pipefail
+          rm scripts/fdm941_final_red.py .github/workflows/fdm941-final-red.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'test: capture FDM-941 one-member saved group menu'
+          git push origin HEAD:feature/fdm-938-context-menus-local-grouping-workspace-pins
