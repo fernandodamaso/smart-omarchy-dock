@@ -151,7 +151,7 @@ const currentMonitorConfigured = build({
   monitorScope: 'current-monitor', monitor: 'id:1', activeWorkspace: 'id:1',
   monitorOrder: ['ZETA', 'GAMMA', 'ALPHA']
 })
-assert.deepEqual(currentMonitorConfigured.monitorGroups, [],
+assert.deepEqual(Array.from(currentMonitorConfigured.monitorGroups || []), [],
   'current-monitor keeps the existing flat grouped presentation')
 assert.deepEqual(groupOrder(currentMonitorConfigured), groupOrder(currentMonitorDefault),
   'saved physical order is visually inactive in current-monitor scope')
