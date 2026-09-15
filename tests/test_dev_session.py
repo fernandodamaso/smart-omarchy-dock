@@ -15,7 +15,12 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from dev_session import (  # noqa: E402
     GUEST_CONFIG_PATH,
+    _commit_live_record,
+    _flock,
+    _read_record_unlocked,
+    _reservation_path,
     _wait_for_guest_setup,
+    _write_record_unlocked,
     default_runtime_root,
     owned_process,
     prepare_private_inputs,
@@ -1154,6 +1159,228 @@ class StartRaceTests(unittest.TestCase):
             latest = read_record("agent-start")
             self.assertEqual(latest["state"], "stopped")
             self.assertNotEqual(latest["state"], "failed")
+            self.assertIsNotNone(proc.poll())
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                proc.wait(timeout=5)
+
+    def _start_paths(self, name: str) -> dict:
+        session = session_dir(name)
+        evidence = session / "evidence"
+        evidence.mkdir(parents=True, mode=0o700)
+        paths = {
+            "session": session,
+            "evidence": evidence,
+            "source": self.source,
+            "base_image": self.base,
+            "overlay": session / "overlay.qcow2",
+            "vars": session / "vars.fd",
+            "seed": session / "seed.iso",
+            "ssh_key": session / "id_ed25519",
+            "ssh_pub": session / "id_ed25519.pub",
+        }
+        for key in ("overlay", "vars", "seed", "ssh_key", "ssh_pub"):
+            paths[key].write_bytes(b"x")
+        return paths
+
+    def test_start_exception_releases_port_after_early_stop(self):
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            start_new_session=True,
+        )
+        try:
+            paths = self._start_paths("agent-port")
+            host_state = {
+                "active_workspace": {"id": 1, "name": "1"},
+                "active_window": {"address": "0x1", "title": "test"},
+                "cursorpos": "10,10",
+                "production_settings_sha256": "abc",
+            }
+            reserved = {"port": None}
+
+            def wrapping_commit(updated, **kwargs):
+                if kwargs.get("allow_identity_assign"):
+                    reserved["port"] = updated.get("port")
+                    self.assertIsInstance(reserved["port"], int)
+                    self.assertTrue(
+                        _reservation_path(
+                            default_runtime_root(), reserved["port"]
+                        ).is_file()
+                    )
+                    self.assertEqual(stop(updated["name"])["state"], "stopped")
+                return _commit_live_record(updated, **kwargs)
+
+            with mock.patch("dev_session.prepare_private_inputs", return_value=paths):
+                with mock.patch("dev_session._capture_host_state", return_value=host_state):
+                    with mock.patch("dev_session._launch_rule"):
+                        with mock.patch("dev_session._disable_launch_rule"):
+                            with mock.patch(
+                                "dev_session.qemu_argv", return_value=["true"]
+                            ):
+                                with mock.patch(
+                                    "dev_session.subprocess.Popen",
+                                    return_value=proc,
+                                ):
+                                    with mock.patch(
+                                        "dev_session._commit_live_record",
+                                        side_effect=wrapping_commit,
+                                    ):
+                                        with self.assertRaises(ValueError):
+                                            start(
+                                                "agent-port",
+                                                source=self.source,
+                                                base_image=self.base,
+                                                mode="standalone",
+                                                workspace="4",
+                                            )
+            self.assertEqual(read_record("agent-port")["state"], "stopped")
+            self.assertFalse(
+                _reservation_path(
+                    default_runtime_root(), reserved["port"]
+                ).exists()
+            )
+            self.assertIsNotNone(proc.poll())
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                proc.wait(timeout=5)
+
+    def test_qemu_exit_while_stopping_returns_stopping(self):
+        paths = self._start_paths("agent-wait")
+        host_state = {
+            "active_workspace": {"id": 1, "name": "1"},
+            "active_window": {"address": "0x1", "title": "test"},
+            "cursorpos": "10,10",
+            "production_settings_sha256": "abc",
+        }
+        identity = {"pid": 424242, "start_ticks": 99, "pgid": 424242}
+        proc = mock.Mock()
+        proc.pid = 424242
+
+        def wait_and_mark_stopping():
+            from dev_session import _write_record
+
+            record = read_record("agent-wait")
+            record["state"] = "stopping"
+            _write_record(record)
+            return 0
+
+        proc.wait.side_effect = wait_and_mark_stopping
+
+        def fake_dock(name):
+            record = read_record(name)
+            record["state"] = "ready"
+            record["host_pid"] = 7
+            record["guest_dock_pid"] = 7
+            from dev_session import _write_record
+
+            _write_record(record)
+            return record
+
+        with mock.patch("dev_session.prepare_private_inputs", return_value=paths):
+            with mock.patch("dev_session._capture_host_state", return_value=host_state):
+                with mock.patch("dev_session._launch_rule"):
+                    with mock.patch("dev_session._disable_launch_rule"):
+                        with mock.patch(
+                            "dev_session._reserve_port_locked", return_value=22055
+                        ):
+                            with mock.patch(
+                                "dev_session.qemu_argv", return_value=["true"]
+                            ):
+                                with mock.patch(
+                                    "dev_session.subprocess.Popen",
+                                    return_value=proc,
+                                ):
+                                    with mock.patch(
+                                        "dev_session.process_identity",
+                                        return_value=identity,
+                                    ):
+                                        with mock.patch(
+                                            "dev_session._wait_for_owned_port"
+                                        ):
+                                            with mock.patch(
+                                                "dev_session._place_owned_window",
+                                                return_value={"address": "0xbeef"},
+                                            ):
+                                                with mock.patch(
+                                                    "dev_session._wait_for_guest_setup"
+                                                ):
+                                                    with mock.patch(
+                                                        "dev_session.sync_source"
+                                                    ):
+                                                        with mock.patch(
+                                                            "dev_session._run_guest_argv",
+                                                            return_value=mock.Mock(
+                                                                returncode=0,
+                                                                stdout="",
+                                                                stderr="",
+                                                            ),
+                                                        ):
+                                                            with mock.patch(
+                                                                "dev_session.start_guest_dock",
+                                                                side_effect=fake_dock,
+                                                            ):
+                                                                result = start(
+                                                                    "agent-wait",
+                                                                    source=self.source,
+                                                                    base_image=self.base,
+                                                                    mode="standalone",
+                                                                    workspace="4",
+                                                                )
+        self.assertEqual(result["state"], "stopping")
+        self.assertIsNone(result.get("error"))
+        self.assertEqual(read_record("agent-wait")["state"], "stopping")
+
+    def test_stop_rereads_identity_under_lock(self):
+        import threading
+        import time
+
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            start_new_session=True,
+        )
+        try:
+            ident = process_identity(proc.pid)
+            self.assertIsNotNone(ident)
+            session = session_dir("agent-lock")
+            session.mkdir(parents=True, mode=0o700)
+            seed = {
+                "name": "agent-lock",
+                "state": "starting",
+                "qemu_pid": None,
+                "qemu_start_ticks": None,
+                "qemu_pgid": None,
+                "port": 22066,
+                "error": None,
+            }
+            from dev_session import _write_record
+
+            _write_record(seed)
+            lock_held = threading.Event()
+            result = {}
+
+            def stopper():
+                lock_held.wait(timeout=5)
+                result["record"] = stop("agent-lock")
+
+            thread = threading.Thread(target=stopper)
+            thread.start()
+            with _flock(session / "record.lock"):
+                lock_held.set()
+                time.sleep(0.05)
+                current = dict(_read_record_unlocked("agent-lock"))
+                current.update(
+                    {
+                        "qemu_pid": ident["pid"],
+                        "qemu_start_ticks": ident["start_ticks"],
+                        "qemu_pgid": ident["pgid"],
+                    }
+                )
+                _write_record_unlocked(current)
+            thread.join(timeout=10)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(result["record"]["state"], "stopped")
             self.assertIsNotNone(proc.poll())
         finally:
             if proc.poll() is None:

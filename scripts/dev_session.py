@@ -1727,7 +1727,10 @@ def _terminate_owned(record: dict, *, wait_seconds: float = 5.0) -> bool:
     if not owned_process(record):
         return False
     pid = int(record["qemu_pid"])
-    os.kill(pid, signal.SIGTERM)
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return False
     deadline = time.monotonic() + wait_seconds
     while time.monotonic() < deadline:
         if not owned_process(record):
@@ -1736,7 +1739,10 @@ def _terminate_owned(record: dict, *, wait_seconds: float = 5.0) -> bool:
     if owned_process(record):
         current = process_identity(pid)
         if current and current["pgid"] == int(record["qemu_pgid"]):
-            os.killpg(current["pgid"], signal.SIGKILL)
+            try:
+                os.killpg(current["pgid"], signal.SIGKILL)
+            except ProcessLookupError:
+                return False
     return True
 
 
@@ -1757,31 +1763,60 @@ def status(name: str) -> dict:
 
 def stop(name: str) -> dict:
     name = validate_name(name)
-    record = read_record(name)
-    if record["state"] == "stopped":
-        return record
-    pid = record.get("qemu_pid")
-    current = process_identity(pid) if isinstance(pid, int) else None
-    if current is not None and not owned_process(record):
-        record["state"] = "failed"
-        record["error"] = "ownership mismatch; refusing to signal process"
-        _write_record(record)
-        raise ValueError(record["error"])
-    if current is None:
-        record["state"] = "stopped"
-        record["error"] = None
-        _write_record(record)
-        _release_port(default_runtime_root(), name, record.get("port"))
-        return record
+    session = session_dir(name)
+    if not session.is_dir():
+        raise ValueError(f"no session record for {name!r}")
+    runtime_root = default_runtime_root()
+    to_kill = None
+    port_to_release = None
 
-    record["state"] = "stopping"
-    record["error"] = None
-    _write_record(record)
-    _terminate_owned(record)
-    record["state"] = "stopped"
-    _write_record(record)
-    _release_port(default_runtime_root(), name, record.get("port"))
-    return record
+    # Re-read under the exclusive record lock so a concurrent start identity
+    # assign cannot be wiped by a stale unlocked no-PID snapshot.
+    with _flock(session / "record.lock"):
+        record = dict(_read_record_unlocked(name))
+        if record["state"] == "stopped":
+            return record
+        pid = record.get("qemu_pid")
+        current = process_identity(pid) if isinstance(pid, int) else None
+        if current is not None and not owned_process(record):
+            record["state"] = "failed"
+            record["error"] = "ownership mismatch; refusing to signal process"
+            _write_record_unlocked(record)
+            raise ValueError(record["error"])
+        if current is None:
+            record["state"] = "stopped"
+            record["error"] = None
+            port_to_release = record.get("port")
+            _write_record_unlocked(record)
+        else:
+            record["state"] = "stopping"
+            record["error"] = None
+            _write_record_unlocked(record)
+            to_kill = dict(record)
+
+    if to_kill is None:
+        _release_port(runtime_root, name, port_to_release)
+        return read_record(name)
+
+    _terminate_owned(to_kill)
+
+    with _flock(session / "record.lock"):
+        latest = dict(_read_record_unlocked(name))
+        if latest.get("state") == "stopped":
+            port_to_release = latest.get("port")
+        elif (
+            latest.get("state") == "stopping"
+            and _qemu_identity(latest) == _qemu_identity(to_kill)
+        ):
+            latest["state"] = "stopped"
+            latest["error"] = None
+            _write_record_unlocked(latest)
+            port_to_release = latest.get("port")
+        else:
+            port_to_release = to_kill.get("port")
+
+    _release_port(runtime_root, name, port_to_release)
+    return read_record(name)
 
 
 def start(
@@ -1908,7 +1943,7 @@ def start(
 
         returncode = proc.wait()
         latest = read_record(name)
-        if latest["state"] == "stopped":
+        if latest["state"] in {"stopped", "stopping", "failed"}:
             return latest
         latest["state"] = "failed"
         latest["error"] = f"QEMU exited unexpectedly with status {returncode}"
@@ -1929,8 +1964,9 @@ def start(
         except ValueError:
             # Concurrent stop already owns the terminal state.
             pass
-        else:
-            _release_port(runtime_root, name, record.get("port"))
+        # Always release: stop may have stamped stopped before port/identity
+        # hit disk, leaving the reservation owned by this start attempt.
+        _release_port(runtime_root, name, record.get("port"))
         raise
     finally:
         if qemu_log is not None:
