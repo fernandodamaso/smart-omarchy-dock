@@ -1,5 +1,5 @@
 import QtQuick
-import Quickshell
+import Qt5Compat.GraphicalEffects
 import qs.Commons
 import qs.Ui
 
@@ -9,14 +9,16 @@ CursorSurface {
   required property string text
   property string iconName: ""
   property string iconText: ""
-  property string iconFontFamily: Style.font.family
-  property int iconSize: Style.font.body
+  property string iconFont: Style.font.family
+  property real iconSize: Style.font.icon
   property bool checked: false
   property bool submenu: false
   property bool isDockMenuAction: true
 
   signal triggered()
   signal cursorRequested()
+
+  readonly property bool hasIcon: root.iconName !== "" || root.iconText !== ""
 
   foreground: Color.menu.text
   accent: Color.accent
@@ -28,46 +30,57 @@ CursorSurface {
 
   Item {
     id: iconSlot
+
+    visible: root.hasIcon
     anchors.left: parent.left
     anchors.leftMargin: Style.spacing.controlPaddingX
     anchors.verticalCenter: parent.verticalCenter
-    width: Style.font.title
-    height: width
+    width: Style.space(24)
+    height: root.iconSize
 
     Image {
-      id: iconImage
-      anchors.fill: parent
-      source: root.iconName !== ""
-        ? Quickshell.iconPath("lucide-" + root.iconName, true) : ""
-      sourceSize.width: root.iconSize
-      sourceSize.height: root.iconSize
-      visible: root.iconName !== "" && status === Image.Ready
+      id: lucideSource
+
+      anchors.centerIn: parent
+      width: root.iconSize
+      height: root.iconSize
+      source: root.iconName === ""
+        ? ""
+        : Qt.resolvedUrl("../assets/lucide/" + root.iconName + ".svg")
+      sourceSize: Qt.size(width * 2, height * 2)
       fillMode: Image.PreserveAspectFit
+      asynchronous: true
+      visible: false
+      layer.enabled: true
     }
 
     ColorOverlay {
-      anchors.fill: iconImage
-      source: iconImage
+      visible: root.iconName !== ""
+      anchors.fill: lucideSource
+      source: lucideSource
       color: root.foreground
-      visible: iconImage.visible
+      opacity: 1.0
     }
 
     Text {
-      anchors.centerIn: parent
-      visible: !iconImage.visible && root.iconText !== ""
+      visible: root.iconName === "" && root.iconText !== ""
+      anchors.fill: parent
       text: root.iconText
       textFormat: Text.PlainText
       color: root.foreground
-      font.family: root.iconFontFamily
+      font.family: root.iconFont
       font.pixelSize: root.iconSize
+      horizontalAlignment: Text.AlignHCenter
+      verticalAlignment: Text.AlignVCenter
     }
   }
 
   Text {
     id: actionLabel
-    anchors.left: iconSlot.right
+    anchors.left: root.hasIcon ? iconSlot.right : parent.left
     anchors.right: trailing.left
-    anchors.leftMargin: Style.spacing.controlGap
+    anchors.leftMargin: root.hasIcon
+      ? Style.spacing.controlGap : Style.spacing.controlPaddingX
     anchors.rightMargin: Style.spacing.controlGap
     anchors.verticalCenter: parent.verticalCenter
     text: root.text
