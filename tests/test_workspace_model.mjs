@@ -283,12 +283,13 @@ let left = mirrored('DP-1')
 let right = mirrored('HDMI-A-1')
 assert.equal(model.presentationsEqual(left, right), true)
 assert.deepEqual(Array.from(left.groups, g => g.identity),
-  ['id:1', 'id:2', 'id:3', 'id:10', 'name:Design', 'name:Retained'])
+  ['id:1', 'id:10', 'id:2', 'id:3', 'name:Design', 'name:Retained'])
 assert.equal(left.groups.find(g => g.identity === 'id:10').count, 0)
 assert.equal(left.groups.find(g => g.identity === 'id:3').items[0].toplevels[0], mirrorWindows[1],
   'sticky follows owner active workspace, once')
 assert.equal(left.groups.find(g => g.identity === 'name:Retained').items[0].sticky, false)
-assert.equal(left.fallbackItems[0].toplevels.length, 2)
+assert.equal(left.fallbackItems[0].toplevels.length, 1,
+  'only the special workspace is fallback; id:3 inherits its monitor-active owner')
 for (const scope of [undefined, null, '', 'invalid']) {
   const defaulted = scope === undefined
     ? model.buildWorkspacePresentation(
@@ -307,8 +308,8 @@ monitors[0].focused = true
 monitors[1].lastIpcObject.focused = false
 right = mirrored('HDMI-A-1')
 assert.equal(right.renderedItems[0].presentationId, 'id:1/chrome', 'global focus transfers badge owner')
-assert.equal(right.groups.find(g => g.identity === 'id:3').count, 1,
-  'global focus does not relocate sticky membership')
+assert.equal(right.groups.find(g => g.identity === 'id:3').count, 2,
+  'global focus does not relocate sticky membership or the active-owned unknown client')
 assert.equal(model.presentationsEqual(right, mirrored('DP-1')), true)
 assert.equal(BadgeModel.isPrimaryVisibleItem(right.renderedItems, 0), true)
 assert.equal(Array.from(right.renderedItems, (_, i) =>

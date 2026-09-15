@@ -42,6 +42,7 @@ Item {
       function onAddressChanged() { root.invalidate() }
       function onActiveChanged() { root.invalidate() }
       function onActiveWorkspaceChanged() { root.invalidate() }
+      function onDescriptionChanged() { root.invalidate() }
       function onFocusedChanged() { root.invalidate() }
       function onHasFullscreenChanged() { root.invalidate() }
       function onHyprlandHandleChanged() { root.invalidate() }
@@ -51,6 +52,8 @@ Item {
       function onUrgentChanged() { root.invalidate() }
       function onWaylandHandleChanged() { root.invalidate() }
       function onWorkspaceChanged() { root.invalidate() }
+      function onXChanged() { root.invalidate() }
+      function onYChanged() { root.invalidate() }
     }
   }
 
