@@ -51,9 +51,8 @@ for command in 'minimize-visible' 'restore-minimized' 'close-represented' \
   grep -Fq "$command" "$menu" || fail "missing contextual command wiring: $command"
 done
 
-if grep -Fq 'Group Windows' "$menu"; then
-  fail 'CM-03 grouping mutation must not be exposed early'
-fi
+# CM-03 now owns local Group/Ungroup. Keep this earlier-slice guard focused on
+# preventing later CM-04 window pinning from leaking into the aggregate PR.
 if grep -Fq 'Pin Window to Workspace' "$menu"; then
   fail 'CM-04 window pinning must not be exposed early'
 fi
