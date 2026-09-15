@@ -185,10 +185,10 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       workspaceKnown: workspace !== "",
       sticky: record.sticky === true && !record.minimized
     })
-    if (owner && activationTarget(workspace)) {
-      if (record.minimized) addOwnerEvidence(originOwners, workspace, owner, false)
-      else addOwnerEvidence(liveOwners, workspace, owner, false)
-      if (allMonitors || owner === monitor) addWorkspace(workspace)
+    if (activationTarget(workspace)) {
+      if (record.minimized) addOwnerEvidence(originOwners, workspace, owner, !owner)
+      else addOwnerEvidence(liveOwners, workspace, owner, !owner)
+      if (allMonitors || owner && owner === monitor) addWorkspace(workspace)
     }
     return resolved
   })
@@ -255,7 +255,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       var toplevel = item.toplevels[t]
       var record = records.find(function(value) { return value.toplevel === toplevel })
       if (!allMonitors && record && record.monitorKnown && record.monitor !== monitor) continue
-      var key = record && record.monitorKnown && record.workspaceKnown
+      var key = record && record.workspaceKnown && (allMonitors || record.monitorKnown)
         && visibleByWorkspace[record.workspace] ? record.workspace : "other"
       if (!partitions[key]) partitions[key] = []
       partitions[key].push(toplevel)
