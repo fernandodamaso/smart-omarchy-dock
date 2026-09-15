@@ -56,7 +56,10 @@ assert.equal(scope.initialPage(false, 0, false), 'app')
 assert.equal(scope.initialPage(false, 1, false), 'window')
 assert.equal(scope.initialPage(false, 3, false), 'app')
 assert.equal(scope.initialPage(false, 3, true), 'window')
-assert.equal(scope.initialPage(true, 0, false), 'controls')
+assert.equal(scope.initialPage(false, 1, true, false), 'window')
+assert.equal(scope.initialPage(false, 1, true, true), 'app',
+  'a saved local group remains a group menu even with one represented window')
+assert.equal(scope.initialPage(true, 0, false, true), 'controls')
 
 assert.equal(scope.contentYForRow(0, 120, 20, 32, 400), 0)
 assert.equal(scope.contentYForRow(0, 120, 180, 32, 400), 92)

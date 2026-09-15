@@ -264,7 +264,8 @@ assert.equal(request('config.get', { key: 'groupWindows', effective: true }).dat
 const legacyEnableWrites = writes;
 result = apply({ groupWindows: true });
 assert.equal(result.error.code, 'E_VALIDATION');
-assert.match(result.error.message, /workspaceGroups|Group Windows/i);
+assert.match(result.data.validationErrors.map(error => error.message).join(' '),
+  /workspaceGroups|Group Windows/i);
 assert.equal(writes, legacyEnableWrites);
 const legacyIconSize = host.settings.iconSize === 53 ? 54 : 53;
 assert.equal(apply({ iconSize: legacyIconSize }).ok, true);
