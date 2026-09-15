@@ -320,7 +320,10 @@ PanelWindow {
   property var visibleItems: []
   readonly property bool groupedRequested: !vertical
     && DockModel.normalizeSetting("workspaceLayout", settings.workspaceLayout) === "grouped"
-  property var workspacePresentation: ({ groups: [], globalLaunchers: [], fallbackItems: [], renderedItems: [] })
+  property var workspacePresentation: ({
+    primaryWorkspaceIdentity: "", monitorGroups: [], groups: [],
+    globalLaunchers: [], fallbackItems: [], renderedItems: []
+  })
   readonly property bool grouped: groupedRequested
   readonly property var minimizedToplevels: {
     var revision = scopeRevision
@@ -342,10 +345,8 @@ PanelWindow {
   readonly property bool groupedFullscreenModeActive:
     Object.keys(workspaceFullscreenOwners).length > 0
   readonly property var renderedItems: grouped ? workspacePresentation.renderedItems : visibleItems
-  readonly property string activeCardIdentity: {
-    var active = workspacePresentation.groups.find(function(group) { return group.active })
-    return active ? active.identity : ""
-  }
+  readonly property string activeCardIdentity:
+    grouped ? String(workspacePresentation.primaryWorkspaceIdentity || "") : ""
   onActiveCardIdentityChanged: Qt.callLater(root.revealActiveWorkspace)
 
   readonly property var visibleWorkspaceIds: {
@@ -500,10 +501,10 @@ PanelWindow {
   }
 
   function revealActiveWorkspace() {
-    if (!grouped || root.workspaceDragActive) return
+    if (!grouped || root.workspaceDragActive || !root.activeCardIdentity) return
     for (var i = 0; i < workspaceCards.count; ++i) {
       var card = workspaceCards.itemAt(i)
-      if (card && card.active) {
+      if (card && card.present && card.workspaceIdentity === root.activeCardIdentity) {
         groupedLayout.ensureVisible(card, card.headerWidth)
         break
       }
