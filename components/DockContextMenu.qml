@@ -9,6 +9,7 @@ import qs.Ui
 import "DockModel.js" as DockModel
 import "DockMenuModel.js" as DockMenuModel
 import "DockFullscreenModel.js" as FullscreenModel
+import "DockWorkspaceGroupModel.js" as WorkspaceGroupModel
 
 PopupWindow {
   id: root
@@ -45,6 +46,8 @@ PopupWindow {
   property string pendingMutationLabel: ""
   property string copyProfileDirectory: ""
   property string pendingClipboardText: ""
+  property var groupCandidateSnapshot: []
+  property string openedWorkspaceGroupsSignature: ""
 
   readonly property string desktopId: !root.controlItem && root.anchorItem
     ? String(root.anchorItem.desktopId || "") : ""
@@ -55,6 +58,9 @@ PopupWindow {
   }
   readonly property var applicationMutationController:
     contextActions.applicationMutationController
+  readonly property var workspaceGroups: WorkspaceGroupModel.normalizeWorkspaceGroups(
+    root.applicationMutationController && root.applicationMutationController.settings
+      ? root.applicationMutationController.settings.workspaceGroups || [] : [])
   readonly property var selectedHandle:
     root.windowActions.handleFor(selectedToplevel)
   readonly property var selectedInfo: selectedHandle
@@ -95,6 +101,8 @@ PopupWindow {
     root.pageStack = []
     root.pageTarget = root.targetContexts.length === 1
       ? root.targetContexts[0] : null
+    root.groupCandidateSnapshot = root.captureGroupCandidateSnapshot()
+    root.openedWorkspaceGroupsSignature = root.workspaceGroupsSignature()
     root.page = DockMenuModel.initialPage(
       root.controlItem, root.targetContexts.length, root.pageTarget !== null)
     root.feedbackTitle = ""
@@ -129,6 +137,8 @@ PopupWindow {
     root.pendingMutationAction = ""
     root.pendingMutationLabel = ""
     root.copyProfileDirectory = ""
+    root.groupCandidateSnapshot = []
+    root.openedWorkspaceGroupsSignature = ""
   }
 
   function targetContextFor(toplevel, index) {
@@ -227,6 +237,94 @@ PopupWindow {
       else if (current !== label) return "Multiple workspaces"
     }
     return label
+  }
+
+  function workspaceIdentityForToplevel(toplevel) {
+    if (!toplevel || !root.windowActions || !root.windowActions.isAlive(toplevel)) return ""
+    var state = root.windowState(toplevel)
+    return WorkspaceGroupModel.canonicalWorkspaceTarget(state ? state.workspace : "")
+  }
+
+  function candidateMatchesApplication(toplevel) {
+    if (!toplevel || !root.desktopId) return false
+    var entries = DesktopEntries.applications.values || []
+    var appId = DockModel.toplevelAppId(toplevel, entries)
+    var entry = DockModel.entryForDesktopId(root.desktopId, entries)
+    return DockModel.entryMatchesAppId(root.desktopId, entry, appId)
+  }
+
+  function workspaceGroupCandidates(targetContext) {
+    if (!targetContext || !root.targetIsValid(targetContext)) return []
+    var workspace = root.workspaceIdentityForToplevel(targetContext.toplevel)
+    if (!workspace) return []
+    var live = root.windowActions.currentToplevels()
+    var candidates = []
+    for (var i = 0; i < live.length; ++i) {
+      var toplevel = live[i]
+      if (!root.windowActions.isAlive(toplevel)
+          || !root.candidateMatchesApplication(toplevel)
+          || root.workspaceIdentityForToplevel(toplevel) !== workspace) continue
+      var address = String(root.windowActions.addressFor(toplevel) || "")
+      if (!address) return []
+      candidates.push({ toplevel: toplevel, address: address, key: "address:" + address })
+    }
+    candidates.sort(function(left, right) {
+      return left.key < right.key ? -1 : left.key > right.key ? 1 : 0
+    })
+    return candidates
+  }
+
+  function candidateKeys(targetContext) {
+    return root.workspaceGroupCandidates(targetContext).map(function(candidate) {
+      return candidate.key
+    })
+  }
+
+  function candidateSnapshotsEqual(left, right) {
+    var a = left || []
+    var b = right || []
+    if (a.length !== b.length) return false
+    for (var i = 0; i < a.length; ++i)
+      if (a[i] !== b[i]) return false
+    return true
+  }
+
+  function captureGroupCandidateSnapshot() {
+    if (root.controlItem || root.targetContexts.length !== 1 || !root.pageTarget) return []
+    return root.candidateKeys(root.pageTarget)
+  }
+
+  function representedWorkspaceIdentity() {
+    if (!root.allTargetsAreValid()) return ""
+    var identity = ""
+    for (var i = 0; i < root.targetContexts.length; ++i) {
+      var current = root.workspaceIdentityForToplevel(root.targetContexts[i].toplevel)
+      if (!current) return ""
+      if (!identity) identity = current
+      else if (identity !== current) return ""
+    }
+    return identity
+  }
+
+  function workspaceGroupsSignature() {
+    return JSON.stringify(root.workspaceGroups)
+  }
+
+  function representedWorkspaceGrouped() {
+    var workspace = root.representedWorkspaceIdentity()
+    return workspace !== "" && WorkspaceGroupModel.workspaceGroupEnabled(
+      root.workspaceGroups, root.desktopId, workspace)
+  }
+
+  function canGroupTarget(targetContext) {
+    if (!targetContext || root.targetContexts.length !== 1
+        || targetContext !== root.pageTarget || !root.targetIsValid(targetContext)) return false
+    var workspace = root.workspaceIdentityForToplevel(targetContext.toplevel)
+    if (!workspace || WorkspaceGroupModel.workspaceGroupEnabled(
+        root.workspaceGroups, root.desktopId, workspace)) return false
+    var current = root.candidateKeys(targetContext)
+    return root.groupCandidateSnapshot.length >= 2
+      && root.candidateSnapshotsEqual(root.groupCandidateSnapshot, current)
   }
 
   function profileDirectoryForTarget(targetContext) {
@@ -396,6 +494,48 @@ PopupWindow {
     return false
   }
 
+  function workspaceGroupMutationLabel(action) {
+    return action === "group" ? "Group Windows" : "Ungroup"
+  }
+
+  function runWorkspaceGroupMutation(action, targetContext) {
+    var workspace = action === "group"
+      ? root.workspaceIdentityForToplevel(targetContext ? targetContext.toplevel : null)
+      : root.representedWorkspaceIdentity()
+    if (action === "group" && !root.canGroupTarget(targetContext)) {
+      root.dismiss()
+      return false
+    }
+    if (action === "ungroup" && !root.representedWorkspaceGrouped()) {
+      root.dismiss()
+      return false
+    }
+    if (!workspace) {
+      root.dismiss()
+      return false
+    }
+    var reply = contextActions.mutateWorkspaceGroup(action, root.desktopId, workspace)
+    var presentation = DockMenuModel.mutationPresentation(reply)
+    var label = root.workspaceGroupMutationLabel(action)
+    root.feedbackTitle = label
+    if (presentation.state === "saved") {
+      root.feedbackText = label + " saved."
+      root.pendingMutationAction = ""
+      root.pendingMutationLabel = ""
+      return true
+    }
+    if (presentation.state === "pending") {
+      root.feedbackText = label + " applied for this session; saving…"
+      root.pendingMutationAction = action
+      root.pendingMutationLabel = label
+      return true
+    }
+    root.feedbackText = presentation.message
+    root.pendingMutationAction = ""
+    root.pendingMutationLabel = ""
+    return false
+  }
+
   function refreshPendingMutationFeedback() {
     if (!root.pendingMutationAction || !root.applicationMutationController) return
     var controller = root.applicationMutationController
@@ -481,6 +621,13 @@ PopupWindow {
       DockMenuModel.headerRecord("app:header", root.applicationName, subtitle)
     ]
 
+    if (root.representedWorkspaceGrouped()) {
+      records.push(DockMenuModel.actionRecord(
+        "app:ungroup", "Ungroup", "", true,
+        "ungroup-windows", null))
+      records.push(DockMenuModel.separatorRecord("app:ungroup-separator"))
+    }
+
     if (total > 1) {
       records.push(DockMenuModel.actionRecord(
         "app:choose", "Choose Window…", "app-window", true,
@@ -555,6 +702,15 @@ PopupWindow {
     records.push(DockMenuModel.actionRecord(
       "window:workspace", "Move to Workspace…", "arrow-right-left",
       addressValid, "open-workspaces-page", target, { submenu: true }))
+    if (root.representedWorkspaceGrouped()) {
+      records.push(DockMenuModel.actionRecord(
+        "window:ungroup", "Ungroup", "", valid,
+        "ungroup-windows", target))
+    } else if (root.canGroupTarget(target)) {
+      records.push(DockMenuModel.actionRecord(
+        "window:group", "Group Windows", "", true,
+        "group-windows", target))
+    }
     records.push(DockMenuModel.actionRecord(
       "window:fullscreen-keep-bars", "Fullscreen — Keep Bars", "maximize-2",
       addressValid, "fullscreen-keep-bars", target,
@@ -722,6 +878,8 @@ PopupWindow {
     case "minimize-visible": return root.representedAction("minimize-visible")
     case "restore-minimized": return root.representedAction("restore-minimized")
     case "close-represented": return root.representedAction("close-represented")
+    case "group-windows": return root.runWorkspaceGroupMutation("group", targetContext)
+    case "ungroup-windows": return root.runWorkspaceGroupMutation("ungroup", targetContext)
     case "close-window":
       if (!root.windowActions.closeToplevel(targetContext.toplevel)) {
         root.feedbackTitle = "Close failed"
@@ -946,5 +1104,28 @@ PopupWindow {
     function onSettingsWriteStateChanged() { root.refreshPendingMutationFeedback() }
     function onSettingsPersistedChanged() { root.refreshPendingMutationFeedback() }
     function onSettingsWriteErrorChanged() { root.refreshPendingMutationFeedback() }
+    function onSettingsChanged() {
+      if (root.visible && root.workspaceGroupsSignature()
+          !== root.openedWorkspaceGroupsSignature) root.dismiss()
+    }
+  }
+
+  Connections {
+    target: ToplevelManager.toplevels
+    function onValuesChanged() {
+      if (!root.visible || root.targetContexts.length !== 1 || !root.pageTarget) return
+      if (!root.candidateSnapshotsEqual(
+          root.groupCandidateSnapshot, root.candidateKeys(root.pageTarget))) root.dismiss()
+    }
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (!root.visible || !event) return
+      var name = String(event.name || "")
+      if (["openwindow", "closewindow", "movewindow", "movewindowv2"].indexOf(name) >= 0)
+        root.dismiss()
+    }
   }
 }

@@ -136,6 +136,7 @@ const dItem = unresolved.find(item => item.toplevels.indexOf(D) >= 0)
 assert.equal(dItem.toplevels.length, 1)
 assert.equal(dItem.identityToplevel, D)
 
+handles[1].lastIpcObject.workspace = { id: 3 }
 A.browserProfileKey = 'Profile 1'
 E.browserProfileKey = 'Profile 2'
 const profileMixed = matching(flat(), 'id:3')[0]

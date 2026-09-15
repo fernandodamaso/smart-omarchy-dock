@@ -44,5 +44,13 @@ grep -q 'Ungroup' components/DockContextMenu.qml \
   || fail 'saved local groups must expose Ungroup'
 grep -q 'mutateWorkspaceGroup' components/DockContextActionController.qml \
   || fail 'menu grouping must delegate through the host controller'
+grep -q 'result.groupWindows = false' components/DockControl.qml \
+  || fail 'effective CLI readback must report legacy global grouping inactive'
+grep -q 'groupCandidateSnapshot' components/DockContextMenu.qml \
+  || fail 'Group Windows must snapshot exact eligible membership'
+grep -q 'onSettingsChanged' components/DockContextMenu.qml \
+  || fail 'workspace-group settings changes must invalidate an open menu'
+grep -q 'target: ToplevelManager.toplevels' components/DockContextMenu.qml \
+  || fail 'candidate membership changes must invalidate an open menu'
 
 echo 'CM-03 workspace-group structural contract: PASS'

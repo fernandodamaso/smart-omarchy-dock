@@ -102,4 +102,26 @@ Item {
       data: { applied: false, persisted: false, writeState: "error" }
     }
   }
+
+  function mutateWorkspaceGroup(action, desktopId, workspace) {
+    var controller = root.applicationMutationController
+    var id = String(desktopId || "")
+    var target = String(workspace || "")
+    if (!controller || !id || !target) {
+      return {
+        ok: false,
+        error: { code: "E_UNAVAILABLE", message: "Host workspace-group controller is unavailable." },
+        data: { applied: false, persisted: false, writeState: "unavailable" }
+      }
+    }
+    if (action === "group" && typeof controller.groupWorkspaceApplication === "function")
+      return controller.groupWorkspaceApplication(id, target)
+    if (action === "ungroup" && typeof controller.ungroupWorkspaceApplication === "function")
+      return controller.ungroupWorkspaceApplication(id, target)
+    return {
+      ok: false,
+      error: { code: "E_ACTION", message: "Unsupported workspace-group mutation." },
+      data: { applied: false, persisted: false, writeState: "error" }
+    }
+  }
 }

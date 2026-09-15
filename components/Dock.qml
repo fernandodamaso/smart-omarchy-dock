@@ -10,6 +10,7 @@ import "DockModel.js" as DockModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockWindowPreviewModel.js" as PreviewModel
 import "DockWorkspaceModel.js" as WorkspaceModel
+import "DockWorkspaceGroupModel.js" as WorkspaceGroupModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockTrashModel.js" as TrashModel
 
@@ -260,8 +261,8 @@ PanelWindow {
     "workspaceMonitorScope", settings.workspaceMonitorScope)
   readonly property var workspaceMonitorOrder: DockModel.normalizeSetting(
     "workspaceMonitorOrder", settings.workspaceMonitorOrder)
-  readonly property bool groupWindows: DockModel.normalizeSetting(
-    "groupWindows", settings.groupWindows)
+  readonly property var workspaceGroups: WorkspaceGroupModel.normalizeWorkspaceGroups(
+    settings.workspaceGroups || [])
   readonly property string windowScope: DockWindowModel.normalizeWindowScope(
     settings.windowScope)
   readonly property bool showUrgentOutsideScope:
@@ -403,9 +404,13 @@ PanelWindow {
         return Object.assign({ toplevel: toplevel }, DockWindowModel.locationForToplevel(
           toplevel, hyprToplevels, windowActions ? windowActions.minimizedOriginsSnapshot : ({})))
       })
+      var baseItems = DockModel.buildVisibleItems(
+        pinned, toplevels, applications, hyprToplevels,
+        false, false, hiddenApplications)
+      var localizedItems = WorkspaceGroupModel.prepareWorkspaceItems(
+        baseItems, records, workspaceGroups)
       var nextPresentation = WorkspaceModel.buildWorkspacePresentation(
-        DockModel.buildVisibleItems(pinned, toplevels, applications, hyprToplevels,
-          false, groupWindows, hiddenApplications), records, hyprWorkspaces, {
+        localizedItems, records, hyprWorkspaces, {
           monitor: DockWindowModel.monitorIdentity(monitor),
           monitorScope: workspaceMonitorScope,
           monitorOrder: workspaceMonitorOrder,
@@ -413,8 +418,11 @@ PanelWindow {
             : DockWindowModel.workspaceIdentity(ipc.activeWorkspace
             || (monitor ? monitor.activeWorkspace : null)),
           monitors: hyprMonitors,
-          groupWindows: groupWindows
+          groupWindows: false,
+          workspaceGroups: workspaceGroups
         })
+      nextPresentation = WorkspaceGroupModel.decorateWorkspacePresentation(
+        nextPresentation, workspaceGroups)
       if (badgeTracker && screen)
         badgeTracker.syncWorkspaceScopes(screen.name,
           nextPresentation.groups.reduce(function(items, group) {
@@ -425,11 +433,19 @@ PanelWindow {
         workspacePresentation = nextPresentation
       }
     }
-    var nextItems = DockModel.buildVisibleItems(
-      pinned, filteredToplevels, applications, hyprToplevels, sortByWorkspace,
-      groupWindows, hiddenApplications)
-    if (!DockModel.visibleItemsEqual(visibleItems, nextItems))
+    var flatRecords = filteredToplevels.map(function(toplevel) {
+      return Object.assign({ toplevel: toplevel }, DockWindowModel.locationForToplevel(
+        toplevel, hyprToplevels, windowActions ? windowActions.minimizedOriginsSnapshot : ({})))
+    })
+    var flatBaseItems = DockModel.buildVisibleItems(
+      pinned, filteredToplevels, applications, hyprToplevels, false,
+      false, hiddenApplications)
+    var nextItems = WorkspaceGroupModel.buildFlatPresentation(
+      flatBaseItems, flatRecords, workspaceGroups, sortByWorkspace)
+    if (!DockModel.visibleItemsEqual(visibleItems, nextItems)) {
+      windowPreview.dismissImmediately()
       visibleItems = nextItems
+    }
     if (root.revealAfterWorkspaceDrag) {
       root.revealAfterWorkspaceDrag = false
       Qt.callLater(root.revealActiveWorkspace)
@@ -606,7 +622,10 @@ PanelWindow {
     if (badgeTracker && screen) badgeTracker.syncWorkspaceScopes(screen.name, [])
   }
   onWorkspaceCountsRevisionChanged: root.scheduleVisibleItemsRefresh()
-  onGroupWindowsChanged: root.scheduleVisibleItemsRefresh()
+  onWorkspaceGroupsChanged: {
+    if (windowPreview) windowPreview.dismissImmediately()
+    root.scheduleVisibleItemsRefresh()
+  }
   onHiddenApplicationsChanged: root.scheduleVisibleItemsRefresh()
   onScopeRevisionChanged: {
     if (windowPreview) windowPreview.dismissImmediately()
