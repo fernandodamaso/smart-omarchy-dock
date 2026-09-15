@@ -1,9 +1,27 @@
 import QtQuick
 import QtTest
 import "../components/DockBadgeModel.js" as BadgeModel
+import "../components/DockBrowserActivityModel.js" as ActivityModel
 
 TestCase {
   name: "DockLauncherBadgeModel"
+
+  readonly property var chromeEntry: ({
+    id: "com.google.Chrome",
+    startupClass: "google-chrome",
+    name: "Google Chrome"
+  })
+
+  function chromeItemBadgeToken(rows, primaryOwner) {
+    var total = ActivityModel.presentation(rows || [], []).total
+    var browser = BadgeModel.browserCountState(
+      chromeEntry.id, chromeEntry, ["google-chrome"], total, true, {})
+    var launcher = { authoritative: false, count: 0, visible: false }
+    return BadgeModel.applicationBadgeToken(
+      true, "automatic",
+      BadgeModel.preferredCountState(launcher, browser, primaryOwner),
+      BadgeModel.BADGE_NONE)
+  }
 
   function test_normalizesLauncherUrisWithoutFuzzyMatching() {
     compare(BadgeModel.normalizeLauncherIdentity(
@@ -93,5 +111,39 @@ TestCase {
     compare(BadgeModel.preferredCountState(launcher, browser).count, 4)
     compare(BadgeModel.preferredCountState(
       { authoritative: false, count: 0, visible: false }, browser).count, 23)
+  }
+
+  function test_launcherPrecedenceAlsoSuppressesSecondaryBrowserCounts() {
+    var launcher = { authoritative: true, count: 9, visible: true }
+    var browser = { authoritative: true, count: 2, visible: true }
+
+    compare(BadgeModel.preferredCountState(launcher, browser, true).count, 9)
+    var secondary = BadgeModel.preferredCountState(launcher, browser, false)
+    verify(secondary.authoritative)
+    verify(!secondary.visible)
+    compare(secondary.count, 0)
+
+    var unavailableLauncher = {
+      authoritative: false, count: 0, visible: false
+    }
+    compare(BadgeModel.preferredCountState(
+      unavailableLauncher, browser, false).count, 2)
+  }
+
+  function test_windowScopedBrowserFallbackTokensPerChromeItem() {
+    var emptyRows = []
+    var whatsappRows = [{
+      targetId: "30512CE29E2EAEB3E32228BBC7F6DE78",
+      serviceId: "whatsapp",
+      label: "WhatsApp",
+      profileKey: "Default",
+      domain: "web.whatsapp.com",
+      count: 2,
+      windowAddress: "0x2"
+    }]
+
+    // Flat Chrome: first item owns no activity; second owns WhatsApp 2.
+    compare(chromeItemBadgeToken(emptyRows, true), "none")
+    compare(chromeItemBadgeToken(whatsappRows, false), "count:2:none")
   }
 }

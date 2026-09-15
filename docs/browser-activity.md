@@ -62,6 +62,12 @@ for the Chrome launcher badge. An authoritative LauncherEntry count always
 wins, including an explicit zero or hidden state; other applications keep the
 existing launcher-count and attention-dot precedence.
 
+When one dock item represents multiple Chrome windows, its fallback count is the
+reduced total for those represented windows. When window grouping is disabled,
+each Chrome item shows only the fallback count owned by its represented window.
+Application-wide LauncherEntry counts retain precedence and render only on the
+primary visible item.
+
 ## Validation
 
 Provider parsing and activation are covered by

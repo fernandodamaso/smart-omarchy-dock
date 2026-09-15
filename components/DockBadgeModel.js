@@ -268,10 +268,14 @@ function browserCountState(desktopId, entry, classes, count, available, aliases)
   return { authoritative: true, count: normalized, visible: normalized > 0 }
 }
 
-function preferredCountState(launcherState, browserState) {
-  if (launcherState && launcherState.authoritative === true) return launcherState
+function preferredCountState(launcherState, browserState, primaryOwner) {
+  var none = { authoritative: false, count: 0, visible: false }
+  if (launcherState && launcherState.authoritative === true)
+    return primaryOwner === false
+      ? { authoritative: true, count: 0, visible: false }
+      : launcherState
   if (browserState && browserState.authoritative === true) return browserState
-  return { authoritative: false, count: 0, visible: false }
+  return none
 }
 
 function applicationBadgePresentation(enabled, mode, countState, severity) {
