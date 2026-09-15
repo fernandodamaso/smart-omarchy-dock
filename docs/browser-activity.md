@@ -27,10 +27,14 @@ alongside the existing `windows` and `profiles` maps:
 ```
 
 The provider accepts only HTTPS targets on `web.whatsapp.com` or
-`mail.google.com`. WhatsApp requires a title of `(N) WhatsApp`; Gmail requires
-`(N) ... - Gmail`. Counts are positive integers capped at 999999. Duplicate
-targets for one service/profile are reduced to the highest count, and target
-IDs are validated before they can be displayed or activated.
+`mail.google.com`. WhatsApp requires a title of `(N) WhatsApp`. Gmail requires
+the supported English `Inbox (N) - ... - Gmail` title and the exact `#inbox`
+listing route. Subjects, drafts, other folders, and unverified localized title
+forms are ignored rather than interpreted as unread counts. Keep a supported
+Gmail inbox tab open to expose its count; an open message is not an inbox
+listing even when its subject resembles an inbox title. Counts are positive
+integers capped at 999999. Duplicate targets for one service/profile are reduced
+to the highest count, and target IDs are validated before display or activation.
 
 The card exposes profile names, service labels, counts, and ordinary window
 preview captures. It never publishes URLs, titles, message text, account
@@ -61,8 +65,12 @@ existing launcher-count and attention-dot precedence.
 ## Validation
 
 Provider parsing and activation are covered by
-`provider/browser-profiles/tests/test_browser_profile_provider.py`. QML model,
-preview, and badge behavior are covered by the existing `qmltestrunner` suites.
-The checks do not claim live Chrome CDP, image decoding, focus, or auto-hide
-qualification; those require an isolated graphical session with the provider
-installed and Chrome launched with remote debugging enabled.
+`provider/browser-profiles/tests/test_browser_profile_provider.py` and the
+negative title/snapshot fixtures in `test_activity_title_regressions.py` beside
+it. `tests/test_browser_activity_preview.py` exercises the production session
+methods, activity bindings and change handlers with real offscreen Qt
+notifications, including preview switching, activity loss and muted rows.
+QML model, preview, and badge behavior are also covered by the existing
+`qmltestrunner` suites. The checks do not claim live Chrome CDP, image decoding,
+focus, or auto-hide qualification; those require an isolated graphical session
+with the provider installed and Chrome launched with remote debugging enabled.

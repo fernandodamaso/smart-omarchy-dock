@@ -35,8 +35,11 @@ def preview_session_source():
     bindings = source.split("  readonly property var activityPresentation:", 1)[1].split(
         "  readonly property bool showWindowPreviews:", 1)[0]
     bindings = "  readonly property var activityPresentation:" + bindings
-    methods = "\n".join(qml_block(source, "function " + name + "(") for name in (
-        "clearSession", "dismissImmediately", "requestPreview", "releasePreview"))
+    names = ["clearSession", "dismissImmediately", "requestPreview", "releasePreview"]
+    # Keep the harness runnable against the pre-fix source for red/green checks.
+    if "  function refreshActivityContent(" in source:
+        names.append("refreshActivityContent")
+    methods = "\n".join(qml_block(source, "function " + name + "(") for name in names)
     handlers = "\n".join(qml_block(source, name + ": {") for name in (
         "onActivityRowsChanged", "onAnchorItemChanged"))
     connections = re.search(
@@ -51,6 +54,7 @@ import "{components}/DockWindowPreviewModel.js" as PreviewModel
 Item {{
   id: root
   visible: false
+  property var mutedServices: []
 {state}
 {bindings}
   readonly property bool pending: openTimer.running
@@ -118,7 +122,7 @@ Item {
       compare(preview.presentationId, "editor")
       verify(preview.visible)
       verify(!preview.pending)
-      wait(0)
+      wait(1)
       compare(preview.anchorItem, ordinary)
       verify(preview.visible)
     }
@@ -130,7 +134,7 @@ Item {
       compare(preview.members.length, 1)
       compare(preview.activityTotal, 13)
       verify(preview.visible)
-      wait(0)
+      wait(1)
       compare(preview.anchorItem, chrome)
     }
     function test_sameActivityAnchorCanRefreshMembers() {
@@ -146,7 +150,7 @@ Item {
       request(chrome, 1)
       preview.visible = true
       chrome.previewActivities = []
-      compare(preview.anchorItem, null)
+      tryCompare(preview, "anchorItem", null)
       compare(preview.members.length, 0)
       verify(!preview.visible)
       verify(!preview.pending)
@@ -155,6 +159,7 @@ Item {
       request(chrome, 2)
       preview.visible = true
       chrome.previewActivities = []
+      wait(1)
       compare(preview.anchorItem, chrome)
       compare(preview.members.length, 2)
       compare(preview.activityRows.length, 0)
@@ -164,9 +169,29 @@ Item {
       request(chrome, 1)
       verify(preview.pending)
       chrome.previewActivities = []
-      compare(preview.anchorItem, null)
+      tryCompare(preview, "anchorItem", null)
       verify(!preview.pending)
       verify(!preview.visible)
+    }
+    function test_oldActivityLossDoesNotDismissNewSession() {
+      request(chrome, 1)
+      preview.visible = true
+      chrome.previewActivities = []
+      request(ordinary, 2)
+      wait(1)
+      compare(preview.anchorItem, ordinary)
+      compare(preview.presentationId, "editor")
+      verify(preview.visible)
+    }
+    function test_mutingLastServiceKeepsActivityCardOpen() {
+      request(chrome, 1)
+      preview.visible = true
+      preview.mutedServices = ["gmail"]
+      wait(1)
+      compare(preview.anchorItem, chrome)
+      compare(preview.activityRows.length, 1)
+      compare(preview.activityTotal, 0)
+      verify(preview.visible)
     }
   }
 }
@@ -190,7 +215,10 @@ class BrowserActivityPreviewTest(unittest.TestCase):
             result = subprocess.run(
                 [runner, "-input", str(path)], capture_output=True, text=True,
                 timeout=45, env=dict(os.environ, QT_QPA_PLATFORM="offscreen"))
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertNotIn("Binding loop detected", output)
+        print(result.stdout, end="")
 
 
 if __name__ == "__main__":

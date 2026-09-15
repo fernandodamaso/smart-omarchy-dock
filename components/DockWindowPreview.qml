@@ -262,6 +262,19 @@ PopupWindow {
       ? root.windowActions.closeToplevel(toplevel) : false
   }
 
+  function refreshActivityContent() {
+    // Called after bindings and requestPreview's session assignments settle.
+    // Never dismiss from inside the activity binding that clearing the anchor
+    // would invalidate, and always validate the current (not queued) session.
+    if (!root.anchorItem || (!root.visible && !root.pending)) return
+    if (!PreviewModel.hasPreviewContent(
+        root.members.length, root.activityRows.length)) {
+      root.dismissImmediately()
+    } else if (root.visible) {
+      root.reanchor()
+    }
+  }
+
   implicitWidth: root.previewViewport.width
   implicitHeight: root.previewViewport.height
   color: "transparent"
@@ -769,13 +782,7 @@ PopupWindow {
         root.members.length, root.activityRows.length))
     Qt.callLater(root.reanchor)
   onActivityRowsChanged: {
-    if (!root.visible) return
-    if (!PreviewModel.hasPreviewContent(
-        root.members.length, root.activityRows.length)) {
-      root.dismissImmediately()
-    } else {
-      Qt.callLater(root.reanchor)
-    }
+    Qt.callLater(root.refreshActivityContent)
   }
   onAnchorItemChanged: {
     if (!root.anchorItem && root.desktopId !== "")
@@ -792,12 +799,7 @@ PopupWindow {
     function onHeightChanged() { root.refreshAnchorGeometry() }
     function onVisibleChanged() { if (root.anchorItem && !root.anchorItem.visible) root.dismissImmediately() }
     function onPreviewActivitiesChanged() {
-      if (!PreviewModel.hasPreviewContent(
-          root.members.length, root.activityRows.length)) {
-        root.dismissImmediately()
-      } else if (root.visible) {
-        Qt.callLater(root.reanchor)
-      }
+      Qt.callLater(root.refreshActivityContent)
     }
   }
 
