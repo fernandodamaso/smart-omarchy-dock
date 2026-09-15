@@ -1,0 +1,33 @@
+name: FDM-941 review fix
+
+on:
+  push:
+    branches:
+      - feature/fdm-938-context-menus-local-grouping-workspace-pins
+    paths:
+      - scripts/fdm941_review_fix.py
+      - .github/workflows/fdm941-review-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feature/fdm-938-context-menus-local-grouping-workspace-pins
+          fetch-depth: 0
+      - name: Apply CM-03 review fixes
+        run: python3 scripts/fdm941_review_fix.py
+      - name: Commit fixes and remove one-shot scaffolding
+        run: |
+          set -euo pipefail
+          rm scripts/fdm941_review_fix.py .github/workflows/fdm941-review-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: harden FDM-941 exact grouping identity'
+          git push origin HEAD:feature/fdm-938-context-menus-local-grouping-workspace-pins
