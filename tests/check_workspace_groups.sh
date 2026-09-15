@@ -37,6 +37,10 @@ grep -q 'buildFlatPresentation' components/Dock.qml \
   || fail 'flat layout must use workspace-local representation'
 grep -q 'workspaceGroups: workspaceGroups' components/Dock.qml \
   || fail 'workspace-card layout must receive the saved local policy'
+grep -q 'WorkspaceModel.monitorGroupForWorkspace' components/Dock.qml \
+  || fail 'FDM-948 inline monitor sections must remain integrated with local grouping'
+grep -q 'DockMonitorLabel' components/Dock.qml \
+  || fail 'FDM-948 monitor section labels must survive CM-03 reconciliation'
 if grep -q 'groupWindows: groupWindows' components/Dock.qml; then
   fail 'production workspace-card rendering must not receive legacy global grouping'
 fi
