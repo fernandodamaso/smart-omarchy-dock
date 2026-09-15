@@ -160,16 +160,16 @@ function buildMoving(workspaces = [movingWorkspace], currentMonitors = monitors)
     })
 }
 const beforeMove = buildMoving()
-assert.equal(beforeMove.groups[0]?.monitorIdentity, 'id:0')
+assert.equal(beforeMove.groups.find(group => group.identity === 'id:5')?.monitorIdentity, 'id:0')
 movingWorkspace.monitorID = 1
 const afterMove = buildMoving()
-assert.equal(afterMove.groups[0]?.monitorIdentity, 'id:1',
+assert.equal(afterMove.groups.find(group => group.identity === 'id:5')?.monitorIdentity, 'id:1',
   'authoritative workspace descriptor overrides stale client monitor')
 assert.equal(WorkspaceModel.presentationsEqual(beforeMove, afterMove), false)
 
 movingWorkspace.monitorID = 99
 const unresolved = buildMoving()
-assert.equal(unresolved.groups[0]?.monitorIdentity, '',
+assert.equal(unresolved.groups.find(group => group.identity === 'id:5')?.monitorIdentity, '',
   'unresolved authoritative descriptor is never replaced by stale client ownership')
 assert.deepEqual(monitorGroupSummary(unresolved).slice(-1), [
   ['', '', 'Unknown monitor', false, '', 'id:5']
