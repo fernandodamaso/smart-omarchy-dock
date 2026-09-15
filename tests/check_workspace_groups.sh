@@ -58,6 +58,8 @@ grep -q 'onSettingsChanged' components/DockContextMenu.qml \
   || fail 'workspace-group settings changes must invalidate an open menu'
 grep -q 'target: ToplevelManager.toplevels' components/DockContextMenu.qml \
   || fail 'candidate membership changes must invalidate an open menu'
+grep -q 'root.representedWorkspaceGrouped())' components/DockContextMenu.qml \
+  || fail 'a saved one-member group must still open the group/application menu'
 grep -q "WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js')" tests/test_cli_host.mjs \
   || fail 'CLI host harness must load the workspace-group dependency'
 grep -q "WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js')" tests/test_config_model.mjs \
