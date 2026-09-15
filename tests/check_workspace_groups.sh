@@ -50,6 +50,8 @@ grep -q 'result.groupWindows = false' components/DockControl.qml \
   || fail 'effective CLI readback must report legacy global grouping inactive'
 grep -q 'function targetSnapshotsEqual' components/DockMenuModel.js \
   || fail 'candidate snapshots must compare exact object and address identity'
+grep -q 'function initialPage(controlItem, targetCount, preferredTargetValid, groupedRepresentation)' components/DockMenuModel.js \
+  || fail 'menu routing must distinguish a persisted group from an ordinary single window'
 grep -q 'DockMenuModel.targetSnapshotsEqual' components/DockContextMenu.qml \
   || fail 'Group Windows must revalidate the exact captured candidate set'
 grep -q 'groupCandidateSnapshot' components/DockContextMenu.qml \
