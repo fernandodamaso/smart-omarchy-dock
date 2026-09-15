@@ -192,6 +192,24 @@ assert.deepEqual(JSON.parse(JSON.stringify(intent.settings.concurrentExtensionVa
 assert.equal(intent.settings.margin, 77)
 assert.deepEqual(Array.from(intent.settings.workspaceGroups, entry => entry.workspace), ['id:8'])
 
+// New local groups must persist the canonical desktop-entry identity instead of
+// inheriting a legacy `.desktop` spelling from unrelated pinned settings.
+const legacyPinned = {
+  pinned: ['com.google.Chrome.desktop'], hiddenApplications: [], groupWindows: true,
+  workspaceGroups: []
+}
+const canonicalized = ConfigModel.workspaceGroupIntent(
+  legacyPinned,
+  [{ id: 'com.google.Chrome', name: 'Chrome' }],
+  'group',
+  { desktopId: 'com.google.Chrome.desktop', workspace: 'id:3' })
+assert.equal(canonicalized.ok, true)
+assert.deepEqual(JSON.parse(JSON.stringify(canonicalized.settings.workspaceGroups)), [
+  { desktopId: 'com.google.Chrome', workspace: 'id:3' }
+])
+assert.deepEqual(JSON.parse(JSON.stringify(canonicalized.settings.pinned)), legacyPinned.pinned,
+  'canonical group creation must not rewrite unrelated legacy pinned spelling')
+
 assert.equal(DockWorkspaceGroupModel.legacyGroupingActive(true), false)
 assert.equal(flat([]).filter(item => item.toplevels.length > 1).length, 0,
   'old groupWindows=true cannot create local groups when workspaceGroups is empty')
