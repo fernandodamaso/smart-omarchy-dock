@@ -308,8 +308,13 @@ def _write_record(record: dict) -> None:
         _write_record_unlocked(record)
 
 
-def _commit_live_record(updated: dict, *, allowed_states: set[str]) -> dict:
-    """Write UPDATED only if NAME is still live with the same QEMU identity."""
+def _commit_live_record(
+    updated: dict,
+    *,
+    allowed_states: set[str],
+    allow_identity_assign: bool = False,
+) -> dict:
+    """Write UPDATED only if NAME is still live with a compatible QEMU identity."""
     name = validate_name(updated.get("name", ""))
     expected = _qemu_identity(updated)
     session = session_dir(name)
@@ -321,10 +326,18 @@ def _commit_live_record(updated: dict, *, allowed_states: set[str]) -> dict:
             raise ValueError(
                 f"cannot update session {name!r} in state {current_state!r}"
             )
-        if _qemu_identity(current) != expected:
-            raise ValueError(
-                f"cannot update session {name!r}: QEMU identity changed"
+        current_id = _qemu_identity(current)
+        if current_id != expected:
+            unset = (None, None, None)
+            assigning = (
+                allow_identity_assign
+                and current_id == unset
+                and all(part is not None for part in expected)
             )
+            if not assigning:
+                raise ValueError(
+                    f"cannot update session {name!r}: QEMU identity changed"
+                )
         _write_record_unlocked(updated)
     return updated
 
@@ -1841,12 +1854,14 @@ def start(
                     "qemu_pgid": identity["pgid"],
                 }
             )
-            _write_record(record)
+            _commit_live_record(
+                record, allowed_states={"starting"}, allow_identity_assign=True
+            )
             _wait_for_owned_port(record)
 
         client = _place_owned_window(proc.pid, workspace)
         record["qemu_window_address"] = client["address"]
-        _write_record(record)
+        _commit_live_record(record, allowed_states={"starting"})
         _disable_launch_rule(name)
         after_placement = _capture_host_state(evidence, "after-placement")
         if (
@@ -1869,7 +1884,7 @@ def start(
         if after_setup["production_settings_sha256"] != before["production_settings_sha256"]:
             raise RuntimeError("host production settings hash changed during guest setup")
         record["error"] = None
-        _write_record(record)
+        _commit_live_record(record, allowed_states={"starting", "ready"})
         print(
             json.dumps(
                 {
@@ -1897,7 +1912,10 @@ def start(
             return latest
         latest["state"] = "failed"
         latest["error"] = f"QEMU exited unexpectedly with status {returncode}"
-        _write_record(latest)
+        try:
+            _commit_live_record(latest, allowed_states={"starting", "ready"})
+        except ValueError:
+            return read_record(name)
         _release_port(runtime_root, name, latest.get("port"))
         return latest
     except BaseException as exc:
@@ -1906,8 +1924,13 @@ def start(
             _terminate_owned(record)
         record["state"] = "failed"
         record["error"] = str(exc)
-        _write_record(record)
-        _release_port(runtime_root, name, record.get("port"))
+        try:
+            _commit_live_record(record, allowed_states={"starting", "ready"})
+        except ValueError:
+            # Concurrent stop already owns the terminal state.
+            pass
+        else:
+            _release_port(runtime_root, name, record.get("port"))
         raise
     finally:
         if qemu_log is not None:

@@ -33,6 +33,7 @@ from dev_session import (  # noqa: E402
     first_party_plugin_ids,
     plugin_shell_config,
     ssh_argv,
+    start,
     status,
     stop,
     sync_source,
@@ -1054,6 +1055,110 @@ class ReadySyncDockTests(unittest.TestCase):
                         self.assertEqual(latest["source_digest"], digest)
                         with self.assertRaisesRegex(ValueError, r"dock in state 'starting'"):
                             guest_dock("agent-sync", ["status", "--json"])
+
+
+class StartRaceTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="dev-session-start-race-"))
+        self.source = _init_candidate_repo(self.tmp / "source")
+        self.state_home = self.tmp / "state-home"
+        self.runtime_dir = self.tmp / "runtime"
+        self.state_home.mkdir()
+        self.runtime_dir.mkdir()
+        self.base = self.tmp / "base.qcow2"
+        self.base.write_bytes(b"fake-base")
+        self.env = mock.patch.dict(
+            os.environ,
+            {
+                "XDG_STATE_HOME": str(self.state_home),
+                "XDG_RUNTIME_DIR": str(self.runtime_dir),
+            },
+        )
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_stop_during_start_does_not_resurrect_failed(self):
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            start_new_session=True,
+        )
+        try:
+            ident = process_identity(proc.pid)
+            session = session_dir("agent-start")
+            evidence = session / "evidence"
+            evidence.mkdir(parents=True, mode=0o700)
+            paths = {
+                "session": session,
+                "evidence": evidence,
+                "source": self.source,
+                "base_image": self.base,
+                "overlay": session / "overlay.qcow2",
+                "vars": session / "vars.fd",
+                "seed": session / "seed.iso",
+                "ssh_key": session / "id_ed25519",
+                "ssh_pub": session / "id_ed25519.pub",
+            }
+            for key in ("overlay", "vars", "seed", "ssh_key", "ssh_pub"):
+                paths[key].write_bytes(b"x")
+
+            host_state = {
+                "active_workspace": {"id": 1, "name": "1"},
+                "active_window": {"address": "0x1", "title": "test"},
+                "cursorpos": "10,10",
+                "production_settings_sha256": "abc",
+            }
+
+            def fake_wait(record, _evidence):
+                self.assertEqual(stop(record["name"])["state"], "stopped")
+                raise RuntimeError("inject-after-stop")
+
+            with mock.patch("dev_session.prepare_private_inputs", return_value=paths):
+                with mock.patch("dev_session._capture_host_state", return_value=host_state):
+                    with mock.patch("dev_session._launch_rule"):
+                        with mock.patch("dev_session._disable_launch_rule"):
+                            with mock.patch(
+                                "dev_session._reserve_port_locked", return_value=22042
+                            ):
+                                with mock.patch(
+                                    "dev_session.qemu_argv", return_value=["true"]
+                                ):
+                                    with mock.patch(
+                                        "dev_session.subprocess.Popen",
+                                        return_value=proc,
+                                    ):
+                                        with mock.patch(
+                                            "dev_session._wait_for_owned_port"
+                                        ):
+                                            with mock.patch(
+                                                "dev_session._place_owned_window",
+                                                return_value={"address": "0xdead"},
+                                            ):
+                                                with mock.patch(
+                                                    "dev_session._wait_for_guest_setup",
+                                                    side_effect=fake_wait,
+                                                ):
+                                                    with self.assertRaisesRegex(
+                                                        RuntimeError,
+                                                        "inject-after-stop",
+                                                    ):
+                                                        start(
+                                                            "agent-start",
+                                                            source=self.source,
+                                                            base_image=self.base,
+                                                            mode="standalone",
+                                                            workspace="4",
+                                                        )
+            latest = read_record("agent-start")
+            self.assertEqual(latest["state"], "stopped")
+            self.assertNotEqual(latest["state"], "failed")
+            self.assertIsNotNone(proc.poll())
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                proc.wait(timeout=5)
 
 
 if __name__ == "__main__":
