@@ -27,9 +27,10 @@ alongside the existing `windows` and `profiles` maps:
 ```
 
 The provider accepts only HTTPS targets on `web.whatsapp.com`,
-`www.instagram.com`, or `mail.google.com`. WhatsApp and Instagram require the
-title form `(N) Service`. Gmail requires the supported English or Portuguese
-inbox title and the exact `#inbox` listing route. Subjects, drafts, other
+`www.instagram.com`, or `mail.google.com`. WhatsApp requires `(N) WhatsApp`;
+Instagram accepts `(N) Instagram` with its optional page label. Gmail requires
+the supported English or Portuguese inbox title and the exact `#inbox` listing
+route. Subjects, drafts, other
 folders, and unverified localized title forms are ignored rather than
 interpreted as unread counts. Keep a supported Gmail inbox tab open to expose
 its count; an open message is not an inbox listing even when its subject

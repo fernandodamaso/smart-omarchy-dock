@@ -46,6 +46,17 @@ class ActivityTitleRegressionTest(unittest.TestCase):
         self.assertEqual(row["count"], 4)
         self.assertEqual(row["serviceId"], "instagram")
 
+    def test_recognizes_instagram_unread_title_with_page_label(self):
+        row = provider.activity_for_target({
+            "targetId": "C" * 32,
+            "url": "https://www.instagram.com/direct/inbox/",
+            "title": "(4) Instagram • Messages",
+            "browserContextId": "context-1",
+        }, "Default", "0x1")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["count"], 4)
+        self.assertEqual(row["serviceId"], "instagram")
+
     def test_rejects_subject_draft_and_other_ambiguous_numbers(self):
         for title in (
             "Project update (42) - person@example.test - Gmail",
