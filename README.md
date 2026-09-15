@@ -699,31 +699,70 @@ Left/right positions render flat without changing the saved preference. Window
 scope, workspace sorting and urgent-outside-scope affect the flat layout; their
 saved values are preserved. `groupWindows` remains effective in either layout.
 
-By default, `workspaceMonitorScope: all` shows the same workspaces, apps, and
-globally focused workspace highlight on every monitor dock. Use
-`smartdock config set workspaceMonitorScope current-monitor --json` for local
-workspace membership and active highlighting, or set it to `all` to restore the
-default. Missing/invalid values and `config reset workspaceMonitorScope` use all;
-existing settings need no migration. This setting affects grouped layouts only;
-flat layouts keep their existing window scope. Clicking a remote workspace or
-app focuses it where it lives without moving it.
+By default, `workspaceMonitorScope: all` shows the same ordered monitor sections,
+workspaces and applications on every monitor dock. Each connected monitor section
+is introduced inline before its first present workspace card by a small display
+glyph and a bounded informational label. The label prefers the live monitor
+description, then connector/name, then `Monitor N`; its full label/connector is
+available in the tooltip/accessibility text. The prefix is not clickable, does
+not take keyboard focus, and is not a workspace-drop target. Use
+`smartdock config set workspaceMonitorScope current-monitor --json` for the
+existing local, unprefixed workspace-card appearance. Missing/invalid values and
+`config reset workspaceMonitorScope` use `all`; flat layouts remain unchanged.
 
-With grouped `workspaceMonitorScope: all`, `workspaceMonitorOrder` controls only
-the visual order of monitor sections; it never moves a Hyprland monitor or
-workspace. The default `[]` uses automatic physical order by finite monitor `x`,
-then `y`, with deterministic connector/identity ties and monitors lacking usable
-positions after positioned monitors. A saved connector list such as
-`["HDMI-A-1","DP-1"]` puts those connected monitors first; other connected
-monitors append automatically. Saved disconnected connector names remain stored
-and resume their configured position after reconnect. Flat and `current-monitor`
-layouts retain the value but do not use it visually. Reset automatic ordering
-with `smartdock config reset workspaceMonitorOrder --json`.
+In grouped/all scope, every connected monitor may therefore have one active card
+at the same time: its own active workspace. Only the workspace on Hyprland's
+globally focused monitor is the primary workspace used for automatic reveal and
+global badge/preview traversal. Switching global focus between monitors changes
+that primary reveal without changing workspace/card identity or the physical
+section order. Closed global launchers still render once before all monitor
+sections, and **Other windows** still renders once after all sections.
 
-Every normal workspace in the selected scope always shows all its app icons inside a rounded translucent card, including inactive workspaces. Cards use narrow workspace labels and a subtle tint across the active group; the label and card styling identify focus. Window counts remain in the header tooltip. Click a header to switch workspaces. Empty workspaces retain their header. Closed pinned launchers and **Other windows** (unknown/special membership) stay outside normal cards. With `current-monitor`, known windows on another monitor are excluded. Window actions and previews use only the item's members; hide and launcher pinning remain application-wide. Pinned reordering and redundant per-icon workspace labels are disabled in grouped mode; running-window dragging is described below.
+`workspaceMonitorOrder` controls only the visual order of those sections; it
+never moves a Hyprland monitor or workspace. The default `[]` uses automatic
+physical order by finite monitor `x`, then `y`, with deterministic
+connector/identity ties and monitors lacking usable positions after positioned
+monitors. A saved connector list such as `["HDMI-A-1","DP-1"]` puts those
+connected monitors first; other connected monitors append automatically. Saved
+disconnected connector names remain stored and resume their configured position
+after reconnect. Flat and `current-monitor` layouts retain the value but do not
+use it visually. Reset automatic ordering with
+`smartdock config reset workspaceMonitorOrder --json`.
 
-Grouped minimize/restore requires a validated recorded workspace: an unknown origin never moves a window to a guessed focused workspace. Flat mode retains its fallback. Sticky windows appear once on their monitor’s active normal workspace with a small marker; minimized windows retain their recorded origin. Local urgency marks its workspace and member icons. App-wide notification badges have one visible owner per app per dock, without claiming a notification belongs to a workspace.
+Every normal workspace in the selected scope always shows all its app icons
+inside a rounded translucent card, including inactive workspaces. Cards use
+narrow workspace labels and a subtle tint across the active group; the label and
+card styling identify activity. Window counts remain in the header tooltip.
+Empty workspaces retain their header. With `current-monitor`, known windows on
+another monitor are excluded. Window actions and previews use only the item's
+members; hide and launcher pinning remain application-wide. Pinned reordering
+and redundant per-icon workspace labels are disabled in grouped mode; running-
+window dragging is described below.
 
-Crowded cards scroll inside a bounded horizontal viewport. Use the previous/next buttons with a mouse; app wheel cycling keeps its configured behavior. Dock Controls and optional Trash stay fixed. Switching workspaces brings the active header into view, and scrolling a popup’s icon out of view closes the popup. Compact and full-length layouts retain magnification headroom. Horizontal workspace cards use a slimmer surface and tighter spacing without changing the configured icon size; application and utility tiles highlight on hover.
+On this source base, clicking a grouped workspace header uses the existing
+central workspace-on-monitor path: it pulls that workspace onto the clicked dock
+monitor and focuses it. A window icon inside a workspace card likewise uses the
+card workspace as its activation target, so an ordinary card-window click pulls
+that workspace before focusing the exact window. FDM-942/FDM-943 pin-aware
+workspace activation and workspace-header context menus are not integrated in
+this base; their focus-in-place/menu behavior remains an explicit integration
+and real-host gate for WS-MON-04 rather than being duplicated in this layout.
+
+Grouped minimize/restore requires a validated recorded workspace: an unknown
+origin never moves a window to a guessed focused workspace. Flat mode retains
+its fallback. Sticky windows appear once on their monitor’s active normal
+workspace with a small marker; minimized windows retain their recorded origin.
+Local urgency marks its workspace and member icons. App-wide notification badges
+have one visible owner per app per dock, without claiming a notification belongs
+to a workspace.
+
+Crowded cards and monitor prefixes stay in one bounded horizontal viewport. Use
+the previous/next buttons with a mouse; app wheel cycling keeps its configured
+behavior. Dock Controls and optional Trash stay fixed. A workspace switch reveals
+only the globally primary card's real header, not its monitor prefix; manual
+scroll and drag suppression remain authoritative. Scrolling a popup's icon out
+of view closes the popup. Compact and full-length layouts retain magnification
+headroom without adding another row or increasing card height.
 
 Both dock layouts use hover-highlighted icon tiles, accent window-count badges,
 a broad focus underline, and spaced utility separators. Flat mode includes a
@@ -755,11 +794,12 @@ Destinations must be existing normal workspaces in the selected monitor scope,
 including empty cards, IDs above 10, and safely supported names with spaces or
 Unicode. Named cards are resolved by their real identity, not the compact `*`
 label. A remote-monitor card shown in this dock is valid; its workspace itself
-is not relocated. **Other windows**, special sections, gaps, Trash, navigation
-buttons and clipped-out areas are not destinations. A non-sticky **Other
-windows** source is allowed only when its live handle/address is resolvable.
-Dragging between separate monitor-dock surfaces and creating workspaces are not
-supported.
+is not relocated. Monitor labels/separators, their prefix gaps, **Other windows**,
+special sections, ordinary gaps, Trash, navigation buttons and clipped-out areas
+are not destinations: hit-testing maps into the actual workspace card only. A
+non-sticky **Other windows** source is allowed only when its live handle/address
+is resolvable. Dragging between separate monitor-dock surfaces and creating
+workspaces are not supported.
 
 Hold over an overflow navigation button for 250 ms to scroll at 12 logical
 pixels per 40 ms; scrolling stops at the boundary, on leaving the button, or when

@@ -77,9 +77,12 @@ assert.equal(Object.keys(actions.minimizedOrigins).length, 0, 'no guessed minimi
 assert.equal(actions.minimizeToplevel(windows[0]), true)
 assert.equal(actions.minimizedOrigins['0x1'].workspace, '3')
 
+const dropCards = [{ id: 'drop-1' }, { id: 'drop-3' }]
 const cards = [
-  { active: true, present: true, workspaceIdentity: 'id:1', headerWidth: 30 },
-  { active: true, present: true, workspaceIdentity: 'id:3', headerWidth: 45 }
+  { active: true, present: true, workspaceIdentity: 'id:1', headerWidth: 30,
+    dropCard: dropCards[0] },
+  { active: true, present: true, workspaceIdentity: 'id:3', headerWidth: 45,
+    dropCard: dropCards[1] }
 ]
 const revealed = []
 const hyprland = actions.Hyprland
@@ -91,8 +94,8 @@ const dock = methods('Dock.qml', {
   dockHyprMonitor: { id: 0, name: 'DP-1' }
 })
 dock.revealActiveWorkspace()
-assert.deepEqual(revealed, [[cards[1], 45]],
-  'workspace switch reveals only the globally focused header when multiple cards are active')
+assert.deepEqual(revealed, [[dropCards[1], 45]],
+  'workspace switch reveals only the globally focused actual card header when multiple cards are active')
 
 // Unmodified clicks focus in place; Ctrl+click keeps workspace-to-monitor pull.
 preview.dismissImmediately = () => {}
