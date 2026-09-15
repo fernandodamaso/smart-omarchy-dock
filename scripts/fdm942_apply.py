@@ -1,0 +1,652 @@
+from pathlib import Path
+
+
+def replace_once(path, old, new):
+    p = Path(path)
+    text = p.read_text()
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"expected one match in {path}, found {count}")
+    p.write_text(text.replace(old, new, 1))
+
+
+path = "components/DockWindowActions.qml"
+replace_once(path,
+'''  property var minimizedOrigins: ({})
+  readonly property var minimizedOriginsSnapshot: DockWindowModel.copyOriginSnapshot(minimizedOrigins)
+''',
+'''  property var minimizedOrigins: ({})
+  // Session-only movement policy. These maps deliberately live in the shared
+  // host-owned controller rather than settings or compositor rules.
+  property var windowWorkspacePins: ({})
+  property var workspaceMonitorPins: ({})
+  readonly property var minimizedOriginsSnapshot: DockWindowModel.copyOriginSnapshot(minimizedOrigins)
+''')
+
+replace_once(path,
+'''  function currentHandles() {
+    return Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
+  }
+''',
+'''  function currentHandles() {
+    return Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
+  }
+
+  function currentWorkspaces() {
+    return Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
+  }
+
+  function currentMonitors() {
+    return Hyprland.monitors ? Hyprland.monitors.values || [] : []
+  }
+
+  function clonePinMap(source) {
+    var result = ({})
+    var values = source || ({})
+    Object.keys(values).forEach(function(key) { result[key] = values[key] })
+    return result
+  }
+
+  function canonicalWorkspaceIdentity(value) {
+    var identity = DockWindowModel.workspaceIdentity(value)
+    if (!identity || identity.indexOf("special:") === 0) return ""
+    var target = identity.indexOf("id:") === 0 ? identity.slice(3) : identity
+    return DockModel.normalizeWorkspaceTarget(target) ? identity : ""
+  }
+
+  function workspaceCommandTarget(value) {
+    var identity = canonicalWorkspaceIdentity(value)
+    if (!identity) return ""
+    return DockModel.normalizeWorkspaceTarget(
+      identity.indexOf("id:") === 0 ? identity.slice(3) : identity)
+  }
+
+  function canonicalMonitorIdentity(value) {
+    return DockWindowModel.canonicalMonitorIdentity(value, currentMonitors())
+  }
+
+  function monitorNameForIdentity(identity) {
+    var monitors = currentMonitors()
+    for (var i = 0; i < monitors.length; ++i) {
+      var monitor = monitors[i]
+      if (!monitor || DockWindowModel.canonicalMonitorIdentity(monitor, monitors) !== identity)
+        continue
+      var ipc = monitor.lastIpcObject || monitor
+      return String(ipc.name !== undefined ? ipc.name : monitor.name || "").trim()
+    }
+    return ""
+  }
+''')
+
+replace_once(path,
+'''  function workspaceOnMonitorRequests(workspace, monitor) {
+    var focusRequest = DockModel.focusWorkspaceTargetRequest(
+      workspace, Hyprland.usingLua)
+    var moveRequest = DockModel.moveWorkspaceToMonitorRequest(
+      workspace, monitor, Hyprland.usingLua)
+    if (moveRequest && focusRequest)
+      return [focusRequest, moveRequest, focusRequest]
+
+    var moveCurrentRequest = DockModel.moveCurrentWorkspaceToMonitorRequest(
+      monitor, Hyprland.usingLua)
+    if (!focusRequest || !moveCurrentRequest) return []
+    return [focusRequest, moveCurrentRequest, focusRequest]
+  }
+''',
+'''  function workspaceOnMonitorRequests(workspace, monitor) {
+    // A present relocation is authoritative even if a delayed event refresh is
+    // still pending. Missing inventory remains non-destructive here.
+    reconcileSessionPins({})
+    var focusRequest = DockModel.focusWorkspaceTargetRequest(
+      workspace, Hyprland.usingLua)
+    if (!focusRequest) return []
+
+    // A monitor-pinned workspace is focused where it already lives. Every dock
+    // surface calls this shared path, so app, preview, cycling and header
+    // activation cannot accidentally pull it onto the activating monitor.
+    if (workspaceMonitorPin(workspace)) return [focusRequest]
+
+    var moveRequest = DockModel.moveWorkspaceToMonitorRequest(
+      workspace, monitor, Hyprland.usingLua)
+    if (moveRequest) return [focusRequest, moveRequest, focusRequest]
+
+    var moveCurrentRequest = DockModel.moveCurrentWorkspaceToMonitorRequest(
+      monitor, Hyprland.usingLua)
+    if (!moveCurrentRequest) return []
+    return [focusRequest, moveCurrentRequest, focusRequest]
+  }
+''')
+
+replace_once(path,
+'''  function workspaceMoveWouldChange(members, identity) {
+    var destination = resolveWorkspaceDropTarget(identity)
+    var live = workspaceMoveMembers(members)
+    if (!destination || !live) return false
+    for (var i = 0; i < live.length; ++i) {
+      if (workspaceMoveChangesLocation(live[i], destination)) return true
+    }
+    return false
+  }
+''',
+'''  function workspaceMoveWouldChange(members, identity) {
+    var destination = resolveWorkspaceDropTarget(identity)
+    var live = workspaceMoveMembers(members)
+    if (!destination || !live) return false
+    for (var i = 0; i < live.length; ++i) {
+      if (!canMoveToplevelToWorkspace(live[i].toplevel, destination.identity))
+        return false
+    }
+    for (var changedIndex = 0; changedIndex < live.length; ++changedIndex) {
+      if (workspaceMoveChangesLocation(live[changedIndex], destination)) return true
+    }
+    return false
+  }
+''')
+
+replace_once(path,
+'''  function moveCapturedToplevels(members, workspaceIdentity) {
+    var destination = resolveWorkspaceDropTarget(workspaceIdentity)
+    var live = workspaceMoveMembers(members)
+    if (!destination || !live || live.length === 0) return false
+    // Complete preflight before the first side effect. This is a submission
+    // result, not a compositor acknowledgement or an atomic multi-window move.
+    var changed = false
+    for (var i = 0; i < live.length; ++i) {
+      destination = resolveWorkspaceDropTarget(workspaceIdentity)
+      if (!destination) break
+      var member = workspaceMoveLocation(live[i].toplevel, live[i].address)
+      if (!member || !workspaceMoveChangesLocation(member, destination)) continue
+      if (member.minimized) {
+        changed = setOrigin(member.address, {
+          workspace: destination.target, monitor: destination.monitor
+        }) || changed
+      } else {
+        var request = DockModel.moveWindowRequest(
+          member.address, destination.target, Hyprland.usingLua)
+        if (dispatchRequest(request)) {
+          forgetOrigin(member.address)
+          changed = true
+        }
+      }
+    }
+    return changed
+  }
+''',
+'''  function moveCapturedToplevels(members, workspaceIdentity) {
+    var destination = resolveWorkspaceDropTarget(workspaceIdentity)
+    var live = workspaceMoveMembers(members)
+    if (!destination || !live || live.length === 0) return false
+
+    // First pass: one blocked member rejects the entire represented payload.
+    var planned = []
+    for (var i = 0; i < live.length; ++i) {
+      if (!canMoveToplevelToWorkspace(live[i].toplevel, destination.identity))
+        return false
+      if (workspaceMoveChangesLocation(live[i], destination)) planned.push(live[i])
+    }
+    if (planned.length === 0) return false
+
+    // Second pass immediately before the first side effect. This catches a pin,
+    // replacement or workspace change that appeared after drag hover/capture.
+    destination = resolveWorkspaceDropTarget(workspaceIdentity)
+    if (!destination) return false
+    var confirmed = []
+    for (var checkIndex = 0; checkIndex < planned.length; ++checkIndex) {
+      var member = workspaceMoveLocation(
+        planned[checkIndex].toplevel, planned[checkIndex].address)
+      if (!member
+          || !canMoveToplevelToWorkspace(member.toplevel, destination.identity))
+        return false
+      if (workspaceMoveChangesLocation(member, destination)) confirmed.push(member)
+    }
+    if (confirmed.length === 0) return false
+
+    var changed = false
+    for (var dispatchIndex = 0; dispatchIndex < confirmed.length; ++dispatchIndex) {
+      var current = confirmed[dispatchIndex]
+      if (current.minimized) {
+        changed = setOrigin(current.address, {
+          workspace: destination.target, monitor: destination.monitor
+        }) || changed
+      } else {
+        var request = DockModel.moveWindowRequest(
+          current.address, destination.target, Hyprland.usingLua)
+        if (dispatchRequest(request)) {
+          forgetOrigin(current.address)
+          changed = true
+        }
+      }
+    }
+    return changed
+  }
+''')
+
+replace_once(path,
+'''  function resolveOriginTarget(recorded, originOnly) {
+''',
+'''  function reliableWorkspaceForToplevel(toplevel) {
+    if (!isAlive(toplevel)) return ""
+    var state = windowState(toplevel)
+    return canonicalWorkspaceIdentity(state ? state.workspace : "")
+  }
+
+  function windowWorkspacePin(toplevel) {
+    if (!toplevel) return null
+    var address = addressFor(toplevel)
+    if (!address) return null
+    var pin = windowWorkspacePins[address]
+    if (!pin || pin.toplevel !== toplevel || pin.address !== address) return null
+    var current = reliableWorkspaceForToplevel(toplevel)
+    if (current && current !== pin.workspace) return null
+    return pin
+  }
+
+  function pinWindowToWorkspace(toplevel) {
+    var address = addressFor(toplevel)
+    var workspace = reliableWorkspaceForToplevel(toplevel)
+    if (!address || !workspace) return false
+    var pins = clonePinMap(windowWorkspacePins)
+    pins[address] = {
+      toplevel: toplevel,
+      address: address,
+      workspace: workspace
+    }
+    windowWorkspacePins = pins
+    return true
+  }
+
+  function unpinWindowFromWorkspace(toplevel) {
+    var address = addressFor(toplevel)
+    var pin = address ? windowWorkspacePins[address] : null
+    if (!pin || pin.toplevel !== toplevel) return false
+    var pins = clonePinMap(windowWorkspacePins)
+    delete pins[address]
+    windowWorkspacePins = pins
+    return true
+  }
+
+  function canMoveToplevelToWorkspace(toplevel, workspace) {
+    var destination = canonicalWorkspaceIdentity(workspace)
+    if (!destination || !isAlive(toplevel)) return false
+    var pin = windowWorkspacePin(toplevel)
+    return !pin || pin.workspace === destination
+  }
+
+  function moveToplevelToWorkspace(toplevel, capturedAddress, workspace) {
+    var address = DockModel.normalizeWindowAddress(capturedAddress)
+    var destinationIdentity = canonicalWorkspaceIdentity(workspace)
+    var target = workspaceCommandTarget(workspace)
+    if (!address || !destinationIdentity || !target
+        || !canMoveToplevelToWorkspace(toplevel, destinationIdentity)) return false
+    var member = workspaceMoveLocation(toplevel, address)
+    if (!member) return false
+    if (DockModel.normalizeWorkspaceTarget(member.workspace) === target)
+      return false
+    if (member.minimized) {
+      return setOrigin(address, {
+        workspace: target,
+        monitor: member.monitor
+      })
+    }
+    var request = DockModel.moveWindowRequest(address, target, Hyprland.usingLua)
+    if (!dispatchRequest(request)) return false
+    forgetOrigin(address)
+    return true
+  }
+
+  function workspaceMonitorPin(workspace) {
+    var identity = canonicalWorkspaceIdentity(workspace)
+    if (!identity) return null
+    var pin = workspaceMonitorPins[identity]
+    if (!pin || pin.workspace !== identity) return null
+    var resolved = resolveWorkspaceDropTarget(identity)
+    if (resolved && resolved.monitor !== pin.monitor) return null
+    return pin
+  }
+
+  function pinWorkspaceToMonitor(workspace) {
+    var identity = canonicalWorkspaceIdentity(workspace)
+    var resolved = identity ? resolveWorkspaceDropTarget(identity) : null
+    if (!resolved || !resolved.monitor) return false
+    var pins = clonePinMap(workspaceMonitorPins)
+    pins[identity] = {
+      workspace: identity,
+      monitor: resolved.monitor,
+      monitorName: monitorNameForIdentity(resolved.monitor)
+    }
+    workspaceMonitorPins = pins
+    return true
+  }
+
+  function unpinWorkspaceFromMonitor(workspace) {
+    var identity = canonicalWorkspaceIdentity(workspace)
+    if (!identity || workspaceMonitorPins[identity] === undefined) return false
+    var pins = clonePinMap(workspaceMonitorPins)
+    delete pins[identity]
+    workspaceMonitorPins = pins
+    return true
+  }
+
+  function canRelocateWorkspaceToMonitor(workspace, monitor) {
+    var identity = canonicalWorkspaceIdentity(workspace)
+    var requested = canonicalMonitorIdentity(monitor)
+    if (!identity || !requested) return false
+    var pin = workspaceMonitorPin(identity)
+    return !pin || pin.monitor === requested
+  }
+
+  function moveWorkspaceToMonitor(workspace, monitor) {
+    if (!canRelocateWorkspaceToMonitor(workspace, monitor)) return false
+    return dispatchRequests(workspaceOnMonitorRequests(workspace, monitor))
+  }
+
+  function resolveOriginTarget(recorded, originOnly) {
+''')
+
+replace_once(path,
+'''  function pruneOrigins() {
+    var retained = DockWindowModel.pruneOriginSnapshot(
+      minimizedOrigins, currentHandles(), currentToplevels())
+    if (JSON.stringify(retained) !== JSON.stringify(minimizedOrigins))
+      minimizedOrigins = DockWindowModel.copyOriginSnapshot(retained)
+  }
+
+  Timer {
+    id: pruneTimer
+    interval: 120
+    repeat: false
+    onTriggered: root.pruneOrigins()
+  }
+
+  Connections {
+    target: ToplevelManager.toplevels
+    function onValuesChanged() { pruneTimer.restart() }
+  }
+
+  Connections {
+    target: Hyprland.toplevels
+    function onValuesChanged() { pruneTimer.restart() }
+  }
+''',
+'''  function reconcileSessionPins(options) {
+    var opts = options || ({})
+    var live = currentToplevels()
+    var nextWindowPins = clonePinMap(windowWorkspacePins)
+    var windowChanged = false
+    Object.keys(nextWindowPins).forEach(function(address) {
+      var pin = nextWindowPins[address]
+      if (!pin || !pin.toplevel) {
+        delete nextWindowPins[address]
+        windowChanged = true
+        return
+      }
+      var alive = live.indexOf(pin.toplevel) >= 0
+      if (!alive) {
+        if (opts.completeToplevels === true) {
+          delete nextWindowPins[address]
+          windowChanged = true
+        }
+        return
+      }
+      var currentAddress = addressFor(pin.toplevel)
+      if (currentAddress && currentAddress !== address) {
+        delete nextWindowPins[address]
+        windowChanged = true
+        return
+      }
+      if (!currentAddress) {
+        if (opts.completeToplevels === true) {
+          delete nextWindowPins[address]
+          windowChanged = true
+        }
+        return
+      }
+      var workspace = reliableWorkspaceForToplevel(pin.toplevel)
+      if (workspace && workspace !== pin.workspace) {
+        delete nextWindowPins[address]
+        windowChanged = true
+      }
+    })
+    if (windowChanged) windowWorkspacePins = nextWindowPins
+
+    var nextWorkspacePins = clonePinMap(workspaceMonitorPins)
+    var workspaceChanged = false
+    Object.keys(nextWorkspacePins).forEach(function(identity) {
+      var pin = nextWorkspacePins[identity]
+      if (!pin) {
+        delete nextWorkspacePins[identity]
+        workspaceChanged = true
+        return
+      }
+      if (opts.completeMonitors === true
+          && !DockWindowModel.canonicalMonitorIdentity(pin.monitor, currentMonitors())) {
+        delete nextWorkspacePins[identity]
+        workspaceChanged = true
+        return
+      }
+      var resolved = resolveWorkspaceDropTarget(identity)
+      if (resolved) {
+        if (resolved.monitor !== pin.monitor) {
+          delete nextWorkspacePins[identity]
+          workspaceChanged = true
+        }
+      } else if (opts.completeWorkspaces === true) {
+        delete nextWorkspacePins[identity]
+        workspaceChanged = true
+      }
+    })
+    if (workspaceChanged) workspaceMonitorPins = nextWorkspacePins
+    return windowChanged || workspaceChanged
+  }
+
+  function eventFields(event) {
+    var data = event && event.data !== undefined ? String(event.data || "") : ""
+    return data.split(",").map(function(value) { return String(value).trim() })
+  }
+
+  function confirmWindowClosed(event) {
+    var fields = eventFields(event)
+    var address = DockModel.normalizeWindowAddress(fields.length > 0 ? fields[0] : "")
+    if (!address || windowWorkspacePins[address] === undefined) return false
+    var pins = clonePinMap(windowWorkspacePins)
+    delete pins[address]
+    windowWorkspacePins = pins
+    return true
+  }
+
+  function confirmMonitorRemoved(event) {
+    var fields = eventFields(event)
+    if (fields.length === 0) return false
+    var pins = clonePinMap(workspaceMonitorPins)
+    var changed = false
+    Object.keys(pins).forEach(function(identity) {
+      var pin = pins[identity]
+      if (pin && pin.monitorName && fields.indexOf(pin.monitorName) >= 0) {
+        delete pins[identity]
+        changed = true
+      }
+    })
+    if (changed) workspaceMonitorPins = pins
+    return changed
+  }
+
+  function pruneOrigins() {
+    var retained = DockWindowModel.pruneOriginSnapshot(
+      minimizedOrigins, currentHandles(), currentToplevels())
+    if (JSON.stringify(retained) !== JSON.stringify(minimizedOrigins))
+      minimizedOrigins = DockWindowModel.copyOriginSnapshot(retained)
+  }
+
+  Timer {
+    id: pruneTimer
+    interval: 120
+    repeat: false
+    onTriggered: root.pruneOrigins()
+  }
+
+  Timer {
+    id: pinReconcileTimer
+    interval: 120
+    repeat: false
+    onTriggered: root.reconcileSessionPins({})
+  }
+
+  Connections {
+    target: ToplevelManager.toplevels
+    function onValuesChanged() {
+      pruneTimer.restart()
+      pinReconcileTimer.restart()
+    }
+  }
+
+  Connections {
+    target: Hyprland.toplevels
+    function onValuesChanged() {
+      pruneTimer.restart()
+      pinReconcileTimer.restart()
+    }
+  }
+
+  Connections {
+    target: Hyprland.workspaces
+    function onValuesChanged() { pinReconcileTimer.restart() }
+  }
+
+  Connections {
+    target: Hyprland.monitors
+    function onValuesChanged() { pinReconcileTimer.restart() }
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (!event) return
+      var name = String(event.name || "")
+      if (name === "closewindow") root.confirmWindowClosed(event)
+      if (name === "monitorremoved" || name === "monitorremovedv2") {
+        root.confirmMonitorRemoved(event)
+        if (typeof Hyprland.refreshMonitors === "function") Hyprland.refreshMonitors()
+      }
+      if (name === "moveworkspace" || name === "moveworkspacev2") {
+        if (typeof Hyprland.refreshWorkspaces === "function") Hyprland.refreshWorkspaces()
+      }
+      if (["movewindow", "movewindowv2", "moveworkspace", "moveworkspacev2",
+           "monitorremoved", "monitorremovedv2"].indexOf(name) >= 0)
+        pinReconcileTimer.restart()
+    }
+  }
+''')
+
+path = "components/DockContextMenu.qml"
+replace_once(path,
+'''  function moveTargetToWorkspace(targetContext, workspace) {
+    if (!root.targetIsValid(targetContext)) {
+      root.dismiss()
+      return false
+    }
+    var request = DockModel.moveWindowRequest(
+      targetContext.address, workspace, Hyprland.usingLua)
+    if (!request) {
+      root.feedbackTitle = "Move failed"
+      root.feedbackText = "The workspace target is no longer valid."
+      return false
+    }
+    root.windowActions.forgetOrigin(targetContext.toplevel)
+    root.dispatchRequest(request)
+    root.dismiss()
+    return true
+  }
+''',
+'''  function moveTargetToWorkspace(targetContext, workspace) {
+    if (!root.targetIsValid(targetContext)) {
+      root.dismiss()
+      return false
+    }
+    if (!root.windowActions.moveToplevelToWorkspace(
+        targetContext.toplevel, targetContext.address, workspace)) {
+      root.feedbackTitle = "Move blocked"
+      root.feedbackText = root.windowActions.windowWorkspacePin(targetContext.toplevel)
+        ? "This window is pinned to its workspace for this SmartDock session."
+        : "The workspace target is no longer valid."
+      return false
+    }
+    root.dismiss()
+    return true
+  }
+''')
+
+replace_once(path,
+'''  function profileDirectoryForTarget(targetContext) {
+''',
+'''  function windowPinWorkspaceLabel(identity) {
+    var value = String(identity || "")
+    if (value.indexOf("id:") === 0) value = value.slice(3)
+    else if (value.indexOf("name:") === 0) value = value.slice(5)
+    return value ? "Workspace " + value : "Workspace"
+  }
+
+  function runWindowWorkspacePinMutation(action, targetContext) {
+    if (!targetContext || !root.targetIsValid(targetContext)) {
+      root.dismiss()
+      return false
+    }
+    var changed = action === "pin"
+      ? root.windowActions.pinWindowToWorkspace(targetContext.toplevel)
+      : root.windowActions.unpinWindowFromWorkspace(targetContext.toplevel)
+    if (!changed) {
+      root.feedbackTitle = action === "pin" ? "Pin Window" : "Unpin Window"
+      root.feedbackText = "The exact window or its workspace is no longer available."
+      return false
+    }
+    root.dismiss()
+    return true
+  }
+
+  function profileDirectoryForTarget(targetContext) {
+''')
+
+replace_once(path,
+'''    records.push(DockMenuModel.actionRecord(
+      "window:workspace", "Move to Workspace…", "arrow-right-left",
+      addressValid, "open-workspaces-page", target, { submenu: true }))
+    if (root.representedWorkspaceGrouped()) {
+''',
+'''    records.push(DockMenuModel.actionRecord(
+      "window:workspace", "Move to Workspace…", "arrow-right-left",
+      addressValid, "open-workspaces-page", target, { submenu: true }))
+    var windowPin = valid ? root.windowActions.windowWorkspacePin(target.toplevel) : null
+    var reliableWorkspace = windowPin ? windowPin.workspace
+      : root.workspaceIdentityForToplevel(target ? target.toplevel : null)
+    records.push(DockMenuModel.actionRecord(
+      "window:workspace-pin",
+      (windowPin ? "Unpin Window from " : "Pin Window to ")
+        + root.windowPinWorkspaceLabel(reliableWorkspace),
+      windowPin ? "pin-off" : "pin",
+      valid && reliableWorkspace !== "",
+      windowPin ? "unpin-window-workspace" : "pin-window-workspace", target))
+    if (root.representedWorkspaceGrouped()) {
+''')
+
+replace_once(path,
+'''        valid && String(target ? target.address : "") !== ""
+          && workspace !== currentWorkspace,
+''',
+'''        valid && String(target ? target.address : "") !== ""
+          && workspace !== currentWorkspace
+          && root.windowActions.canMoveToplevelToWorkspace(
+            target.toplevel, workspace),
+''')
+
+replace_once(path,
+'''    case "move-workspace":
+      return root.moveTargetToWorkspace(targetContext, record.workspace)
+    case "fullscreen-keep-bars":
+''',
+'''    case "move-workspace":
+      return root.moveTargetToWorkspace(targetContext, record.workspace)
+    case "pin-window-workspace":
+      return root.runWindowWorkspacePinMutation("pin", targetContext)
+    case "unpin-window-workspace":
+      return root.runWindowWorkspacePinMutation("unpin", targetContext)
+    case "fullscreen-keep-bars":
+''')
