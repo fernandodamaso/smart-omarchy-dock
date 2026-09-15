@@ -41,6 +41,17 @@ assert.equal(
   false,
   'address identity changes invalidate the target')
 
+const capturedCandidates = [targetA, targetB]
+assert.equal(scope.targetSnapshotsEqual(capturedCandidates, [targetA, targetB]), true)
+assert.equal(scope.targetSnapshotsEqual(capturedCandidates, [
+  { toplevel: replacement, address: '0xaaa' }, targetB
+]), false, 'same-address replacement object must invalidate a captured group candidate set')
+assert.equal(scope.targetSnapshotsEqual(capturedCandidates, [
+  { toplevel: targetA.toplevel, address: '0xchanged' }, targetB
+]), false, 'address change must invalidate a captured group candidate set')
+assert.equal(scope.targetSnapshotsEqual(capturedCandidates, [targetB, targetA]), false,
+  'candidate snapshot order is part of the deterministic exact identity')
+
 assert.equal(scope.initialPage(false, 0, false), 'app')
 assert.equal(scope.initialPage(false, 1, false), 'window')
 assert.equal(scope.initialPage(false, 3, false), 'app')
