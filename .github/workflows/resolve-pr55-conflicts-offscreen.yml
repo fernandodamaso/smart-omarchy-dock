@@ -1,0 +1,118 @@
+name: Resolve PR 55 conflicts offscreen
+
+on:
+  push:
+    branches:
+      - feat/chrome-activity-hover
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    name: Reconcile main into PR 55 offscreen
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: feat/chrome-activity-hover
+
+      - name: Merge current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "SmartDock-Live"
+          git config user.email "smartdock-live@example.invalid"
+          git fetch origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "main already integrated"
+            exit 0
+          fi
+
+          set +e
+          git merge --no-commit --no-ff origin/main
+          status=$?
+          set -e
+
+          conflicts="$(git diff --name-only --diff-filter=U || true)"
+          if [[ -n "$conflicts" ]]; then
+            if [[ "$conflicts" != "components/DockWindowPreview.qml" ]]; then
+              echo "Unexpected conflicts:" >&2
+              printf '%s\n' "$conflicts" >&2
+              exit 1
+            fi
+            git checkout --ours -- components/DockWindowPreview.qml
+          elif [[ $status -ne 0 ]]; then
+            exit "$status"
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("components/DockWindowPreview.qml")
+          text = p.read_text()
+          old = '''  function activateToplevel(toplevel) {\n    if (!root.windowActions\n        || !root.windowActions.activateToplevel(\n          toplevel, root.originOnly, root.activationMonitor)) return false\n    root.dismissImmediately()\n    return true\n  }\n'''
+          new = '''  function activateToplevel(toplevel, pullToDockMonitor) {\n    var monitor = pullToDockMonitor === true ? root.activationMonitor : ""\n    if (!root.windowActions\n        || !root.windowActions.activateToplevel(\n          toplevel, root.originOnly, monitor)) return false\n    root.dismissImmediately()\n    return true\n  }\n'''
+          if new not in text:
+              if old not in text:
+                  raise SystemExit("missing preview activation conflict target")
+              text = text.replace(old, new, 1)
+
+          old = '                onActivateRequested: toplevel => root.activateToplevel(toplevel)\n'
+          new = '''                onActivateRequested: (toplevel, pullToDockMonitor) =>\n                  root.activateToplevel(toplevel, pullToDockMonitor)\n'''
+          if new not in text:
+              if old not in text:
+                  raise SystemExit("missing preview tile activation target")
+              text = text.replace(old, new, 1)
+          p.write_text(text)
+          PY
+
+          git add components/DockWindowPreview.qml
+          test -z "$(git diff --name-only --diff-filter=U)"
+
+      - name: Install headless test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            qml6-module-qtqml-workerscript \
+            qml6-module-qtquick \
+            qml6-module-qtquick-window \
+            qml6-module-qttest \
+            qt6-declarative-dev-tools \
+            ripgrep
+
+      - name: Verify reconciled tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh; do
+            bash -n "$script"
+          done
+          for test_script in tests/check_*.sh; do
+            bash "$test_script"
+          done
+          for test_script in tests/test_*.mjs; do
+            node "$test_script"
+          done
+          python3 -m unittest discover -s tests -p 'test_*.py'
+          python3 -m unittest discover -s provider/browser-profiles/tests -p 'test_*.py'
+          /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+          git diff --check
+
+      - name: Commit and push reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm -f .github/workflows/resolve-pr55-conflicts.yml \
+            .github/workflows/resolve-pr55-conflicts-offscreen.yml
+          git add -A
+          git commit -m "merge: reconcile main into Chrome activity hover"
+          git push origin HEAD:feat/chrome-activity-hover
