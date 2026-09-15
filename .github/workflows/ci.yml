@@ -14,6 +14,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  apply-fdm941:
+    name: Apply FDM-941 source integration
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feature/fdm-938-context-menus-local-grouping-workspace-pins' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Apply CM-03 integration patch
+        run: python3 scripts/fdm941_apply.py
+      - name: Commit integration and remove one-shot scaffolding
+        run: |
+          set -euo pipefail
+          rm scripts/fdm941_apply.py .github/workflows/fdm941-apply.yml
+          git show b38818a84fb89f25c239a7b28fdaabb42a0700d6:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'feat: wire FDM-941 workspace-local grouping'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+
   headless:
     name: Headless CI
     runs-on: ubuntu-24.04
