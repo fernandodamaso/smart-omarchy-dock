@@ -274,24 +274,13 @@ PopupWindow {
     return candidates
   }
 
-  function candidateKeys(targetContext) {
-    return root.workspaceGroupCandidates(targetContext).map(function(candidate) {
-      return candidate.key
-    })
-  }
-
   function candidateSnapshotsEqual(left, right) {
-    var a = left || []
-    var b = right || []
-    if (a.length !== b.length) return false
-    for (var i = 0; i < a.length; ++i)
-      if (a[i] !== b[i]) return false
-    return true
+    return DockMenuModel.targetSnapshotsEqual(left, right)
   }
 
   function captureGroupCandidateSnapshot() {
     if (root.controlItem || root.targetContexts.length !== 1 || !root.pageTarget) return []
-    return root.candidateKeys(root.pageTarget)
+    return root.workspaceGroupCandidates(root.pageTarget)
   }
 
   function representedWorkspaceIdentity() {
@@ -322,7 +311,7 @@ PopupWindow {
     var workspace = root.workspaceIdentityForToplevel(targetContext.toplevel)
     if (!workspace || WorkspaceGroupModel.workspaceGroupEnabled(
         root.workspaceGroups, root.desktopId, workspace)) return false
-    var current = root.candidateKeys(targetContext)
+    var current = root.workspaceGroupCandidates(targetContext)
     return root.groupCandidateSnapshot.length >= 2
       && root.candidateSnapshotsEqual(root.groupCandidateSnapshot, current)
   }
@@ -1115,7 +1104,7 @@ PopupWindow {
     function onValuesChanged() {
       if (!root.visible || root.targetContexts.length !== 1 || !root.pageTarget) return
       if (!root.candidateSnapshotsEqual(
-          root.groupCandidateSnapshot, root.candidateKeys(root.pageTarget))) root.dismiss()
+          root.groupCandidateSnapshot, root.workspaceGroupCandidates(root.pageTarget))) root.dismiss()
     }
   }
 

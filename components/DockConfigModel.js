@@ -245,7 +245,8 @@ function workspaceGroupIntent(current, entries, action, args) {
   }
   if (action === "group") {
     if (index < 0) {
-      var desktopId = storedIdentity(current, entries || [], args.desktopId)
+      var entry = exactEntry(entries || [], desktopKey)
+      var desktopId = entry && entry.id ? String(entry.id) : String(args.desktopId || "")
       if (!DockWorkspaceGroupModel.persistedApplicationId(desktopId))
         return rejectedIntent("desktopId", "Application identity cannot be persisted canonically")
       list.push({ desktopId: desktopId, workspace: workspace })
