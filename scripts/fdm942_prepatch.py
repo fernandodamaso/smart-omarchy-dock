@@ -101,3 +101,7 @@ or incomplete refreshes do not by themselves clear pin state. Group/Ungroup
 changes leave window pins untouched.
 """,
 )
+
+harness_patch = Path("scripts/fdm942_harness_patch.py")
+exec(compile(harness_patch.read_text(), str(harness_patch), "exec"))
+harness_patch.unlink()
