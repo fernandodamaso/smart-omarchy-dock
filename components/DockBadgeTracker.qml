@@ -216,14 +216,16 @@ Item {
       counts, desktopId, !!(service && service.available))
   }
 
-  function browserCountFor(desktopId) {
+  function browserCountFor(desktopId, rows) {
     var service = root.browserProfileService
     var providerRevision = service ? Number(service.revision || 0) : 0
     if (!service || !service.available) return null
-    var rows = typeof service.allActivityRows === "function"
-      ? service.allActivityRows() : []
+    var values = Array.isArray(rows)
+      ? rows
+      : typeof service.allActivityRows === "function"
+        ? service.allActivityRows() : []
     var total = ActivityModel.presentation(
-      rows, root.browserActivityMutedServices).total
+      values, root.browserActivityMutedServices).total
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     return BadgeModel.browserCountState(
       desktopId, entry, service.classes, total, service.available,
@@ -241,7 +243,7 @@ Item {
       !scope || scope.primaryOwner === true ? local : BadgeModel.BADGE_NONE)
   }
 
-  function badgeFor(desktopId, scope) {
+  function badgeFor(desktopId, scope, browserRows) {
     var entry = BadgeModel.entryForDesktopId(desktopId, applications)
     var local = BadgeModel.localSeverity(
       persisted.localNotifications, desktopId, entry, identityAliases,
@@ -249,13 +251,13 @@ Item {
     var severity = BadgeModel.scopedBadgeSeverity(
       sniNeedsAttentionFor(desktopId, entry),
       hyprUrgentFor(desktopId, entry), local, scope)
-    var launcher = !scope || scope.primaryOwner === true
-      ? launcherCountFor(desktopId) : null
-    var browser = !scope || scope.primaryOwner === true
-      ? browserCountFor(desktopId) : null
+    var primaryOwner = !scope || scope.primaryOwner === true
+    var launcher = launcherCountFor(desktopId)
+    var browser = primaryOwner || Array.isArray(browserRows)
+      ? browserCountFor(desktopId, browserRows) : null
     return BadgeModel.applicationBadgeToken(
       true, launcherBadgeMode,
-      BadgeModel.preferredCountState(launcher, browser), severity)
+      BadgeModel.preferredCountState(launcher, browser, primaryOwner), severity)
   }
 
   function focusedEntry() {

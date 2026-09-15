@@ -492,9 +492,11 @@ PanelWindow {
     var badgeRevision = badgeStateRevision
     if (!attentionBadgesEnabled || !badgeTracker || !item) return "none"
     var owner = primaryBadgeOwnerFor(index)
-    if (grouped)
-      return badgeTracker.badgeFor(item.desktopId, { localUrgent: item.localUrgent, primaryOwner: owner })
-    return owner ? badgeTracker.badgeFor(item.desktopId) : "none"
+    var browserRows = browserActivitiesFor(item)
+    var scope = grouped || !owner
+      ? ({ localUrgent: item.localUrgent === true, primaryOwner: owner })
+      : null
+    return badgeTracker.badgeFor(item.desktopId, scope, browserRows)
   }
 
   function revealActiveWorkspace() {

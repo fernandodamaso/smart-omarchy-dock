@@ -123,4 +123,17 @@ if grep -Eiq 'accessibility|window[ _-]*title|sqlite|database' \
   fail 'launcher counts must not scrape accessibility, titles, or app databases'
 fi
 
+badge_binding="$(sed -n '/function attentionBadgeFor(item, index)/,/^  }/p' components/Dock.qml)"
+grep -Fq 'var browserRows = browserActivitiesFor(item)' <<<"$badge_binding" \
+  || fail 'each dock item must derive its badge from its address-filtered browser rows'
+grep -Fq 'return badgeTracker.badgeFor(item.desktopId, scope, browserRows)' <<<"$badge_binding" \
+  || fail 'each dock item must pass its browser rows to the shared badge tracker'
+grep -Fq 'function badgeFor(desktopId, scope, browserRows)' "$tracker" \
+  || fail 'badge tracker must accept item-scoped browser rows'
+grep -Fq 'test_windowScopedBrowserFallbackTokensPerChromeItem' \
+  tests/tst_launcherbadgemodel.qml \
+  || fail 'window-scoped Chrome badge tokens must have a functional regression'
+grep -Fq 'count:2:none' tests/tst_launcherbadgemodel.qml \
+  || fail 'window-scoped regression must expect count:2:none on the owning Chrome item'
+
 echo 'check_launcher_badge_counts: PASS'
