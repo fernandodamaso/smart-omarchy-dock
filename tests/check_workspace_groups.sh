@@ -58,5 +58,13 @@ grep -q 'onSettingsChanged' components/DockContextMenu.qml \
   || fail 'workspace-group settings changes must invalidate an open menu'
 grep -q 'target: ToplevelManager.toplevels' components/DockContextMenu.qml \
   || fail 'candidate membership changes must invalidate an open menu'
+grep -q "WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js')" tests/test_cli_host.mjs \
+  || fail 'CLI host harness must load the workspace-group dependency'
+grep -q "WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js')" tests/test_config_model.mjs \
+  || fail 'writer harness must load the workspace-group dependency'
+grep -q 'loading stored legacy grouping must not rewrite configuration' tests/test_config_model.mjs \
+  || fail 'host lifecycle must prove legacy grouping loads without migration writes'
+grep -q "config.get', { key: 'groupWindows', effective: true" tests/test_config_model.mjs \
+  || fail 'host lifecycle must prove requested/effective legacy readback differs'
 
 echo 'CM-03 workspace-group structural contract: PASS'
