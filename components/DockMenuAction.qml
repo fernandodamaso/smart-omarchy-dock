@@ -1,106 +1,104 @@
 import QtQuick
-import Qt5Compat.GraphicalEffects
+import Quickshell
 import qs.Commons
 import qs.Ui
 
-BorderSurface {
+CursorSurface {
   id: root
 
   required property string text
   property string iconName: ""
   property string iconText: ""
-  property string iconFont: Style.font.family
-  property real iconSize: Style.font.icon
-  property bool keyboardActive: false
+  property string iconFontFamily: Style.font.family
+  property int iconSize: Style.font.body
+  property bool checked: false
+  property bool submenu: false
   property bool isDockMenuAction: true
-  property bool autoTriggerOnHover: false
-  signal triggered()
 
-  readonly property bool hasIcon: root.iconName !== "" || root.iconText !== ""
-  readonly property bool highlighted: hover.hovered || root.keyboardActive
+  signal triggered()
+  signal cursorRequested()
+
+  foreground: Color.menu.text
+  accent: Color.accent
+  current: root.checked
 
   implicitWidth: Style.space(168)
   implicitHeight: Style.spacing.popupRowHeight
-  radius: Style.cornerRadius
-  color: root.highlighted && enabled
-    ? Style.hoverFillFor(Color.menu.text, Color.accent)
-    : "transparent"
-  borderSpec: root.highlighted && enabled
-    ? Border.controlSpec("hover-cursor", Color.menu.text, Color.accent)
-    : Border.none()
-  opacity: enabled ? 1 : 0.42
+  opacity: enabled ? 1.0 : 0.42
 
   Item {
-    id: actionIcon
-
-    visible: root.hasIcon
-    width: Style.space(24)
-    height: root.iconSize
+    id: iconSlot
     anchors.left: parent.left
     anchors.leftMargin: Style.spacing.controlPaddingX
     anchors.verticalCenter: parent.verticalCenter
+    width: Style.font.title
+    height: width
 
     Image {
-      id: lucideSource
-
-      anchors.centerIn: parent
-      width: root.iconSize
-      height: root.iconSize
-      source: root.iconName === ""
-        ? ""
-        : Qt.resolvedUrl("../assets/lucide/" + root.iconName + ".svg")
-      sourceSize: Qt.size(width * 2, height * 2)
+      id: iconImage
+      anchors.fill: parent
+      source: root.iconName !== ""
+        ? Quickshell.iconPath("lucide-" + root.iconName, true) : ""
+      sourceSize.width: root.iconSize
+      sourceSize.height: root.iconSize
+      visible: root.iconName !== "" && status === Image.Ready
       fillMode: Image.PreserveAspectFit
-      asynchronous: true
-      visible: false
-      layer.enabled: true
     }
 
     ColorOverlay {
-      visible: root.iconName !== ""
-      anchors.fill: lucideSource
-      source: lucideSource
-      color: root.highlighted && root.enabled ? Color.accent : Color.menu.text
-      opacity: 1.0
-
-      Behavior on color { ColorAnimation { duration: 100 } }
+      anchors.fill: iconImage
+      source: iconImage
+      color: root.foreground
+      visible: iconImage.visible
     }
 
     Text {
-      visible: root.iconName === "" && root.iconText !== ""
-      anchors.fill: parent
+      anchors.centerIn: parent
+      visible: !iconImage.visible && root.iconText !== ""
       text: root.iconText
-      color: root.highlighted && root.enabled ? Color.accent : Color.menu.text
-      font.family: root.iconFont
+      textFormat: Text.PlainText
+      color: root.foreground
+      font.family: root.iconFontFamily
       font.pixelSize: root.iconSize
-      horizontalAlignment: Text.AlignHCenter
-      verticalAlignment: Text.AlignVCenter
     }
   }
 
   Text {
-    anchors {
-      verticalCenter: parent.verticalCenter
-      left: root.hasIcon ? actionIcon.right : parent.left
-      leftMargin: root.hasIcon ? Style.spacing.controlGap : Style.spacing.controlPaddingX
-      right: parent.right
-      rightMargin: Style.spacing.controlPaddingX
-    }
+    id: actionLabel
+    anchors.left: iconSlot.right
+    anchors.right: trailing.left
+    anchors.leftMargin: Style.spacing.controlGap
+    anchors.rightMargin: Style.spacing.controlGap
+    anchors.verticalCenter: parent.verticalCenter
     text: root.text
-    color: root.highlighted && root.enabled ? Color.accent : Color.menu.text
+    textFormat: Text.PlainText
+    color: root.foreground
     font.family: Style.font.family
     font.pixelSize: Style.font.body
     elide: Text.ElideRight
+    maximumLineCount: 1
+  }
+
+  Text {
+    id: trailing
+    anchors.right: parent.right
+    anchors.rightMargin: Style.spacing.controlPaddingX
+    anchors.verticalCenter: parent.verticalCenter
+    width: visible ? implicitWidth : 0
+    visible: root.checked || root.submenu
+    text: root.submenu ? "›" : "✓"
+    textFormat: Text.PlainText
+    color: root.foreground
+    font.family: Style.font.family
+    font.pixelSize: Style.font.body
   }
 
   HoverHandler {
-    id: hover
     enabled: root.enabled
     cursorShape: Qt.PointingHandCursor
-
     onHoveredChanged: {
-      if (hovered && root.autoTriggerOnHover && root.enabled)
-        root.triggered()
+      if (hovered)
+        root.cursorRequested()
     }
   }
 

@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockMenuModel.js" as DockMenuModel
 
 PopupWindow {
   id: root
@@ -18,8 +19,8 @@ PopupWindow {
   required property var windowActions
   property bool interfaceAnimationsEnabled: true
   property bool originOnly: false
-  onRunningToplevelsChanged: if (visible) dismiss()
   property bool controlItem: false
+
   signal openLauncher()
   signal openNewWindow()
   signal addApplication()
@@ -27,10 +28,16 @@ PopupWindow {
   signal hideFromDock()
   signal toggleAutoHide()
 
-  property string page: "windows"
-  property var selectedToplevel: null
+  property string page: "app"
+  property var pageStack: []
+  property var targetContexts: []
+  property var pageTarget: null
+  property var selectedToplevel: pageTarget ? pageTarget.toplevel : null
+  property int openGeneration: 0
+  property int activeMenuIndex: -1
   property real entranceOpacity: 0
   property real entranceOffset: 0
+
   readonly property var selectedHandle:
     root.windowActions.handleFor(selectedToplevel)
   readonly property var selectedInfo: selectedHandle
@@ -42,22 +49,34 @@ PopupWindow {
   }
   readonly property bool selectedFakeFullscreen:
     DockModel.isFakeFullscreen(selectedInfo)
-  readonly property var runningWindowStates: buildWindowStates()
-  readonly property var runningWindowCounts:
-    DockModel.windowStateCounts(runningWindowStates)
-  readonly property int minimizedCount: runningWindowCounts.minimized
-  readonly property int visibleWindowCount: runningWindowCounts.visible
   readonly property int selectedWorkspaceId: {
     var workspace = selectedInfo.workspace
       || (selectedHandle ? selectedHandle.workspace : null)
     var id = Number(workspace ? workspace.id : -1)
     return Number.isInteger(id) ? id : -1
   }
+  readonly property var runningWindowStates: buildWindowStates()
+  readonly property var runningWindowCounts:
+    DockModel.windowStateCounts(runningWindowStates)
+  readonly property int minimizedCount: runningWindowCounts.minimized
+  readonly property int visibleWindowCount: runningWindowCounts.visible
+  readonly property var pageActions: buildPageActions()
+
+  onRunningToplevelsChanged: {
+    // The open menu owns captured QObject/address identities. Any membership
+    // change invalidates that snapshot rather than silently retargeting a row.
+    if (visible)
+      dismiss()
+  }
 
   function open() {
-    page = "windows"
-    selectedToplevel = root.runningToplevels.length > 0
-      ? root.runningToplevels[0] : null
+    openGeneration += 1
+    targetContexts = buildTargetContexts()
+    pageStack = []
+    pageTarget = targetContexts.length === 1 ? targetContexts[0] : null
+    page = DockMenuModel.initialPage(
+      root.controlItem, targetContexts.length, pageTarget !== null)
+
     entranceOpacity = interfaceAnimationsEnabled ? 0 : 1
     entranceOffset = interfaceAnimationsEnabled ? 6 : 0
     visible = true
@@ -67,7 +86,7 @@ PopupWindow {
         entranceOffset = 0
       }
     })
-    resetActiveMenuIndex()
+    Qt.callLater(resetActiveMenuIndex)
     if (menuSurface) menuSurface.forceActiveFocus()
   }
 
@@ -75,11 +94,122 @@ PopupWindow {
     visible = false
     entranceOpacity = 0
     entranceOffset = 0
-    page = "windows"
-    selectedToplevel = null
+    page = "app"
+    pageStack = []
+    targetContexts = []
+    pageTarget = null
+    activeMenuIndex = -1
+  }
+
+  function targetContextFor(toplevel, index) {
+    if (!toplevel) return null
+
+    var address = root.windowActions.addressFor(toplevel)
+    var key = address !== ""
+      ? "address:" + address
+      : "snapshot:" + root.openGeneration + ":" + index
+    return {
+      key: key,
+      toplevel: toplevel,
+      address: address
+    }
+  }
+
+  function buildTargetContexts() {
+    var targets = []
+    for (var i = 0; i < root.runningToplevels.length; ++i) {
+      var target = targetContextFor(root.runningToplevels[i], i)
+      if (target)
+        targets.push(target)
+    }
+    return targets
+  }
+
+  function targetIsValid(targetContext) {
+    return DockMenuModel.targetIsCurrent(
+      targetContext,
+      root.runningToplevels,
+      function(toplevel) {
+        return root.windowActions.addressFor(toplevel)
+      })
+  }
+
+  function targetHandle(targetContext) {
+    if (!targetContext || !targetIsValid(targetContext)) return null
+    return root.windowActions.handleFor(targetContext.toplevel)
+  }
+
+  function targetInfo(targetContext) {
+    var handle = targetHandle(targetContext)
+    return handle ? handle.lastIpcObject || ({}) : ({})
+  }
+
+  function targetWorkspaceId(targetContext) {
+    var handle = targetHandle(targetContext)
+    if (!handle) return -1
+
+    var info = handle.lastIpcObject || ({})
+    var workspace = info.workspace || handle.workspace || null
+    var id = Number(workspace ? workspace.id : -1)
+    return Number.isInteger(id) ? id : -1
+  }
+
+  function targetTitle(targetContext, fallbackIndex) {
+    if (!targetContext || !targetContext.toplevel)
+      return "Window " + (fallbackIndex + 1)
+    return String(targetContext.toplevel.title || "").trim()
+      || "Window " + (fallbackIndex + 1)
+  }
+
+  function targetStatusLabel(targetContext) {
+    if (!targetContext || !targetContext.toplevel) return ""
+    return windowStatusLabel(targetContext.toplevel)
+  }
+
+  function targetSubtitle(targetContext, fallbackIndex) {
+    var title = targetTitle(targetContext, fallbackIndex)
+    var workspaceId = targetWorkspaceId(targetContext)
+    var suffix = workspaceId > 0 ? " · Workspace " + workspaceId : ""
+    return title + suffix
+  }
+
+  function targetMinimized(targetContext) {
+    if (!targetContext || !targetIsValid(targetContext)) return false
+    var originsRevision = root.windowActions.minimizedOriginsSnapshot
+    return root.windowActions.isMinimized(targetContext.toplevel)
+  }
+
+  function targetFakeFullscreen(targetContext) {
+    if (!targetContext || !targetIsValid(targetContext)) return false
+    return DockModel.isFakeFullscreen(targetInfo(targetContext))
+  }
+
+  function pushPage(nextPage, targetContext) {
+    root.pageStack = root.pageStack.concat([{
+      page: root.page,
+      targetContext: root.pageTarget
+    }])
+    root.pageTarget = targetContext || null
+    root.page = nextPage
+    Qt.callLater(root.resetActiveMenuIndex)
+  }
+
+  function goBack() {
+    if (root.pageStack.length === 0) {
+      root.dismiss()
+      return false
+    }
+
+    var previous = root.pageStack[root.pageStack.length - 1]
+    root.pageStack = root.pageStack.slice(0, root.pageStack.length - 1)
+    root.pageTarget = previous.targetContext || null
+    root.page = previous.page
+    Qt.callLater(root.resetActiveMenuIndex)
+    return true
   }
 
   function minimizeRestoreSelected() {
+    // Compatibility entry point used by the existing grouped-action harness.
     var changed = root.selectedMinimized
       ? root.windowActions.restoreToplevel(root.selectedToplevel, root.originOnly)
       : root.windowActions.minimizeToplevel(root.selectedToplevel, root.originOnly)
@@ -87,8 +217,18 @@ PopupWindow {
     return changed
   }
 
-  function selectWindow(toplevel) {
-    selectedToplevel = toplevel
+  function minimizeRestoreTarget(targetContext) {
+    if (!targetIsValid(targetContext)) {
+      root.dismiss()
+      return false
+    }
+
+    var toplevel = targetContext.toplevel
+    var changed = targetMinimized(targetContext)
+      ? root.windowActions.restoreToplevel(toplevel, root.originOnly)
+      : root.windowActions.minimizeToplevel(toplevel, root.originOnly)
+    root.dismiss()
+    return changed
   }
 
   function selectedAddress() {
@@ -112,80 +252,315 @@ PopupWindow {
   }
 
   function dispatchRequest(request) {
-    if (request) Hyprland.dispatch(request)
+    if (!request) return false
+    Hyprland.dispatch(request)
+    return true
   }
 
-  function moveSelectedToWorkspace(workspace) {
+  function moveTargetToWorkspace(targetContext, workspace) {
+    if (!targetIsValid(targetContext)) {
+      root.dismiss()
+      return false
+    }
+
     var request = DockModel.moveWindowRequest(
-      selectedAddress(), workspace, Hyprland.usingLua)
-    if (request) {
-      root.windowActions.forgetOrigin(selectedToplevel)
-      dispatchRequest(request)
-    }
+      targetContext.address, workspace, Hyprland.usingLua)
+    if (!request) return false
+
+    root.windowActions.forgetOrigin(targetContext.toplevel)
+    dispatchRequest(request)
     dismiss()
+    return true
   }
 
-  function toggleSelectedFakeFullscreen() {
-    var enable = !selectedFakeFullscreen
+  function toggleTargetFakeFullscreen(targetContext) {
+    if (!targetIsValid(targetContext)) {
+      root.dismiss()
+      return false
+    }
+
+    var enable = !targetFakeFullscreen(targetContext)
     var request = DockModel.fakeFullscreenRequest(
-      selectedAddress(), enable, Hyprland.usingLua)
-    if (request)
+      targetContext.address, enable, Hyprland.usingLua)
+    if (request) {
       dispatchRequest(request)
-    else if (selectedToplevel)
-      selectedToplevel.maximized = enable
-    dismiss()
-  }
-
-  property int activeMenuIndex: -1
-
-  function currentPageColumn() {
-    if (root.page === "windows") return windowsPage
-    if (root.page === "workspaces") return workspacesPage
-    return null
-  }
-
-  function collectFocusableItems(parent, items) {
-    if (!parent || !parent.children) return
-    for (var i = 0; i < parent.children.length; ++i) {
-      var child = parent.children[i]
-      if (!child) continue
-      if (child.isDockMenuAction && child.enabled && child.visible)
-        items.push(child)
-      collectFocusableItems(child, items)
+    } else if (targetContext.toplevel) {
+      targetContext.toplevel.maximized = enable
     }
+    dismiss()
+    return true
   }
 
-  function currentFocusableItems() {
-    var col = currentPageColumn()
-    var items = []
-    if (!col) return items
-    collectFocusableItems(col, items)
-    return items
+  function applicationActionRecords(prefix) {
+    var records = [
+      DockMenuModel.actionRecord(
+        prefix + ":open-new", "Open New Window", "plus", true,
+        "open-new", null)
+    ]
+
+    records.push(DockMenuModel.actionRecord(
+      prefix + ":hide", "Hide from Dock", "eye-off", true,
+      "hide-from-dock", null))
+
+    if (root.pinnedItem) {
+      records.push(DockMenuModel.actionRecord(
+        prefix + ":remove", "Remove from Dock", "minus", true,
+        "remove-from-dock", null))
+    }
+    return records
+  }
+
+  function appPageActions() {
+    var records = [
+      DockMenuModel.headerRecord(
+        "app:header",
+        "Open Windows",
+        root.targetContexts.length === 0
+          ? "No open windows"
+          : root.targetContexts.length + " open windows")
+    ]
+
+    if (root.targetContexts.length === 0) {
+      records.push(DockMenuModel.actionRecord(
+        "app:none", "No open windows", "app-window", false, "noop", null))
+    } else {
+      for (var i = 0; i < root.targetContexts.length; ++i) {
+        var target = root.targetContexts[i]
+        var status = targetStatusLabel(target)
+        var label = (target.toplevel && target.toplevel.activated ? "● " : "")
+          + (status !== "" ? status + " " : "")
+          + targetTitle(target, i)
+        records.push(DockMenuModel.actionRecord(
+          "app:window:" + target.key,
+          label,
+          "app-window",
+          true,
+          "open-window-page",
+          target,
+          { submenu: true }))
+      }
+    }
+
+    records.push(DockMenuModel.separatorRecord("app:application-actions"))
+    return records.concat(applicationActionRecords("app"))
+  }
+
+  function windowPageActions() {
+    var target = root.pageTarget
+    var valid = targetIsValid(target)
+    var addressValid = valid && String(target ? target.address : "") !== ""
+    var index = Math.max(0, root.targetContexts.indexOf(target))
+    var records = []
+
+    if (root.pageStack.length > 0) {
+      records.push(DockMenuModel.actionRecord(
+        "window:back", "Back", "arrow-left", true, "back", null))
+    }
+
+    records.push(DockMenuModel.headerRecord(
+      "window:header",
+      "Window",
+      targetSubtitle(target, index)))
+
+    records.push(DockMenuModel.actionRecord(
+      "window:minimize",
+      targetMinimized(target) ? "Restore Window" : "Minimize",
+      targetMinimized(target) ? "maximize-2" : "minus",
+      addressValid,
+      "minimize-restore",
+      target))
+
+    records.push(DockMenuModel.actionRecord(
+      "window:workspace",
+      "Move to Workspace…",
+      "arrow-right-left",
+      addressValid,
+      "open-workspaces-page",
+      target,
+      { submenu: true }))
+
+    records.push(DockMenuModel.actionRecord(
+      "window:fullscreen-bars",
+      targetFakeFullscreen(target) ? "Restore Size" : "Fullscreen (Keep Bars)",
+      targetFakeFullscreen(target) ? "minimize-2" : "maximize-2",
+      addressValid,
+      "toggle-fake-fullscreen",
+      target,
+      { checked: targetFakeFullscreen(target) }))
+
+    records.push(DockMenuModel.separatorRecord("window:application-actions"))
+    records = records.concat(applicationActionRecords("window"))
+
+    records.push(DockMenuModel.separatorRecord("window:close-separator"))
+    records.push(DockMenuModel.actionRecord(
+      "window:close", "Close Window", "x", valid,
+      "close-window", target))
+    return records
+  }
+
+  function workspacePageActions() {
+    var target = root.pageTarget
+    var valid = targetIsValid(target)
+    var currentWorkspace = targetWorkspaceId(target)
+    var index = Math.max(0, root.targetContexts.indexOf(target))
+    var records = [
+      DockMenuModel.actionRecord(
+        "workspace:back", "Back", "arrow-left", true, "back", null),
+      DockMenuModel.headerRecord(
+        "workspace:header", "Move to Workspace", targetTitle(target, index))
+    ]
+
+    for (var workspace = 1; workspace <= 10; ++workspace) {
+      records.push(DockMenuModel.actionRecord(
+        "workspace:" + workspace,
+        "Workspace " + workspace,
+        "",
+        valid && String(target ? target.address : "") !== ""
+          && workspace !== currentWorkspace,
+        "move-workspace",
+        target,
+        {
+          checked: workspace === currentWorkspace,
+          workspace: workspace,
+          iconText: workspace === currentWorkspace ? "✓" : String(workspace)
+        }))
+    }
+    return records
+  }
+
+  function controlPageActions() {
+    return [
+      DockMenuModel.headerRecord("controls:header", "Dock Controls", ""),
+      DockMenuModel.actionRecord(
+        "controls:launcher", "Open App Launcher",
+        DockModel.dockControlIcon("launcher", root.autoHide),
+        true, "open-launcher", null),
+      DockMenuModel.actionRecord(
+        "controls:add", "Add Application",
+        DockModel.dockControlIcon("add", root.autoHide),
+        true, "add-application", null),
+      DockMenuModel.actionRecord(
+        "controls:auto-hide",
+        root.autoHide ? "Disable Auto-Hide" : "Enable Auto-Hide",
+        DockModel.dockControlIcon("auto-hide", root.autoHide),
+        true, "toggle-auto-hide", null)
+    ]
+  }
+
+  function buildPageActions() {
+    if (root.controlItem || root.page === "controls")
+      return controlPageActions()
+    if (root.page === "window")
+      return windowPageActions()
+    if (root.page === "workspaces")
+      return workspacePageActions()
+    return appPageActions()
+  }
+
+  function setActiveMenuIndex(index) {
+    if (index < 0 || index >= root.pageActions.length) return
+    if (!DockMenuModel.isFocusable(root.pageActions[index])) return
+    root.activeMenuIndex = index
   }
 
   function resetActiveMenuIndex() {
-    var items = currentFocusableItems()
-    root.activeMenuIndex = items.length > 0 ? 0 : -1
+    root.activeMenuIndex = DockMenuModel.firstEnabledIndex(root.pageActions)
+    Qt.callLater(root.ensureActiveVisible)
   }
 
   function moveActiveMenuIndex(delta) {
-    var items = currentFocusableItems()
-    if (items.length === 0) {
-      root.activeMenuIndex = -1
+    var step = DockMenuModel.cursorStep(
+      root.pageActions, root.activeMenuIndex, delta, root.pageTarget)
+    // Cursor movement may change only the shared highlight. If that invariant
+    // is ever violated, close instead of silently retargeting an action.
+    if (step.targetContext !== root.pageTarget) {
+      root.dismiss()
       return
     }
-    var next = root.activeMenuIndex + delta
-    next = Math.max(0, Math.min(items.length - 1, next))
-    root.activeMenuIndex = next
+    root.activeMenuIndex = step.index
+    Qt.callLater(root.ensureActiveVisible)
+  }
+
+  function ensureActiveVisible() {
+    if (!menuList || root.activeMenuIndex < 0) return
+    var item = actionRepeater.itemAt(root.activeMenuIndex)
+    if (!item) return
+    menuList.contentY = DockMenuModel.contentYForRow(
+      menuList.contentY,
+      menuList.height,
+      item.y,
+      item.height,
+      actionColumn.height)
   }
 
   function activateCurrentMenuItem() {
-    var items = currentFocusableItems()
-    if (root.activeMenuIndex >= 0 && root.activeMenuIndex < items.length)
-      items[root.activeMenuIndex].triggered()
+    var index = root.activeMenuIndex
+    if (index < 0 || index >= root.pageActions.length) return
+    dispatchAction(root.pageActions[index], index)
   }
 
-  onPageChanged: resetActiveMenuIndex()
+  function dispatchAction(record, index) {
+    if (!record || record.kind !== "action" || record.enabled === false)
+      return false
+
+    root.setActiveMenuIndex(index)
+
+    var targetContext = record.targetContext || null
+    if (targetContext && !root.targetIsValid(targetContext)) {
+      root.dismiss()
+      return false
+    }
+
+    switch (record.command) {
+    case "back":
+      return root.goBack()
+    case "open-window-page":
+      root.pushPage("window", targetContext)
+      return true
+    case "open-workspaces-page":
+      root.pushPage("workspaces", targetContext)
+      return true
+    case "minimize-restore":
+      return root.minimizeRestoreTarget(targetContext)
+    case "move-workspace":
+      return root.moveTargetToWorkspace(targetContext, record.workspace)
+    case "toggle-fake-fullscreen":
+      return root.toggleTargetFakeFullscreen(targetContext)
+    case "close-window":
+      root.windowActions.closeToplevel(targetContext.toplevel)
+      root.dismiss()
+      return true
+    case "open-new":
+      root.dismiss()
+      root.openNewWindow()
+      return true
+    case "hide-from-dock":
+      root.dismiss()
+      root.hideFromDock()
+      return true
+    case "remove-from-dock":
+      root.dismiss()
+      root.removeFromDock()
+      return true
+    case "open-launcher":
+      root.dismiss()
+      Qt.callLater(function() { root.openLauncher() })
+      return true
+    case "add-application":
+      root.dismiss()
+      root.addApplication()
+      return true
+    case "toggle-auto-hide":
+      root.toggleAutoHide()
+      root.dismiss()
+      return true
+    default:
+      return false
+    }
+  }
+
+  onPageChanged: Qt.callLater(resetActiveMenuIndex)
+  onPageActionsChanged: Qt.callLater(resetActiveMenuIndex)
   onInterfaceAnimationsEnabledChanged: {
     if (!interfaceAnimationsEnabled) {
       entranceOpacity = 1
@@ -193,9 +568,8 @@ PopupWindow {
     }
   }
 
-  implicitWidth: root.page === "windows" && !root.controlItem
-    && root.runningToplevels.length > 0 ? 400 : 200
-  implicitHeight: Math.min(520, menuPages.implicitHeight + 12)
+  implicitWidth: root.controlItem ? Style.space(210) : Style.space(300)
+  implicitHeight: Math.min(520, actionColumn.implicitHeight + 12)
   color: "transparent"
   grabFocus: true
 
@@ -222,11 +596,20 @@ PopupWindow {
         y = root.anchorItem.height / 2 - root.implicitHeight / 2
       }
 
-      var point = root.anchor.window.contentItem.mapFromItem(root.anchorItem, x, y)
+      var point = root.anchor.window.contentItem.mapFromItem(
+        root.anchorItem, x, y)
       if (root.position === "top" || root.position === "bottom")
-        point.x = Math.max(8, Math.min(point.x, root.anchor.window.width - root.implicitWidth - 8))
+        point.x = Math.max(
+          8,
+          Math.min(
+            point.x,
+            root.anchor.window.width - root.implicitWidth - 8))
       else
-        point.y = Math.max(8, Math.min(point.y, root.anchor.window.height - root.implicitHeight - 8))
+        point.y = Math.max(
+          8,
+          Math.min(
+            point.y,
+            root.anchor.window.height - root.implicitHeight - 8))
 
       root.anchor.rect.x = Math.round(point.x)
       root.anchor.rect.y = Math.round(point.y)
@@ -264,437 +647,123 @@ PopupWindow {
 
     Keys.onPressed: function(event) {
       if (event.key === Qt.Key_Down) {
-        moveActiveMenuIndex(1)
+        root.moveActiveMenuIndex(1)
         event.accepted = true
       } else if (event.key === Qt.Key_Up) {
-        moveActiveMenuIndex(-1)
+        root.moveActiveMenuIndex(-1)
         event.accepted = true
-      } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+      } else if (event.key === Qt.Key_Return
+                 || event.key === Qt.Key_Enter
                  || event.key === Qt.Key_Space) {
-        activateCurrentMenuItem()
+        root.activateCurrentMenuItem()
         event.accepted = true
-      } else if (event.key === Qt.Key_Escape) {
-        if (root.page !== "windows") {
-          root.page = "windows"
-          event.accepted = true
-        } else {
+      } else if (event.key === Qt.Key_Escape
+                 || event.key === Qt.Key_Backspace
+                 || event.key === Qt.Key_Left) {
+        if (root.pageStack.length > 0)
+          root.goBack()
+        else
           root.dismiss()
-          event.accepted = true
-        }
+        event.accepted = true
       }
     }
 
     Flickable {
+      id: menuList
+
       anchors.fill: parent
       anchors.margins: 6
       contentWidth: width
-      contentHeight: menuPages.implicitHeight
+      contentHeight: actionColumn.implicitHeight
       clip: true
       boundsBehavior: Flickable.StopAtBounds
 
       Column {
-        id: menuPages
+        id: actionColumn
 
-        width: parent.width
+        width: menuList.width
 
-        Column {
-          id: windowsPage
+        Repeater {
+          id: actionRepeater
 
-          visible: root.page === "windows"
-          width: parent.width
+          model: root.pageActions
 
-          Text {
-            width: parent.width
-            height: 32
-            leftPadding: 12
-            verticalAlignment: Text.AlignVCenter
-            text: root.controlItem ? "Dock Controls" : "Open Windows"
-            color: Color.menu.text
-            font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
-            font.bold: true
-          }
+          delegate: Item {
+            id: row
 
-          Column {
-            visible: root.controlItem || root.runningToplevels.length === 0
-            width: parent.width
+            required property var modelData
+            required property int index
 
-            DockMenuAction {
-              visible: !root.controlItem && root.runningToplevels.length === 0
-              enabled: false
-              text: "No open windows"
-              keyboardActive: !!root && itemIndex === root.activeMenuIndex
-              readonly property int itemIndex: {
-                if (!root) return -1
-                var items = root.currentFocusableItems()
-                for (var i = 0; i < items.length; ++i)
-                  if (items[i] === this) return i
-                return -1
-              }
+            width: actionColumn.width
+            height: modelData.kind === "separator"
+              ? Style.spacing.md
+              : modelData.kind === "header"
+                ? (modelData.subtitle !== "" ? Style.space(48) : Style.space(34))
+                : Style.spacing.popupRowHeight
+
+            Text {
+              visible: row.modelData.kind === "header"
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.leftMargin: Style.spacing.controlPaddingX
+              anchors.rightMargin: Style.spacing.controlPaddingX
+              anchors.topMargin: Style.spacing.xs
+              text: row.modelData.text || ""
+              textFormat: Text.PlainText
+              color: Color.menu.text
+              font.family: Style.font.family
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+              elide: Text.ElideRight
+              maximumLineCount: 1
             }
 
-            Item {
-              visible: !root.controlItem && root.runningToplevels.length === 0
-              width: 188
-              height: 10
+            Text {
+              visible: row.modelData.kind === "header"
+                && String(row.modelData.subtitle || "") !== ""
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.bottom: parent.bottom
+              anchors.leftMargin: Style.spacing.controlPaddingX
+              anchors.rightMargin: Style.spacing.controlPaddingX
+              anchors.bottomMargin: Style.spacing.xs
+              text: row.modelData.subtitle || ""
+              textFormat: Text.PlainText
+              color: Util.alpha(Color.menu.text, 0.68)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              elide: Text.ElideRight
+              maximumLineCount: 1
+            }
 
-              Rectangle {
-                anchors.centerIn: parent
-                width: 164
-                height: 1
-                color: Util.alpha(Color.menu.border, 0.35)
-              }
+            PanelSeparator {
+              visible: row.modelData.kind === "separator"
+              anchors.centerIn: parent
+              width: parent.width - Style.spacing.controlPaddingX * 2
+              foreground: Color.menu.text
+              strength: 0.2
             }
 
             DockMenuAction {
-              visible: !root.controlItem
-              iconName: "plus"
-              text: "Open New Window"
-              keyboardActive: !!root && itemIndex === root.activeMenuIndex
-              readonly property int itemIndex: {
-                if (!root) return -1
-                var items = root.currentFocusableItems()
-                for (var i = 0; i < items.length; ++i)
-                  if (items[i] === this) return i
-                return -1
+              visible: row.modelData.kind === "action"
+              anchors.fill: parent
+              enabled: row.modelData.enabled !== false
+              text: row.modelData.text || ""
+              iconName: row.modelData.iconName || ""
+              iconText: row.modelData.iconText || ""
+              checked: row.modelData.checked === true
+              submenu: row.modelData.submenu === true
+              hasCursor: root.activeMenuIndex === row.index
+
+              onCursorRequested: {
+                if (root)
+                  root.setActiveMenuIndex(row.index)
               }
               onTriggered: {
-                root.dismiss()
-                root.openNewWindow()
+                if (root)
+                  root.dispatchAction(row.modelData, row.index)
               }
-            }
-
-            DockMenuAction {
-              visible: !root.controlItem
-              iconName: "eye-off"
-              text: "Hide from Dock"
-              keyboardActive: !!root && itemIndex === root.activeMenuIndex
-              readonly property int itemIndex: {
-                if (!root) return -1
-                var items = root.currentFocusableItems()
-                for (var i = 0; i < items.length; ++i)
-                  if (items[i] === this) return i
-                return -1
-              }
-              onTriggered: {
-                root.dismiss()
-                root.hideFromDock()
-              }
-            }
-
-            DockMenuAction {
-              visible: root.controlItem
-              iconName: DockModel.dockControlIcon("launcher", root.autoHide)
-              text: "Open App Launcher"
-              keyboardActive: !!root && itemIndex === root.activeMenuIndex
-              readonly property int itemIndex: {
-                if (!root) return -1
-                var items = root.currentFocusableItems()
-                for (var i = 0; i < items.length; ++i)
-                  if (items[i] === this) return i
-                return -1
-              }
-              onTriggered: {
-                root.dismiss()
-                Qt.callLater(() => root.openLauncher())
-              }
-            }
-
-            DockMenuAction {
-              visible: root.controlItem
-              iconName: DockModel.dockControlIcon("add", root.autoHide)
-              text: "Add Application"
-              keyboardActive: !!root && itemIndex === root.activeMenuIndex
-              readonly property int itemIndex: {
-                if (!root) return -1
-                var items = root.currentFocusableItems()
-                for (var i = 0; i < items.length; ++i)
-                  if (items[i] === this) return i
-                return -1
-              }
-              onTriggered: {
-                root.dismiss()
-                root.addApplication()
-              }
-            }
-
-            DockMenuAction {
-              visible: !root.controlItem && root.pinnedItem
-              iconName: "minus"
-              text: "Remove from Dock"
-              keyboardActive: !!root && itemIndex === root.activeMenuIndex
-              readonly property int itemIndex: {
-                if (!root) return -1
-                var items = root.currentFocusableItems()
-                for (var i = 0; i < items.length; ++i)
-                  if (items[i] === this) return i
-                return -1
-              }
-              onTriggered: {
-                root.dismiss()
-                root.removeFromDock()
-              }
-            }
-
-            DockMenuAction {
-              visible: root.controlItem
-              iconName: DockModel.dockControlIcon("auto-hide", root.autoHide)
-              text: root.autoHide ? "Disable Auto-Hide" : "Enable Auto-Hide"
-              keyboardActive: !!root && itemIndex === root.activeMenuIndex
-              readonly property int itemIndex: {
-                if (!root) return -1
-                var items = root.currentFocusableItems()
-                for (var i = 0; i < items.length; ++i)
-                  if (items[i] === this) return i
-                return -1
-              }
-              onTriggered: {
-                root.toggleAutoHide()
-                root.dismiss()
-              }
-            }
-          }
-
-          Row {
-            visible: !root.controlItem && root.runningToplevels.length > 0
-            width: parent.width
-
-            Column {
-              width: parent.width / 2
-
-              Repeater {
-                model: root.runningToplevels
-
-                DockMenuAction {
-                  required property var modelData
-                  required property int index
-
-                  readonly property string statusLabel: root
-                    ? root.windowStatusLabel(modelData) : ""
-                  readonly property int itemIndex: {
-                    if (!root) return -1
-                    var items = root.currentFocusableItems()
-                    for (var i = 0; i < items.length; ++i)
-                      if (items[i] === this) return i
-                    return -1
-                  }
-
-                  iconName: "app-window"
-                  text: (modelData && modelData.activated ? "● " : "")
-                    + statusLabel
-                    + (statusLabel !== "" ? " " : "")
-                    + (String(modelData && modelData.title || "").trim()
-                      || "Window " + (index + 1))
-                  keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                  autoTriggerOnHover: true
-                  onTriggered: if (root) root.selectWindow(modelData)
-                }
-              }
-
-              Item {
-                width: 188
-                height: 10
-
-                Rectangle {
-                  anchors.centerIn: parent
-                  width: 164
-                  height: 1
-                  color: Util.alpha(Color.menu.border, 0.35)
-                }
-              }
-
-              DockMenuAction {
-                iconName: "plus"
-                text: "Open New Window"
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: {
-                  root.dismiss()
-                  root.openNewWindow()
-                }
-              }
-
-              DockMenuAction {
-                visible: !root.controlItem
-                iconName: "eye-off"
-                text: "Hide from Dock"
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: {
-                  root.dismiss()
-                  root.hideFromDock()
-                }
-              }
-
-              DockMenuAction {
-                visible: root.pinnedItem
-                iconName: "minus"
-                text: "Remove from Dock"
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: {
-                  root.dismiss()
-                  root.removeFromDock()
-                }
-              }
-            }
-
-            Column {
-              width: parent.width / 2
-              visible: root.selectedToplevel !== null
-
-              DockMenuAction {
-                iconName: "arrow-right-left"
-                text: "Move to Workspace…"
-                enabled: root.selectedAddress() !== ""
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: root.page = "workspaces"
-              }
-
-              DockMenuAction {
-                iconName: root.selectedFakeFullscreen ? "minimize-2" : "maximize-2"
-                text: root.selectedFakeFullscreen
-                  ? "Restore Size" : "Fullscreen (Keep Bars)"
-                enabled: root.selectedAddress() !== ""
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: root.toggleSelectedFakeFullscreen()
-              }
-
-              DockMenuAction {
-                iconName: root.selectedMinimized ? "maximize-2" : "minus"
-                text: root.selectedMinimized ? "Restore Window" : "Minimize"
-                enabled: root.selectedAddress() !== ""
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: {
-                  root.minimizeRestoreSelected()
-                }
-              }
-
-              Item {
-                width: 188
-                height: 10
-
-                Rectangle {
-                  anchors.centerIn: parent
-                  width: 164
-                  height: 1
-                  color: Util.alpha(Color.menu.border, 0.35)
-                }
-              }
-
-              DockMenuAction {
-                iconName: "x"
-                text: "Close Window"
-                enabled: root.selectedToplevel !== null
-                keyboardActive: !!root && itemIndex === root.activeMenuIndex
-                readonly property int itemIndex: {
-                  if (!root) return -1
-                  var items = root.currentFocusableItems()
-                  for (var i = 0; i < items.length; ++i)
-                    if (items[i] === this) return i
-                  return -1
-                }
-                onTriggered: {
-                  root.windowActions.closeToplevel(root.selectedToplevel)
-                  root.dismiss()
-                }
-              }
-            }
-          }
-        }
-
-        Column {
-          id: workspacesPage
-
-          visible: root.page === "workspaces"
-          width: parent.width
-
-          DockMenuAction {
-            iconName: "chevron-left"
-            text: "Back to Windows"
-            keyboardActive: !!root && itemIndex === root.activeMenuIndex
-            readonly property int itemIndex: {
-              if (!root) return -1
-              var items = root.currentFocusableItems()
-              for (var i = 0; i < items.length; ++i)
-                if (items[i] === this) return i
-              return -1
-            }
-            onTriggered: root.page = "windows"
-          }
-
-          Text {
-            width: parent.width
-            height: 32
-            leftPadding: 12
-            verticalAlignment: Text.AlignVCenter
-            text: "Move to Workspace"
-            color: Color.menu.text
-            font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
-            font.bold: true
-          }
-
-          Repeater {
-            model: 10
-
-            DockMenuAction {
-              required property int index
-
-              readonly property int workspaceNumber: index + 1
-              readonly property int itemIndex: {
-                if (!root) return -1
-                var items = root.currentFocusableItems()
-                for (var i = 0; i < items.length; ++i)
-                  if (items[i] === this) return i
-                return -1
-              }
-
-              iconName: "layout-grid"
-              text: "Workspace " + workspaceNumber
-                + (root.selectedWorkspaceId === workspaceNumber ? "  ✓" : "")
-              enabled: root.selectedWorkspaceId !== workspaceNumber
-              keyboardActive: !!root && itemIndex === root.activeMenuIndex
-              onTriggered: root.moveSelectedToWorkspace(workspaceNumber)
             }
           }
         }
