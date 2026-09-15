@@ -31,7 +31,7 @@ rg -q 'firstWorkspaceIdentity' "$workspace_model"
 # Drag/reveal continue to use the actual card, not prefix/wrapper pixels.
 rg -q 'readonly property Item dropCard:\s*workspaceCard' "$dock"
 rg -q 'card\.mapFromItem\(null, scenePoint\.x, scenePoint\.y\)' "$dock"
-rg -q 'groupedLayout\.ensureVisible\(card, card\.headerWidth\)' "$dock"
+rg -q 'groupedLayout\.ensureVisible\(card\.dropCard, card\.headerWidth\)' "$dock"
 
 # Singleton launchers/fallback stay outside the workspace-card repeater.
 [[ $(rg -c 'root\.workspacePresentation\.globalLaunchers' "$dock") -eq 1 ]]
