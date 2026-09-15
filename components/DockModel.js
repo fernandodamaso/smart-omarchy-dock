@@ -109,14 +109,24 @@ function terminalCliAppId(title) {
     return "smartdock-agent-kilo-code"
   if (text === "Cline")
     return "smartdock-agent-cline"
+  // opencode replaces the window title with its session title
+  // (e.g. "OC | <session>") shortly after launch.
   if (raw.indexOf("opencode") >= 0 || /^oc\s*\|/.test(raw))
     return "opencode"
+  // Herdr writes its own marker to the terminal title via window_title
+  // (e.g. "omarchy · herdr · Lumen Media Hub").
   if (raw.indexOf("herdr") >= 0)
     return "herdr"
+  // Kimi leaves the terminal title alone, so a shell wrapper marks it
+  // (see ~/.bashrc): the title is "kimi" for the whole session.
   if (raw.indexOf("kimi") >= 0)
     return "kimi"
+  // Same for Codex: terminal_title is set to [] so the wrapper-set
+  // "codex" title survives for the whole session.
   if (raw.indexOf("codex") >= 0)
     return "codex"
+  // Hermes CLI: marked by a shell wrapper like kimi/codex
+  // (see ~/.bashrc).
   if (raw.indexOf("hermes") >= 0)
     return "hermes"
   return ""
@@ -487,6 +497,9 @@ function normalizedHexColor(value) {
   return /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/.test(color) ? color : ""
 }
 
+// Color settings may be either a literal hex value or a symbolic
+// Omarchy theme token such as "@accent" / "@menu.background". Keeping the
+// token in the existing setting means it follows theme changes automatically.
 function normalizedColorValue(value) {
   var hex = normalizedHexColor(value)
   if (hex !== "") return hex
@@ -573,6 +586,8 @@ function normalizeSetting(key, value) {
   case "clickAction":
   case "middleClickAction": {
     var action = String(value === undefined || value === null ? "" : value).trim()
+    // Older settings exposed Focus and Launch separately. Treat both legacy
+    // values as the single combined action so existing files keep working.
     if (action === "focus" || action === "launch")
       return "focus-or-launch"
     return applicationActionValues().indexOf(action) >= 0 ? action : defaults[key]
@@ -830,6 +845,7 @@ function moveWindowRequest(address, workspace, usingLua) {
   var target = normalizeWindowAddress(address)
   var raw = String(workspace === undefined || workspace === null ? "" : workspace)
   var workspaceTarget = normalizeWorkspaceTarget(raw)
+  // Reject unsafe input rather than silently changing a named workspace.
   if (!target || !workspaceTarget || raw !== workspaceTarget
       || /[\x00-\x1f\x7f]/.test(raw)) return ""
 
@@ -913,6 +929,8 @@ function fullscreenOwner(toplevels, handles, focusedWorkspaceId, activeToplevel)
     if (!handle || !handle.wayland || windows.indexOf(handle.wayland) < 0)
       continue
 
+    // Quickshell's object-level workspace relationship can be stale; prefer
+    // the authoritative IPC record carried by lastIpcObject.
     var ipc = handle.lastIpcObject || ({})
     var handleWorkspace = ipc.workspace || handle.workspace || ({})
     var handleWorkspaceId = Number(handleWorkspace.id)
@@ -1005,6 +1023,8 @@ function workspaceBadgeText(toplevels, handles) {
       var handle = hyprHandles[j]
       if (!handle || handle.wayland !== window) continue
 
+      // Quickshell's object-level workspace relationship can be stale; prefer
+      // the authoritative IPC record carried by lastIpcObject.
       var ipc = handle.lastIpcObject || ({})
       var workspace = ipc.workspace || handle.workspace || ({})
       var workspaceId = Number(workspace.id)
@@ -1078,6 +1098,7 @@ function webAppId(entry) {
     try {
       url = decodeURIComponent(url)
     } catch (error) {
+      // The encoded URL can still match a generated browser app ID.
     }
     return url.toLowerCase().replace(/[^a-z0-9]/g, "")
   }
@@ -1113,6 +1134,8 @@ function itemWorkspaceId(item, handles) {
       var handle = handles[j]
       if (!handle || handle.wayland !== window) continue
 
+      // Quickshell's object-level workspace relationship can be stale; prefer
+      // the authoritative IPC record carried by lastIpcObject.
       var ipc = handle.lastIpcObject || ({})
       var workspace = ipc.workspace || handle.workspace || ({})
       var id = Number(workspace.id)
@@ -1174,6 +1197,8 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
   for (var topIndex = 0; topIndex < toplevels.length; ++topIndex) {
     var toplevel = toplevels[topIndex]
     var matchedPinned = false
+    // Terminal windows running a recognized CLI app (e.g. opencode)
+    // group under that app instead of the terminal emulator.
     var effectiveAppId = toplevelAppId(toplevel, entries)
 
     if (mergeWindows) {
@@ -1236,18 +1261,22 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
 
   if (sortByWorkspace) {
     items.sort(function(a, b) {
+      // Closed pinned apps stay at the front in their configured order.
       var aClosedPinned = a.pinned && a.toplevels.length === 0
       var bClosedPinned = b.pinned && b.toplevels.length === 0
       if (aClosedPinned && !bClosedPinned) return -1
       if (!aClosedPinned && bClosedPinned) return 1
 
+      // Everything else is ordered by the lowest workspace id it occupies.
       var aWorkspace = itemWorkspaceId(a, handles)
       var bWorkspace = itemWorkspaceId(b, handles)
       if (aWorkspace !== bWorkspace) return aWorkspace - bWorkspace
 
+      // Pinned items precede unpinned items on the same workspace.
       if (a.pinned && !b.pinned) return -1
       if (!a.pinned && b.pinned) return 1
 
+      // Preserve the original construction order for a stable layout.
       return a.originalIndex - b.originalIndex
     })
   }
