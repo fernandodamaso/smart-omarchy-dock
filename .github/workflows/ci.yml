@@ -28,6 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python scripts/fdm942_prepatch.py
           python scripts/fdm942_apply.py
           node tests/test_session_pins.mjs
           node tests/test_workspace_drag.mjs
@@ -36,7 +37,7 @@ jobs:
 
           git fetch origin main
           git checkout origin/main -- .github/workflows/ci.yml
-          rm -f .github/workflows/fdm942-implement.yml scripts/fdm942_apply.py
+          rm -f .github/workflows/fdm942-implement.yml scripts/fdm942_apply.py scripts/fdm942_prepatch.py
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
