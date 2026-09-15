@@ -67,7 +67,8 @@ The initial recognized services are:
 | Service | Origin | Accepted title signal |
 | --- | --- | --- |
 | WhatsApp | `https://web.whatsapp.com` | A leading positive integer in the established `(10) WhatsApp` form |
-| Gmail | `https://mail.google.com` | A positive integer in Gmail's established inbox-title form, with Gmail identity also present in the title |
+| Instagram | `https://www.instagram.com` | A leading positive integer in the established `(4) Instagram` form |
+| Gmail | `https://mail.google.com` | A positive integer in a supported English or Portuguese inbox-title form on the exact inbox route |
 
 Parsing is origin-specific. Numbers in titles from unknown origins are never
 treated as unread counts. Invalid, negative, zero, overflowed, or ambiguous
