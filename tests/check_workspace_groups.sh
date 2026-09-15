@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  printf 'CM-03 workspace grouping contract failed: %s\n' "$1" >&2
+  exit 1
+}
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+defaults = json.loads(Path('config/dock.json').read_text())
+schema = json.loads(Path('config/settings-schema.json').read_text())['settings']
+assert 'workspaceGroups' in defaults and defaults['workspaceGroups'] == []
+assert 'workspaceGroups' in schema
+assert schema['workspaceGroups'].get('type') == 'array'
+assert schema['workspaceGroups'].get('format') == 'workspace-groups'
+assert defaults.get('groupWindows') is False
+legacy = schema['groupWindows']
+assert legacy.get('deprecated') is True
+assert legacy.get('inactive') is True
+assert legacy.get('replacement') == 'workspaceGroups'
+PY
+
+grep -q 'function workspaceGroupIntent' components/DockConfigModel.js \
+  || fail 'DockConfigModel must own exact pair mutation'
+grep -q 'function groupWorkspaceApplication' DockHost.qml \
+  || fail 'DockHost must expose the group intent through the sole settings writer'
+grep -q 'function ungroupWorkspaceApplication' DockHost.qml \
+  || fail 'DockHost must expose exact-pair ungrouping'
+grep -q 'workspaceGroups' components/Dock.qml \
+  || fail 'Dock must consume workspaceGroups'
+grep -q 'buildFlatPresentation' components/Dock.qml \
+  || fail 'flat layout must use workspace-local representation'
+grep -q 'workspaceGroups: workspaceGroups' components/Dock.qml \
+  || fail 'workspace-card layout must receive the saved local policy'
+if grep -q 'groupWindows: groupWindows' components/Dock.qml; then
+  fail 'production workspace-card rendering must not receive legacy global grouping'
+fi
+grep -q 'Group Windows' components/DockContextMenu.qml \
+  || fail 'eligible individual-window menus must expose Group Windows'
+grep -q 'Ungroup' components/DockContextMenu.qml \
+  || fail 'saved local groups must expose Ungroup'
+grep -q 'mutateWorkspaceGroup' components/DockContextActionController.qml \
+  || fail 'menu grouping must delegate through the host controller'
+
+echo 'CM-03 workspace-group structural contract: PASS'
