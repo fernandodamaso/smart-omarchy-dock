@@ -1042,7 +1042,6 @@ PopupWindow {
       Column {
         id: actionColumn
         width: menuList.width
-        implicitHeight: childrenRect.height
 
         Repeater {
           id: actionRepeater
