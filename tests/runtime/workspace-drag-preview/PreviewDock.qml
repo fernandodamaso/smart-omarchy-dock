@@ -271,9 +271,10 @@ Item {
                   enabled: false
                 }
 
+                // Destination placeholders are inert; only the source grab card
+                // keeps a live DockWorkspaceGroup / DragHandler.
                 Components.DockWorkspaceGroup {
                   id: workspaceCard
-                  // Keep one live source card for the active DragHandler grab.
                   visible: !cardSlot.isDestinationPlaceholder
                   opacity: cardSlot.isSourceGrab ? 0 : 1
                   label: String(modelData.label || "")
@@ -285,11 +286,14 @@ Item {
                   slotSize: root.slotSize
                   position: "bottom"
                   animationsEnabled: root.animationsEnabled
-                  workspaceIdentity: cardSlot.workspaceIdentity
+                  workspaceIdentity: cardSlot.isDestinationPlaceholder
+                    ? "" : cardSlot.workspaceIdentity
                   workspaceOwnerMonitor: String(modelData.owner
                     || sectionRow.sectionIdentity)
-                  workspaceMonitorDrag: root.dragController
-                  workspaceMonitorDragDock: root
+                  workspaceMonitorDrag: cardSlot.isDestinationPlaceholder
+                    ? null : root.dragController
+                  workspaceMonitorDragDock: cardSlot.isDestinationPlaceholder
+                    ? null : root
                   applicationModel: modelData.items || []
                   applicationDelegate: Component {
                     Item {

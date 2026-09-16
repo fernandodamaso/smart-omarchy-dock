@@ -18,6 +18,16 @@ require_guest() {
   [[ -n "${SMARTDOCK_SESSION_NAME:-}" ]] || die "SMARTDOCK_SESSION_NAME is required"
   [[ -n "${WAYLAND_DISPLAY:-}" ]] || die "guest WAYLAND_DISPLAY is required"
   [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || die "guest HYPRLAND_INSTANCE_SIGNATURE is required"
+  local vendor product virt
+  vendor=$(tr -d '\0' </sys/class/dmi/id/sys_vendor 2>/dev/null || true)
+  product=$(tr -d '\0' </sys/class/dmi/id/product_name 2>/dev/null || true)
+  virt=$(systemd-detect-virt --vm 2>/dev/null || true)
+  case "${vendor} ${product} ${virt}" in
+    *QEMU*|*KVM*|*qemu*|*kvm*) ;;
+    *)
+      die "refusing to run outside a named KVM guest session"
+      ;;
+  esac
 }
 
 stage_dir() {

@@ -35,6 +35,7 @@ Item {
   property color foreground: "#c0caf5"
   property string fontFamily: ""
   property int fontSize: 12
+  property int cursorShape: Qt.ArrowCursor
 
   signal fixturesCommitted(var fixtures)
   signal presentationChanged(var presentation)
@@ -75,25 +76,13 @@ Item {
     var card = dock.cardFor ? dock.cardFor(workspace) : null
     if (!card) return false
 
-    sourceDock = dock
-    sourceWorkspace = String(workspace)
-    sourceMonitor = String(monitor)
-    sourceLabel = String(label || workspace)
-    sourceCount = Math.max(0, Number(count) || 0)
-    pointerScene = scenePoint
-    pointerVirtual = scenePoint
-    pointerDock = dock
-    targetMonitor = ""
-    hoveredTarget = null
+    // Capture the full card before any drag dimming/placeholder opacity changes.
     captureReady = false
     ghostImage = null
     ghostUrl = ""
     ghostSize = Qt.size(card.width, card.height)
     var cardOrigin = card.mapToItem(null, 0, 0)
     grabOffset = Qt.point(scenePoint.x - cardOrigin.x, scenePoint.y - cardOrigin.y)
-    baselineHits = snapshotBaselines()
-    hoverDrag = null
-    active = true
     captureGeneration += 1
     var generation = captureGeneration
     try {
@@ -104,6 +93,20 @@ Item {
       cancel("capture failed")
       return false
     }
+
+    sourceDock = dock
+    sourceWorkspace = String(workspace)
+    sourceMonitor = String(monitor)
+    sourceLabel = String(label || workspace)
+    sourceCount = Math.max(0, Number(count) || 0)
+    pointerScene = scenePoint
+    pointerVirtual = scenePoint
+    pointerDock = dock
+    targetMonitor = ""
+    hoveredTarget = null
+    baselineHits = snapshotBaselines()
+    hoverDrag = null
+    active = true
     emitPresentation(null)
     updatePointer(scenePoint)
     return active
@@ -152,11 +155,12 @@ Item {
           break
         }
       }
-      if (!section && dock.sectionAt)
-        section = dock.sectionAt(scenePoint)
+      // Snapshot-only targeting while dragging. Live sectionAt is reserved for
+      // begin-time baselines and explicit scroll refresh of baselineHits.
       if (!section) continue
       if (section === sourceMonitor) {
         hoveredTarget = null
+        cursorShape = Qt.ArrowCursor
         return ""
       }
       var drag = {
@@ -166,12 +170,15 @@ Item {
       var projected = PreviewModel.project(committedFixtures, drag)
       if (projected.workspaceOwners[sourceWorkspace] !== section) {
         hoveredTarget = null
+        cursorShape = Qt.ForbiddenCursor
         return ""
       }
       hoveredTarget = dock
+      cursorShape = Qt.ClosedHandCursor
       return section
     }
     hoveredTarget = null
+    cursorShape = Qt.ArrowCursor
     return ""
   }
 
