@@ -59,6 +59,21 @@ Do not wait on `start` in the controller pane. Poll `~/.local/state/smartdock/de
 
 Plugin mode uses `--mode plugin` on one name only. That session copies Omarchy `shell/` plus theme `colors.toml`/`shell.toml` into the guest as read-only test assets and runs one `qs -p …/shell` with `Overlay.qml` enabled and first-party plugins listed in `disabledPlugins`. That is a stripped Omarchy shell for SmartDock qualification, not a full desktop Omarchy host. Never start a second dock in the same guest.
 
+### Host Hyprland FD guard
+
+`dev-session` aborts if the host Hyprland process accumulates too many open
+file descriptors (soft warning at 800, hard stop at 2000). A healthy desktop is
+usually a few hundred; thousands indicate a leak, often from host-side
+`hyprctl` polling. On desktop slowdown, stop the session immediately and check:
+
+```bash
+pid=$(pgrep -xo Hyprland)
+find "/proc/$pid/fd" -maxdepth 1 -type l | wc -l
+```
+
+Prefer a single `./scripts/dev-session exec …` guest script for repeated
+input/capture. Do not run host-side `hyprctl` polling loops from agents.
+
 ### Commands (guest-only CLI targeting)
 
 Public `dock` injects `--runtime standalone|plugin --instance GUEST_DOCK_PID` from the named record. Do not pass `--instance` or `--runtime` yourself. `status --json` labels targeting with `target: guest`, `guest_dock_pid`, and `guest_config_path` (inside the VM). Those fields are never the host production dock; `host_pid`/`config_path` are aliases for the same guest process and guest file. Keep using SSH to the named guest. Never write host `~/.config/smartdock/dock.json`.

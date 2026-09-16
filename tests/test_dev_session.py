@@ -15,8 +15,12 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from dev_session import (  # noqa: E402
     GUEST_CONFIG_PATH,
+    HYPRLAND_FD_HARD_LIMIT,
+    HYPRLAND_FD_SOFT_LIMIT,
     _commit_live_record,
     _flock,
+    _guard_hyprland_fds,
+    _hyprland_fd_count,
     _read_record_unlocked,
     _reservation_path,
     _wait_for_guest_setup,
@@ -52,6 +56,31 @@ class ContractTests(unittest.TestCase):
         for value in ("", "A", "../a", "a/b", "a" * 33):
             with self.assertRaises(ValueError):
                 validate_name(value)
+
+    def test_hyprland_fd_guard_limits(self):
+        self.assertLess(HYPRLAND_FD_SOFT_LIMIT, HYPRLAND_FD_HARD_LIMIT)
+        self.assertGreaterEqual(HYPRLAND_FD_SOFT_LIMIT, 500)
+        self.assertGreaterEqual(HYPRLAND_FD_HARD_LIMIT, 1500)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fd_dir = Path(tmp)
+            for index in range(7):
+                (fd_dir / str(index)).symlink_to("/dev/null")
+            (fd_dir / "plain").write_text("not-a-symlink\n", encoding="utf-8")
+            with mock.patch("dev_session.Path", return_value=fd_dir):
+                self.assertEqual(_hyprland_fd_count(4242), 7)
+
+        with mock.patch("dev_session._hyprland_fd_count", return_value=None):
+            self.assertIsNone(_guard_hyprland_fds("unit"))
+        with mock.patch(
+            "dev_session._hyprland_fd_count", return_value=HYPRLAND_FD_SOFT_LIMIT
+        ):
+            self.assertEqual(_guard_hyprland_fds("unit-soft"), HYPRLAND_FD_SOFT_LIMIT)
+        with mock.patch(
+            "dev_session._hyprland_fd_count", return_value=HYPRLAND_FD_HARD_LIMIT
+        ):
+            with self.assertRaisesRegex(RuntimeError, "FD leak detected"):
+                _guard_hyprland_fds("unit-hard")
 
     def test_qemu_target_is_private(self):
         paths = {

@@ -108,6 +108,7 @@ TestCase {
     id: dragComponent
     Preview.PreviewDrag {
       committedFixtures: testCase.committed
+      animationsEnabled: false
       onFixturesCommitted: fixtures => {
         testCase.committed = fixtures
         testCase.commits++

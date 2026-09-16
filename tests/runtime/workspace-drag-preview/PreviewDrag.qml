@@ -36,10 +36,22 @@ Item {
   property string fontFamily: ""
   property int fontSize: 12
   property int cursorShape: Qt.ArrowCursor
+  property bool settling: false
 
   signal fixturesCommitted(var fixtures)
   signal presentationChanged(var presentation)
   signal ended()
+
+  Timer {
+    id: settleTimer
+    interval: root.animationsEnabled ? 260 : 0
+    repeat: false
+    onTriggered: {
+      root.endSession()
+      root.finishing = false
+      root.settling = false
+    }
+  }
 
   function registered(dock) {
     return dock && docks.indexOf(dock) >= 0
@@ -230,28 +242,40 @@ Item {
   }
 
   function finish(scenePoint) {
-    if (!active || finishing || ending) return false
+    if (!active || finishing || ending || settling) return false
     finishing = true
-    try {
-      updatePointer(scenePoint)
-      if (!active || !targetMonitor) return false
-      var next = PreviewModel.commit(committedFixtures, sourceWorkspace, targetMonitor)
-      if (JSON.stringify(next) === JSON.stringify(committedFixtures))
-        return false
-      committedFixtures = next
-      fixturesCommitted(next)
-      emitPresentation(null)
-      return true
-    } finally {
+    updatePointer(scenePoint)
+    if (!active || !targetMonitor) {
       endSession()
       finishing = false
+      return false
     }
+    var next = PreviewModel.commit(committedFixtures, sourceWorkspace, targetMonitor)
+    if (JSON.stringify(next) === JSON.stringify(committedFixtures)) {
+      endSession()
+      finishing = false
+      return false
+    }
+    committedFixtures = next
+    fixturesCommitted(next)
+    hoverDrag = null
+    emitPresentation(null)
+    if (!animationsEnabled) {
+      endSession()
+      finishing = false
+      return true
+    }
+    settling = true
+    settleTimer.restart()
+    return true
   }
 
   function endSession() {
-    if (!active || ending) return
+    if ((!active && !settling) || ending) return
+    settleTimer.stop()
     ending = true
     active = false
+    settling = false
     clearHighlights()
     sourceDock = null
     sourceWorkspace = ""
@@ -270,6 +294,7 @@ Item {
     ghostSize = Qt.size(0, 0)
     baselineHits = ({})
     hoverDrag = null
+    cursorShape = Qt.ArrowCursor
     emitPresentation(null)
     ended()
     ending = false
@@ -277,6 +302,9 @@ Item {
 
   function cancel(reason) {
     captureGeneration += 1
+    finishing = false
+    settling = false
+    settleTimer.stop()
     if (!active && !ending)
       return
     endSession()

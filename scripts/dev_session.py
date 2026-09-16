@@ -53,6 +53,10 @@ HOST_TOOLS = (
 )
 PORT_MIN = 22000
 PORT_MAX = 22999
+# Host Hyprland FD guard: a healthy compositor is a few hundred descriptors.
+# Thousands usually mean a hyprctl/poll leak; abort before the desktop freezes.
+HYPRLAND_FD_SOFT_LIMIT = 800
+HYPRLAND_FD_HARD_LIMIT = 2000
 ACTIVE_STATES = {"starting", "ready", "stopping"}
 RECORD_FIELDS = (
     "name",
@@ -618,7 +622,68 @@ def prepare_private_inputs(
         raise
 
 
+def _hyprland_pid() -> int | None:
+    result = subprocess.run(
+        ["pgrep", "-xo", "Hyprland"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    text = result.stdout.strip().splitlines()
+    if not text:
+        return None
+    try:
+        return int(text[0])
+    except ValueError:
+        return None
+
+
+def _hyprland_fd_count(pid: int | None = None) -> int | None:
+    target = pid if pid is not None else _hyprland_pid()
+    if target is None:
+        return None
+    fd_dir = Path(f"/proc/{target}/fd")
+    try:
+        return sum(1 for entry in fd_dir.iterdir() if entry.is_symlink())
+    except (FileNotFoundError, PermissionError, NotADirectoryError):
+        return None
+
+
+def _guard_hyprland_fds(context: str = "") -> int | None:
+    """Abort when host Hyprland FD count indicates a leak.
+
+    Returns the observed count when available. Soft limit logs a warning; hard
+    limit raises so the supervisor can stop the owned QEMU session immediately.
+    """
+    count = _hyprland_fd_count()
+    if count is None:
+        return None
+    where = f" during {context}" if context else ""
+    if count >= HYPRLAND_FD_HARD_LIMIT:
+        raise RuntimeError(
+            f"Hyprland FD leak detected{where}: {count} open descriptors "
+            f"(hard limit {HYPRLAND_FD_HARD_LIMIT}); stopping before host desktop freeze"
+        )
+    if count >= HYPRLAND_FD_SOFT_LIMIT:
+        print(
+            json.dumps(
+                {
+                    "event": "hyprland_fd_soft_limit",
+                    "fd_count": count,
+                    "soft_limit": HYPRLAND_FD_SOFT_LIMIT,
+                    "context": context or None,
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+    return count
+
+
 def _host_command_json(command: str) -> object:
+    _guard_hyprland_fds(f"hyprctl -j {command}")
     result = subprocess.run(
         ["hyprctl", "-j", command],
         check=True,
@@ -636,9 +701,11 @@ def _settings_digest() -> str:
 
 
 def _capture_host_state(evidence: Path, tag: str) -> dict:
+    _guard_hyprland_fds(f"host-state {tag}")
     state = {
         "active_workspace": _host_command_json("activeworkspace"),
         "active_window": _host_command_json("activewindow"),
+        "hyprland_fd_count": _hyprland_fd_count(),
         "cursor": subprocess.run(
             ["hyprctl", "cursorpos"],
             check=True,
@@ -704,17 +771,19 @@ def _workspace_matches(client: dict, workspace: str) -> bool:
 def _wait_for_owned_window(pid: int, timeout: float = 20.0) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        _guard_hyprland_fds("wait-for-owned-window")
         clients = _host_command_json("clients")
         matches = [client for client in clients if client.get("pid") == pid]
         if len(matches) > 1:
             raise RuntimeError(f"QEMU PID {pid} owns {len(matches)} host windows; expected one")
         if len(matches) == 1:
             return matches[0]
-        time.sleep(0.25)
+        time.sleep(0.5)
     raise RuntimeError(f"no unique host window found for owned QEMU PID {pid}")
 
 
 def _move_owned_window(pid: int, address: str, workspace: str) -> None:
+    _guard_hyprland_fds("move-owned-window")
     expression = (
         "local w=nil; "
         "for _,candidate in ipairs(hl.get_windows()) do "
@@ -740,22 +809,31 @@ def _place_owned_window(pid: int, workspace: str) -> dict:
     address = client.get("address")
     if not isinstance(address, str) or not address:
         raise RuntimeError("owned QEMU window has no address")
-    if not _workspace_matches(client, workspace):
-        _move_owned_window(pid, address, workspace)
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            matches = [
-                item
-                for item in _host_command_json("clients")
-                if item.get("pid") == pid and item.get("address") == address
-            ]
-            if len(matches) == 1 and _workspace_matches(matches[0], workspace):
-                return matches[0]
-            time.sleep(0.1)
-        raise RuntimeError(
-            f"owned QEMU window {address} did not reach workspace {workspace!r}"
-        )
-    return client
+    if _workspace_matches(client, workspace):
+        return client
+    _move_owned_window(pid, address, workspace)
+    # One bounded verify pass only — avoid tight hyprctl clients polling.
+    time.sleep(0.5)
+    _guard_hyprland_fds("place-owned-window-verify")
+    matches = [
+        item
+        for item in _host_command_json("clients")
+        if item.get("pid") == pid and item.get("address") == address
+    ]
+    if len(matches) == 1 and _workspace_matches(matches[0], workspace):
+        return matches[0]
+    time.sleep(1.0)
+    _guard_hyprland_fds("place-owned-window-retry")
+    matches = [
+        item
+        for item in _host_command_json("clients")
+        if item.get("pid") == pid and item.get("address") == address
+    ]
+    if len(matches) == 1 and _workspace_matches(matches[0], workspace):
+        return matches[0]
+    raise RuntimeError(
+        f"owned QEMU window {address} did not reach workspace {workspace!r}"
+    )
 
 
 def _process_socket_inodes(pid: int) -> set[str]:
