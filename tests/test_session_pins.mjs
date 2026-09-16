@@ -31,7 +31,8 @@ function fixture(usingLua = false) {
   ]
   const workspaces = [
     { id: 3, name: '3', monitorID: 0 },
-    { id: 4, name: '4', monitorID: 1 }
+    { id: 4, name: '4', monitorID: 1 },
+    { id: -2, name: 'project space', monitorID: 0 }
   ]
   const monitors = [
     { id: 0, name: 'DP-1' },
@@ -60,8 +61,24 @@ function fixture(usingLua = false) {
     'pinWindowToWorkspace', 'unpinWindowFromWorkspace', 'windowWorkspacePin',
     'canMoveToplevelToWorkspace', 'moveToplevelToWorkspace',
     'pinWorkspaceToMonitor', 'unpinWorkspaceFromMonitor', 'workspaceMonitorPin',
-    'canRelocateWorkspaceToMonitor', 'reconcileSessionPins'
+    'canRelocateWorkspaceToMonitor', 'canMoveWorkspaceToMonitor',
+    'reconcileSessionPins'
   ]) assert.equal(typeof a[name], 'function', `CM-04 requires central ${name}()`)
+}
+
+// Hover eligibility includes compositor command compatibility, not pins alone.
+{
+  const f = fixture(false)
+  const native = f.actions
+  assert.equal(native.canMoveWorkspaceToMonitor('id:3', 'id:1'), true)
+  assert.equal(native.canMoveWorkspaceToMonitor('id:3', 'id:0'), false,
+    'the live workspace owner is a no-op destination')
+  assert.equal(native.canMoveWorkspaceToMonitor('name:project space', 'id:1'), false)
+  assert.equal(fixture(true).actions.canMoveWorkspaceToMonitor(
+    'name:project space', 'id:1'), true)
+  f.workspaces.splice(0, 1)
+  assert.equal(native.canMoveWorkspaceToMonitor('id:3', 'id:1'), false,
+    'a vanished workspace is never an eligible drop payload')
 }
 
 // One pinned member blocks the whole represented move before any side effect.
@@ -136,6 +153,23 @@ function fixture(usingLua = false) {
   assert.equal(a.unpinWorkspaceFromMonitor('id:3'), true)
   assert.ok(a.workspaceOnMonitorRequests(3, 'id:1').length > 1,
     'unpinned workspace retains the existing pull behavior')
+}
+
+// Explicit workspace relocation is silent: one move, never focus→move→focus.
+{
+  const f = fixture(false)
+  const { actions: a, requests, detached } = f
+  assert.equal(a.moveWorkspaceToMonitor(3, 'id:1'), true)
+  assert.deepEqual(requests, ['moveworkspacetomonitor 3 1'])
+  assert.equal(detached.length, 0,
+    'workspace relocation must not batch focus→move→focus commands')
+
+  requests.length = 0
+  detached.length = 0
+  assert.equal(a.pinWorkspaceToMonitor('id:3'), true)
+  assert.equal(a.moveWorkspaceToMonitor(3, 'id:1'), false)
+  assert.equal(requests.length, 0)
+  assert.equal(detached.length, 0, 'a pinned workspace blocks relocation before dispatch')
 }
 
 // Cycling and minimized activation share the same monitor-pin focus-only path.

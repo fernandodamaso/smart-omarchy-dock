@@ -15,6 +15,18 @@ Rectangle {
   property bool urgent: false
   property bool dropHighlighted: false
   property bool windowDragActive: false
+  property var workspaceMonitorDrag: null
+  property var workspaceMonitorDragDock: null
+  property string workspaceIdentity: ""
+  property string workspaceOwnerMonitor: ""
+  property bool workspaceMonitorGestureOwned: false
+  readonly property bool workspaceMonitorDragActive:
+    workspaceMonitorDrag && workspaceMonitorDrag.active
+  readonly property bool workspaceMonitorDragSource: workspaceMonitorDragActive
+    && workspaceMonitorDrag.sourceDock === workspaceMonitorDragDock
+    && workspaceMonitorDrag.sourceWorkspace === workspaceIdentity
+  readonly property bool headerInputSuppressed: windowDragActive
+    || workspaceMonitorDragActive || workspaceMonitorGestureOwned
   property string position: "bottom"
   property bool presentationVisible: true
   property bool animationsEnabled: true
@@ -32,6 +44,38 @@ Rectangle {
   default property alias items: appRow.data
   signal activated()
 
+  function cancelWorkspaceMonitorDrag(reason) {
+    if (root.workspaceMonitorDrag
+        && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock
+        && root.workspaceMonitorDrag.sourceWorkspace === root.workspaceIdentity)
+      root.workspaceMonitorDrag.cancel(reason)
+  }
+
+  function workspaceMonitorGrabChanged(transition, point) {
+    if (!root.workspaceMonitorDrag
+        || root.workspaceMonitorDrag.sourceDock !== root.workspaceMonitorDragDock
+        || root.workspaceMonitorDrag.sourceWorkspace !== root.workspaceIdentity) return
+    if (transition === PointerDevice.UngrabExclusive) {
+      if (point.state === EventPoint.Released)
+        root.workspaceMonitorDrag.finish(point.scenePosition)
+      else
+        cancelWorkspaceMonitorDrag("non-release ungrab")
+    } else if (transition === PointerDevice.CancelGrabExclusive
+        || transition === PointerDevice.CancelGrabPassive) {
+      cancelWorkspaceMonitorDrag("grab cancelled")
+    }
+  }
+
+  onPresentationVisibleChanged: if (!presentationVisible)
+    cancelWorkspaceMonitorDrag("source hidden")
+  onWorkspaceIdentityChanged: cancelWorkspaceMonitorDrag("workspace changed")
+  onWorkspaceOwnerMonitorChanged: cancelWorkspaceMonitorDrag("workspace owner changed")
+  onWorkspaceMonitorDragDockChanged: cancelWorkspaceMonitorDrag("dock changed")
+  onWindowDragActiveChanged: if (windowDragActive)
+    cancelWorkspaceMonitorDrag("window drag started")
+  onParentChanged: cancelWorkspaceMonitorDrag("source reparented")
+  Component.onDestruction: cancelWorkspaceMonitorDrag("source destroyed")
+
   readonly property real appOccupancy: Math.min(1, appRow.width / Math.max(1, slotSize))
   width: header.width + appRow.width + 2 + 14 * appOccupancy
   height: slotSize + 10
@@ -41,6 +85,7 @@ Rectangle {
   border.width: 1
   border.color: dropHighlighted ? Color.accent
     : urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.50) : Util.alpha(Color.foreground, workspaceHover.hovered ? 0.14 : 0.07)
+  opacity: workspaceMonitorDragSource ? 0.55 : 1
   Behavior on color {
     enabled: root.animationsEnabled
     ColorAnimation { duration: 160 }
@@ -63,10 +108,15 @@ Rectangle {
     height: parent.height - 2
     Accessible.role: Accessible.Button
     Accessible.name: root.label + ", " + root.count + " windows" + (root.urgent ? ", urgent" : "")
-    Accessible.onPressAction: if (root.switchable && !root.windowDragActive) root.activated()
-    activeFocusOnTab: root.switchable && !root.windowDragActive
-    Keys.onReturnPressed: if (root.switchable && !root.windowDragActive) root.activated()
-    Keys.onSpacePressed: if (root.switchable && !root.windowDragActive) root.activated()
+    Accessible.onPressAction: if (root.switchable && !root.headerInputSuppressed) root.activated()
+    activeFocusOnTab: root.switchable && !root.headerInputSuppressed
+    Keys.onReturnPressed: if (root.switchable && !root.headerInputSuppressed) root.activated()
+    Keys.onSpacePressed: if (root.switchable && !root.headerInputSuppressed) root.activated()
+    Keys.onEscapePressed: event => {
+      if (!root.workspaceMonitorDragActive) return
+      root.cancelWorkspaceMonitorDrag("escape")
+      event.accepted = true
+    }
     Text {
       id: title
       anchors.horizontalCenter: parent.horizontalCenter
@@ -84,13 +134,63 @@ Rectangle {
       font.pixelSize: Math.max(Style.font.body, root.slotSize * 0.38)
       font.bold: true
     }
-    TapHandler { enabled: root.switchable && !root.windowDragActive; onTapped: root.activated() }
-    HoverHandler { id: headerHover; cursorShape: root.switchable ? Qt.PointingHandCursor : Qt.ArrowCursor }
+    TapHandler { enabled: root.switchable && !root.headerInputSuppressed; onTapped: root.activated() }
+    HoverHandler {
+      id: headerHover
+      cursorShape: root.workspaceMonitorDragSource ? Qt.ClosedHandCursor
+        : root.switchable ? Qt.PointingHandCursor : Qt.ArrowCursor
+    }
+    DragHandler {
+      id: workspaceMonitorDragHandler
+      enabled: root.switchable && root.workspaceIdentity !== ""
+        && root.workspaceMonitorDrag && root.workspaceMonitorDragDock
+        && root.presentationVisible && !root.windowDragActive
+        && (active || root.workspaceMonitorGestureOwned
+          || !root.workspaceMonitorDrag.active)
+      target: null
+      acceptedButtons: Qt.LeftButton
+      acceptedModifiers: Qt.NoModifier
+      xAxis.enabled: true
+      yAxis.enabled: true
+      grabPermissions: PointerHandler.CanTakeOverFromItems
+        | PointerHandler.CanTakeOverFromHandlersOfDifferentType
+      cursorShape: Qt.ClosedHandCursor
+      onActiveChanged: {
+        if (active) {
+          workspaceMonitorReleaseCleanup.stop()
+          root.workspaceMonitorGestureOwned = true
+          if (root.workspaceMonitorDrag.begin(root.workspaceMonitorDragDock,
+            root.workspaceIdentity, root.label, root.count,
+            root.workspaceOwnerMonitor, centroid.scenePosition))
+            header.forceActiveFocus(Qt.MouseFocusReason)
+        } else {
+          workspaceMonitorReleaseCleanup.restart()
+        }
+      }
+      onActiveTranslationChanged: if (active && root.workspaceMonitorDrag
+          && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock)
+        root.workspaceMonitorDrag.updatePointer(centroid.scenePosition)
+      onGrabChanged: (transition, point) =>
+        root.workspaceMonitorGrabChanged(transition, point)
+      onCanceled: root.cancelWorkspaceMonitorDrag("grab stolen")
+      onEnabledChanged: if (!enabled)
+        root.cancelWorkspaceMonitorDrag("handler disabled")
+    }
+    Timer {
+      id: workspaceMonitorReleaseCleanup
+      interval: 0
+      repeat: false
+      onTriggered: {
+        root.cancelWorkspaceMonitorDrag("grab ended without release")
+        root.workspaceMonitorGestureOwned = false
+      }
+    }
     DockToolTip {
       id: headerTooltip
       anchorItem: header
       position: root.position
-      requestedVisible: headerHover.hovered && root.presentationVisible && !root.windowDragActive
+      requestedVisible: headerHover.hovered && root.presentationVisible
+        && !root.headerInputSuppressed
       text: root.label + " — " + root.count + " windows" + (root.urgent ? " — urgent" : "")
       fontFamily: Style.font.family
       fontSize: Style.font.body

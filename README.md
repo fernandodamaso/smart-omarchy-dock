@@ -516,7 +516,7 @@ Input precedence is intentionally strict:
 
 - Right click always opens the existing application context menu.
 - Left click with no modifier uses `clickAction`.
-- Ctrl+Left click uses the same `clickAction`; `focus-or-launch` also moves that window's workspace onto the clicked dock monitor. In grouped workspace cards, window icons pull their workspace on any click, matching the card name; the dock panel never takes keyboard focus, so modifier keys cannot gate card clicks.
+- Ctrl+Left click uses the same `clickAction`; `focus-or-launch` also moves that window's workspace onto the clicked dock monitor. In grouped workspace cards, window icons pull their workspace on any click, matching the card name. Ordinary clicks do not give the dock keyboard focus; a workspace-header drag captures it only until release or Escape.
 - Middle click with no modifier uses `middleClickAction`.
 - Ctrl+Middle click uses the same `middleClickAction`, including the workspace pull when that action is `focus-or-launch`.
 - Vertical-dominant scrolling uses `scrollAction`; horizontal/tied gestures pass through.
@@ -760,6 +760,16 @@ close, or monitor disconnect it drops only the affected session pin. Transient
 or incomplete refreshes do not by themselves clear pin state. Group/Ungroup
 changes leave window pins untouched.
 
+Drag a grouped workspace header onto another monitor's SmartDock to move the
+whole workspace there without sending a focus command. The source dock must
+already be visible. An auto-hidden destination reveals when the pointer reaches
+its normal edge strip; release over its visible background to move, or release
+elsewhere, return to the source dock, or press Escape to cancel. A session pin
+rejects the move. In `current-monitor` scope the card leaves the source dock and
+appears on the destination; in `all` scope every dock mirrors the same move from
+the source monitor section to the destination section. There is no drag setting,
+and app reordering and window-to-card dragging are unchanged.
+
 Grouped minimize/restore requires a validated recorded workspace: an unknown
 origin never moves a window to a guessed focused workspace. Flat mode retains
 its fallback. Sticky windows appear once on their monitor’s active normal
@@ -810,8 +820,9 @@ is not relocated. Monitor labels/separators, their prefix gaps, **Other windows*
 special sections, ordinary gaps, Trash, navigation buttons and clipped-out areas
 are not destinations: hit-testing maps into the actual workspace card only. A
 non-sticky **Other windows** source is allowed only when its live handle/address
-is resolvable. Dragging between separate monitor-dock surfaces and creating
-workspaces are not supported.
+is resolvable. Window-icon dragging between separate monitor-dock surfaces and
+creating workspaces are not supported; workspace-header dragging between docks
+is described above.
 
 Hold over an overflow navigation button for 250 ms to scroll at 12 logical
 pixels per 40 ms; scrolling stops at the boundary, on leaving the button, or when
