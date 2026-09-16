@@ -641,11 +641,14 @@ PopupWindow {
       records.push(DockMenuModel.separatorRecord("app:ungroup-separator"))
     }
 
-    if (total > 1) {
+    // Saved groups keep this page even when only one window remains.
+    if (total > 0) {
       records.push(DockMenuModel.actionRecord(
         "app:choose", "Choose Window…", "app-window", true,
         "open-chooser-page", null, { submenu: true }))
       records.push(DockMenuModel.separatorRecord("app:window-actions"))
+    }
+    if (total > 1) {
       records.push(DockMenuModel.actionRecord(
         "app:minimize-visible",
         "Minimize " + root.visibleWindowCount + " Visible",
