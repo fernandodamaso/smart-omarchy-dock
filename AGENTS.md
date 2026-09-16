@@ -133,6 +133,12 @@ context, never by launching a second dock beside the production plugin. A portal
 warning about an application ID already being registered can occur when another
 Quickshell process is running; it is not by itself a dock failure.
 
+For dock rendering, input, and screenshot checks during source work, use a fresh
+named KVM guest as described in `docs/DEV_SESSIONS.md`. Sync the current worktree
+after edits, restart the guest dock, collect guest evidence, and stop the session.
+Use standalone mode by default; the plugin guest runs a stripped Omarchy shell
+and does not replace required checks in a full Omarchy desktop.
+
 ## Style
 
 - Use two-space indentation in QML.
