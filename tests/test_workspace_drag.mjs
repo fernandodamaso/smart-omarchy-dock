@@ -276,8 +276,11 @@ for (const mutate of [
   assert.match(handler, /PointerHandler\.CanTakeOverFromItems/)
   assert.match(handler, /header\.forceActiveFocus\(Qt\.MouseFocusReason\)/)
   assert.match(read('Dock.qml'),
-    /WlrLayershell\.keyboardFocus: workspaceMonitorDragSourceActive\s+\? WlrKeyboardFocus\.Exclusive : WlrKeyboardFocus\.None/,
-    'the grabbing source surface must receive Escape until the drag ends')
+    /WlrLayershell\.keyboardFocus: workspaceMonitorDragAvailable\s+\? WlrKeyboardFocus\.OnDemand : WlrKeyboardFocus\.None/,
+    'keyboard mode must remain stable while the pointer handler owns its grab')
+  assert.doesNotMatch(read('Dock.qml'),
+    /keyboardFocus: workspaceMonitorDragSourceActive/,
+    'starting a drag must not recommit layer-surface state and cancel its grab')
   assert.match(groupSource,
     /onWorkspaceOwnerMonitorChanged: cancelWorkspaceMonitorDrag\("workspace owner changed"\)/)
   assert.match(read('Dock.qml'),
