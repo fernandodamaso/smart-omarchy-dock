@@ -1,5 +1,6 @@
 -- Minimal guest Hyprland config for named KVM SmartDock sessions.
-hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
+-- Two virtio-gpu scanouts sit left-to-right so workspace-card drag is real.
+hl.monitor({ output = "", mode = "preferred", position = "auto-right", scale = 1 })
 hl.config({
   general = { layout = "dwindle", gaps_in = 0, gaps_out = 0 },
   misc = { disable_hyprland_logo = true, disable_splash_rendering = true },

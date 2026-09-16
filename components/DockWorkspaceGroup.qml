@@ -36,6 +36,7 @@ Rectangle {
   Connections {
     target: root.viewport
     function onViewportChanged() {
+      if (root.viewport && root.viewport.viewportWidth <= 0) return
       root.presentationVisible = !root.viewport || root.viewport.containsItem(header)
       headerTooltip.scheduleReanchor()
     }
@@ -85,7 +86,8 @@ Rectangle {
   border.width: 1
   border.color: dropHighlighted ? Color.accent
     : urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.50) : Util.alpha(Color.foreground, workspaceHover.hovered ? 0.14 : 0.07)
-  opacity: workspaceMonitorDragSource ? 0.55 : 1
+  opacity: workspaceMonitorDragSource && workspaceMonitorDrag
+    && workspaceMonitorDrag.captureReady ? 0.55 : 1
   Behavior on color {
     enabled: root.animationsEnabled
     ColorAnimation { duration: 160 }
@@ -100,11 +102,11 @@ Rectangle {
     id: header
     color: "transparent"
     radius: Math.max(10, root.radius - 2)
-    border.width: activeFocus ? 1 : 0
+    border.width: activeFocus && !root.workspaceMonitorDragSource ? 1 : 0
     border.color: Color.accent
     x: 1
     y: 1
-    width: Math.min(80, Math.max(30, title.implicitWidth + 12))
+    width: Math.min(80, Math.max(root.slotSize, title.implicitWidth + 16))
     height: parent.height - 2
     Accessible.role: Accessible.Button
     Accessible.name: root.label + ", " + root.count + " windows" + (root.urgent ? ", urgent" : "")
@@ -134,11 +136,26 @@ Rectangle {
       font.pixelSize: Math.max(Style.font.body, root.slotSize * 0.38)
       font.bold: true
     }
-    TapHandler { enabled: root.switchable && !root.headerInputSuppressed; onTapped: root.activated() }
+    TapHandler {
+      enabled: root.switchable && !root.headerInputSuppressed
+      onPressedChanged: if (pressed)
+        header.forceActiveFocus(Qt.MouseFocusReason)
+      onTapped: root.activated()
+    }
     HoverHandler {
       id: headerHover
       cursorShape: root.workspaceMonitorDragSource ? Qt.ClosedHandCursor
         : root.switchable ? Qt.PointingHandCursor : Qt.ArrowCursor
+    }
+    DockToolTip {
+      id: headerTooltip
+      anchorItem: header
+      position: root.position
+      requestedVisible: headerHover.hovered && root.presentationVisible
+        && !root.headerInputSuppressed
+      text: root.label + " — " + root.count + " windows" + (root.urgent ? " — urgent" : "")
+      fontFamily: Style.font.family
+      fontSize: Style.font.body
     }
     DragHandler {
       id: workspaceMonitorDragHandler
@@ -149,7 +166,7 @@ Rectangle {
           || !root.workspaceMonitorDrag.active)
       target: null
       acceptedButtons: Qt.LeftButton
-      acceptedModifiers: Qt.NoModifier
+      dragThreshold: 0
       xAxis.enabled: true
       yAxis.enabled: true
       grabPermissions: PointerHandler.CanTakeOverFromItems
@@ -165,13 +182,18 @@ Rectangle {
             header.forceActiveFocus(Qt.MouseFocusReason)
         } else {
           workspaceMonitorReleaseCleanup.restart()
+          header.focus = false
         }
       }
       onActiveTranslationChanged: if (active && root.workspaceMonitorDrag
           && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock)
         root.workspaceMonitorDrag.updatePointer(centroid.scenePosition)
-      onGrabChanged: (transition, point) =>
+      onGrabChanged: (transition, point) => {
+        if (transition === PointerDevice.GrabPassive
+            || transition === PointerDevice.GrabExclusive)
+          header.forceActiveFocus(Qt.MouseFocusReason)
         root.workspaceMonitorGrabChanged(transition, point)
+      }
       onCanceled: root.cancelWorkspaceMonitorDrag("grab stolen")
       onEnabledChanged: if (!enabled)
         root.cancelWorkspaceMonitorDrag("handler disabled")
@@ -184,16 +206,6 @@ Rectangle {
         root.cancelWorkspaceMonitorDrag("grab ended without release")
         root.workspaceMonitorGestureOwned = false
       }
-    }
-    DockToolTip {
-      id: headerTooltip
-      anchorItem: header
-      position: root.position
-      requestedVisible: headerHover.hovered && root.presentationVisible
-        && !root.headerInputSuppressed
-      text: root.label + " — " + root.count + " windows" + (root.urgent ? " — urgent" : "")
-      fontFamily: Style.font.family
-      fontSize: Style.font.body
     }
   }
 

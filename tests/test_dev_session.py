@@ -13,10 +13,17 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "runtime/dev-session"))
 from dev_session import (  # noqa: E402
     GUEST_CONFIG_PATH,
+    HYPRLAND_FD_HARD_LIMIT,
+    HYPRLAND_FD_SOFT_LIMIT,
     _commit_live_record,
     _flock,
+    _atspi_find_qemu_app,
+    _atspi_process_id,
+    _guard_hyprland_fds,
+    _hyprland_fd_count,
     _read_record_unlocked,
     _reservation_path,
     _wait_for_guest_setup,
@@ -70,6 +77,129 @@ class ContractTests(unittest.TestCase):
         )
         self.assertIn("file=/tmp/a/vars.fd", " ".join(argv))
         self.assertIn("file=/tmp/a/seed.iso,media=cdrom,if=virtio,readonly=on", argv)
+        self.assertIn("virtio-vga,max_outputs=2", argv)
+        self.assertIn("gtk,gl=off,window-close=on,show-tabs=on", argv)
+
+    def test_owned_windows_keep_both_qemu_heads(self):
+        from dev_session import _owned_windows
+
+        clients = [
+            {
+                "pid": 9,
+                "address": "0xa",
+                "title": "QEMU (SmartDock visual-a)",
+                "workspace": {"name": "4"},
+            },
+            {
+                "pid": 9,
+                "address": "0xb",
+                "title": "QEMU (SmartDock visual-a): virtio-vga.1",
+                "workspace": {"name": "1"},
+            },
+            {"pid": 8, "address": "0xc", "title": "ghostty"},
+        ]
+        owned = _owned_windows(clients, 9)
+        self.assertEqual([item["address"] for item in owned], ["0xa", "0xb"])
+
+    def test_hyprland_fd_guard_limits(self):
+        self.assertLess(HYPRLAND_FD_SOFT_LIMIT, HYPRLAND_FD_HARD_LIMIT)
+        self.assertGreaterEqual(HYPRLAND_FD_SOFT_LIMIT, 500)
+        self.assertGreaterEqual(HYPRLAND_FD_HARD_LIMIT, 1500)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fd_dir = Path(tmp)
+            for index in range(7):
+                (fd_dir / str(index)).symlink_to("/dev/null")
+            (fd_dir / "plain").write_text("not-a-symlink\n", encoding="utf-8")
+            with mock.patch("dev_session.Path", return_value=fd_dir):
+                self.assertEqual(_hyprland_fd_count(4242), 7)
+
+        with mock.patch("dev_session._hyprland_fd_count", return_value=None):
+            self.assertIsNone(_guard_hyprland_fds("unit"))
+        with mock.patch(
+            "dev_session._hyprland_fd_count", return_value=HYPRLAND_FD_SOFT_LIMIT
+        ):
+            self.assertEqual(_guard_hyprland_fds("unit-soft"), HYPRLAND_FD_SOFT_LIMIT)
+        with mock.patch(
+            "dev_session._hyprland_fd_count", return_value=HYPRLAND_FD_HARD_LIMIT
+        ):
+            with self.assertRaisesRegex(RuntimeError, "FD leak detected"):
+                _guard_hyprland_fds("unit-hard")
+
+    def test_atspi_qemu_app_matches_owned_pid(self):
+        other = mock.Mock()
+        other.get_name.return_value = "QEMU"
+        other.get_process_id.return_value = 111
+        owned = mock.Mock()
+        owned.get_name.return_value = "QEMU"
+        owned.get_process_id.return_value = 222
+        ignored = mock.Mock()
+        ignored.get_name.return_value = "ghostty"
+        ignored.get_process_id.return_value = 222
+        desktop = mock.Mock()
+        desktop.get_child_count.return_value = 3
+        desktop.get_child_at_index.side_effect = [other, ignored, owned]
+
+        self.assertEqual(_atspi_process_id(owned), 222)
+        self.assertIs(_atspi_find_qemu_app(desktop, 222), owned)
+        desktop.get_child_at_index.side_effect = [other, ignored, owned]
+        self.assertIs(_atspi_find_qemu_app(desktop, 111), other)
+        desktop.get_child_at_index.side_effect = [other, ignored, owned]
+        self.assertIsNone(_atspi_find_qemu_app(desktop, 999))
+
+        import inspect
+        from dev_session import _atspi_qemu_app, _detach_second_qemu_head, _show_both_qemu_heads
+
+        self.assertIn("pid", inspect.signature(_atspi_qemu_app).parameters)
+        self.assertIn("pid", inspect.signature(_detach_second_qemu_head).parameters)
+        source = inspect.getsource(_show_both_qemu_heads)
+        self.assertIn("_detach_second_qemu_head(pid)", source)
+
+    def test_supervised_wait_polls_fd_guard(self):
+        from dev_session import HYPRLAND_FD_POLL_SECONDS, _wait_supervised
+
+        self.assertGreaterEqual(HYPRLAND_FD_POLL_SECONDS, 1)
+        self.assertLessEqual(HYPRLAND_FD_POLL_SECONDS, 15)
+
+        proc = mock.Mock()
+        proc.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd="qemu", timeout=5),
+            subprocess.TimeoutExpired(cmd="qemu", timeout=5),
+            0,
+        ]
+        with mock.patch("dev_session._guard_hyprland_fds") as guard:
+            self.assertEqual(_wait_supervised(proc, poll_seconds=5), 0)
+        self.assertEqual(proc.wait.call_count, 3)
+        self.assertEqual(guard.call_count, 2)
+        guard.assert_called_with("supervise")
+
+        proc = mock.Mock()
+        proc.wait.side_effect = subprocess.TimeoutExpired(cmd="qemu", timeout=5)
+        with mock.patch(
+            "dev_session._guard_hyprland_fds",
+            side_effect=RuntimeError("Hyprland FD leak detected during supervise"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "FD leak detected"):
+                _wait_supervised(proc, poll_seconds=5)
+
+        import inspect
+        from dev_session import start
+
+        self.assertIn("_wait_supervised(proc)", inspect.getsource(start))
+
+    def test_guest_ready_requires_two_monitors(self):
+        import guest_ready
+
+        with self.assertRaises(ValueError):
+            guest_ready.ready_outputs([{"name": "Virtual-1", "x": 0}])
+        primary, names = guest_ready.ready_outputs(
+            [
+                {"name": "Virtual-2", "x": 1280},
+                {"name": "Virtual-1", "x": 0},
+            ]
+        )
+        self.assertEqual(primary, "Virtual-1")
+        self.assertEqual(names, ["Virtual-1", "Virtual-2"])
 
     def test_invalid_source_and_base_image(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -632,6 +762,43 @@ class GuestExecCaptureTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "PNG"):
                         guest_capture("agent-exec")
 
+    def test_capture_grabs_all_guest_outputs(self):
+        captured = {}
+
+        def fake_ssh(_record, command, _timeout):
+            if "grim" in command:
+                captured["command"] = command
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=json.dumps(
+                    {
+                        "wayland_display": "wayland-1",
+                        "hyprland_instance_signature": "sig",
+                        "output": "Virtual-1",
+                        "outputs": ["Virtual-1", "Virtual-2"],
+                        "xdg_runtime_dir": "/run/user/1000",
+                    }
+                ),
+                stderr="",
+            )
+
+        def fake_scp(_record, remote, local):
+            del remote
+            Path(local).write_bytes(b"\x89PNG\r\n\x1a\n" + b"\0" * 32)
+
+        with mock.patch("dev_session._run_ssh", side_effect=fake_ssh):
+            with mock.patch("dev_session._scp_from_guest", side_effect=fake_scp):
+                with mock.patch("dev_session.owned_process", return_value=True):
+                    with mock.patch(
+                        "dev_session._guest_config_digest", return_value="a" * 64
+                    ):
+                        guest_capture("agent-exec")
+        self.assertIn("grim", captured["command"])
+        self.assertNotIn("grim -o ", captured["command"])
+        self.assertNotIn("'grim', '-o'", captured["command"])
+
     def test_exec_and_capture_reject_stopped_or_failed(self):
         for state in ("stopped", "failed", "stopping"):
             self.record["state"] = state
@@ -906,6 +1073,15 @@ class GuestControlHostGuardTests(unittest.TestCase):
             timeout=5,
         )
 
+    def test_guest_control_is_two_head_production_host(self):
+        text = GUEST_CONTROL_SH.read_text(encoding="utf-8")
+        self.assertNotIn("expected exactly one monitor", text)
+        self.assertIn("seed-desktop", text)
+        self.assertIn("guest_ready.py", text)
+        self.assertIn("hl.dsp.exec_cmd", text)
+        lua = (GUEST_CONTROL_SH.parent / "guest-hyprland.lua").read_text(encoding="utf-8")
+        self.assertIn("auto-right", lua)
+
     def test_start_dock_refuses_on_host(self):
         result = self.run_control("start-dock")
         self.assertNotEqual(result.returncode, 0)
@@ -926,7 +1102,7 @@ class GuestControlHostGuardTests(unittest.TestCase):
         self.assertRegex(result.stderr, r"refuses to run on the host")
 
     def test_env_capture_and_stop_dock_refuse_on_host(self):
-        for cmd in ("env", "capture", "stop-dock"):
+        for cmd in ("env", "capture", "stop-dock", "seed-desktop"):
             result = subprocess.run(
                 ["bash", str(GUEST_CONTROL_SH), cmd]
                 + (["/tmp/smartdock-host-capture.png"] if cmd == "capture" else []),
@@ -1142,20 +1318,26 @@ class StartRaceTests(unittest.TestCase):
                                                 return_value={"address": "0xdead"},
                                             ):
                                                 with mock.patch(
-                                                    "dev_session._wait_for_guest_setup",
-                                                    side_effect=fake_wait,
+                                                    "dev_session._show_both_qemu_heads",
+                                                    return_value=[
+                                                        {"address": "0xdead", "at": [0, 0]}
+                                                    ],
                                                 ):
-                                                    with self.assertRaisesRegex(
-                                                        RuntimeError,
-                                                        "inject-after-stop",
+                                                    with mock.patch(
+                                                        "dev_session._wait_for_guest_setup",
+                                                        side_effect=fake_wait,
                                                     ):
-                                                        start(
-                                                            "agent-start",
-                                                            source=self.source,
-                                                            base_image=self.base,
-                                                            mode="standalone",
-                                                            workspace="4",
-                                                        )
+                                                        with self.assertRaisesRegex(
+                                                            RuntimeError,
+                                                            "inject-after-stop",
+                                                        ):
+                                                            start(
+                                                                "agent-start",
+                                                                source=self.source,
+                                                                base_image=self.base,
+                                                                mode="standalone",
+                                                                workspace="4",
+                                                            )
             latest = read_record("agent-start")
             self.assertEqual(latest["state"], "stopped")
             self.assertNotEqual(latest["state"], "failed")
@@ -1258,7 +1440,7 @@ class StartRaceTests(unittest.TestCase):
         proc = mock.Mock()
         proc.pid = 424242
 
-        def wait_and_mark_stopping():
+        def wait_and_mark_stopping(*_args, **_kwargs):
             from dev_session import _write_record
 
             record = read_record("agent-wait")
@@ -1304,30 +1486,36 @@ class StartRaceTests(unittest.TestCase):
                                                 return_value={"address": "0xbeef"},
                                             ):
                                                 with mock.patch(
-                                                    "dev_session._wait_for_guest_setup"
+                                                    "dev_session._show_both_qemu_heads",
+                                                    return_value=[
+                                                        {"address": "0xbeef", "at": [0, 0]}
+                                                    ],
                                                 ):
                                                     with mock.patch(
-                                                        "dev_session.sync_source"
+                                                        "dev_session._wait_for_guest_setup"
                                                     ):
                                                         with mock.patch(
-                                                            "dev_session._run_guest_argv",
-                                                            return_value=mock.Mock(
-                                                                returncode=0,
-                                                                stdout="",
-                                                                stderr="",
-                                                            ),
+                                                            "dev_session.sync_source"
                                                         ):
                                                             with mock.patch(
-                                                                "dev_session.start_guest_dock",
-                                                                side_effect=fake_dock,
+                                                                "dev_session._run_guest_argv",
+                                                                return_value=mock.Mock(
+                                                                    returncode=0,
+                                                                    stdout="",
+                                                                    stderr="",
+                                                                ),
                                                             ):
-                                                                result = start(
-                                                                    "agent-wait",
-                                                                    source=self.source,
-                                                                    base_image=self.base,
-                                                                    mode="standalone",
-                                                                    workspace="4",
-                                                                )
+                                                                with mock.patch(
+                                                                    "dev_session.start_guest_dock",
+                                                                    side_effect=fake_dock,
+                                                                ):
+                                                                    result = start(
+                                                                        "agent-wait",
+                                                                        source=self.source,
+                                                                        base_image=self.base,
+                                                                        mode="standalone",
+                                                                        workspace="4",
+                                                                    )
         self.assertEqual(result["state"], "stopping")
         self.assertIsNone(result.get("error"))
         self.assertEqual(read_record("agent-wait")["state"], "stopping")

@@ -16,6 +16,15 @@ Item {
   property point pointerVirtual: Qt.point(0, 0)
   property var pointerDock: null
   property var hoveredTarget: null
+  property string hoveredMonitor: ""
+  property var sectionHits: []
+  property point pointerScene: Qt.point(0, 0)
+  property bool captureReady: false
+  property int captureGeneration: 0
+  property var ghostImage: null
+  property url ghostUrl: ""
+  property size ghostSize: Qt.size(0, 0)
+  property point grabOffset: Qt.point(0, 0)
   property bool finishing: false
   property bool ending: false
   property color accent: docks.length > 0
@@ -85,21 +94,80 @@ Item {
     return null
   }
 
-  function canTarget(dock) {
-    return available(dock) && dock !== sourceDock
-      && String(dock.monitorIdentity || "") !== sourceMonitor
-      && windowActions
-      && windowActions.canMoveWorkspaceToMonitor(sourceWorkspace, dock.monitorIdentity)
+  function canTargetMonitor(monitor) {
+    return !!monitor && String(monitor) !== sourceMonitor && windowActions
+      && windowActions.canMoveWorkspaceToMonitor(sourceWorkspace, monitor)
+  }
+
+  function snapshotSectionHits() {
+    var hits = []
+    for (var i = 0; i < docks.length; ++i) {
+      var dock = docks[i]
+      if (!dock || typeof dock.workspaceMonitorSectionHits !== "function") continue
+      var list = dock.workspaceMonitorSectionHits() || []
+      for (var j = 0; j < list.length; ++j) {
+        var hit = list[j]
+        if (!hit || !hit.identity || !hit.rect) continue
+        hits.push({ dock: dock, identity: String(hit.identity), rect: hit.rect })
+      }
+    }
+    return hits
+  }
+
+  function captureGhost(dock, workspace, scenePoint) {
+    ghostImage = null
+    ghostUrl = ""
+    captureReady = false
+    ghostSize = Qt.size(0, 0)
+    grabOffset = Qt.point(0, 0)
+    captureGeneration += 1
+    var generation = captureGeneration
+    if (!dock || typeof dock.cardForWorkspace !== "function" || !dock.workspaceDragMapItem) return
+    var card = dock.cardForWorkspace(workspace)
+    if (!card) return
+    ghostSize = Qt.size(card.width, card.height)
+    var area = dock.workspaceDragMapItem
+    var origin = card.mapToItem(area, 0, 0)
+    grabOffset = Qt.point(
+      scenePoint.x - Number(area.x) - origin.x,
+      scenePoint.y - Number(area.y) - origin.y)
+    try {
+      card.grabToImage(function(result) {
+        if (generation !== captureGeneration || !active || ending) return
+        if (!result) return
+        ghostImage = result
+        ghostUrl = result.url || ""
+        ghostSize = Qt.size(card.width, card.height)
+        captureReady = true
+      })
+    } catch (error) {
+      ghostImage = null
+      ghostUrl = ""
+      captureReady = false
+    }
   }
 
   function begin(dock, workspace, label, count, monitor, scenePoint) {
     if (active || finishing || ending || !available(dock) || !windowActions
-        || !validPoint(scenePoint) || !workspace || !monitor) return false
+        || !validPoint(scenePoint) || !workspace || !monitor)
+      return false
     sourceDock = dock
     sourceWorkspace = String(workspace)
     sourceMonitor = String(monitor)
     sourceLabel = String(label || workspace)
     sourceCount = Math.max(0, Number(count) || 0)
+    try {
+      sectionHits = snapshotSectionHits()
+    } catch (error) {
+      sectionHits = []
+    }
+    try {
+      captureGhost(dock, workspace, scenePoint)
+    } catch (error) {
+      ghostImage = null
+      ghostUrl = ""
+      captureReady = false
+    }
     active = true
     try {
       updatePointer(scenePoint)
@@ -110,6 +178,28 @@ Item {
     }
   }
 
+  function refreshSectionHits() {
+    if (!active || ending) return
+    try {
+      sectionHits = snapshotSectionHits()
+    } catch (error) {
+      sectionHits = []
+    }
+  }
+
+  function sectionHitAt(point) {
+    for (var i = 0; i < sectionHits.length; ++i) {
+      var hit = sectionHits[i]
+      if (hit && hit.identity && contains(hit.rect, point)) return hit
+    }
+    return null
+  }
+
+  function sectionTargetAt(point) {
+    var hit = sectionHitAt(point)
+    return hit && canTargetMonitor(hit.identity) ? hit : null
+  }
+
   function updatePointer(scenePoint) {
     if (!active || ending) return false
     if (!validPoint(scenePoint) || !available(sourceDock)) {
@@ -117,26 +207,38 @@ Item {
       return false
     }
 
+    pointerScene = scenePoint
+    refreshSectionHits()
     pointerVirtual = sceneToVirtual(sourceDock, scenePoint)
     pointerDock = pointerDockAt(pointerVirtual)
     hoveredTarget = null
+    hoveredMonitor = ""
+    var covering = sectionHitAt(pointerVirtual)
+    var section = sectionTargetAt(pointerVirtual)
+    if (section) {
+      hoveredTarget = section.dock
+      hoveredMonitor = section.identity
+    }
     for (var i = 0; i < docks.length; ++i) {
       var dock = docks[i]
       if (!dock) continue
       dock.workspaceMonitorDropHighlighted = false
-      if (dock === sourceDock) continue
-      if (dock.dragRevealed && !available(dock)) {
+      if (dock.dragRevealed && !available(dock) && dock !== sourceDock) {
         cancel("destination unavailable")
         return false
       }
       if (!available(dock)) continue
       if (contains(dock.revealRect, pointerVirtual)) dock.dragRevealed = true
-      if (!hoveredTarget && (dock.dragRevealed || dock.dockShown)
-          && contains(dock.dropRect, pointerVirtual) && canTarget(dock))
+      if (!hoveredMonitor && !covering && dock !== sourceDock
+          && (dock.dragRevealed || dock.dockShown)
+          && contains(dock.dropRect, pointerVirtual)
+          && canTargetMonitor(dock.monitorIdentity)) {
         hoveredTarget = dock
+        hoveredMonitor = String(dock.monitorIdentity)
+      }
     }
     if (hoveredTarget) hoveredTarget.workspaceMonitorDropHighlighted = true
-    return hoveredTarget !== null
+    return hoveredMonitor !== ""
   }
 
   function finish(scenePoint) {
@@ -144,9 +246,9 @@ Item {
     finishing = true
     try {
       updatePointer(scenePoint)
-      if (!active || !hoveredTarget || !canTarget(hoveredTarget)) return false
-      return windowActions.moveWorkspaceToMonitor(
-        sourceWorkspace, hoveredTarget.monitorIdentity)
+      if (!active || !hoveredMonitor || !canTargetMonitor(hoveredMonitor))
+        return false
+      return windowActions.moveWorkspaceToMonitor(sourceWorkspace, hoveredMonitor)
     } finally {
       endSession()
       finishing = false
@@ -171,6 +273,15 @@ Item {
     pointerVirtual = Qt.point(0, 0)
     pointerDock = null
     hoveredTarget = null
+    hoveredMonitor = ""
+    pointerScene = Qt.point(0, 0)
+    sectionHits = []
+    captureGeneration += 1
+    captureReady = false
+    ghostImage = null
+    ghostUrl = ""
+    ghostSize = Qt.size(0, 0)
+    grabOffset = Qt.point(0, 0)
     ended()
     ending = false
   }

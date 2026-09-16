@@ -75,16 +75,117 @@ PanelWindow {
       item.width, item.height)
   }
 
-  function workspaceMonitorVisibleRect(item, offsetX, offsetY) {
-    var rect = workspaceMonitorVirtualRect(item, offsetX, offsetY)
-    var left = Math.max(rect.x, monitorRect.x)
-    var top = Math.max(rect.y, monitorRect.y)
-    var right = Math.min(rect.x + rect.width,
-      monitorRect.x + monitorRect.width)
-    var bottom = Math.min(rect.y + rect.height,
-      monitorRect.y + monitorRect.height)
+  function workspaceMonitorClipRect(rect, bounds) {
+    if (!rect || !bounds) return Qt.rect(0, 0, 0, 0)
+    var left = Math.max(rect.x, bounds.x)
+    var top = Math.max(rect.y, bounds.y)
+    var right = Math.min(rect.x + rect.width, bounds.x + bounds.width)
+    var bottom = Math.min(rect.y + rect.height, bounds.y + bounds.height)
     return Qt.rect(left, top, Math.max(0, right - left),
       Math.max(0, bottom - top))
+  }
+
+  function workspaceMonitorVisibleRect(item, offsetX, offsetY) {
+    return workspaceMonitorClipRect(
+      workspaceMonitorVirtualRect(item, offsetX, offsetY), monitorRect)
+  }
+
+  function cardForWorkspace(identity) {
+    var wanted = String(identity || "")
+    if (!wanted || !workspaceCards) return null
+    for (var i = 0; i < workspaceCards.count; ++i) {
+      var wrap = workspaceCards.itemAt(i)
+      if (wrap && wrap.present && String(wrap.workspaceIdentity) === wanted)
+        return wrap.dropCard
+    }
+    return null
+  }
+
+  function workspaceMonitorViewportRect() {
+    if (!groupedLayout || groupedLayout.visible === false || !interactionArea)
+      return monitorRect
+    var inset = Number(groupedLayout.navigationWidth) || 0
+    var origin = groupedLayout.mapToItem(interactionArea, inset, 0)
+    var width = Number(groupedLayout.viewportWidth)
+    if (!isFinite(width) || width <= 0)
+      width = Math.max(0, Number(groupedLayout.width) - inset * 2)
+    return workspaceMonitorClipRect(Qt.rect(
+      sceneOrigin.x + interactionArea.x + origin.x,
+      sceneOrigin.y + interactionArea.y + origin.y,
+      width, groupedLayout.height), monitorRect)
+  }
+
+  function workspaceMonitorSectionHits() {
+    var hits = []
+    if (!workspaceCards || !interactionArea) return hits
+    try {
+      var view = workspaceMonitorViewportRect()
+      for (var i = 0; i < workspaceCards.count; ++i) {
+        var wrap = workspaceCards.itemAt(i)
+        if (!wrap || !wrap.present) continue
+        var identity = String(wrap.sectionMonitorIdentity || "")
+        if (!identity) continue
+        var origin = wrap.mapToItem(interactionArea, 0, 0)
+        var rect = workspaceMonitorClipRect(Qt.rect(
+          sceneOrigin.x + interactionArea.x + origin.x,
+          sceneOrigin.y + interactionArea.y + origin.y,
+          wrap.width, wrap.height), view)
+        if (rect.width <= 0 || rect.height <= 0) continue
+        var last = hits.length ? hits[hits.length - 1] : null
+        if (last && last.identity === identity) {
+          var left = Math.min(last.rect.x, rect.x)
+          var top = Math.min(last.rect.y, rect.y)
+          var right = Math.max(last.rect.x + last.rect.width, rect.x + rect.width)
+          var bottom = Math.max(last.rect.y + last.rect.height, rect.y + rect.height)
+          last.rect = Qt.rect(left, top, right - left, bottom - top)
+        } else {
+          hits.push({ identity: identity, rect: rect })
+        }
+      }
+    } catch (error) {
+      return []
+    }
+    return hits
+  }
+
+  function monitorDropSectionRect() {
+    var identity = String(workspaceMonitorDropIdentity || "")
+    var empty = Qt.rect(0, 0, 0, 0)
+    if (!identity || !workspaceCards || !dockLayout) return empty
+    try {
+      var found = false
+      var hits = empty
+      for (var i = 0; i < workspaceCards.count; ++i) {
+        var wrap = workspaceCards.itemAt(i)
+        if (!wrap || !wrap.present) continue
+        if (String(wrap.sectionMonitorIdentity || "") !== identity) continue
+        var origin = wrap.mapToItem(dockLayout, 0, 0)
+        var rect = Qt.rect(origin.x, origin.y, wrap.width, wrap.height)
+        if (groupedLayout && groupedLayout.visible !== false) {
+          var inset = Number(groupedLayout.navigationWidth) || 0
+          var viewOrigin = groupedLayout.mapToItem(dockLayout, inset, 0)
+          var width = Number(groupedLayout.viewportWidth)
+          if (!isFinite(width) || width <= 0)
+            width = Math.max(0, Number(groupedLayout.width) - inset * 2)
+          rect = workspaceMonitorClipRect(rect, Qt.rect(
+            viewOrigin.x, viewOrigin.y, width, groupedLayout.height))
+        }
+        if (rect.width <= 0 || rect.height <= 0) continue
+        if (!found) {
+          hits = rect
+          found = true
+          continue
+        }
+        var left = Math.min(hits.x, rect.x)
+        var top = Math.min(hits.y, rect.y)
+        var right = Math.max(hits.x + hits.width, rect.x + rect.width)
+        var bottom = Math.max(hits.y + hits.height, rect.y + rect.height)
+        hits = Qt.rect(left, top, right - left, bottom - top)
+      }
+      return found ? hits : empty
+    } catch (error) {
+      return empty
+    }
   }
 
   property int dragSource: -1
@@ -93,6 +194,11 @@ PanelWindow {
   property bool autoHideRevealed: false
   property bool dragRevealed: false
   property bool workspaceMonitorDropHighlighted: false
+  readonly property string workspaceMonitorDropIdentity: {
+    var drag = workspaceMonitorDrag
+    if (!drag || !drag.active || drag.hoveredTarget !== root) return ""
+    return String(drag.hoveredMonitor || "")
+  }
   property int badgeStateRevision: 0
   readonly property bool workspaceDragActive: workspaceDrag.active
   readonly property DockWorkspaceDrag workspaceDragController: workspaceDrag
@@ -358,6 +464,7 @@ PanelWindow {
     : Qt.rect(0, 0, 0, 0)
   readonly property bool workspaceMonitorDragAvailable:
     grouped && !vertical && monitorIdentity !== "" && visible
+  readonly property Item workspaceDragMapItem: interactionArea
   readonly property bool workspaceMonitorDragActive:
     workspaceMonitorDrag !== null && workspaceMonitorDrag.active
   readonly property bool workspaceMonitorDragSourceActive:
@@ -819,6 +926,8 @@ PanelWindow {
     id: workspaceDrag
     anchors.fill: parent
     z: 100
+    enabled: false
+    visible: active
     windowActions: root.windowActions
     targetAtScenePoint: root.workspaceDropTargetAt
     iconSize: root.iconSize
@@ -840,39 +949,27 @@ PanelWindow {
     onEnded: root.finishWorkspacePresentation()
   }
 
-  Rectangle {
+  Item {
     id: workspaceMonitorDragProxy
     visible: root.workspaceMonitorDragActive
       && root.workspaceMonitorDrag.pointerDock === root
+      && root.workspaceMonitorDrag.ghostUrl !== ""
     enabled: false
     z: 101
     readonly property point pointerLocal: Qt.point(
       root.workspaceMonitorDrag.pointerVirtual.x - root.sceneOrigin.x,
       root.workspaceMonitorDrag.pointerVirtual.y - root.sceneOrigin.y)
-    x: Math.max(0, Math.min(root.width - width, pointerLocal.x - width / 2))
-    y: Math.max(0, Math.min(root.height - height, pointerLocal.y - height / 2))
-    width: Math.min(180,
-      Math.max(42, workspaceMonitorDragProxyLabel.implicitWidth + 18))
-    height: 30
-    radius: height / 2
-    color: root.workspaceMonitorDrag.background
-    border.color: root.workspaceMonitorDrag.accent
-    border.width: 1
-    opacity: 0.9
+    width: Math.max(1, root.workspaceMonitorDrag.ghostSize.width)
+    height: Math.max(1, root.workspaceMonitorDrag.ghostSize.height)
+    x: pointerLocal.x - root.workspaceMonitorDrag.grabOffset.x
+    y: Math.max(0, Math.min(root.height - height,
+      pointerLocal.y - root.workspaceMonitorDrag.grabOffset.y))
 
-    Text {
-      id: workspaceMonitorDragProxyLabel
-      anchors.centerIn: parent
-      width: parent.width - 18
-      elide: Text.ElideRight
-      horizontalAlignment: Text.AlignHCenter
-      text: root.workspaceMonitorDrag.sourceLabel
-        + (root.workspaceMonitorDrag.sourceCount > 0
-          ? " · " + root.workspaceMonitorDrag.sourceCount : "")
-      color: root.workspaceMonitorDrag.foreground
-      font.family: root.workspaceMonitorDrag.fontFamily
-      font.pixelSize: root.workspaceMonitorDrag.fontSize
-      font.bold: true
+    Image {
+      anchors.fill: parent
+      source: root.workspaceMonitorDrag.ghostUrl
+      fillMode: Image.PreserveAspectFit
+      asynchronous: false
     }
   }
 
@@ -938,17 +1035,6 @@ PanelWindow {
     }
 
     Rectangle {
-      anchors.fill: parent
-      visible: root.workspaceMonitorDropHighlighted
-      enabled: false
-      z: 90
-      radius: parent.radius
-      color: Util.alpha(Color.accent, 0.12)
-      border.color: Color.accent
-      border.width: 2
-    }
-
-    Rectangle {
       x: dockBackground.radius
       y: Math.max(1, Border.top(root.dockBorderSpec))
       width: Math.max(0, parent.width - x * 2)
@@ -976,6 +1062,25 @@ PanelWindow {
         ? Math.max(leadingEnd, Math.min(centeredAppStart,
             Math.max(leadingEnd, trailingStart - root.appMainExtent)))
         : leadingEnd
+
+      Rectangle {
+        id: monitorDropSectionGlow
+        readonly property rect section: {
+          var identity = root.workspaceMonitorDropIdentity
+          return identity ? root.monitorDropSectionRect() : Qt.rect(0, 0, 0, 0)
+        }
+        visible: section.width > 0 && section.height > 0
+        enabled: false
+        z: 80
+        x: section.x
+        y: section.y
+        width: section.width
+        height: section.height
+        radius: Math.max(12, Style.cornerRadius - 4)
+        color: Util.alpha(Color.accent, 0.12)
+        border.color: Color.accent
+        border.width: 2
+      }
 
       DockControlItem {
         id: controlItem
@@ -1042,6 +1147,8 @@ PanelWindow {
         onViewportChanged: {
           windowPreview.refreshAnchorGeometry()
           if (root.workspaceDragActive) workspaceDrag.updatePointer(workspaceDrag.pointerScene)
+          if (root.workspaceMonitorDrag && root.workspaceMonitorDrag.active)
+            root.workspaceMonitorDrag.updatePointer(root.workspaceMonitorDrag.pointerScene)
         }
         DockPresentationModel {
           id: workspacePresentationModel
@@ -1072,6 +1179,9 @@ PanelWindow {
             readonly property real headerWidth: workspaceCard.headerWidth
             readonly property var monitorSection: WorkspaceModel.monitorGroupForWorkspace(
               root.workspacePresentation.monitorGroups, workspaceIdentity, present)
+            readonly property string sectionMonitorIdentity: String(
+              (modelData.item && modelData.item.monitorIdentity)
+              || (monitorSection && monitorSection.identity) || "")
             readonly property bool hasMonitorPrefix: monitorSection !== null
             readonly property real prefixGap: hasMonitorPrefix
               ? Style.spacing.controlGap : 0
@@ -1345,6 +1455,7 @@ PanelWindow {
     Connections {
       target: groupedLayout
       function onViewportChanged() {
+        if (groupedLayout.viewportWidth <= 0) return
         appItem.presentationVisible = !appItem.originOnly || groupedLayout.containsItem(appItem)
         if (!appItem.presentationVisible) appItem.dismissPopups()
         else appItem.refreshPopupGeometry()

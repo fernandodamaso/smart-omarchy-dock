@@ -235,6 +235,7 @@ ds._disable_launch_rule = lambda *a: None
 ds.qemu_argv = lambda *a: [sys.executable, "-c", "import time; time.sleep(60)"]
 ds._wait_for_owned_port = lambda *a: None
 ds._place_owned_window = lambda *a: {"address": "0xfixture"}
+ds._show_both_qemu_heads = lambda *a: [{"address": "0xfixture", "at": [0, 0]}]
 def gate(record, evidence):
     if phase == "boot":
         (root / "gate").write_text("boot")

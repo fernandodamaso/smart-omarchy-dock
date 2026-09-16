@@ -41,6 +41,9 @@ TestCase {
       property bool dockShown: false
       property bool workspaceMonitorDropHighlighted: false
       property bool workspaceMonitorDragAvailable: true
+      property var sectionHits: []
+      function workspaceMonitorSectionHits() { return sectionHits }
+      function cardForWorkspace(identity) { return null }
       property color workspaceMonitorDragAccent: "#80a0ff"
       property color workspaceMonitorDragBackground: "#202020"
       property color workspaceMonitorDragForeground: "white"
@@ -99,6 +102,7 @@ TestCase {
     compare(scene.drag.active, false)
     compare(scene.drag.sourceDock, null)
     compare(scene.drag.hoveredTarget, null)
+    compare(scene.drag.hoveredMonitor, "")
     compare(scene.drag.pointerDock, null)
     compare(scene.source.dragRevealed, false)
     compare(scene.destination.dragRevealed, false)
@@ -165,6 +169,28 @@ TestCase {
     verifyClean(scene)
   }
 
+  function test_sameDockForeignSectionCommitsOnReleaseOnly() {
+    var scene = makeScene()
+    scene.source.sectionHits = [
+      { identity: "id:0", rect: Qt.rect(-1536, 790, 736, 64) },
+      { identity: "id:1", rect: Qt.rect(-800, 790, 700, 64) }
+    ]
+    verify(scene.drag.begin(scene.source, "id:3", "Work", 4, "id:0", Qt.point(100, 100)))
+    compare(scene.drag.hoveredMonitor, "")
+    compare(actions.moves, 0)
+
+    scene.drag.updatePointer(Qt.point(836, 76))
+    compare(scene.drag.hoveredMonitor, "id:1")
+    compare(scene.drag.hoveredTarget, scene.source)
+    compare(actions.moves, 0, "hovering the other monitor section must not move yet")
+
+    verify(scene.drag.finish(Qt.point(836, 76)))
+    compare(actions.moves, 1)
+    compare(actions.movedWorkspace, "id:3")
+    compare(actions.movedMonitor, "id:1")
+    verifyClean(scene)
+  }
+
   function test_alreadyVisibleDestinationAcceptsDirectDrop() {
     var scene = makeScene()
     scene.destination.dockShown = true
@@ -202,5 +228,45 @@ TestCase {
     scene.drag.unregisterDock(scene.destination)
     verifyClean(scene)
     compare(scene.drag.endings, 1)
+  }
+
+  function test_rejectedSectionBlocksPhysicalDockFallback() {
+    var scene = makeScene()
+    scene.destination.dockShown = true
+    scene.destination.sectionHits = [
+      { identity: "id:0", rect: Qt.rect(600, -80, 360, 70) },
+      { identity: "id:1", rect: Qt.rect(960, -80, 360, 70) }
+    ]
+    verify(scene.drag.begin(scene.source, "id:3", "Work", 4, "id:0", Qt.point(100, 100)))
+    scene.drag.updatePointer(Qt.point(2436, -784))
+    compare(scene.drag.hoveredMonitor, "",
+      "dropping onto the current-owner section of another dock must not fall through")
+    compare(scene.drag.hoveredTarget, null)
+    verify(!scene.drag.finish(Qt.point(2436, -784)))
+    compare(actions.moves, 0)
+    verifyClean(scene)
+  }
+
+  function test_sectionHitsRefreshAfterDestinationReveal() {
+    var scene = makeScene()
+    scene.destination.dropRect = Qt.rect(0, 0, 0, 0)
+    scene.destination.sectionHits = [
+      { identity: "id:1", rect: Qt.rect(600, 800, 720, 70) }
+    ]
+    verify(scene.drag.begin(scene.source, "id:3", "Work", 4, "id:0", Qt.point(100, 100)))
+    compare(scene.drag.sectionHits[0].rect.y, 800)
+
+    scene.drag.updatePointer(Qt.point(2436, -745))
+    compare(scene.destination.dragRevealed, true)
+    scene.destination.sectionHits = [
+      { identity: "id:1", rect: Qt.rect(600, -80, 720, 70) }
+    ]
+    scene.drag.updatePointer(Qt.point(2436, -784))
+    compare(scene.drag.hoveredMonitor, "id:1",
+      "revealed destination sections must retarget from live geometry, not pickup snapshots")
+    verify(scene.drag.finish(Qt.point(2436, -784)))
+    compare(actions.moves, 1)
+    compare(actions.movedMonitor, "id:1")
+    verifyClean(scene)
   }
 }

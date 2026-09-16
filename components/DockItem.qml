@@ -80,6 +80,9 @@ Item {
   }
 
   function workspaceGrabChanged(transition, point) {
+    if (transition === PointerDevice.GrabPassive
+        || transition === PointerDevice.GrabExclusive)
+      root.forceActiveFocus(Qt.MouseFocusReason)
     if (!root.workspaceDrag || root.workspaceDrag.sourceItem !== root) return
     if (transition === PointerDevice.UngrabExclusive) {
       if (point.state === EventPoint.Released)
@@ -664,8 +667,8 @@ Item {
     }
   }
 
-  // Separate from pin reordering: both axes, normal platform threshold, and
-  // no target translation. Clipping the source must not disable its live grab.
+  // Separate from pin reordering: both axes, activate on press so
+  // layer-shell can keep the grab, and no target translation.
   DragHandler {
     id: workspaceDragHandler
     enabled: root.workspaceDragEnabled && root.presentationActive
@@ -674,7 +677,7 @@ Item {
         && !root.sticky && !root.workspaceInputSuppressed)
     target: null
     acceptedButtons: Qt.LeftButton
-    acceptedModifiers: Qt.NoModifier
+    dragThreshold: 0
     xAxis.enabled: true
     yAxis.enabled: true
     grabPermissions: PointerHandler.CanTakeOverFromItems
