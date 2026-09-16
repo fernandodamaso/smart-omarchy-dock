@@ -110,6 +110,22 @@ Item {
     return changeApplication("hide", { id: desktopId })
   }
 
+  function groupWorkspaceApplication(desktopId, workspace) {
+    return changeWorkspaceGroup("group", desktopId, workspace)
+  }
+
+  function ungroupWorkspaceApplication(desktopId, workspace) {
+    return changeWorkspaceGroup("ungroup", desktopId, workspace)
+  }
+
+  function changeWorkspaceGroup(action, desktopId, workspace) {
+    var blocked = mutationBlocked()
+    if (blocked) return blocked
+    return commitSettings(ConfigModel.workspaceGroupIntent(
+      settings, applications, action,
+      { desktopId: desktopId, workspace: workspace }), false)
+  }
+
   function toggleBrowserActivityMute(serviceId) {
     var blocked = mutationBlocked()
     if (blocked) return blocked
@@ -432,6 +448,7 @@ Item {
 
   DockWindowActions {
     id: windowActionsController
+    applicationMutationController: root
   }
 
   DockBadgeTracker {

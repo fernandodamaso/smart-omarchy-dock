@@ -28,8 +28,14 @@ grep -Eq 'onTapped: contextMenu\.open\(\)' "$control_item" \
   || { echo "Controls left click must open the controls menu" >&2; exit 1; }
 grep -Eq 'signal openLauncher' "$context_menu" \
   || { echo "Controls menu is missing its launcher action signal" >&2; exit 1; }
-grep -Eq 'text: "Open App Launcher"' "$context_menu" \
+grep -Eq '"controls:launcher"' "$context_menu" \
+  || { echo "Controls menu is missing its launcher action record" >&2; exit 1; }
+grep -Eq '"Open App Launcher"' "$context_menu" \
   || { echo "Controls menu is missing Open App Launcher" >&2; exit 1; }
+grep -Eq 'case "open-launcher"' "$context_menu" \
+  || { echo "Controls menu launcher record is not dispatched" >&2; exit 1; }
+grep -Eq 'root\.openLauncher\(\)' "$context_menu" \
+  || { echo "Controls menu launcher dispatch is not wired to its signal" >&2; exit 1; }
 grep -Eq 'Qt\.callLater\(\(\) => root\.activate\(\)\)' "$control_item" \
   || { echo "Launcher action is not wired to the configured command" >&2; exit 1; }
 
