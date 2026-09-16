@@ -50,6 +50,7 @@ const left = {
   id: 0,
   name: 'DP-1',
   description: 'Built-in panel',
+  model: 'Panel 14',
   focused: false,
   activeWorkspace: { id: 1, name: '1' }
 }
@@ -60,6 +61,7 @@ const right = {
     id: 1,
     name: 'HDMI-A-1',
     description: 'Desk display',
+    model: 'Desk 27',
     focused: true,
     activeWorkspace: { id: 3, name: '3' }
   }
@@ -112,9 +114,12 @@ assert.deepEqual(monitorIdentitySummary(initial), [
   ['name:Design', 'id:1', false]
 ], 'each workspace appears once under one canonical monitor owner')
 assert.deepEqual(monitorGroupSummary(initial), [
-  ['id:0', 'DP-1', 'Built-in panel', false, 'id:1', 'id:1'],
-  ['id:1', 'HDMI-A-1', 'Desk display', true, 'id:3', 'id:2']
+  ['id:0', 'DP-1', 'Panel 14', false, 'id:1', 'id:1'],
+  ['id:1', 'HDMI-A-1', 'Desk 27', true, 'id:3', 'id:2']
 ], 'monitor metadata carries active/focus state and section boundaries')
+assert.deepEqual(Array.from(initial.monitorGroups, group => group.description),
+  ['Built-in panel', 'Desk display'],
+  'compact labels retain the complete monitor description')
 assert.deepEqual(Array.from(initial.groups.filter(group => group.active), group => group.identity),
   ['id:1', 'id:3'], 'each monitor active workspace gets active card styling')
 assert.equal(initial.globalLaunchers.length, 1, 'closed global launchers remain singleton')
@@ -146,7 +151,15 @@ left.description = 'Renamed built-in panel'
 const afterDescription = buildAll()
 assert.equal(WorkspaceModel.presentationsEqual(beforeDescription, afterDescription), false,
   'same-object monitor description changes refresh metadata')
-assert.equal((afterDescription.monitorGroups || [])[0]?.label, 'Renamed built-in panel')
+assert.equal((afterDescription.monitorGroups || [])[0]?.label, 'Panel 14')
+assert.equal((afterDescription.monitorGroups || [])[0]?.description, 'Renamed built-in panel')
+
+const beforeModel = afterDescription
+left.model = 'Panel 15'
+const afterModel = buildAll()
+assert.equal(WorkspaceModel.presentationsEqual(beforeModel, afterModel), false,
+  'same-object monitor model changes refresh the compact label')
+assert.equal((afterModel.monitorGroups || [])[0]?.label, 'Panel 15')
 
 const movingWindow = { appId: 'moving' }
 const movingWorkspace = { id: 5, name: 'Five', monitorID: 0 }

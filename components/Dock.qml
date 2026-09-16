@@ -954,6 +954,8 @@ PanelWindow {
               DockMonitorLabel {
                 label: workspaceCardWrapper.monitorSection
                   ? String(workspaceCardWrapper.monitorSection.label || "") : ""
+                description: workspaceCardWrapper.monitorSection
+                  ? String(workspaceCardWrapper.monitorSection.description || "") : ""
                 connector: workspaceCardWrapper.monitorSection
                   ? String(workspaceCardWrapper.monitorSection.connector || "") : ""
                 focused: workspaceCardWrapper.monitorSection

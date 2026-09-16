@@ -702,10 +702,11 @@ saved values are preserved. `groupWindows` remains effective in either layout.
 By default, `workspaceMonitorScope: all` shows the same ordered monitor sections,
 workspaces and applications on every monitor dock. Each connected monitor section
 is introduced inline before its first present workspace card by a small display
-glyph and a bounded informational label. The label prefers the live monitor
-description, then connector/name, then `Monitor N`; its full label/connector is
-available in the tooltip/accessibility text. The prefix is not clickable, does
-not take keyboard focus, and is not a workspace-drop target. Use
+glyph and a bounded informational label. The compact label prefers the live
+monitor model, then description, connector/name, and `Monitor N`; the full
+description/connector remains available in the tooltip/accessibility text. The
+prefix is not clickable, does not take keyboard focus, and is not a workspace-drop target.
+Use
 `smartdock config set workspaceMonitorScope current-monitor --json` for the
 existing local, unprefixed workspace-card appearance. Missing/invalid values and
 `config reset workspaceMonitorScope` use `all`; flat layouts remain unchanged.
