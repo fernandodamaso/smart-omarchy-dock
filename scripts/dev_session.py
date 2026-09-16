@@ -79,6 +79,44 @@ RECORD_FIELDS = (
 )
 
 
+class _SessionInterrupted(SystemExit):
+    def __init__(self, signum: int):
+        super().__init__(128 + signum)
+        self.signum = signum
+
+    def __str__(self) -> str:
+        return f"session supervisor received {signal.Signals(self.signum).name}"
+
+
+class _SupervisorSignals:
+    """Unwind start on termination, without interrupting ownership or cleanup."""
+
+    def __init__(self):
+        self.previous = {}
+        self.signum = None
+        self.deferred = False
+
+    def install(self) -> None:
+        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            self.previous[signum] = signal.signal(signum, self.handle)
+
+    def handle(self, signum: int, _frame) -> None:
+        if self.signum is not None:
+            return  # A second signal must not abort cleanup.
+        self.signum = signum
+        if not self.deferred:
+            raise _SessionInterrupted(signum)
+
+    def resume(self) -> None:
+        self.deferred = False
+        if self.signum is not None:
+            raise _SessionInterrupted(self.signum)
+
+    def restore(self) -> None:
+        for signum, handler in self.previous.items():
+            signal.signal(signum, handler)
+
+
 def apply_guest_targeting(record: dict, *, recorded_state: str | None = None) -> dict:
     """Status/record view: CLI targeting is the named guest, never production."""
     view = dict(record)
@@ -922,6 +960,12 @@ def source_manifest(source: Path) -> tuple[list[dict], str]:
     for raw in _git_ls_files(source):
         rel = _validate_relpath(os.fsdecode(raw))
         full = source / rel
+        try:
+            full.lstat()
+        except (FileNotFoundError, NotADirectoryError):
+            # The Git index still lists unstaged deletions and rename sources.
+            # Inventory working-tree state, including dangling symlinks.
+            continue
         if full.is_symlink():
             payload = os.fsencode(os.readlink(full))
             entries.append(
@@ -1159,6 +1203,34 @@ def _next_frame_path(evidence: Path) -> Path:
     return evidence / f"frame-{next_number:03d}.png"
 
 
+def _guest_config_digest(record: dict, config_path: str) -> str | None:
+    """Hash persisted settings inside this guest; never read host defaults."""
+    script = """
+import hashlib, json, sys
+from pathlib import Path
+try:
+    digest = hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest()
+except FileNotFoundError:
+    digest = None
+print(json.dumps(digest))
+""".strip()
+    result = _run_ssh(record, shlex.join(["python3", "-c", script, config_path]), 10)
+    if result.returncode != 0:
+        raise RuntimeError(
+            "guest config digest failed: "
+            f"{(result.stderr or result.stdout or '').strip()}"
+        )
+    try:
+        digest = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("malformed guest config digest") from exc
+    if digest is not None and (
+        not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+    ):
+        raise RuntimeError("malformed guest config digest")
+    return digest
+
+
 def guest_capture(name: str) -> Path:
     """Capture one guest PNG into NAME's numbered evidence path."""
     record = _require_runnable_session(name)
@@ -1193,17 +1265,21 @@ def guest_capture(name: str) -> Path:
     if len(data) < 32 or data[:8] != PNG_SIGNATURE:
         local.unlink(missing_ok=True)
         raise ValueError("capture is not a valid PNG")
-    config_path = Path(record.get("source") or "") / "config/dock.json"
-    config_digest = (
-        hashlib.sha256(config_path.read_bytes()).hexdigest()
-        if config_path.is_file()
-        else None
+    config_path = str(
+        record.get("guest_config_path") or record.get("config_path") or GUEST_CONFIG_PATH
     )
+    try:
+        config_digest = _guest_config_digest(record, config_path)
+    except (RuntimeError, subprocess.TimeoutExpired):
+        local.unlink(missing_ok=True)
+        raise
     local.with_suffix(".json").write_text(
         json.dumps(
             {
                 "source_digest": record.get("source_digest"),
                 "config_digest": config_digest,
+                "config_path": config_path,
+                "config_target": "guest",
                 "guest_output": ready["output"],
                 "guest_display": ready["wayland_display"],
                 "guest_signature": ready["hyprland_instance_signature"],
@@ -1473,6 +1549,29 @@ def _host_theme_files() -> tuple[Path, Path]:
     return colors, shell_toml
 
 
+def _copy_guest_readonly_file(record: dict, local: Path, remote: str) -> None:
+    """Stage beside the destination, then atomically replace a read-only file."""
+    staging = f"{remote}.smartdock-{os.getpid()}-{time.monotonic_ns()}.tmp"
+    try:
+        _scp_to_guest(record, local, staging)
+        result = _run_ssh(
+            record,
+            f"chmod 444 -- {shlex.quote(staging)} "
+            f"&& mv -f -- {shlex.quote(staging)} {shlex.quote(remote)}",
+            10,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "failed to replace guest theme file: "
+                f"{(result.stderr or result.stdout or '').strip()}"
+            )
+    finally:
+        # An interrupted upload must not damage the previous theme or mask
+        # the original transport error if cleanup also loses the connection.
+        with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+            _run_ssh(record, f"rm -f -- {shlex.quote(staging)}", 10)
+
+
 def install_guest_plugin_runtime(record: dict, inspected: dict) -> None:
     """Private guest shell.json, plugin symlink, and read-only theme copy."""
     config = plugin_shell_config(inspected["first_party_plugin_ids"])
@@ -1487,10 +1586,10 @@ def install_guest_plugin_runtime(record: dict, inspected: dict) -> None:
         10,
     )
     _scp_to_guest(record, local_shell, "/home/admin/.config/omarchy/shell.json")
-    _scp_to_guest(
+    _copy_guest_readonly_file(
         record, colors, "/home/admin/.local/state/omarchy/current/theme/colors.toml"
     )
-    _scp_to_guest(
+    _copy_guest_readonly_file(
         record, shell_toml, "/home/admin/.local/state/omarchy/current/theme/shell.toml"
     )
     link = _run_ssh(
@@ -1861,7 +1960,9 @@ def start(
     _write_record(record)
     proc = None
     qemu_log = None
+    supervisor_signals = _SupervisorSignals()
     try:
+        supervisor_signals.install()
         _launch_rule(name, workspace)
         with _port_registry_lock(runtime_root):
             port = _reserve_port_locked(runtime_root, name)
@@ -1872,6 +1973,9 @@ def start(
                 encoding="utf-8",
             )
             qemu_log = (evidence / "qemu.log").open("w", encoding="utf-8")
+            # Do not unwind between spawning the detached child and recording
+            # its identity. Deliver a pending signal as soon as it is owned.
+            supervisor_signals.deferred = True
             proc = subprocess.Popen(
                 argv,
                 start_new_session=True,
@@ -1892,6 +1996,7 @@ def start(
             _commit_live_record(
                 record, allowed_states={"starting"}, allow_identity_assign=True
             )
+            supervisor_signals.resume()
             _wait_for_owned_port(record)
 
         client = _place_owned_window(proc.pid, workspace)
@@ -1954,9 +2059,21 @@ def start(
         _release_port(runtime_root, name, latest.get("port"))
         return latest
     except BaseException as exc:
+        supervisor_signals.deferred = True
         _disable_launch_rule(name)
         if record.get("qemu_pid") and owned_process(record):
             _terminate_owned(record)
+            if proc is not None:
+                proc.wait(timeout=5)
+        elif proc is not None and not record.get("qemu_pid"):
+            # Popen succeeded but identity recording failed. This is still our
+            # direct child, not a PID selected from a potentially stale record.
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
         record["state"] = "failed"
         record["error"] = str(exc)
         try:
@@ -1969,8 +2086,12 @@ def start(
         _release_port(runtime_root, name, record.get("port"))
         raise
     finally:
-        if qemu_log is not None:
-            qemu_log.close()
+        supervisor_signals.deferred = True
+        try:
+            if qemu_log is not None:
+                qemu_log.close()
+        finally:
+            supervisor_signals.restore()
 
 
 def main(argv: list[str] | None = None) -> int:
