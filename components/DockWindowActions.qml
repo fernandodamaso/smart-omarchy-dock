@@ -465,9 +465,13 @@ Item {
     if (DockModel.normalizeWorkspaceTarget(member.workspace) === target)
       return false
     if (member.minimized) {
+      // Keep minimized storage untouched, but record the destination owner
+      // exactly as a workspace-card drag does. Unknown ownership is not a move.
+      var destination = resolveWorkspaceDropTarget(destinationIdentity)
+      if (!destination) return false
       return setOrigin(address, {
-        workspace: target,
-        monitor: member.monitor
+        workspace: destination.target,
+        monitor: destination.monitor
       })
     }
     var request = DockModel.moveWindowRequest(address, target, Hyprland.usingLua)
