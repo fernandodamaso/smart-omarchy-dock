@@ -7,6 +7,7 @@ import "DockModel.js" as DockModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockTrashModel.js" as TrashModel
 import "DockConfigModel.js" as ConfigModel
+import "DockWorkspaceGroupModel.js" as WorkspaceGroupModel
 
 // Exactly one host-owned target, never one target per screen/Variants delegate.
 Item {
@@ -71,6 +72,9 @@ Item {
       result[key] = DockModel.normalizeSetting(key, value)
     }
     result.iconOverrides = ConfigModel.effectiveIcons(requested.iconOverrides)
+    result.workspaceGroups = WorkspaceGroupModel.normalizeWorkspaceGroups(
+      requested.workspaceGroups === undefined ? root.defaults.workspaceGroups : requested.workspaceGroups)
+    result.groupWindows = false
     result.showTrash = TrashModel.normalizeShowTrash(requested.showTrash)
     result.windowScope = DockWindowModel.normalizeWindowScope(requested.windowScope)
     result.showUrgentOutsideScope = DockWindowModel.normalizeShowUrgentOutsideScope(requested.showUrgentOutsideScope)

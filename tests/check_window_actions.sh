@@ -50,6 +50,12 @@ require_pattern 'root\.windowActions\.activateToplevel' components/DockItem.qml
 require_pattern 'root\.windowActions\.minimizeToplevel' components/DockContextMenu.qml
 require_pattern 'root\.windowActions\.restoreToplevel' components/DockContextMenu.qml
 require_pattern 'root\.windowActions\.closeToplevel' components/DockContextMenu.qml
-require_pattern 'root\.windowActions\.forgetOrigin' components/DockContextMenu.qml
+require_pattern 'root\.windowActions\.moveToplevelToWorkspace' components/DockContextMenu.qml
+require_pattern 'forgetOrigin\(address\)' components/DockWindowActions.qml
+
+move_body="$(sed -n '/function moveTargetToWorkspace(/,/^  }/p' components/DockContextMenu.qml)"
+if grep -Eq 'DockModel\.moveWindowRequest|Hyprland\.dispatch|root\.windowActions\.forgetOrigin' <<<"$move_body"; then
+  fail "context menu workspace movement must remain centralized in DockWindowActions"
+fi
 
 echo "check_window_actions: PASS"

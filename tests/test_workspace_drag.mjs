@@ -33,6 +33,7 @@ function fixture(usingLua = false) {
   const actions = methods('DockWindowActions.qml', {
     DockModel, DockWindowModel,
     minimizedWorkspace: 'special:smartdock-minimized', minimizedOrigins: {},
+    windowWorkspacePins: {}, workspaceMonitorPins: {},
     ToplevelManager: { toplevels: { values: windows } },
     Hyprland: { toplevels: { values: handles }, workspaces: { values: workspaces },
       monitors: { values: monitors }, usingLua, dispatch: request => requests.push(request) }

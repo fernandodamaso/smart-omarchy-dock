@@ -1,0 +1,273 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import vm from 'node:vm'
+
+const read = name => fs.readFileSync(new URL(`../components/${name}`, import.meta.url), 'utf8')
+function model(name, imports = {}) {
+  const scope = vm.createContext(imports)
+  vm.runInContext(read(name).replace(/^\.(pragma|import).*$/gm, ''), scope)
+  return scope
+}
+function methods(file, properties) {
+  const scope = vm.createContext(properties)
+  scope.root = scope
+  vm.runInContext((read(file).match(/^  function [\s\S]*?^  }/gm) || []).join('\n'), scope,
+    { filename: file })
+  return scope
+}
+
+const DockModel = model('DockModel.js')
+const DockWindowModel = model('DockWindowModel.js', { DockModel })
+
+function fixture(usingLua = false) {
+  const A = { appId: 'editor', title: 'A' }
+  const B = { appId: 'editor', title: 'B' }
+  const C = { appId: 'browser', title: 'C' }
+  const windows = [A, B, C]
+  const handles = [
+    { wayland: A, address: 'a1', lastIpcObject: { workspace: { id: 3 }, monitor: 0, pinned: false } },
+    { wayland: B, address: 'b2', lastIpcObject: { workspace: { id: 3 }, monitor: 0, pinned: false } },
+    { wayland: C, address: 'c3', lastIpcObject: { workspace: { id: 4 }, monitor: 1, pinned: false } }
+  ]
+  const workspaces = [
+    { id: 3, name: '3', monitorID: 0 },
+    { id: 4, name: '4', monitorID: 1 }
+  ]
+  const monitors = [
+    { id: 0, name: 'DP-1' },
+    { id: 1, name: 'DP-2' }
+  ]
+  const requests = []
+  const detached = []
+  const actions = methods('DockWindowActions.qml', {
+    DockModel, DockWindowModel,
+    minimizedWorkspace: 'special:smartdock-minimized', minimizedOrigins: {},
+    windowWorkspacePins: {}, workspaceMonitorPins: {},
+    ToplevelManager: { toplevels: { values: windows }, activeToplevel: null },
+    Hyprland: {
+      toplevels: { values: handles }, workspaces: { values: workspaces },
+      monitors: { values: monitors }, usingLua,
+      focusedWorkspace: workspaces[0], dispatch: request => requests.push(request)
+    },
+    Quickshell: { execDetached: args => detached.push(args) }
+  })
+  return { actions, A, B, C, windows, handles, workspaces, monitors, requests, detached }
+}
+
+{
+  const { actions: a } = fixture()
+  for (const name of [
+    'pinWindowToWorkspace', 'unpinWindowFromWorkspace', 'windowWorkspacePin',
+    'canMoveToplevelToWorkspace', 'moveToplevelToWorkspace',
+    'pinWorkspaceToMonitor', 'unpinWorkspaceFromMonitor', 'workspaceMonitorPin',
+    'canRelocateWorkspaceToMonitor', 'reconcileSessionPins'
+  ]) assert.equal(typeof a[name], 'function', `CM-04 requires central ${name}()`)
+}
+
+// One pinned member blocks the whole represented move before any side effect.
+{
+  const f = fixture()
+  const { actions: a, A, B, requests } = f
+  assert.equal(a.pinWindowToWorkspace(A), true)
+  assert.equal(a.windowWorkspacePin(A).workspace, 'id:3')
+  const captured = a.captureWorkspaceMove([A, B])
+  assert.equal(captured.length, 2)
+  assert.equal(a.workspaceMoveWouldChange(captured, 'id:4'), false,
+    'drag hover must reject a mixed group containing a pinned member')
+  assert.equal(a.moveCapturedToplevels(captured, 'id:4'), false,
+    'drop preflight must reject the whole mixed group')
+  assert.equal(requests.length, 0, 'blocked group move dispatches nothing')
+
+  assert.equal(a.moveToplevelToWorkspace(A, a.addressFor(A), 4), false,
+    'menu move must use the same central pin guard')
+  assert.equal(requests.length, 0)
+  assert.equal(a.canMoveToplevelToWorkspace(A, 3), true,
+    'same-workspace interaction is not a relocation ban')
+
+  assert.equal(a.unpinWindowFromWorkspace(A), true)
+  assert.equal(a.workspaceMoveWouldChange(captured, 'id:4'), true)
+  assert.equal(a.moveCapturedToplevels(captured, 'id:4'), true)
+  assert.equal(requests.length, 2)
+}
+
+// A pin added after drag capture/hover is authoritative at drop time.
+{
+  const f = fixture()
+  const { actions: a, A, B, requests } = f
+  const captured = a.captureWorkspaceMove([A, B])
+  assert.equal(a.workspaceMoveWouldChange(captured, 'id:4'), true)
+  assert.equal(a.pinWindowToWorkspace(A), true)
+  assert.equal(a.workspaceMoveWouldChange(captured, 'id:4'), false)
+  assert.equal(a.moveCapturedToplevels(captured, 'id:4'), false)
+  assert.equal(requests.length, 0)
+}
+
+// Minimize/restore keeps the original workspace pin and recorded origin.
+{
+  const f = fixture()
+  const { actions: a, A, handles, requests } = f
+  assert.equal(a.pinWindowToWorkspace(A), true)
+  assert.equal(a.minimizeToplevel(A, true), true)
+  handles[0].lastIpcObject.workspace = { name: 'special:smartdock-minimized' }
+  a.reconcileSessionPins({})
+  assert.equal(a.windowWorkspacePin(A).workspace, 'id:3',
+    'minimized storage must not clear or retarget the pin')
+  assert.equal(a.restoreToplevel(A, true), true)
+  assert.equal(a.windowWorkspacePin(A).workspace, 'id:3')
+  assert.equal(requests.length, 2)
+}
+
+// Workspace pins turn every cross-monitor activation into focus-in-place.
+{
+  const f = fixture(false)
+  const { actions: a, A, detached } = f
+  assert.equal(a.pinWorkspaceToMonitor('id:3'), true)
+  assert.equal(a.workspaceMonitorPin('id:3').monitor, 'id:0')
+  const requests = a.workspaceOnMonitorRequests(3, 'id:1')
+  assert.deepEqual(Array.from(requests), [DockModel.focusWorkspaceTargetRequest(3, false)])
+  assert.equal(a.canRelocateWorkspaceToMonitor('id:3', 'id:1'), false)
+  assert.equal(a.canRelocateWorkspaceToMonitor('id:3', 'id:0'), true)
+
+  assert.equal(a.activateToplevel(A, true, 'id:1', false, 3), true)
+  const command = detached.flat().join(' ')
+  assert.doesNotMatch(command, /movecurrentworkspacetomonitor|moveworkspacetomonitor/i,
+    'app/preview activation must focus pinned workspace in place')
+
+  assert.equal(a.unpinWorkspaceFromMonitor('id:3'), true)
+  assert.ok(a.workspaceOnMonitorRequests(3, 'id:1').length > 1,
+    'unpinned workspace retains the existing pull behavior')
+}
+
+// Cycling and minimized activation share the same monitor-pin focus-only path.
+{
+  const f = fixture(false)
+  const { actions: a, A, C, handles, detached } = f
+  assert.equal(a.pinWorkspaceToMonitor('id:3'), true)
+  assert.equal(a.cycleToplevels([C, A], 1, C, true, 'id:1'), true)
+  assert.doesNotMatch(detached.flat().join(' '),
+    /movecurrentworkspacetomonitor|moveworkspacetomonitor/i,
+    'window cycling must not pull a pinned workspace')
+
+  detached.length = 0
+  assert.equal(a.minimizeToplevel(A, true), true)
+  handles[0].lastIpcObject.workspace = { name: 'special:smartdock-minimized' }
+  assert.equal(a.activateToplevel(A, true, 'id:1', true), true)
+  assert.doesNotMatch(detached.flat().join(' '),
+    /movecurrentworkspacetomonitor|moveworkspacetomonitor/i,
+    'minimized restore/focus must keep a pinned workspace on its monitor')
+}
+
+// Explicit compositor lifecycle signals clear exact pins without guessing from gaps.
+{
+  const f = fixture()
+  const { actions: a, A } = f
+  assert.equal(a.pinWindowToWorkspace(A), true)
+  assert.equal(a.confirmWindowClosed({ data: 'a1' }), true)
+  assert.equal(a.windowWorkspacePins['0xa1'], undefined)
+
+  assert.equal(a.pinWorkspaceToMonitor('id:3'), true)
+  assert.equal(a.confirmMonitorRemoved({ data: 'DP-1' }), true)
+  assert.equal(a.workspaceMonitorPins['id:3'], undefined)
+}
+
+// Reconciliation clears only confirmed changes; incomplete inventory is retained.
+{
+  const f = fixture()
+  const { actions: a, A, windows, handles, workspaces, monitors } = f
+  assert.equal(a.pinWindowToWorkspace(A), true)
+  const savedWindowPin = a.windowWorkspacePins['0xa1']
+  windows.splice(windows.indexOf(A), 1)
+  handles.splice(0, 1)
+  a.reconcileSessionPins({})
+  assert.equal(a.windowWorkspacePins['0xa1'], savedWindowPin,
+    'transient missing window must not prove closure')
+  a.reconcileSessionPins({ completeToplevels: true })
+  assert.equal(a.windowWorkspacePins['0xa1'], undefined,
+    'authoritative closure clears only the exact window pin')
+
+  windows.unshift(A)
+  handles.unshift({ wayland: A, address: 'a1',
+    lastIpcObject: { workspace: { id: 3 }, monitor: 0, pinned: false } })
+  assert.equal(a.pinWindowToWorkspace(A), true)
+  handles[0].lastIpcObject.workspace = { id: 4 }
+  a.reconcileSessionPins({})
+  assert.equal(a.windowWorkspacePins['0xa1'], undefined,
+    'present exact window on another workspace is a confirmed external relocation')
+
+  handles[0].lastIpcObject.workspace = { id: 3 }
+  assert.equal(a.pinWindowToWorkspace(A), true)
+  const replacement = { appId: 'editor', title: 'replacement' }
+  windows[0] = replacement
+  handles[0].wayland = replacement
+  a.reconcileSessionPins({ completeToplevels: true })
+  assert.equal(a.windowWorkspacePins['0xa1'], undefined,
+    'reused address must never transfer an old QObject pin')
+  assert.equal(a.windowWorkspacePin(replacement), null)
+
+  assert.equal(a.pinWorkspaceToMonitor('id:3'), true)
+  workspaces.splice(0, 1)
+  a.reconcileSessionPins({})
+  assert.ok(a.workspaceMonitorPins['id:3'],
+    'transient missing workspace must not clear its pin')
+  a.reconcileSessionPins({ completeWorkspaces: true })
+  assert.equal(a.workspaceMonitorPins['id:3'], undefined)
+
+  workspaces.unshift({ id: 3, name: '3', monitorID: 0 })
+  assert.equal(a.pinWorkspaceToMonitor('id:3'), true)
+  workspaces[0].monitorID = 1
+  a.reconcileSessionPins({})
+  assert.equal(a.workspaceMonitorPins['id:3'], undefined,
+    'present workspace on another monitor confirms external relocation')
+
+  workspaces[0].monitorID = 0
+  assert.equal(a.pinWorkspaceToMonitor('id:3'), true)
+  workspaces.splice(0, 1)
+  monitors.splice(0, 1)
+  a.reconcileSessionPins({})
+  assert.ok(a.workspaceMonitorPins['id:3'],
+    'partial monitor/workspace refresh retains the pin')
+  a.reconcileSessionPins({ completeMonitors: true })
+  assert.equal(a.workspaceMonitorPins['id:3'], undefined,
+    'confirmed monitor disconnection clears affected monitor pins')
+}
+
+// Host/controller restart naturally starts with empty session state.
+{
+  const first = fixture()
+  first.actions.pinWindowToWorkspace(first.A)
+  first.actions.pinWorkspaceToMonitor('id:3')
+  const restarted = fixture()
+  assert.deepEqual(Object.keys(restarted.actions.windowWorkspacePins), [])
+  assert.deepEqual(Object.keys(restarted.actions.workspaceMonitorPins), [])
+}
+
+const menuSource = read('DockContextMenu.qml')
+assert.match(menuSource, /windowPin \? \"Unpin Window from \" : \"Pin Window to \"/)
+assert.match(menuSource, /windowPinWorkspaceLabel\(reliableWorkspace\)/)
+assert.match(menuSource, /pin-window-workspace/)
+assert.match(menuSource, /unpin-window-workspace/)
+const moveBody = menuSource.match(/function moveTargetToWorkspace\([\s\S]*?\n  }/)?.[0] || ''
+assert.match(moveBody, /windowActions\.moveToplevelToWorkspace/,
+  'context-menu moves must delegate to the central controller')
+assert.doesNotMatch(moveBody, /DockModel\.moveWindowRequest|Hyprland\.dispatch/,
+  'context menu must not retain a movement-dispatch bypass')
+
+const dockSource = read('Dock.qml')
+const headerActivationBody = dockSource.match(
+  /function focusWorkspaceOnDockMonitor\([\s\S]*?\n  }/)?.[0] || ''
+assert.match(headerActivationBody, /windowActions\.workspaceOnMonitorRequests/,
+  'workspace-header activation must use the central monitor-pin policy')
+assert.doesNotMatch(headerActivationBody, /moveWorkspaceToMonitorRequest|moveCurrentWorkspaceToMonitorRequest/,
+  'workspace-header activation must not bypass the central monitor-pin policy')
+assert.match(dockSource, /windowActions\.activateToplevel/,
+  'dock app/preview activation must retain the shared exact-window activation controller')
+
+const dragSource = read('DockWorkspaceDrag.qml')
+assert.match(dragSource, /workspaceMoveWouldChange\(members, destination\.identity\)/)
+assert.match(dragSource, /moveCapturedToplevels\(members, hoveredIdentity\)/)
+
+const actionsSource = read('DockWindowActions.qml')
+assert.doesNotMatch(actionsSource, /settings\.(windowWorkspacePins|workspaceMonitorPins)/,
+  'session pins must never be persisted in settings')
+
+console.log('CM-04 central session pin guards, activation and reconciliation tests: PASS')

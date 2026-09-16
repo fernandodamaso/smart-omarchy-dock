@@ -35,6 +35,7 @@ const shared = {
   ConfigModel: loadModel('DockConfigModel.js'),
   DockModel: loadModel('DockModel.js'),
   DockWindowModel: loadModel('DockWindowModel.js'),
+  WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js'),
   TrashModel: loadModel('DockTrashModel.js'),
 };
 let deferred = 0;
