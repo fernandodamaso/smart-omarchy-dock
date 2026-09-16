@@ -258,6 +258,8 @@ PanelWindow {
     "sortByWorkspace", settings.sortByWorkspace)
   readonly property string workspaceMonitorScope: DockModel.normalizeSetting(
     "workspaceMonitorScope", settings.workspaceMonitorScope)
+  readonly property var workspaceMonitorOrder: DockModel.normalizeSetting(
+    "workspaceMonitorOrder", settings.workspaceMonitorOrder)
   readonly property bool groupWindows: DockModel.normalizeSetting(
     "groupWindows", settings.groupWindows)
   readonly property string windowScope: DockWindowModel.normalizeWindowScope(
@@ -406,6 +408,7 @@ PanelWindow {
           false, groupWindows, hiddenApplications), records, hyprWorkspaces, {
           monitor: DockWindowModel.monitorIdentity(monitor),
           monitorScope: workspaceMonitorScope,
+          monitorOrder: workspaceMonitorOrder,
           activeWorkspace: workspaceMonitorScope === "all" ? focusedScopeWorkspace
             : DockWindowModel.workspaceIdentity(ipc.activeWorkspace
             || (monitor ? monitor.activeWorkspace : null)),
@@ -505,7 +508,7 @@ PanelWindow {
     for (var i = 0; i < workspaceCards.count; ++i) {
       var card = workspaceCards.itemAt(i)
       if (card && card.present && card.workspaceIdentity === root.activeCardIdentity) {
-        groupedLayout.ensureVisible(card, card.headerWidth)
+        groupedLayout.ensureVisible(card.dropCard, card.headerWidth)
         break
       }
     }
@@ -584,6 +587,7 @@ PanelWindow {
   onVisibleChanged: if (!visible) root.cancelWorkspaceGesture("surface hidden")
   onPinnedChanged: root.scheduleVisibleItemsRefresh()
   onWorkspaceMonitorScopeChanged: root.scheduleVisibleItemsRefresh()
+  onWorkspaceMonitorOrderChanged: root.scheduleVisibleItemsRefresh()
   onFocusedScopeWorkspaceChanged: root.scheduleVisibleItemsRefresh()
   onSortByWorkspaceChanged: root.scheduleVisibleItemsRefresh()
   onGroupedChanged: {
@@ -896,83 +900,124 @@ PanelWindow {
         Repeater {
           id: workspaceCards
           model: workspacePresentationModel.model
-          DockAnimatedSlot {
-            id: workspaceCardSlot
+
+          Item {
+            id: workspaceCardWrapper
             required property var modelData
             required property int index
             readonly property string workspaceIdentity: modelData.item.identity
+            readonly property bool present: modelData.present
             readonly property Item dropCard: workspaceCard
             readonly property bool active: workspaceCard.active
             readonly property real headerWidth: workspaceCard.headerWidth
-            present: modelData.present
-            animateEntrance: modelData.animateEntrance
-            animationsEnabled: root.interfaceAnimationsEnabled
-            exitRevision: modelData.exitRevision
-            naturalWidth: workspaceCard.width
-            naturalHeight: workspaceCard.height
-            trailingGap: 0
-            onExitFinished: revision => workspacePresentationModel.completeRemoval(
-              modelData.token, revision)
+            readonly property var monitorSection: WorkspaceModel.monitorGroupForWorkspace(
+              root.workspacePresentation.monitorGroups, workspaceIdentity, present)
+            readonly property bool hasMonitorPrefix: monitorSection !== null
+            readonly property real prefixGap: hasMonitorPrefix
+              ? Style.spacing.controlGap : 0
+            width: monitorPrefix.width + prefixGap + workspaceCardSlot.width
+            height: root.itemSize + 10
 
-            DockWorkspaceGroup {
-              id: workspaceCard
+            Row {
+              id: monitorPrefix
+              visible: workspaceCardWrapper.hasMonitorPrefix
+              width: visible ? implicitWidth : 0
+              height: parent.height
+              spacing: Math.max(2, Math.round(Style.spacing.controlGap / 2))
+
+              DockSeparator {
+                y: (monitorPrefix.height - height) / 2
+                vertical: false
+                slotSize: root.itemSize
+                iconSize: root.iconSize
+              }
+
+              DockMonitorLabel {
+                label: workspaceCardWrapper.monitorSection
+                  ? String(workspaceCardWrapper.monitorSection.label || "") : ""
+                connector: workspaceCardWrapper.monitorSection
+                  ? String(workspaceCardWrapper.monitorSection.connector || "") : ""
+                focused: workspaceCardWrapper.monitorSection
+                  ? workspaceCardWrapper.monitorSection.focused === true : false
+                position: root.position
+                slotSize: root.itemSize
+              }
+            }
+
+            DockAnimatedSlot {
+              id: workspaceCardSlot
+              property var modelData: workspaceCardWrapper.modelData
+              property int index: workspaceCardWrapper.index
+              x: monitorPrefix.width + workspaceCardWrapper.prefixGap
+              present: modelData.present
+              animateEntrance: modelData.animateEntrance
               animationsEnabled: root.interfaceAnimationsEnabled
-              modelData: workspaceCardSlot.modelData.item
-              property var modelData
-              label: modelData.label
-              showFullLabel: modelData.showFullLabel === true
-              count: modelData.count
-              urgent: modelData.urgent === true && root.attentionBadgesEnabled
-              windowDragActive: root.workspaceDragActive
-              dropHighlighted: root.workspaceDragActive && workspaceDrag.hoveredIdentity === modelData.identity
-              position: root.position
-              viewport: groupedLayout
-              active: modelData.active
-              slotSize: root.itemSize
-              applicationModel: appPresentationModel.model
-              applicationDelegate: Component {
-                DockAnimatedSlot {
-                  id: appSlot
-                  required property var modelData
-                  required property int index
-                  present: modelData.present
-                  animateEntrance: modelData.animateEntrance
-                  animationsEnabled: root.interfaceAnimationsEnabled
-                  exitRevision: modelData.exitRevision
-                  naturalWidth: root.itemSize
-                  naturalHeight: root.itemSize + 6
-                  trailingGap: index < appPresentationModel.entries.length - 1 ? 6 : 0
-                  onExitFinished: revision => appPresentationModel.completeRemoval(
-                    modelData.token, revision)
-                  AppIcon {
-                    modelData: appSlot.modelData.item
-                    index: appSlot.index
-                    workspaceActivationTarget: workspaceCard.modelData.activationTarget
-                    presentationActive: appSlot.modelData.present
-                      && workspaceCardSlot.modelData.present
-                    fullscreenModeActive:
-                      root.workspaceFullscreenOwners[workspaceCard.modelData.identity] !== undefined
-                    fullscreenEmphasized: {
-                      var owner =
-                        root.workspaceFullscreenOwners[workspaceCard.modelData.identity]
-                      return owner !== undefined
-                        && modelData.toplevels.indexOf(owner) >= 0
+              exitRevision: modelData.exitRevision
+              naturalWidth: workspaceCard.width
+              naturalHeight: workspaceCard.height
+              trailingGap: 0
+              onExitFinished: revision => workspacePresentationModel.completeRemoval(
+                modelData.token, revision)
+
+              DockWorkspaceGroup {
+                id: workspaceCard
+                animationsEnabled: root.interfaceAnimationsEnabled
+                modelData: workspaceCardSlot.modelData.item
+                property var modelData
+                label: modelData.label
+                showFullLabel: modelData.showFullLabel === true
+                count: modelData.count
+                urgent: modelData.urgent === true && root.attentionBadgesEnabled
+                windowDragActive: root.workspaceDragActive
+                dropHighlighted: root.workspaceDragActive && workspaceDrag.hoveredIdentity === modelData.identity
+                position: root.position
+                viewport: groupedLayout
+                active: modelData.active
+                slotSize: root.itemSize
+                applicationModel: appPresentationModel.model
+                applicationDelegate: Component {
+                  DockAnimatedSlot {
+                    id: appSlot
+                    required property var modelData
+                    required property int index
+                    present: modelData.present
+                    animateEntrance: modelData.animateEntrance
+                    animationsEnabled: root.interfaceAnimationsEnabled
+                    exitRevision: modelData.exitRevision
+                    naturalWidth: root.itemSize
+                    naturalHeight: root.itemSize + 6
+                    trailingGap: index < appPresentationModel.entries.length - 1 ? 6 : 0
+                    onExitFinished: revision => appPresentationModel.completeRemoval(
+                      modelData.token, revision)
+                    AppIcon {
+                      modelData: appSlot.modelData.item
+                      index: appSlot.index
+                      workspaceActivationTarget: workspaceCard.modelData.activationTarget
+                      presentationActive: appSlot.modelData.present
+                        && workspaceCardSlot.modelData.present
+                      fullscreenModeActive:
+                        root.workspaceFullscreenOwners[workspaceCard.modelData.identity] !== undefined
+                      fullscreenEmphasized: {
+                        var owner =
+                          root.workspaceFullscreenOwners[workspaceCard.modelData.identity]
+                        return owner !== undefined
+                          && modelData.toplevels.indexOf(owner) >= 0
+                      }
                     }
                   }
                 }
+                onActivated: {
+                  root.focusWorkspaceOnDockMonitor(modelData.activationTarget)
+                }
               }
-              onActivated: {
-                root.focusWorkspaceOnDockMonitor(modelData.activationTarget)
+
+              DockPresentationModel {
+                id: appPresentationModel
+                sourceItems: workspaceCard.modelData.items
+                keyProperty: "presentationId"
+                animationsEnabled: root.interfaceAnimationsEnabled
               }
             }
-
-            DockPresentationModel {
-              id: appPresentationModel
-              sourceItems: workspaceCard.modelData.items
-              keyProperty: "presentationId"
-              animationsEnabled: root.interfaceAnimationsEnabled
-            }
-
           }
         }
         DockWorkspaceGroup {

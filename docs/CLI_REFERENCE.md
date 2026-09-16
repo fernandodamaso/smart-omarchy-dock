@@ -49,7 +49,16 @@ Requested values retain intent. Effective output projects current normalization 
 | `config retry` | Retry a failed save using the complete **current** live snapshot, not an old patch. Does not increment the settings revision. Inspect the error first. |
 | `config export` | `--output PATH`. Export requested live settings to a separate **new** owner-only JSON file; not necessarily saved source values. |
 
-New patches reject unknown keys, unsafe/prototype-sensitive keys, wrong types, invalid enums/ranges, duplicate JSON keys/canonical application identities and non-finite numbers. Validation is atomic: one bad value rejects the complete patch. Array/object values replace that key; per-app commands are preferable to replacing a collection. Accepted unrelated legacy values and unknown extension keys remain untouched.
+Array values use JSON syntax. `workspaceMonitorOrder` is an exact case-sensitive connector-name array used only to order grouped/all monitor sections. Empty `[]` selects automatic physical ordering by finite monitor x then y; configured connected connectors lead, other connected monitors append automatically, and disconnected connector names remain saved for reconnect. It never reconfigures Hyprland monitors or workspaces, and flat/current-monitor layouts keep the value without a visual effect.
+
+```bash
+smartdock config get workspaceMonitorOrder --json
+smartdock config set workspaceMonitorOrder '["HDMI-A-1","DP-1"]' --json
+smartdock config get workspaceMonitorOrder --effective --json
+smartdock config reset workspaceMonitorOrder --json
+```
+
+New patches reject unknown keys, unsafe/prototype-sensitive keys, wrong types, invalid enums/ranges, duplicate JSON keys/canonical application identities and non-finite numbers. Validation is atomic: one bad value rejects the complete patch. `workspaceMonitorOrder` additionally rejects blank/padded/control-containing connector names and exact duplicates while allowing valid virtual connector strings. Array/object values replace that key; per-app commands are preferable to replacing a collection. Accepted unrelated legacy values and unknown extension keys remain untouched.
 
 Dry run validates against current state and returns proposed `changedKeys`, `diff`, full `requested`, projected `effective`, `dryRun: true`, `applied: false`, `persisted: false`. `sourcePersisted` describes the current source. It does not write, create config directories or increment revision. Apply recomputes against latest host state; a dry run is not a reservation. Cooperating host intents serialize; disjoint changes survive and the later accepted same-key intent wins. Known pending reload/write returns busy instead of using stale state. Arbitrary external editors are not transaction-safe participants.
 
@@ -57,7 +66,9 @@ Mutation data includes status plus `changedKeys`, full `requested`/`effective`, 
 
 A failed save can return `E_PERSISTENCE`, `applied: true`, `persisted: false`: the live change remains active for the session. Retry saves the latest snapshot. Busy/invalid states refuse unsafe mutations. A timeout has unknown outcome (`applied: null`, `persisted: null`); read status and affected values before another mutation. Never interpret exit status alone as visible-rendering confirmation.
 
-Preference reset preserves `pinned`, `hiddenApplications`, `browserActivityMutedServices`, `iconOverrides`, `margin` and unknown extension keys. It resets all other declared preferences, **including `controlCommand`**. That command is executable configuration used later by the launcher action; validation never executes it. Pointer action `close` may close all live grouped members when used. Change executable or destructive-on-use settings only for explicit user intent.
+Preference reset preserves `pinned`, `hiddenApplications`, `browserActivityMutedServices`, `iconOverrides`, `margin` and unknown extension keys. It resets all other declared preferences, **including `controlCommand` and `workspaceMonitorOrder`**; the latter returns to `[]` automatic ordering. That command is executable configuration used later by the launcher action; validation never executes it. Pointer action `close` may close all live grouped members when used. Change executable or destructive-on-use settings only for explicit user intent.
+
+Malformed legacy `workspaceMonitorOrder` state is preserved in requested readback and projects effectively as `[]` without an automatic rewrite. This keeps unrelated mutations byte-for-value compatible while allowing an explicit `config set` or `config reset` to repair the key.
 
 Export creates a new file with mode 0600, does not create missing parent directories, and refuses existing files, destination symlinks/hardlinks and aliases of the live path. There is no force switch. The plain file contains requested settings, including unsaved values and unknown keys. Its acknowledgment includes `exportWritten`, `exportPath`, `sourcePersisted`, `sourceRevision`, `sourceRuntime`, `configPath`, `applied: false`. A successful snapshot is not a successful live save. No whole-snapshot restore/import command exists: re-read and restore only touched supported keys. A snapshot containing unknown keys is deliberately not accepted wholesale by apply.
 

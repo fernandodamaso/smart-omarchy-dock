@@ -27,6 +27,18 @@ function monitorCompare(left, right) {
   return left < right ? -1 : left > right ? 1 : 0
 }
 
+function finiteCoordinate(primary, fallback) {
+  var raw = primary !== undefined ? primary : fallback
+  if (raw === undefined || raw === null || raw === "" || typeof raw === "boolean")
+    return null
+  var value = Number(raw)
+  return isFinite(value) ? value : null
+}
+
+function lexicalCompare(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
 function ownerEvidence(map, workspace) {
   if (!map[workspace]) map[workspace] = { seen: false, unresolved: false, owners: Object.create(null) }
   return map[workspace]
@@ -59,6 +71,18 @@ function monitorLabel(identity, connector, descriptor, ipc) {
   return "Monitor"
 }
 
+function monitorGroupForWorkspace(monitorGroups, workspaceIdentity, present) {
+  if (present !== true) return null
+  var identity = String(workspaceIdentity || "")
+  if (!identity) return null
+  var values = monitorGroups || []
+  for (var i = 0; i < values.length; ++i) {
+    var group = values[i]
+    if (group && group.firstWorkspaceIdentity === identity) return group
+  }
+  return null
+}
+
 function buildWorkspacePresentation(appItems, records, workspaces, context) {
   context = context || ({})
   var groups = []
@@ -68,6 +92,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
   var allMonitors = context.monitorScope !== "current-monitor"
   var primaryWorkspaceIdentity = DockWindowModel.workspaceIdentity(context.activeWorkspace)
   var monitor = DockWindowModel.canonicalMonitorIdentity(context.monitor, context.monitors)
+  var monitorOrder = DockModel.normalizeSetting("workspaceMonitorOrder", context.monitorOrder)
   var descriptorOwners = Object.create(null)
   var activeOwners = Object.create(null)
   var liveOwners = Object.create(null)
@@ -116,6 +141,32 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     if (workspace) evidence.values[workspace] = true
   }
 
+  function monitorOrderCompare(leftIdentity, rightIdentity) {
+    if (leftIdentity === rightIdentity) return 0
+    var left = monitorMetadata[leftIdentity] || ({
+      identity: leftIdentity, connector: "", x: null, y: null
+    })
+    var right = monitorMetadata[rightIdentity] || ({
+      identity: rightIdentity, connector: "", x: null, y: null
+    })
+    var leftConfigured = monitorOrder.indexOf(left.connector)
+    var rightConfigured = monitorOrder.indexOf(right.connector)
+    if (leftConfigured >= 0 || rightConfigured >= 0) {
+      if (leftConfigured < 0) return 1
+      if (rightConfigured < 0) return -1
+      if (leftConfigured !== rightConfigured) return leftConfigured - rightConfigured
+    }
+    var leftPositioned = left.x !== null && left.y !== null
+    var rightPositioned = right.x !== null && right.y !== null
+    if (leftPositioned !== rightPositioned) return leftPositioned ? -1 : 1
+    if (leftPositioned && rightPositioned) {
+      if (left.x !== right.x) return left.x - right.x
+      if (left.y !== right.y) return left.y - right.y
+    }
+    var connectorOrder = lexicalCompare(left.connector, right.connector)
+    return connectorOrder || monitorCompare(leftIdentity, rightIdentity)
+  }
+
   var monitors = context.monitors || []
   for (var m = 0; m < monitors.length; ++m) {
     var monitorDescriptor = monitors[m]
@@ -139,7 +190,9 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     monitorMetadata[owner] = {
       identity: owner,
       connector: connector,
-      label: monitorLabel(owner, connector, monitorDescriptor, monitorIpc)
+      label: monitorLabel(owner, connector, monitorDescriptor, monitorIpc),
+      x: finiteCoordinate(monitorIpc.x, monitorDescriptor.x),
+      y: finiteCoordinate(monitorIpc.y, monitorDescriptor.y)
     }
   }
 
@@ -220,7 +273,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       return workspaceCompare(left, right)
     if (!left.monitorIdentity) return 1
     if (!right.monitorIdentity) return -1
-    return monitorCompare(left.monitorIdentity, right.monitorIdentity)
+    return monitorOrderCompare(left.monitorIdentity, right.monitorIdentity)
   })
 
   var visibleByWorkspace = Object.create(null)
@@ -306,7 +359,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       if (sectionOwner && sectionOwners.indexOf(sectionOwner) < 0)
         sectionOwners.push(sectionOwner)
     }
-    sectionOwners.sort(monitorCompare)
+    sectionOwners.sort(monitorOrderCompare)
 
     var focusedOwners = Object.keys(focusedMonitorEvidence)
     var focusedOwner = focusedOwners.length === 1 ? focusedOwners[0] : ""

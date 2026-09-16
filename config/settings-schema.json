@@ -34,6 +34,7 @@
     "sortByWorkspace": {"type":"boolean","description":"Sort flat-layout applications by their lowest occupied workspace."},
     "workspaceLayout": {"type":"string","enum":["flat","grouped"],"description":"Grouped cards are supported on top/bottom. Requested grouped survives a move to left/right."},
     "workspaceMonitorScope": {"type":"string","enum":["all","current-monitor"],"description":"Workspace-card monitor scope; inactive in flat layout."},
+    "workspaceMonitorOrder": {"type":"array","format":"monitor-connectors","description":"Case-sensitive connector order for grouped/all monitor sections. Empty means automatic physical x/y order; disconnected names remain saved for reconnect."},
     "groupWindows": {"type":"boolean","description":"Group windows belonging to the same application."},
     "interfaceAnimationsEnabled": {"type":"boolean","description":"Enable interface transitions; separate from urgent-window attention motion."},
     "windowScope": {"type":"string","enum":["all","workspace","monitor","workspace-monitor"],"description":"Running-window scope, independent of pinned launchers and hidden applications."},

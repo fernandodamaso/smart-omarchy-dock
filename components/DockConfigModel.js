@@ -64,6 +64,19 @@ function valueError(value, spec) {
         seenServices[serviceId] = true
       }
     }
+    if (spec.format === "monitor-connectors") {
+      var seenConnectors = Object.create(null)
+      for (var c = 0; c < value.length; ++c) {
+        if (typeof value[c] !== "string")
+          return "Expected a string monitor connector at index " + c
+        if (!value[c] || value[c] !== value[c].trim()
+            || /[\x00-\x1f\x7f]/.test(value[c]))
+          return "Invalid monitor connector at index " + c
+        if (own(seenConnectors, value[c]))
+          return "Duplicate monitor connector: " + value[c]
+        seenConnectors[value[c]] = true
+      }
+    }
   }
   if (spec.type === "object" && !isObject(value)) return "Expected an object"
   if (spec.format === "icon-overrides") {
