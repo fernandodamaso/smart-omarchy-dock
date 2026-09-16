@@ -1,0 +1,3 @@
+module WorkspaceDragPreview
+PreviewDrag 1.0 PreviewDrag.qml
+PreviewDock 1.0 PreviewDock.qml
