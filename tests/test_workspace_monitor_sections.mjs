@@ -26,13 +26,15 @@ const longDescription = 'UltraWide Production Display With A Deliberately Long D
 const monitors = [
   monitor(0, 'DP-1', 'Shared display', 'ASUS VP249', 1, false),
   monitor(1, 'HDMI-A-1', 'Shared display', 'E2350', 3, true),
-  monitor(2, '', '', '', 5, false),
-  monitor(3, 'DP-4', longDescription, '', 7, false)
+  monitor(2, 'DP-3', '', '', 5, false),
+  monitor(3, 'DP-4', longDescription, '', 7, false),
+  monitor(4, '', '', '', 9, false)
 ]
 const workspaces = [
   { id: 1, monitorID: 0 }, { id: 2, monitorID: 0 },
   { id: 3, monitorID: 1 }, { id: 4, monitorID: 1 },
-  { id: 5, monitorID: 2 }, { id: 7, monitorID: 3 }
+  { id: 5, monitorID: 2 }, { id: 7, monitorID: 3 },
+  { id: 9, monitorID: 4 }
 ]
 
 function build(currentMonitors = monitors, currentWorkspaces = workspaces) {
@@ -46,14 +48,15 @@ function build(currentMonitors = monitors, currentWorkspaces = workspaces) {
 const initial = build()
 const sections = Array.from(initial.monitorGroups)
 assert.deepEqual(sections.map(section => section.label), [
-  'ASUS VP249', 'E2350', 'Monitor 2', longDescription
+  'ASUS VP249', 'E2350', 'DP-3', longDescription, 'Monitor 4'
 ], 'exact model names lead while blank model metadata falls back safely')
 assert.deepEqual(sections.map(section => section.description), [
-  'Shared display', 'Shared display', 'Monitor 2', longDescription
+  'Shared display', 'Shared display', 'DP-3', longDescription, 'Monitor 4'
 ], 'full monitor descriptions remain available separately from compact labels')
-assert.deepEqual(sections.map(section => section.identity), ['id:0', 'id:1', 'id:2', 'id:3'])
+assert.deepEqual(sections.map(section => section.identity),
+  ['id:0', 'id:1', 'id:2', 'id:3', 'id:4'])
 assert.deepEqual(sections.map(section => section.firstWorkspaceIdentity),
-  ['id:1', 'id:3', 'id:5', 'id:7'])
+  ['id:1', 'id:3', 'id:5', 'id:7', 'id:9'])
 assert.equal(sections.filter(section => section.focused).length, 1)
 assert.equal(sections.find(section => section.focused)?.identity, 'id:1')
 
