@@ -1,5 +1,10 @@
 # SmartDock for Omarchy
 
+Want to try an unmerged version on your desktop? Use
+`smartdock dev use <worktree-path-or-local-branch>`, then `smartdock dev reset`
+to return to the installed copy. See [local version switching](docs/DEV_SWITCH.md)
+for setup, reload, and recovery commands.
+
 > **Unreleased workspace-drag candidate:**
 > [Draft PR #45](https://github.com/fernandodamaso/smart-omarchy-dock/pull/45)
 > integrates the CLI-first migration from `main`. Keep this candidate Draft,

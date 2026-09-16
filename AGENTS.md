@@ -10,6 +10,12 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 - Installed Omarchy plugin checkouts are read-only deployment state; never edit
   them directly. Push validated changes from the source checkout, then update
   the installed plugin through `omarchy plugin update`.
+- For user-requested visual testing on this development desktop, use
+  `smartdock dev use <worktree-or-local-branch>` and `smartdock dev reset` to
+  return to the installed copy. No PR or merge is required for this local
+  preview. This swaps the existing plugin source; never start a second dock.
+  See `docs/DEV_SWITCH.md`. Only run `omarchy plugin update` after resetting;
+  while linked, it could update the source worktree itself.
 - Releases are cut from validated `main`. Imports from `upstream` are explicit
   review work on a dedicated branch and must pass the complete validation gate.
 - Follow `docs/DELIVERY.md` for PR-only delivery, exact-SHA evidence, protected-main
@@ -138,6 +144,9 @@ named KVM guest as described in `docs/DEV_SESSIONS.md`. Sync the current worktre
 after edits, restart the guest dock, collect guest evidence, and stop the session.
 Use standalone mode by default; the plugin guest runs a stripped Omarchy shell
 and does not replace required checks in a full Omarchy desktop.
+
+The KVM default is for autonomous agent checks. A user's explicit request to
+try a version on their desktop authorizes the local switch workflow above.
 
 ## Style
 
