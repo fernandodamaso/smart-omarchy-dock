@@ -70,6 +70,7 @@ const scope = vm.createContext({
   windowPointer: { hovered: false }, appPicker: { visible: false },
   windowPreview: { interactionActive: false }, openMenuCount: 0, dragSource: -1,
   autoHide: true, autoHideRevealed: false, workspaceDragActive: false,
+  workspaceMonitorDragSourceActive: false, dragRevealed: false,
   hideTimer: { stop() { stops++; }, restart() { restarts++; } },
 });
 scope.root = scope;
@@ -79,7 +80,8 @@ assert.equal(scope.keepAutoHideOpen, false);
 for (const [object, key, value] of [[scope.windowPointer, 'hovered', true],
   [scope.appPicker, 'visible', true], [scope.windowPreview, 'interactionActive', true],
   [scope, 'openMenuCount', 1], [scope, 'dragSource', 0],
-  [scope, 'workspaceDragActive', true]]) {
+  [scope, 'workspaceDragActive', true],
+  [scope, 'workspaceMonitorDragSourceActive', true], [scope, 'dragRevealed', true]]) {
   const old = object[key];
   object[key] = value;
   scope.updateAutoHideState();
@@ -89,12 +91,12 @@ for (const [object, key, value] of [[scope.windowPointer, 'hovered', true],
   scope.updateAutoHideState();
   assert.equal(scope.keepAutoHideOpen, false, key);
 }
-assert.equal(stops, 6);
-assert.equal(restarts, 6);
+assert.equal(stops, 8);
+assert.equal(restarts, 8);
 scope.autoHide = false;
 scope.updateAutoHideState();
 assert.equal(scope.autoHideRevealed, false);
-assert.equal(stops, 7);
+assert.equal(stops, 9);
 
 // Requested values still reach the actual dock normalizers after preview state
 // is removed. Evaluate production binding expressions, not a copied normalizer.

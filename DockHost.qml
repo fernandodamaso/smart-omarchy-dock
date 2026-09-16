@@ -451,6 +451,11 @@ Item {
     applicationMutationController: root
   }
 
+  DockWorkspaceMonitorDrag {
+    id: workspaceMonitorDragController
+    windowActions: root.windowActions
+  }
+
   DockBadgeTracker {
     id: badgeTrackerController
     notificationService: root.notificationService
@@ -474,6 +479,7 @@ Item {
         browserProfileBadgesEnabled: root.settings.browserProfileBadgesEnabled !== false
         showTrash: root.showTrash
         windowActions: root.windowActions
+        workspaceMonitorDrag: workspaceMonitorDragController
         badgeTracker: root.badgeTracker
         trashItemCount: root.trashItemCount
         trashStateKnown: root.trashStateKnown

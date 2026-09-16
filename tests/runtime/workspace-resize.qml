@@ -10,6 +10,10 @@ ShellRoot {
   }
 
   Components.DockWindowActions { id: actions }
+  Components.DockWorkspaceMonitorDrag {
+    id: monitorDrag
+    windowActions: actions
+  }
 
   Components.Dock {
     id: dock
@@ -20,6 +24,7 @@ ShellRoot {
     settings: ({ workspaceLayout: "grouped", iconSize: 24, pinned: [] })
     showTrash: false
     windowActions: actions
+    workspaceMonitorDrag: monitorDrag
     badgeTracker: null
     trashItemCount: 0
     trashStateKnown: true
