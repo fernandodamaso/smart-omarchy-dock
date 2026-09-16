@@ -8,6 +8,7 @@ Item {
   id: root
 
   required property string label
+  required property string description
   required property string connector
   required property bool focused
   required property string position
@@ -20,15 +21,16 @@ Item {
     return fallback || "Monitor"
   }
   readonly property string accessibilityText: {
+    var details = String(root.description || "").trim() || root.displayText
     var connectorText = String(root.connector || "").trim()
-    if (!connectorText || connectorText === root.displayText) return root.displayText
-    return root.displayText + " — " + connectorText
+    if (!connectorText || connectorText === details) return details
+    return details + " — " + connectorText
   }
   readonly property real contentWidth: monitorGlyph.width
-    + Style.spacing.controlGap + monitorText.implicitWidth
-  readonly property real maximumWidth: 156
+    + Style.spacing.labelGap + monitorText.implicitWidth
+  readonly property real maximumWidth: 112
 
-  implicitWidth: Math.min(maximumWidth, Math.max(54, contentWidth))
+  implicitWidth: Math.min(maximumWidth, Math.max(44, contentWidth))
   width: implicitWidth
   height: root.slotSize + 10
 
@@ -40,10 +42,10 @@ Item {
 
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
-    width: Math.ceil(Style.font.bodySmall * 1.35)
+    width: Math.ceil(Style.font.caption * 1.35)
     height: width
     text: "󰍺"
-    fontSize: Style.font.bodySmall
+    fontSize: Style.font.caption
     color: root.focused ? Color.foreground : Color.muted
   }
 
@@ -51,7 +53,7 @@ Item {
     id: monitorText
 
     anchors.left: monitorGlyph.right
-    anchors.leftMargin: Style.spacing.controlGap
+    anchors.leftMargin: Style.spacing.labelGap
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
     textFormat: Text.PlainText
@@ -63,7 +65,7 @@ Item {
       ? Util.alpha(Color.foreground, 0.9)
       : Util.alpha(Color.muted, 0.88)
     font.family: Style.font.family
-    font.pixelSize: Style.font.bodySmall
+    font.pixelSize: Style.font.caption
     renderType: Text.NativeRendering
   }
 

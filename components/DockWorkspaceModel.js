@@ -59,16 +59,27 @@ function resolvedOwner(evidence) {
   return { seen: true, owner: owners[0] }
 }
 
-function monitorLabel(identity, connector, descriptor, ipc) {
-  var description = String(
-    ipc && ipc.description !== undefined ? ipc.description
-      : descriptor && descriptor.description !== undefined ? descriptor.description : ""
+function monitorProperty(name, descriptor, ipc) {
+  return String(
+    ipc && ipc[name] !== undefined ? ipc[name]
+      : descriptor && descriptor[name] !== undefined ? descriptor[name] : ""
   ).trim()
+}
+
+function monitorLabel(identity, connector, descriptor, ipc) {
+  var model = monitorProperty("model", descriptor, ipc)
+  if (model) return model
+  var description = monitorProperty("description", descriptor, ipc)
   if (description) return description
   if (connector) return connector
   if (identity.indexOf("name:") === 0) return identity.slice(5)
   if (identity.indexOf("id:") === 0) return "Monitor " + identity.slice(3)
   return "Monitor"
+}
+
+function monitorDescription(identity, connector, descriptor, ipc) {
+  return monitorProperty("description", descriptor, ipc)
+    || monitorLabel(identity, connector, descriptor, ipc)
 }
 
 function monitorGroupForWorkspace(monitorGroups, workspaceIdentity, present) {
@@ -191,6 +202,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       identity: owner,
       connector: connector,
       label: monitorLabel(owner, connector, monitorDescriptor, monitorIpc),
+      description: monitorDescription(owner, connector, monitorDescriptor, monitorIpc),
       x: finiteCoordinate(monitorIpc.x, monitorDescriptor.x),
       y: finiteCoordinate(monitorIpc.y, monitorDescriptor.y)
     }
@@ -373,7 +385,8 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
       var metadata = monitorMetadata[sectionIdentity] || ({
         identity: sectionIdentity,
         connector: sectionIdentity.indexOf("name:") === 0 ? sectionIdentity.slice(5) : "",
-        label: monitorLabel(sectionIdentity, "", null, null)
+        label: monitorLabel(sectionIdentity, "", null, null),
+        description: monitorDescription(sectionIdentity, "", null, null)
       })
       var firstWorkspaceIdentity = ""
       for (var firstIndex = 0; firstIndex < groups.length; ++firstIndex) {
@@ -386,6 +399,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
         identity: sectionIdentity,
         connector: metadata.connector,
         label: metadata.label,
+        description: metadata.description,
         focused: focusedOwner === sectionIdentity,
         activeWorkspace: monitorWorkspaces[sectionIdentity] || "",
         firstWorkspaceIdentity: firstWorkspaceIdentity
@@ -404,6 +418,7 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
         identity: "",
         connector: "",
         label: "Unknown monitor",
+        description: "Unknown monitor",
         focused: false,
         activeWorkspace: "",
         firstWorkspaceIdentity: firstUnknown
@@ -457,7 +472,8 @@ function monitorGroupsEqual(a, b) {
     var left = leftGroups[i]
     var right = rightGroups[i]
     if (left.identity !== right.identity || left.connector !== right.connector
-        || left.label !== right.label || left.focused !== right.focused
+        || left.label !== right.label || left.description !== right.description
+        || left.focused !== right.focused
         || left.activeWorkspace !== right.activeWorkspace
         || left.firstWorkspaceIdentity !== right.firstWorkspaceIdentity)
       return false
