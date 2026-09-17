@@ -74,9 +74,19 @@ assert.equal(intent.reply.data.applied,true)
 assert.equal(h.host.settings.sidebarExpandedWidth,400)
 assert.equal(h.host.settingsPersisted,false)
 
+h.fault.save=false
+const writesBeforeRetry = h.writes.length
+const retry = h.host.retrySettings()
+assert.equal(retry.ok,true)
+assert.equal(h.writes.length,writesBeforeRetry+1,'explicit retry writes the current snapshot once')
+assert.equal(h.host.settingsPersisted,true)
+const retried = JSON.parse(h.host.settingsLoadedText)
+assert.equal(retried.sidebarExpandedWidth,400)
+assert.equal(retried.sidebarCollapsed,true)
+assert.deepEqual(plain(retried.extensionData),baselineUnknown)
+
 // A later accepted field is part of the same current snapshot; no stale width
 // patch or unrelated-key rollback is allowed.
-h.fault.save=false
 cli = h.request('config.apply',{patch:{sidebarCollapsed:false}})
 assert.equal(cli.ok,true)
 assert.equal(h.host.settings.sidebarExpandedWidth,400)
@@ -99,4 +109,4 @@ assert.equal(restarted.host.settings.sidebarCollapsed,false)
 assert.deepEqual(plain(restarted.host.settings.extensionData),baselineUnknown)
 assert.deepEqual(plain(restarted.host.settings.iconOverrides),initial.iconOverrides)
 
-console.log('SB-03 conflict-safe host preference intents and latest-snapshot persistence: PASS')
+console.log('SB-03 conflict-safe host preference intents, retry and latest-snapshot persistence: PASS')
