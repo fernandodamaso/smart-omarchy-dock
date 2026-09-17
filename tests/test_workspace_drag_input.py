@@ -54,6 +54,9 @@ def production_blocks():
         "tap": qml_block(
             item_source, "TapHandler {",
             contains="acceptedButtons: Qt.LeftButton\n    acceptedModifiers: Qt.NoModifier"),
+        "ctrl_tap": qml_block(
+            item_source, "TapHandler {",
+            contains="acceptedButtons: Qt.LeftButton\n    acceptedModifiers: Qt.ControlModifier"),
         "drag": qml_block(
             item_source, "DragHandler {", contains="id: workspaceDragHandler"),
         "timer": qml_block(
@@ -165,6 +168,7 @@ Item {{
         property url renderedSource: ""
       }}
       {item["tap"]}
+      {item["ctrl_tap"]}
       {item["helper"]}
       {item["drag"]}
       {item["timer"]}
@@ -305,7 +309,14 @@ Item {{
     id: iconActions
     property int activationCalls: 0
     property var activeToplevel: null
-    function activateToplevel() {{ activationCalls++; return true }}
+    property var lastActivationMonitor: null
+    property var lastWorkspaceTargetOverride: null
+    function activateToplevel(toplevel, originOnly, activationMonitor, focusAfterRestore, workspaceTargetOverride) {{
+      activationCalls++
+      lastActivationMonitor = activationMonitor
+      lastWorkspaceTargetOverride = workspaceTargetOverride
+      return true
+    }}
   }}
 
   QtObject {{
@@ -353,6 +364,8 @@ Item {{
       iconDrag.beginCalls = 0
       iconDrag.cancelCalls = 0
       iconActions.activationCalls = 0
+      iconActions.lastActivationMonitor = null
+      iconActions.lastWorkspaceTargetOverride = null
       var value = createTemporaryObject(iconFactory, scene)
       verify(value)
       return value
@@ -387,7 +400,24 @@ Item {{
       mouseRelease(icon, 31, 30, Qt.LeftButton)
       compare(icon.beginCalls, 0)
       compare(icon.activationCalls, 1)
+      compare(iconActions.lastActivationMonitor, "")
+      compare(iconActions.lastWorkspaceTargetOverride, undefined)
       tryCompare(icon, "workspaceGestureOwned", false)
+    }}
+    function test_iconCtrlClickRecordsDockMonitor() {{
+      var icon = freshIcon()
+      icon.activationMonitor = "id:fixture-monitor"
+      mouseClick(icon, 30, 30, Qt.LeftButton, Qt.ControlModifier)
+      compare(icon.activationCalls, 1)
+      compare(iconActions.lastActivationMonitor, "id:fixture-monitor")
+      compare(iconActions.lastWorkspaceTargetOverride, undefined)
+    }}
+    function test_iconMixedModifiersDoNotActivate() {{
+      var icon = freshIcon()
+      mouseClick(icon, 30, 30, Qt.LeftButton, Qt.ShiftModifier)
+      mouseClick(icon, 30, 30, Qt.LeftButton,
+        Qt.ControlModifier | Qt.ShiftModifier)
+      compare(icon.activationCalls, 0)
     }}
     function test_headerFirstMoveCrossesThreshold() {{
       var header = freshHeader()
@@ -495,6 +525,35 @@ Item {{
       mouseRelease(scene, 600, 200, Qt.LeftButton)
       tryCompare(icon, "workspaceGestureOwned", false)
       compare(icon.workspaceGestureConsumed, false)
+      mouseClick(icon, 30, 30, Qt.LeftButton)
+      compare(icon.activationCalls, 1)
+    }}
+    function test_iconCtrlReleasedBeforeCanceledGestureEndsDoesNotActivate() {{
+      var icon = freshIcon()
+      var delta = Application.styleHints.startDragDistance + 7
+      mousePress(icon, 30, 30, Qt.LeftButton, Qt.ControlModifier)
+      mouseMove(icon, 30 + delta, 30, 20,
+        Qt.LeftButton, Qt.ControlModifier)
+      compare(icon.beginCalls, 1)
+      mouseMove(scene, 600, 200, 20, Qt.LeftButton, Qt.NoModifier)
+      mouseRelease(scene, 600, 200, Qt.LeftButton)
+      tryCompare(icon, "workspaceGestureOwned", false)
+      compare(icon.activationCalls, 0)
+      mouseClick(icon, 30, 30, Qt.LeftButton)
+      compare(icon.activationCalls, 1)
+    }}
+    function test_iconCtrlHeldThroughCanceledGestureDoesNotActivate() {{
+      var icon = freshIcon()
+      var delta = Application.styleHints.startDragDistance + 7
+      mousePress(icon, 30, 30, Qt.LeftButton, Qt.ControlModifier)
+      mouseMove(icon, 30 + delta, 30, 20,
+        Qt.LeftButton, Qt.ControlModifier)
+      compare(icon.beginCalls, 1)
+      mouseMove(scene, 600, 200, 20,
+        Qt.LeftButton, Qt.ControlModifier)
+      mouseRelease(scene, 600, 200, Qt.LeftButton, Qt.ControlModifier)
+      tryCompare(icon, "workspaceGestureOwned", false)
+      compare(icon.activationCalls, 0)
       mouseClick(icon, 30, 30, Qt.LeftButton)
       compare(icon.activationCalls, 1)
     }}

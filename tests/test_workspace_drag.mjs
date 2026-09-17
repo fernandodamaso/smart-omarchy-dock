@@ -309,8 +309,8 @@ for (const mutate of [
   assert.match(groupSource, /header\.focus = false/,
     'release must drop header focus so hover does not restore the accent ring')
   assert.match(read('Dock.qml'),
-    /WlrLayershell\.keyboardFocus: workspaceMonitorDragAvailable\s+\? WlrKeyboardFocus\.OnDemand : WlrKeyboardFocus\.None/,
-    'keyboard mode must remain stable while the pointer handler owns its grab')
+    /WlrLayershell\.keyboardFocus:\s*WlrKeyboardFocus\.OnDemand/,
+    'keyboard mode must remain available for native modifiers in every dock layout')
   assert.doesNotMatch(read('Dock.qml'),
     /keyboardFocus: workspaceMonitorDragSourceActive/,
     'starting a drag must not recommit layer-surface state and cancel its grab')

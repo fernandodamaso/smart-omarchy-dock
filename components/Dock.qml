@@ -932,8 +932,7 @@ PanelWindow {
   WlrLayershell.exclusiveZone: reserveSpace ? reservedSize : 0
   WlrLayershell.namespace: "smartdock"
   WlrLayershell.layer: WlrLayer.Top
-  WlrLayershell.keyboardFocus: workspaceMonitorDragAvailable
-    ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+  WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
   mask: Region {
     item: root.dockShown ? interactionArea : revealStrip
   }

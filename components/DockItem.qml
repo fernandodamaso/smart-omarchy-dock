@@ -237,11 +237,9 @@ Item {
   function dispatchPointerAction(input, modifiers, options) {
     var keys = modifiers || ({})
     var request = Object.assign({}, options || ({}))
-    // Workspace-card windows pull their workspace to the dock monitor on any
-    // click, matching the card name; the panel has no keyboard focus, so
-    // modifiers never reach these handlers and cannot gate the pull.
     var cardTarget = root.workspaceActivationTarget || ""
-    if (keys.control === true || cardTarget !== "") {
+    // Left-click relocation requires explicit Ctrl; preserve other input actions.
+    if (keys.control === true || (input !== "left" && cardTarget !== "")) {
       request.activationMonitor = root.activationMonitor
       if (cardTarget !== "")
         request.workspaceTargetOverride = cardTarget

@@ -172,6 +172,18 @@ function fixture(usingLua = false) {
   assert.equal(detached.length, 0, 'a pinned workspace blocks relocation before dispatch')
 }
 
+// Activation on a workspace's current monitor must not emit a redundant move.
+{
+  const f = fixture(false)
+  const { actions: a, A, detached } = f
+  assert.deepEqual(Array.from(a.workspaceOnMonitorRequests(3, 'id:0')),
+    [DockModel.focusWorkspaceTargetRequest(3, false)])
+  assert.equal(a.activateToplevel(A, true, 'id:0', false, 3), true)
+  assert.doesNotMatch(detached.flat().join(' '),
+    /movecurrentworkspacetomonitor|moveworkspacetomonitor/i,
+    'same-monitor activation must focus without moving the workspace')
+}
+
 // Cycling and minimized activation share the same monitor-pin focus-only path.
 {
   const f = fixture(false)
