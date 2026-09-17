@@ -46,6 +46,7 @@ from dev_session import (  # noqa: E402
     plugin_shell_config,
     ssh_argv,
     start,
+    start_guest_dock,
     status,
     stop,
     sync_source,
@@ -54,6 +55,19 @@ from dev_session import (  # noqa: E402
 
 
 class ContractTests(unittest.TestCase):
+    def test_host_focus_signature_ignores_window_geometry(self):
+        from dev_session import _host_focus_signature
+
+        before = {
+            "active_workspace": {"id": 1, "name": "1", "windows": 1},
+            "active_window": {"address": "0x1", "at": [0, 0], "size": [1900, 968]},
+        }
+        after = {
+            "active_workspace": {"id": 1, "name": "1", "windows": 3},
+            "active_window": {"address": "0x1", "at": [0, 0], "size": [945, 479]},
+        }
+        self.assertEqual(_host_focus_signature(before), _host_focus_signature(after))
+
     def test_name(self):
         self.assertEqual(validate_name("agent-a"), "agent-a")
         for value in ("", "A", "../a", "a/b", "a" * 33):
@@ -100,6 +114,89 @@ class ContractTests(unittest.TestCase):
         ]
         owned = _owned_windows(clients, 9)
         self.assertEqual([item["address"] for item in owned], ["0xa", "0xb"])
+
+    def test_qemu_launch_rule_covers_both_owned_titles(self):
+        from dev_session import _disable_launch_rule, _launch_rule
+
+        calls = []
+        result = subprocess.CompletedProcess([], 0, stdout="true\n", stderr="")
+        with mock.patch("dev_session.subprocess.run", side_effect=lambda *args, **kwargs: calls.append(args[0]) or result):
+            _launch_rule("visual-a", "4")
+            _disable_launch_rule("visual-a")
+        launch = " ".join(calls[0])
+        disable = " ".join(calls[1])
+        for expression in (launch, disable):
+            self.assertIn("virtio-vga", expression)
+            self.assertIn(")?$", expression)
+            self.assertIn("SmartDock visual", expression)
+
+    def test_qemu_heads_are_exactly_two_owned_titles_and_ordered(self):
+        from dev_session import _show_both_qemu_heads
+
+        heads = [
+            {"pid": 9, "address": "0xb", "title": "QEMU (SmartDock visual-a): virtio-vga.1",
+             "workspace": {"name": "4"}, "at": [900, 0]},
+            {"pid": 9, "address": "0xa", "title": "QEMU (SmartDock visual-a)",
+             "workspace": {"name": "4"}, "at": [0, 0]},
+        ]
+        with mock.patch("dev_session._guard_hyprland_fds"):
+            with mock.patch("dev_session._owned_windows", return_value=heads):
+                with mock.patch("dev_session._place_owned_windows", return_value=heads):
+                    actual = _show_both_qemu_heads(9, "4", "visual-a")
+        self.assertEqual([item["address"] for item in actual], ["0xa", "0xb"])
+
+    def test_guest_seed_is_persisted_and_not_repeated_on_restart(self):
+        from dev_session import GUEST_CONFIG_PATH
+
+        evidence = Path(tempfile.mkdtemp(prefix="dev-session-seed-evidence-"))
+        self.addCleanup(lambda: shutil.rmtree(evidence, ignore_errors=True))
+        record = {
+            "name": "seed-once", "state": "ready", "mode": "standalone",
+            "evidence_path": str(evidence), "config_path": GUEST_CONFIG_PATH,
+            "guest_config_path": GUEST_CONFIG_PATH, "guest_seeded": False,
+            "source": "/tmp/source", "qemu_pid": 9, "qemu_start_ticks": 1,
+            "qemu_pgid": 9, "host_pid": 9, "guest_dock_pid": 8,
+        }
+        starts = []
+        seeds = []
+
+        def guest_argv(_record, argv, _timeout):
+            if argv[-1] == "start-dock":
+                starts.append(argv)
+                return subprocess.CompletedProcess(argv, 0,
+                    stdout=json.dumps({"pid": 8, "config_path": GUEST_CONFIG_PATH}) + "\n",
+                    stderr="")
+            if argv[-1] == "seed-desktop":
+                seeds.append(argv)
+                return subprocess.CompletedProcess(argv, 0,
+                    stdout=json.dumps({"seeded": True}) + "\n", stderr="")
+            raise AssertionError(argv)
+
+        with mock.patch("dev_session._require_runnable_session", return_value=record):
+            with mock.patch("dev_session._read_guest_ready", return_value={
+                "wayland_display": "wayland-1",
+                "hyprland_instance_signature": "sig",
+                "output": "Virtual-1",
+                "outputs": ["Virtual-1", "Virtual-2"],
+            }):
+                with mock.patch("dev_session._commit_live_record"):
+                    with mock.patch("dev_session._stop_guest_dock") as stop_dock:
+                        with mock.patch("dev_session.stage_omarchy_qml_assets"):
+                            with mock.patch("dev_session._run_guest_argv", side_effect=guest_argv):
+                                with mock.patch("dev_session._guest_qs_instances",
+                                                  return_value=[{"pid": 8}]):
+                                    with mock.patch("dev_session._guest_smartdock_status",
+                                                      return_value={"ok": True}):
+                                        with mock.patch("dev_session.qualify_guest_dock",
+                                                          return_value={"loadState": "loaded"}):
+                                            first = start_guest_dock("seed-once")
+                                            second = start_guest_dock("seed-once")
+        self.assertTrue(first["guest_seeded"])
+        self.assertTrue(second["guest_seeded"])
+        self.assertEqual(len(seeds), 1)
+        self.assertEqual(len(starts), 2)
+        self.assertEqual(stop_dock.call_count, 2)
+        self.assertEqual(json.loads((evidence / "guest-seed.json").read_text())["seeded"], True)
 
     def test_hyprland_fd_guard_limits(self):
         self.assertLess(HYPRLAND_FD_SOFT_LIMIT, HYPRLAND_FD_HARD_LIMIT)

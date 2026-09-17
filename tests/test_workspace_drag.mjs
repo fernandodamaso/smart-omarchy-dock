@@ -326,6 +326,10 @@ for (const mutate of [
     'ordinary header clicks must retain the existing activation path')
   assert.match(groupSource, /onPressedChanged: if \(pressed\)/,
     'header press must take layer focus before the drag threshold or the grab is lost on the first move')
+  assert.match(groupSource, /Application\.styleHints\.startDragDistance/,
+    'workspace monitor drag begins only after the platform distance threshold')
+  assert.match(groupSource, /workspaceMonitorGestureStarted/,
+    'press-time grab and threshold-crossing gesture state are separate')
   assert.match(groupSource,
     /width: Math.min\(80, Math.max\(root\.slotSize, title\.implicitWidth \+ 16\)\)/,
     'the workspace number column must be at least one icon wide so card drag is hittable')
@@ -356,8 +360,10 @@ for (const mutate of [
     'a covering section, including a rejected current-owner section, is detected before fallback')
   assert.match(updatePointer, /!covering/,
     'an explicit rejected section must block the physical-dock fallback')
-  assert.match(updatePointer, /refreshSectionHits/,
-    'destination reveal and later pointer motion retarget from live section geometry')
+  assert.doesNotMatch(updatePointer, /refreshTargetGeometry/,
+    'pointer motion uses pickup-time geometry snapshots')
+  assert.match(dragSource, /function refreshTargetGeometry/,
+    'deliberate scrolling and completed reveal refresh target geometry')
   assert.match(read('Dock.qml'),
     /workspaceMonitorDrag\.updatePointer\(root\.workspaceMonitorDrag\.pointerScene\)/,
     'scrolling a destination dock must refresh monitor section targeting')
@@ -377,6 +383,19 @@ for (const mutate of [
     'section hits include every card on the hovered monitor, not only the labeled first card')
   assert.match(read('Dock.qml'), /ghostUrl/,
     'the drag ghost must be the captured workspace card, not a number pill')
+  assert.match(read('Dock.qml'), /workspaceDisplayPresentation/,
+    'hover projection is display-only and leaves the live presentation authoritative')
+  assert.match(read('Dock.qml'), /projectMonitorDrag/,
+    'the dock uses the pure workspace projection helper')
+  assert.match(read('Dock.qml'), /_monitorDragPlaceholder/,
+    'destination placeholders are inert derived entries')
+  const ghost = read('Dock.qml').slice(
+    read('Dock.qml').indexOf('id: workspaceMonitorDragProxy'),
+    read('Dock.qml').indexOf('id: hideTimer'))
+  assert.doesNotMatch(ghost, /Behavior|scale:/,
+    'the captured ghost follows the pointer directly without easing or scaling')
+  assert.match(ghost, /enabled: false/,
+    'the captured ghost cannot steal pointer input')
   assert.match(read('Dock.qml'), /cardForWorkspace/,
     'pickup must find the live workspace card so grabToImage can copy it')
   assert.match(dragSource, /grabToImage/,
@@ -385,8 +404,8 @@ for (const mutate of [
     'section hits must map through an Item, not the PanelWindow')
   assert.match(read('Dock.qml'), /mapToItem\(\s*interactionArea\s*,/,
     'section hits use the dock Item that owns card geometry')
-  assert.doesNotMatch(dragSource, /cancel\("capture failed"\)/,
-    'a failed card snapshot must not abort the live drag')
+  assert.match(dragSource, /cancel\("capture failed"\)/,
+    'a failed card snapshot aborts the gesture before dispatch')
 
   const transitions = { UngrabExclusive: 1, CancelGrabExclusive: 2, CancelGrabPassive: 3 }
   for (const [transition, state, expected] of [[1, 1, 'finish'], [1, 0, 'cancel'],

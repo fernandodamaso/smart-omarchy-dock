@@ -32,12 +32,12 @@ require_guest() {
 
 stage_dir() {
   local dir="$1"
-  mkdir -p "$dir/imports" "$dir/assets"
+  local preview_dir="$dir/tests/runtime/workspace-drag-preview"
+  mkdir -p "$dir/imports" "$preview_dir"
   cp "$script_dir/shell.qml" "$script_dir/PreviewDock.qml" "$script_dir/PreviewDrag.qml" \
-    "$script_dir/PreviewModel.js" "$script_dir/qmldir" "$dir/"
+    "$script_dir/PreviewModel.js" "$script_dir/qmldir" "$preview_dir/"
   ln -sfn "$repo_root/components" "$dir/components"
-  ln -sfn "$repo_root/assets/lucide" "$dir/assets/lucide"
-  ln -sfn "$repo_root/assets/services" "$dir/assets/services"
+  ln -sfn "$repo_root/assets" "$dir/assets"
   ln -sfn "${OMARCHY_PATH:-${HOME}/smartdock-omarchy-test}/shell" "$dir/imports/qs"
   if [[ ! -d "$dir/imports/qs/Commons" || ! -d "$dir/imports/qs/Ui" ]]; then
     die "missing Omarchy qs.Commons/Ui at ${OMARCHY_PATH:-${HOME}/smartdock-omarchy-test}/shell"
@@ -115,7 +115,7 @@ cmd_start() {
   export QML2_IMPORT_PATH="$run_dir/imports${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
   export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
   : >"$log_file"
-  qs -p "$run_dir" --no-color >"$log_file" 2>&1 &
+  qs -p "$run_dir/tests/runtime/workspace-drag-preview" --no-color >"$log_file" 2>&1 &
   local pid=$!
   sleep 0.3
   if ! kill -0 "$pid" 2>/dev/null; then

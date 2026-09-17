@@ -51,17 +51,63 @@ recorded here after the checks run.
 | Plugin validation blocker reproduction | EXPECTED FAIL: prototype `tests/runtime/workspace-drag-preview/assets` symlink rejected | `logs/plugin-validate.txt` |
 | Browser-preview blocker reproduction | EXPECTED FAIL: 1 Python test with 5 QML failures; same result on local `main` | `logs/browser-preview.txt`, `logs/browser-preview-main.txt` |
 
-## Stage-two backlog
+## Real integration
 
-- Prototype symlinks prevent plugin validation.
-- Prototype accepts hidden destination targets.
-- Production coordinator accepts unavailable destination sections.
-- Detached QEMU window misses the no-focus launch rule.
-- Restarting the guest dock reseeds applications and workspace placement.
-- The real dock still lacks the complete reference placeholder and gap-animation behavior.
-- The browser-preview Python failure also reproduces on local `main`.
+- Preview symlinks are removed; `omarchy plugin validate .` now passes.
+- `projectMonitorDrag()` is a non-mutating display projection. The live
+  compositor presentation remains authoritative; the source delegate stays at
+  its stable identity while an inert equal-size destination placeholder is
+  shown during hover and confirmation.
+- Capture, platform drag-distance activation, frozen/clipped target geometry,
+  reveal-settle refresh, one-shot dispatch, compositor confirmation, timeout,
+  and monitor-removal cleanup are covered by the focused and full QML suites.
+- The development-session launcher matches both exact QEMU head titles,
+  records `qemu_window_addresses`, compares stable focus/workspace identities,
+  and persists one-time guest seeding across sync/restart.
+
+Automated results on the current working head:
+
+| Check | Result |
+| --- | --- |
+| Structural shell checks | PASS |
+| JavaScript model tests | PASS |
+| Python tests (`tests`) | 116 pass; 1 known browser-preview baseline failure |
+| Python provider tests | PASS: 20 tests |
+| QML tests | PASS: 230 tests |
+| `omarchy plugin validate .` | PASS |
+| Targeted `qmllint` gate | PASS with existing unqualified-access/import warnings |
+| `timeout 6s ./scripts/run --no-color` | Startup reached `Configuration Loaded`; expected timeout 124 |
+| Workspace resize harness | Baseline issue: prints `workspace-resize: PASS` but exits 1 because stripped-shell `ReferenceError: ToplevelManager is not defined` is matched by the harness; reproduced on `main` |
+| Browser preview | Baseline issue: 5 QML failures; reproduced unchanged on `main` `4026d8bee7113d49994917bd99a6cb57247eef51` |
+
+KVM evidence is retained outside Git under
+`~/.local/state/smartdock/dev-sessions/workspace-drag-kvm-20260917/`:
+
+- `record.json`: ready standalone guest, outputs `Virtual-1`/`Virtual-2`, two
+  exact QEMU addresses on workspace `2`, and `guest_seeded: true`.
+- `evidence/guest-seed.json`: verified seed payload for four guest clients.
+- `evidence/frame-001.png` and `frame-002.png`: two-head guest captures.
+- Two sync/restart cycles retained the seed file timestamp and size and did
+  not create another seed payload. Stop removed all named QEMU windows and the
+  host production settings SHA-256 stayed
+  `c0f5098ec03ef1da1006dbed8e30d44a836b9e8ca81880969379ff77e9cc4bd8`.
+
+The exact Omarchy environment used for imports was `omarchy 4.0.3-1`, with
+`/usr/share/omarchy/version` reporting `4.0.0.alpha`.
+
+## Remaining qualification
+
+- Full Omarchy two-monitor qualification remains unresolved; only the stripped
+  standalone guest was available.
+- The exposed computer-use surface could not target the native QEMU windows,
+  so actual press-drag-release pointer evidence for the real dock was not
+  collected. The guest capture and seed/restart checks are supplemental only.
+- Keep the PR Draft until those physical gates and the independent review are
+  complete. The browser-preview and resize results remain separate baseline
+  issues and were not changed by this branch.
 
 ## Status
 
-Consolidated locally; feature integration and merge qualification remain
-incomplete.
+Real integration is implemented and locally validated; delivery and physical
+qualification remain incomplete by design. Do not merge, deploy, or update the
+installed plugin from this branch.

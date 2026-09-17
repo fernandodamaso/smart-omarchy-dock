@@ -102,8 +102,9 @@ PanelWindow {
   }
 
   function workspaceMonitorViewportRect() {
+    if (!dockShown || visible === false) return Qt.rect(0, 0, 0, 0)
     if (!groupedLayout || groupedLayout.visible === false || !interactionArea)
-      return monitorRect
+      return Qt.rect(0, 0, 0, 0)
     var inset = Number(groupedLayout.navigationWidth) || 0
     var origin = groupedLayout.mapToItem(interactionArea, inset, 0)
     var width = Number(groupedLayout.viewportWidth)
@@ -117,7 +118,7 @@ PanelWindow {
 
   function workspaceMonitorSectionHits() {
     var hits = []
-    if (!workspaceCards || !interactionArea) return hits
+    if (!dockShown || visible === false || !workspaceCards || !interactionArea) return hits
     try {
       var view = workspaceMonitorViewportRect()
       for (var i = 0; i < workspaceCards.count; ++i) {
@@ -510,6 +511,19 @@ PanelWindow {
     primaryWorkspaceIdentity: "", monitorGroups: [], groups: [],
     globalLaunchers: [], fallbackItems: [], renderedItems: []
   })
+  readonly property var workspaceDisplayPresentation: {
+    var drag = workspaceMonitorDrag
+    var target = drag && (drag.active || drag.awaitingConfirmation)
+      ? String(drag.projectionMonitor || "") : ""
+    if (!groupedRequested || !target || !drag) return workspacePresentation
+    return WorkspaceModel.projectMonitorDrag(workspacePresentation, {
+      workspaceIdentity: String(drag.sourceWorkspace || ""),
+      sourceMonitor: String(drag.sourceMonitor || ""),
+      targetMonitor: target,
+      label: String(drag.sourceLabel || ""),
+      count: Number(drag.sourceCount) || 0
+    }, monitorIdentity)
+  }
   readonly property bool grouped: groupedRequested
   readonly property var minimizedToplevels: {
     var revision = scopeRevision
@@ -634,6 +648,8 @@ PanelWindow {
       root.revealAfterWorkspaceDrag = false
       Qt.callLater(root.revealActiveWorkspace)
     }
+    if (workspaceMonitorDrag)
+      workspaceMonitorDrag.reconcileCompositorOwnership()
   }
 
   function scheduleVisibleItemsRefresh() {
@@ -667,7 +683,8 @@ PanelWindow {
 
   function cancelWorkspaceGesture(reason) {
     if (workspaceDrag) workspaceDrag.cancel(reason)
-    if (workspaceMonitorDrag && workspaceMonitorDrag.active
+    if (workspaceMonitorDrag && (workspaceMonitorDrag.active
+        || workspaceMonitorDrag.awaitingConfirmation)
         && (workspaceMonitorDrag.sourceDock === root
           || workspaceMonitorDrag.hoveredTarget === root || dragRevealed))
       workspaceMonitorDrag.cancel(reason)
@@ -962,8 +979,7 @@ PanelWindow {
     width: Math.max(1, root.workspaceMonitorDrag.ghostSize.width)
     height: Math.max(1, root.workspaceMonitorDrag.ghostSize.height)
     x: pointerLocal.x - root.workspaceMonitorDrag.grabOffset.x
-    y: Math.max(0, Math.min(root.height - height,
-      pointerLocal.y - root.workspaceMonitorDrag.grabOffset.y))
+    y: pointerLocal.y - root.workspaceMonitorDrag.grabOffset.y
 
     Image {
       anchors.fill: parent
@@ -1143,16 +1159,23 @@ PanelWindow {
         accent: Color.accent
         animationsEnabled: root.interfaceAnimationsEnabled
         windowDragActive: root.workspaceDragActive
-        dragScenePosition: workspaceDrag.pointerScene
+        monitorDragActive: root.workspaceMonitorDragActive
+        dragScenePosition: root.workspaceDragActive ? workspaceDrag.pointerScene
+          : root.workspaceMonitorDragActive ? root.workspaceMonitorDrag.pointerScene
+          : Qt.point(0, 0)
         onViewportChanged: {
           windowPreview.refreshAnchorGeometry()
-          if (root.workspaceDragActive) workspaceDrag.updatePointer(workspaceDrag.pointerScene)
-          if (root.workspaceMonitorDrag && root.workspaceMonitorDrag.active)
+        }
+        onViewportMovementFinished: {
+          if (root.workspaceMonitorDrag && root.workspaceMonitorDrag.active) {
+            root.workspaceMonitorDrag.refreshTargetGeometry(root)
             root.workspaceMonitorDrag.updatePointer(root.workspaceMonitorDrag.pointerScene)
+          }
+          if (root.workspaceDragActive) workspaceDrag.updatePointer(workspaceDrag.pointerScene)
         }
         DockPresentationModel {
           id: workspacePresentationModel
-          sourceItems: root.groupedRequested ? root.workspacePresentation.groups : []
+          sourceItems: root.groupedRequested ? root.workspaceDisplayPresentation.groups : []
           keyProperty: "identity"
           animationsEnabled: root.interfaceAnimationsEnabled
         }
@@ -1178,7 +1201,7 @@ PanelWindow {
             readonly property bool active: workspaceCard.active
             readonly property real headerWidth: workspaceCard.headerWidth
             readonly property var monitorSection: WorkspaceModel.monitorGroupForWorkspace(
-              root.workspacePresentation.monitorGroups, workspaceIdentity, present)
+              root.workspaceDisplayPresentation.monitorGroups, workspaceIdentity, present)
             readonly property string sectionMonitorIdentity: String(
               (modelData.item && modelData.item.monitorIdentity)
               || (monitorSection && monitorSection.identity) || "")
@@ -1221,18 +1244,23 @@ PanelWindow {
               property var modelData: workspaceCardWrapper.modelData
               property int index: workspaceCardWrapper.index
               x: monitorPrefix.width + workspaceCardWrapper.prefixGap
-              present: modelData.present
+              present: modelData.present && modelData.item._monitorDragOccupied !== false
               animateEntrance: modelData.animateEntrance
               animationsEnabled: root.interfaceAnimationsEnabled
               exitRevision: modelData.exitRevision
-              naturalWidth: workspaceCard.width
-              naturalHeight: workspaceCard.height
+              naturalWidth: modelData.item._monitorDragPlaceholder
+                ? Math.max(1, root.workspaceMonitorDrag.ghostSize.width)
+                : workspaceCard.width
+              naturalHeight: modelData.item._monitorDragPlaceholder
+                ? Math.max(1, root.workspaceMonitorDrag.ghostSize.height)
+                : workspaceCard.height
               trailingGap: 0
               onExitFinished: revision => workspacePresentationModel.completeRemoval(
                 modelData.token, revision)
 
               DockWorkspaceGroup {
                 id: workspaceCard
+                visible: !workspaceCardSlot.modelData.item._monitorDragPlaceholder
                 animationsEnabled: root.interfaceAnimationsEnabled
                 modelData: workspaceCardSlot.modelData.item
                 property var modelData
@@ -1241,6 +1269,7 @@ PanelWindow {
                 workspaceOwnerMonitor: String(modelData.monitorIdentity || "")
                 workspaceMonitorDrag: root.workspaceMonitorDrag
                 workspaceMonitorDragDock: root
+                switchable: !modelData._monitorDragPlaceholder
                 showFullLabel: modelData.showFullLabel === true
                 count: modelData.count
                 urgent: modelData.urgent === true && root.attentionBadgesEnabled
@@ -1250,7 +1279,7 @@ PanelWindow {
                 viewport: groupedLayout
                 active: modelData.active
                 slotSize: root.itemSize
-                applicationModel: appPresentationModel.model
+                applicationModel: modelData._monitorDragPlaceholder ? null : appPresentationModel.model
                 applicationDelegate: Component {
                   DockAnimatedSlot {
                     id: appSlot
@@ -1285,6 +1314,17 @@ PanelWindow {
                 onActivated: {
                   root.focusWorkspaceOnDockMonitor(modelData.activationTarget)
                 }
+              }
+
+              Rectangle {
+                visible: workspaceCardSlot.modelData.item._monitorDragPlaceholder
+                width: workspaceCardSlot.naturalWidth
+                height: workspaceCardSlot.naturalHeight
+                radius: Math.max(12, Style.cornerRadius - 4)
+                color: Util.alpha(Color.foreground, 0.06)
+                border.width: 1
+                border.color: Util.alpha(Color.foreground, 0.18)
+                enabled: false
               }
 
               DockPresentationModel {

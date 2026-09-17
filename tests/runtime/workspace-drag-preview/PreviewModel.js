@@ -1,5 +1,5 @@
 .pragma library
-.import "components/DockWorkspaceModel.js" as DockWorkspaceModel
+.import "../../../components/DockWorkspaceModel.js" as DockWorkspaceModel
 
 function workspaceCompare(left, right) {
   return DockWorkspaceModel.workspaceCompare(left, right)

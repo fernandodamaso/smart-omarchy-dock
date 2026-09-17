@@ -20,9 +20,17 @@ Rectangle {
   property string workspaceIdentity: ""
   property string workspaceOwnerMonitor: ""
   property bool workspaceMonitorGestureOwned: false
+  property bool workspaceMonitorGestureStarted: false
+  property point workspaceMonitorPressPoint: Qt.point(0, 0)
   readonly property bool workspaceMonitorDragActive:
     workspaceMonitorDrag && workspaceMonitorDrag.active
   readonly property bool workspaceMonitorDragSource: workspaceMonitorDragActive
+    || workspaceMonitorDrag && workspaceMonitorDrag.awaitingConfirmation
+    && workspaceMonitorDrag.sourceDock === workspaceMonitorDragDock
+    && workspaceMonitorDrag.sourceWorkspace === workspaceIdentity
+  readonly property bool workspaceMonitorDragSourceActive:
+    workspaceMonitorDrag && (workspaceMonitorDrag.active
+      || workspaceMonitorDrag.awaitingConfirmation)
     && workspaceMonitorDrag.sourceDock === workspaceMonitorDragDock
     && workspaceMonitorDrag.sourceWorkspace === workspaceIdentity
   readonly property bool headerInputSuppressed: windowDragActive
@@ -67,7 +75,7 @@ Rectangle {
     }
   }
 
-  onPresentationVisibleChanged: if (!presentationVisible)
+  onPresentationVisibleChanged: if (!presentationVisible && !workspaceMonitorDragSource)
     cancelWorkspaceMonitorDrag("source hidden")
   onWorkspaceIdentityChanged: cancelWorkspaceMonitorDrag("workspace changed")
   onWorkspaceOwnerMonitorChanged: cancelWorkspaceMonitorDrag("workspace owner changed")
@@ -175,19 +183,32 @@ Rectangle {
       onActiveChanged: {
         if (active) {
           workspaceMonitorReleaseCleanup.stop()
-          root.workspaceMonitorGestureOwned = true
-          if (root.workspaceMonitorDrag.begin(root.workspaceMonitorDragDock,
-            root.workspaceIdentity, root.label, root.count,
-            root.workspaceOwnerMonitor, centroid.scenePosition))
-            header.forceActiveFocus(Qt.MouseFocusReason)
+          root.workspaceMonitorGestureStarted = false
+          root.workspaceMonitorPressPoint = centroid.scenePosition
         } else {
           workspaceMonitorReleaseCleanup.restart()
           header.focus = false
         }
       }
-      onActiveTranslationChanged: if (active && root.workspaceMonitorDrag
-          && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock)
-        root.workspaceMonitorDrag.updatePointer(centroid.scenePosition)
+      onActiveTranslationChanged: {
+        if (!active || !root.workspaceMonitorDrag) return
+        var dx = centroid.scenePosition.x - root.workspaceMonitorPressPoint.x
+        var dy = centroid.scenePosition.y - root.workspaceMonitorPressPoint.y
+        var distance = Math.sqrt(dx * dx + dy * dy)
+        if (!root.workspaceMonitorGestureStarted
+            && distance >= Application.styleHints.startDragDistance) {
+          if (root.workspaceMonitorDrag.begin(root.workspaceMonitorDragDock,
+            root.workspaceIdentity, root.label, root.count,
+            root.workspaceOwnerMonitor, centroid.scenePosition)) {
+            root.workspaceMonitorGestureStarted = true
+            root.workspaceMonitorGestureOwned = true
+            header.forceActiveFocus(Qt.MouseFocusReason)
+          }
+        } else if (root.workspaceMonitorGestureStarted
+            && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock) {
+          root.workspaceMonitorDrag.updatePointer(centroid.scenePosition)
+        }
+      }
       onGrabChanged: (transition, point) => {
         if (transition === PointerDevice.GrabPassive
             || transition === PointerDevice.GrabExclusive)
@@ -203,7 +224,10 @@ Rectangle {
       interval: 0
       repeat: false
       onTriggered: {
-        root.cancelWorkspaceMonitorDrag("grab ended without release")
+        if (root.workspaceMonitorGestureStarted && root.workspaceMonitorDrag
+            && root.workspaceMonitorDrag.active)
+          root.cancelWorkspaceMonitorDrag("grab ended without release")
+        root.workspaceMonitorGestureStarted = false
         root.workspaceMonitorGestureOwned = false
       }
     }

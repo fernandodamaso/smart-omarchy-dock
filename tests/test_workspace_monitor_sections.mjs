@@ -104,4 +104,55 @@ for (const entry of reconciled.entries) {
 assert.equal(reconciled.entries.some(entry => !entry.present), false,
   'section transfer never creates an exiting duplicate card')
 
+const drag = {
+  workspaceIdentity: 'id:1',
+  sourceMonitor: 'id:0',
+  targetMonitor: 'id:1',
+  label: '1',
+  count: 2
+}
+const beforeProjection = JSON.stringify(initial)
+const projected = WorkspaceModel.projectMonitorDrag(initial, drag, 'id:0')
+assert.equal(JSON.stringify(initial), beforeProjection, 'projection does not mutate live state')
+const source = projected.groups.find(group => group.identity === 'id:1')
+const placeholder = projected.groups.find(group => group._monitorDragPlaceholder)
+assert.equal(source._monitorDragSource, true)
+assert.equal(source._monitorDragOccupied, false)
+assert.equal(source.identity, 'id:1')
+assert.equal(placeholder.identity, 'workspace-monitor-placeholder:id:1')
+assert.equal(placeholder._monitorDragSortIdentity, 'id:1')
+assert.equal(placeholder.monitorIdentity, 'id:1')
+assert.equal(projected.groups.filter(group => group._monitorDragPlaceholder).length, 1)
+assert.deepEqual(Array.from(projected.monitorGroups, group => group.identity),
+  sections.map(group => group.identity), 'monitor order is unchanged')
+assert.equal(projected.monitorGroups.find(group => group.identity === 'id:0')
+  .firstWorkspaceIdentity, 'id:1', 'empty source section retains its prefix anchor')
+assert.equal(projected.monitorGroups.find(group => group.identity === 'id:1')
+  .firstWorkspaceIdentity, placeholder.identity,
+  'destination prefix follows the inserted placeholder')
+assert.equal(projected.groups[0].identity, 'id:1', 'source keeps its array position')
+assert.equal(projected.groups.findIndex(group => group.identity === placeholder.identity), 2,
+  'numeric placeholder is sorted into the destination section')
+
+const sourceScope = WorkspaceModel.buildWorkspacePresentation([], [], workspaces, {
+  monitorScope: 'current-monitor', monitor: 'id:0', activeWorkspace: 'id:1',
+  monitors, groupWindows: true
+})
+const targetScope = WorkspaceModel.buildWorkspacePresentation([], [], workspaces, {
+  monitorScope: 'current-monitor', monitor: 'id:1', activeWorkspace: 'id:3',
+  monitors, groupWindows: true
+})
+const sourceProjection = WorkspaceModel.projectMonitorDrag(sourceScope, drag, 'id:0')
+const targetProjection = WorkspaceModel.projectMonitorDrag(targetScope, drag, 'id:1')
+assert.equal(sourceProjection.groups.some(group => group._monitorDragPlaceholder), false,
+  'source current-monitor dock only closes the source')
+assert.equal(sourceProjection.groups.find(group => group.identity === 'id:1')
+  ._monitorDragOccupied, false)
+assert.equal(targetProjection.groups.filter(group => group._monitorDragPlaceholder).length, 1,
+  'target current-monitor dock inserts the placeholder')
+assert.equal(targetProjection.groups.find(group => group._monitorDragPlaceholder)
+  .monitorIdentity, 'id:1')
+assert.deepEqual(WorkspaceModel.projectMonitorDrag(initial, null, 'id:0'), initial,
+  'clearing a drag restores the live presentation')
+
 console.log('inline monitor section model contract: PASS')

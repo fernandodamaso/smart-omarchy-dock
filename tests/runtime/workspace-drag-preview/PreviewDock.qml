@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import qs.Commons
-import "components" as Components
+import "../../../components" as Components
 import "PreviewModel.js" as PreviewModel
 
 Item {
@@ -53,13 +53,13 @@ Item {
   // DockIconModel.normalizeSource only accepts strings; QUrl objects are dropped
   // and every fixture icon silently falls back to app-window.svg.
   readonly property var iconOverrides: ({
-    "preview.chrome": String(Qt.resolvedUrl("assets/lucide/rocket.svg")),
-    "preview.files": String(Qt.resolvedUrl("assets/lucide/folder-open.svg")),
-    "preview.terminal": String(Qt.resolvedUrl("assets/lucide/terminal.svg")),
-    "preview.chat": String(Qt.resolvedUrl("assets/lucide/sparkles.svg")),
-    "preview.notes": String(Qt.resolvedUrl("assets/lucide/layout-grid.svg")),
-    "preview.code": String(Qt.resolvedUrl("assets/lucide/settings-2.svg")),
-    "preview.mail": String(Qt.resolvedUrl("assets/services/gmail.svg"))
+    "preview.chrome": String(Qt.resolvedUrl("../../../assets/lucide/rocket.svg")),
+    "preview.files": String(Qt.resolvedUrl("../../../assets/lucide/folder-open.svg")),
+    "preview.terminal": String(Qt.resolvedUrl("../../../assets/lucide/terminal.svg")),
+    "preview.chat": String(Qt.resolvedUrl("../../../assets/lucide/sparkles.svg")),
+    "preview.notes": String(Qt.resolvedUrl("../../../assets/lucide/layout-grid.svg")),
+    "preview.code": String(Qt.resolvedUrl("../../../assets/lucide/settings-2.svg")),
+    "preview.mail": String(Qt.resolvedUrl("../../../assets/services/gmail.svg"))
   })
 
   property var sectionHitRects: []

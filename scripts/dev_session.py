@@ -71,6 +71,8 @@ RECORD_FIELDS = (
     "qemu_start_ticks",
     "qemu_pgid",
     "qemu_window_address",
+    "qemu_window_addresses",
+    "guest_seeded",
     "guest_display",
     "guest_signature",
     "guest_output",
@@ -732,12 +734,28 @@ def _capture_host_state(evidence: Path, tag: str) -> dict:
     return state
 
 
+def _host_focus_signature(state: dict) -> tuple[object, object, object]:
+    workspace = state.get("active_workspace")
+    window = state.get("active_window")
+    workspace = workspace if isinstance(workspace, dict) else {}
+    window = window if isinstance(window, dict) else {}
+    return (
+        workspace.get("id"),
+        workspace.get("name"),
+        window.get("address"),
+    )
+
+
 def _lua_string(value: str) -> str:
     return json.dumps(value)
 
 
+def _qemu_title_pattern(name: str) -> str:
+    return f"^QEMU \\(SmartDock {re.escape(name)}\\)(: virtio-vga\\.1)?$"
+
+
 def _launch_rule(name: str, workspace: str) -> None:
-    title = f"^QEMU \\(SmartDock {re.escape(name)}\\)$"
+    title = _qemu_title_pattern(name)
     rule_name = f"smartdock-dev-{name}"
     expression = (
         "local r=hl.window_rule({ "
@@ -759,7 +777,7 @@ def _launch_rule(name: str, workspace: str) -> None:
 
 def _disable_launch_rule(name: str) -> None:
     rule_name = f"smartdock-dev-{name}"
-    title = f"^QEMU \\(SmartDock {re.escape(name)}\\)$"
+    title = _qemu_title_pattern(name)
     expression = (
         "local r=hl.window_rule({ "
         f"name = {_lua_string(rule_name)}, enabled = false, "
@@ -995,12 +1013,34 @@ def _detach_second_qemu_head(pid: int) -> None:
             _atspi_click(show_tabs, "Show Tabs")
 
 
-def _show_both_qemu_heads(pid: int, workspace: str) -> list[dict]:
+def _show_both_qemu_heads(pid: int, workspace: str, name: str) -> list[dict]:
     _guard_hyprland_fds("show-both-qemu-heads")
     existing = _owned_windows(_host_command_json("clients"), pid)
     if len(existing) < 2:
         _detach_second_qemu_head(pid)
     heads = _place_owned_windows(pid, workspace)
+    heads = sorted(
+        heads,
+        key=lambda item: (
+            int((item.get("at") or [0, 0])[0] or 0),
+            int((item.get("at") or [0, 0])[1] or 0),
+            str(item.get("address") or ""),
+        ),
+    )
+    expected_titles = {
+        f"QEMU (SmartDock {name})",
+        f"QEMU (SmartDock {name}): virtio-vga.1",
+    }
+    if len(heads) != 2:
+        raise RuntimeError(f"QEMU PID {pid} owns {len(heads)} windows; expected two heads")
+    addresses = [str(item.get("address") or "") for item in heads]
+    titles = [str(item.get("title") or "") for item in heads]
+    if len(set(addresses)) != 2 or "" in addresses:
+        raise RuntimeError("QEMU heads did not have two distinct exact addresses")
+    if set(titles) != expected_titles:
+        raise RuntimeError(f"QEMU heads had unexpected titles: {titles!r}")
+    if not all(_workspace_matches(item, workspace) for item in heads):
+        raise RuntimeError(f"QEMU heads did not reach workspace {workspace!r}")
     return heads
 
 
@@ -1947,15 +1987,22 @@ def start_guest_dock(name: str) -> dict:
             time.sleep(1)
     if qualified is None:
         raise RuntimeError(last_error)
-    seeded = _run_guest_argv(record, [GUEST_CONTROL, "seed-desktop"], 90)
-    if seeded.returncode != 0:
-        raise RuntimeError(
-            "guest seed-desktop failed: "
-            f"{(seeded.stderr or seeded.stdout or '').strip()}"
-        )
+    seeded = None
+    if not record.get("guest_seeded", False):
+        seeded = _run_guest_argv(record, [GUEST_CONTROL, "seed-desktop"], 90)
+        if seeded.returncode != 0:
+            raise RuntimeError(
+                "guest seed-desktop failed: "
+                f"{(seeded.stderr or seeded.stdout or '').strip()}"
+            )
+        try:
+            seed_payload = _last_json_value(seeded.stdout)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(f"malformed guest seed JSON: {exc}") from exc
+    else:
+        seed_payload = None
     record["state"] = "ready"
     record["error"] = None
-    _commit_live_record(record, allowed_states={"starting", "ready"})
     evidence = Path(record["evidence_path"])
     (evidence / "guest-dock-status.json").write_text(
         json.dumps(
@@ -1972,10 +2019,13 @@ def start_guest_dock(name: str) -> dict:
         + "\n",
         encoding="utf-8",
     )
-    (evidence / "guest-seed.json").write_text(
-        (seeded.stdout or "").strip() + "\n",
-        encoding="utf-8",
-    )
+    if seed_payload is not None:
+        (evidence / "guest-seed.json").write_text(
+            json.dumps(seed_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        record["guest_seeded"] = True
+    _commit_live_record(record, allowed_states={"starting", "ready"})
     return record
 
 
@@ -2227,6 +2277,8 @@ def start(
             "base_image": str(paths["base_image"]),
             "host_pid": None,
             "guest_dock_pid": None,
+            "qemu_window_addresses": None,
+            "guest_seeded": False,
             "config_path": GUEST_CONFIG_PATH,
             "guest_config_path": GUEST_CONFIG_PATH,
             "target": "guest",
@@ -2278,7 +2330,7 @@ def start(
 
         client = _place_owned_window(proc.pid, workspace)
         record["qemu_window_address"] = client["address"]
-        heads = _show_both_qemu_heads(proc.pid, workspace)
+        heads = _show_both_qemu_heads(proc.pid, workspace, name)
         leftmost = min(
             heads,
             key=lambda item: (
@@ -2287,6 +2339,7 @@ def start(
             ),
         )
         record["qemu_window_address"] = leftmost["address"]
+        record["qemu_window_addresses"] = [item["address"] for item in heads]
         _commit_live_record(record, allowed_states={"starting"})
         _disable_launch_rule(name)
         after_placement = _capture_host_state(evidence, "after-placement")
@@ -2295,6 +2348,9 @@ def start(
             != before["production_settings_sha256"]
         ):
             raise RuntimeError("host production settings hash changed during launch")
+        if (_host_focus_signature(after_placement)
+                != _host_focus_signature(before)):
+            raise RuntimeError("host focus or workspace changed during QEMU placement")
 
         _wait_for_guest_setup(record, evidence)
         sync_source(record)
@@ -2309,6 +2365,9 @@ def start(
         after_setup = _capture_host_state(evidence, "after-setup")
         if after_setup["production_settings_sha256"] != before["production_settings_sha256"]:
             raise RuntimeError("host production settings hash changed during guest setup")
+        if (_host_focus_signature(after_setup)
+                != _host_focus_signature(before)):
+            raise RuntimeError("host focus or workspace changed during guest setup")
         record["error"] = None
         _commit_live_record(record, allowed_states={"starting", "ready"})
         print(
@@ -2320,6 +2379,7 @@ def start(
                     "port": record["port"],
                     "qemu_pid": record["qemu_pid"],
                     "qemu_window_address": record["qemu_window_address"],
+                    "qemu_window_addresses": record["qemu_window_addresses"],
                     "host_pid": record["host_pid"],
                     "guest_dock_pid": record.get("guest_dock_pid"),
                     "config_path": record["config_path"],

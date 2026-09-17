@@ -15,6 +15,7 @@ Item {
   property color accent: "#808080"
   property bool animationsEnabled: true
   property bool windowDragActive: false
+  property bool monitorDragActive: false
   property point dragScenePosition: Qt.point(0, 0)
   property int dragNavigationDirection: 0
   readonly property real desiredWidth: content.implicitWidth + contentPadding * 2
@@ -24,6 +25,7 @@ Item {
   readonly property real maximumOffset: Math.max(0, viewport.contentWidth - viewport.width)
   property alias contentX: viewport.contentX
   signal viewportChanged()
+  signal viewportMovementFinished()
 
   function clampOffset() {
     viewport.contentX = Math.max(0, Math.min(maximumOffset, viewport.contentX))
@@ -31,6 +33,7 @@ Item {
 
   function scrollBy(amount) {
     viewport.contentX = Math.max(0, Math.min(maximumOffset, viewport.contentX + amount))
+    viewportMovementFinished()
   }
 
   function ensureVisible(item, extent) {
@@ -72,7 +75,8 @@ Item {
   }
 
   function updateDragNavigation() {
-    var direction = windowDragActive ? navigationDirectionAt(dragScenePosition) : 0
+    var direction = (windowDragActive || monitorDragActive)
+      ? navigationDirectionAt(dragScenePosition) : 0
     if (direction < 0 && contentX <= 0
         || direction > 0 && contentX >= maximumOffset) direction = 0
     if (direction === dragNavigationDirection) return
@@ -83,11 +87,12 @@ Item {
   }
 
   function dragScrollStep() {
-    if (!windowDragActive || dragNavigationDirection === 0) return
+    if ((!windowDragActive && !monitorDragActive) || dragNavigationDirection === 0) return
     scrollBy(dragNavigationDirection * 12)
   }
 
   onWindowDragActiveChanged: updateDragNavigation()
+  onMonitorDragActiveChanged: updateDragNavigation()
   onDragScenePositionChanged: updateDragNavigation()
   onViewportChanged: updateDragNavigation()
   onMaximumOffsetChanged: { clampOffset(); viewportChanged() }
@@ -102,9 +107,11 @@ Item {
     interval: 250
     repeat: false
     onTriggered: {
-      if (!root.windowDragActive || root.dragNavigationDirection === 0) return
+      if ((!root.windowDragActive && !root.monitorDragActive)
+          || root.dragNavigationDirection === 0) return
       root.dragScrollStep()
-      if (root.windowDragActive && root.dragNavigationDirection !== 0) dragScroll.start()
+      if ((root.windowDragActive || root.monitorDragActive)
+          && root.dragNavigationDirection !== 0) dragScroll.start()
     }
   }
 
@@ -125,9 +132,10 @@ Item {
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     flickableDirection: Flickable.HorizontalFlick
-    interactive: root.overflowing && !root.windowDragActive
+    interactive: root.overflowing && !root.windowDragActive && !root.monitorDragActive
     onContentXChanged: root.viewportChanged()
     onWidthChanged: root.viewportChanged()
+    onMovementEnded: root.viewportMovementFinished()
 
     Row {
       id: content
@@ -156,10 +164,10 @@ Item {
       color: navHover.hovered ? root.accent : root.background
       Accessible.role: Accessible.Button
       Accessible.name: index === 0 ? "Previous workspace cards" : "Next workspace cards"
-      Accessible.onPressAction: if (!root.windowDragActive) root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
-      activeFocusOnTab: visible && enabled && !root.windowDragActive
-      Keys.onReturnPressed: if (!root.windowDragActive) root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
-      Keys.onSpacePressed: if (!root.windowDragActive) root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
+      Accessible.onPressAction: if (!root.windowDragActive && !root.monitorDragActive) root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
+      activeFocusOnTab: visible && enabled && !root.windowDragActive && !root.monitorDragActive
+      Keys.onReturnPressed: if (!root.windowDragActive && !root.monitorDragActive) root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
+      Keys.onSpacePressed: if (!root.windowDragActive && !root.monitorDragActive) root.scrollBy((index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
       Text {
         anchors.centerIn: parent
         text: parent.index === 0 ? "‹" : "›"
@@ -168,7 +176,7 @@ Item {
       }
       HoverHandler { id: navHover; cursorShape: Qt.PointingHandCursor }
       TapHandler {
-        enabled: !root.windowDragActive
+        enabled: !root.windowDragActive && !root.monitorDragActive
         onTapped: root.scrollBy((parent.index === 0 ? -1 : 1) * root.viewportWidth * 0.8)
       }
     }

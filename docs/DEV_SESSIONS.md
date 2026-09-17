@@ -106,7 +106,7 @@ Plugin mode uses `--mode plugin` on one name only. That session copies Omarchy `
 
 Public `dock` injects `--runtime standalone|plugin --instance GUEST_DOCK_PID` from the named record. Do not pass `--instance` or `--runtime` yourself. `status --json` labels targeting with `target: guest`, `guest_dock_pid`, and `guest_config_path` (inside the VM). Those fields are never the host production dock; `host_pid`/`config_path` are aliases for the same guest process and guest file. Keep using SSH to the named guest. Never write host `~/.config/smartdock/dock.json`.
 
-`sync` of a `ready` session stops the guest dock, clears `host_pid`/`guest_dock_pid`, and sets `state=starting`. The next `dock NAME` (no argv) restarts it through the guest host contract. `dock NAME -- …` is rejected until that restart.
+`sync` of a `ready` session stops the guest dock, clears `host_pid`/`guest_dock_pid`, and sets `state=starting` while retaining the private `guest_seeded` record flag. The first `dock NAME` runs `seed-desktop`, verifies its JSON payload into `evidence/guest-seed.json`, and sets `guest_seeded=true`; later restarts skip seeding. The next `dock NAME` (no argv) restarts it through the guest host contract. `dock NAME -- …` is rejected until that restart.
 
 ```bash
 unset XDG_STATE_HOME
@@ -190,7 +190,7 @@ qemu-system-x86_64 \
 
 The feasibility experiment verified that its QEMU window ended on workspace `4` without following focus. Its temporary script selected the first window with class `qemu`; that shortcut must **not** be copied into the launcher because another QEMU window could already belong to the user.
 
-The launcher must establish a current-version silent/no-initial-focus launch rule first, then identify the new QEMU window by the owned VM PID and its exact address in `hyprctl clients -j`. Require exactly one match. If a delegated window ignores the rule, move only that address with `movetoworkspacesilent` and verify the target workspace afterward. A class-only match or an active-window dispatcher is an ownership failure.
+The launcher establishes one escaped silent/no-initial-focus title rule before QEMU starts. It matches both exact owned titles: `QEMU (SmartDock NAME)` and `QEMU (SmartDock NAME): virtio-vga.1`. After detaching the second head, it requires exactly two PID-owned clients with distinct exact addresses, records the left-to-right `qemu_window_addresses` list, and retains the leftmost `qemu_window_address` for compatibility. If a delegated window ignores the rule, move only those exact addresses with `movetoworkspacesilent` and verify the target workspace afterward. A class-only match or an active-window dispatcher is an ownership failure. Before/after active workspace and window evidence must be unchanged.
 
 Authorized test workspace for this run was `4`. General sessions use the coding agent's workspace unless the user explicitly selects another. Never switch the user's active workspace.
 
