@@ -3,24 +3,58 @@ on:
   push:
     branches: [agent/fdm-964-source-workspace]
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: fdm-964-source-transfer
+  cancel-in-progress: false
 jobs:
   source:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      BASE: 6b13dd60233f45accb70e09a07e95464966e2d6c
+      TARGET: feat/fdm-964-global-sidebar
+      EXPECTED_TREE: 308630987b0a8d049f23405b5dde1fc43974976d
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          ref: 6b13dd60233f45accb70e09a07e95464966e2d6c
-      - name: Package exact accepted source
+      - name: Verify exact tested payload and publish source-only branch
+        shell: bash
         run: |
-          git branch sb02-base HEAD
-          git bundle create /tmp/sb02-base.bundle sb02-base
-          git rev-parse HEAD > /tmp/sb02-base.txt
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, lzma
+          payload = ''.join(Path(f'.agent-transfer/sb02-{i}.txt').read_text() for i in range(3))
+          patch = lzma.decompress(base64.b64decode(payload, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == 'ada4712e560ce8e535f735afea3dd85b73f354f8d045973bc8b6ba54c9f3b891'
+          Path('/tmp/sb02.patch').write_bytes(patch)
+          PY
+          parent="$(git ls-remote --heads origin refs/heads/feat/fdm-963-shared-desktop | cut -f1)"
+          test "$parent" = "$BASE"
+          if git ls-remote --exit-code --heads origin "refs/heads/$TARGET"; then
+            echo 'Refusing to overwrite an existing source branch' >&2
+            exit 1
+          fi
+          git checkout --detach "$BASE"
+          test "$(git rev-parse HEAD)" = "$BASE"
+          git apply --unidiff-zero --index /tmp/sb02.patch
+          git diff --cached --check
+          test "$(git write-tree)" = "$EXPECTED_TREE"
+          git switch -c "$TARGET"
+          git config user.name 'SmartDock Source Agent'
+          git config user.email 'smartdock-agent@example.invalid'
+          git commit -m 'feat(fdm-964): add global sidebar hierarchy, icon rail and typed configuration'
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+          git push origin "HEAD:refs/heads/$TARGET"
+          printf 'base=%s\nhead=%s\ntree=%s\nbranch=%s\n' "$BASE" "$(git rev-parse HEAD)" "$EXPECTED_TREE" "$TARGET" | tee /tmp/sb02-source.txt
+          cat /tmp/sb02-source.txt >> "$GITHUB_STEP_SUMMARY"
+          git bundle create /tmp/sb02-source.bundle "$TARGET"
       - uses: actions/upload-artifact@v4
         with:
-          name: fdm-964-base
+          name: fdm-964-published-source
           retention-days: 3
           path: |
-            /tmp/sb02-base.bundle
-            /tmp/sb02-base.txt
+            /tmp/sb02-source.txt
+            /tmp/sb02-source.bundle
