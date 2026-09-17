@@ -17,12 +17,13 @@ PanelWindow {
   readonly property string badgeScopeOwner: "smartdock-sidebar"
   objectName: "smartdock-sidebar"
   visible: screen !== null && controller.geometry.mapped
-  implicitWidth: controller.geometry.width
+  implicitWidth: Math.round(controller.geometry.width)
   anchors.top: true
   anchors.bottom: true
   anchors.left: controller.edge === "left"
   anchors.right: controller.edge === "right"
-  exclusiveZone: controller.geometry.width
+  // The handle lives inside this total width. Reserve that persistent width once.
+  exclusiveZone: implicitWidth
   WlrLayershell.namespace: "smartdock-sidebar"
   WlrLayershell.layer: WlrLayer.Top
   WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
@@ -35,6 +36,7 @@ PanelWindow {
 
   function closeSurfaces() {
     picker.visible = false
+    root.controller.cancelResize("surface-close")
     root.controller.interactionBusy = false
     if (root.host && root.host.badgeTracker) root.host.badgeTracker.syncWorkspaceScopes(root.badgeScopeOwner, [])
   }
@@ -119,6 +121,27 @@ PanelWindow {
       }
     }
   }
+
+  DockSidebarResizeHandle {
+    id: resizeHandle
+    controller: root.controller
+    panelWidth: root.width
+    screenX: root.controller.selectedScreen ? Number(root.controller.selectedScreen.x || 0) : 0
+    screenWidth: root.controller.selectedScreen ? Number(root.controller.selectedScreen.width || 0) : 0
+    width: 8
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.right: root.controller.edge === "left" ? parent.right : undefined
+    anchors.left: root.controller.edge === "right" ? parent.left : undefined
+    z: 20
+  }
+
+  Shortcut {
+    sequence: "Escape"
+    enabled: root.visible && root.controller.resizeActive
+    onActivated: root.controller.cancelResize("escape")
+  }
+
   DockAppPicker {
     id: picker
     anchorItem: launcher
@@ -127,7 +150,7 @@ PanelWindow {
     iconOverrides: root.controller.settings.iconOverrides || ({})
     iconReloadRevision: root.host.iconReloadRevision
     onApplicationSelected: desktopId => root.host.pinApplication(desktopId)
-    onVisibleChanged: root.controller.interactionBusy = visible
+    onVisibleChanged: root.controller.interactionBusy = visible || root.controller.resizeActive
   }
   Connections {
     target: root.controller
