@@ -34,8 +34,8 @@ Item {
   property real resizeStartGlobalX: 0
   property int resizeStartWidth: 0
   property int resizePreviewWidth: 0
-  property int resizeRequestedAtStart: 320
-  property bool resizeCollapsedAtStart: false
+  property var resizeExpectedWidthAtStart: undefined
+  property var resizeExpectedCollapseAtStart: undefined
   property string resizeEdgeAtStart: "left"
   property string resizeConnectorAtStart: ""
   readonly property var geometry: resizeActive
@@ -65,6 +65,8 @@ Item {
     root.resizeStartGlobalX = 0
     root.resizeStartWidth = 0
     root.resizePreviewWidth = 0
+    root.resizeExpectedWidthAtStart = undefined
+    root.resizeExpectedCollapseAtStart = undefined
     root.resizeConnectorAtStart = ""
     root.interactionBusy = false
   }
@@ -92,9 +94,10 @@ Item {
     root.resizeStartGlobalX = pointer
     root.resizeStartWidth = root.persistentGeometry.expandedWidth
     root.resizePreviewWidth = root.resizeStartWidth
-    root.resizeRequestedAtStart = DockModel.normalizeSetting(
-      "sidebarExpandedWidth", root.settings.sidebarExpandedWidth)
-    root.resizeCollapsedAtStart = root.collapsed
+    // Capture the exact host values for the stale check. Effective geometry may
+    // normalize compatible legacy bytes, but that must not manufacture a conflict.
+    root.resizeExpectedWidthAtStart = root.settings.sidebarExpandedWidth
+    root.resizeExpectedCollapseAtStart = root.settings.sidebarCollapsed
     root.resizeEdgeAtStart = root.edge
     root.resizeConnectorAtStart = root.selectedConnector
     root.resizeActive = true
@@ -127,7 +130,7 @@ Item {
       return {accepted:false,pending:false,reply:{ok:false,error:{code:"E_STATE",message:"No resize is active."},data:{applied:false}}}
     var finalWidth = root.resizePreviewWidth
     var startWidth = root.resizeStartWidth
-    var expected = root.resizeRequestedAtStart
+    var expected = root.resizeExpectedWidthAtStart
     root.clearResizeState()
     if (cancelled === true || finalWidth === startWidth) {
       root.scheduleRefresh()
@@ -145,8 +148,8 @@ Item {
 
   function resizePreferenceConflict() {
     return root.resizeActive && (
-      DockModel.normalizeSetting("sidebarExpandedWidth", root.settings.sidebarExpandedWidth) !== root.resizeRequestedAtStart
-      || DockModel.normalizeSetting("sidebarCollapsed", root.settings.sidebarCollapsed) !== root.resizeCollapsedAtStart)
+      root.settings.sidebarExpandedWidth !== root.resizeExpectedWidthAtStart
+      || root.settings.sidebarCollapsed !== root.resizeExpectedCollapseAtStart)
   }
 
   function refresh() {
@@ -219,8 +222,7 @@ Item {
   function requestCollapse() {
     if (root.resizeActive) root.cancelResize("collapse")
     if (root.interactionBusy) return {ok:false,error:{code:"E_BUSY",message:"Finish the active interaction."},data:{applied:false}}
-    var expected = root.collapsed
-    var intent = root.hostIntent("sidebarCollapsed", !root.collapsed, expected)
+    var intent = root.hostIntent("sidebarCollapsed", !root.collapsed, root.settings.sidebarCollapsed)
     var reply = intent.reply
     root.mutationFeedback = intent.accepted ? "" : String(reply && reply.error && reply.error.message || "Preference was not accepted.")
     return reply
