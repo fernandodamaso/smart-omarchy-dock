@@ -161,7 +161,7 @@ were removed. The seed evidence retained timestamp/size `1789660559 1978` and
 SHA-256
 `225f6ccc50e664e5627e261a960e44184c0ea3bf419766e850c29fed2fd8f7b8` across
 both restarts. Host production settings retained SHA-256
-`c0f5098ec03ef1da1006dbed8e30d44a8366dbed8e30d44b9e8ca81880969379ff77e9cc4bd8`.
+`c0f5098ec03ef1da1006dbed8e30d44a836b9e8ca81880969379ff77e9cc4bd8`.
 
 Native press-drag-release qualification on the real dock remains pending: the
 available computer-use surface exposed Chrome but could not target the native

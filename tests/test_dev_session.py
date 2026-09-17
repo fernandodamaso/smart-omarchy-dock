@@ -140,9 +140,10 @@ class ContractTests(unittest.TestCase):
              "workspace": {"name": "4"}, "at": [0, 0]},
         ]
         with mock.patch("dev_session._guard_hyprland_fds"):
-            with mock.patch("dev_session._owned_windows", return_value=heads):
-                with mock.patch("dev_session._place_owned_windows", return_value=heads):
-                    actual = _show_both_qemu_heads(9, "4", "visual-a")
+            with mock.patch("dev_session._host_command_json", return_value=heads):
+                with mock.patch("dev_session._owned_windows", return_value=heads):
+                    with mock.patch("dev_session._place_owned_windows", return_value=heads):
+                        actual = _show_both_qemu_heads(9, "4", "visual-a")
         self.assertEqual([item["address"] for item in actual], ["0xa", "0xb"])
 
     def test_guest_seed_is_persisted_and_not_repeated_on_restart(self):

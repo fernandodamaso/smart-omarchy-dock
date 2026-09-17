@@ -57,7 +57,8 @@ Rectangle {
     if (!root.workspaceMonitorGestureStarted || !root.workspaceMonitorDrag
         || root.workspaceMonitorDrag.sourceDock !== root.workspaceMonitorDragDock) return
     if (transition === PointerDevice.UngrabExclusive) {
-      if (point.state === Qt.TouchPointReleased)
+      // QEventPoint::Released maps to Qt::TouchPointReleased (0x08).
+      if (point.state === 0x08)
         root.workspaceMonitorDrag.finish(point.scenePosition)
       else
         cancelWorkspaceMonitorDrag("non-release ungrab")

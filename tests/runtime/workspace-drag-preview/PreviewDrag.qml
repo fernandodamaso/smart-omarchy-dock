@@ -25,7 +25,7 @@ Item {
   property var hoveredTarget: null
   property bool captureReady: false
   property int captureGeneration: 0
-  property QtObject ghostImage: null
+  property var ghostImage: null
   property size ghostSize: Qt.size(0, 0)
   property url ghostUrl: ""
   property var baselineHits: ({})

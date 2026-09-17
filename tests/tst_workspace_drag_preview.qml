@@ -155,7 +155,7 @@ TestCase {
     compare(scene.drag.sourceDock, null)
     compare(scene.drag.sourceWorkspace, "")
     compare(scene.drag.captureReady, false)
-    compare(scene.drag.ghostImage, null)
+    compare(scene.drag.ghostUrl, "")
     compare(scene.source.workspaceMonitorDropHighlighted, false)
     compare(scene.destination.workspaceMonitorDropHighlighted, false)
   }
@@ -166,7 +166,7 @@ TestCase {
     compare(scene.drag.active, true)
     compare(scene.drag.sourceWorkspace, "id:2")
     tryCompare(scene.drag, "captureReady", true, 1000)
-    verify(scene.drag.ghostImage !== null)
+    verify(scene.drag.ghostUrl !== "")
     compare(scene.drag.ghostSize.width, 80)
     compare(scene.drag.ghostSize.height, 40)
 
@@ -221,7 +221,7 @@ TestCase {
       url: "image://stale"
     }, 80, 40)
     compare(scene.drag.active, false)
-    compare(scene.drag.ghostImage, null)
+    compare(scene.drag.ghostUrl, "")
   }
 
   function test_fixtureReplacementCancelsAndCleans() {

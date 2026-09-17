@@ -211,11 +211,11 @@ for (const mutate of [
     'active=false must not disable the handler before the release transition is delivered')
 
   const transitions = { UngrabExclusive: 1, CancelGrabExclusive: 2, CancelGrabPassive: 3 }
-  for (const [transition, state, expected] of [[1, 1, 'finish'], [1, 0, 'cancel'],
-    [2, 1, 'cancel'], [3, 1, 'cancel']]) {
+  for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'cancel'],
+    [2, 0x08, 'cancel'], [3, 0x08, 'cancel']]) {
     const calls = []
     const item = methods('DockItem.qml', { PointerDevice: transitions,
-      EventPoint: { Released: 1 }, workspaceDrag: {
+      workspaceDrag: {
         finish: point => { calls.push(['finish', point]); item.workspaceDrag.sourceItem = null },
         cancel: () => { calls.push(['cancel']); item.workspaceDrag.sourceItem = null }
       } })
@@ -451,12 +451,12 @@ for (const mutate of [
     'targeted refresh replaces or appends one dock snapshot')
 
   const transitions = { UngrabExclusive: 1, CancelGrabExclusive: 2, CancelGrabPassive: 3 }
-  for (const [transition, state, expected] of [[1, 1, 'finish'], [1, 0, 'cancel'],
-    [2, 1, 'cancel'], [3, 1, 'cancel']]) {
+  for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'cancel'],
+    [2, 0x08, 'cancel'], [3, 0x08, 'cancel']]) {
     const calls = []
     const dock = {}
     const group = methods('DockWorkspaceGroup.qml', { PointerDevice: transitions,
-      EventPoint: { Released: 1 }, workspaceMonitorDragDock: dock,
+      workspaceMonitorDragDock: dock,
       workspaceIdentity: 'id:3', workspaceMonitorGestureStarted: true,
       workspaceMonitorDrag: {
         sourceDock: dock,
