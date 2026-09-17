@@ -19,6 +19,8 @@ ShellRoot {
   property string firstKey: ""
   property string appKey: ""
   property var windowKeys: []
+  property int mutationRevision: 0
+  property string mutationWriteText: ""
   QtObject { id: a; property string appId: "fixture.browser"; property string title: "Alpha"; property bool activated: false }
   QtObject { id: b; property string appId: "fixture.browser"; property string title: "Beta"; property bool activated: false }
   QtObject { id: c; property string appId: "fixture.browser"; property string title: "Other workspace"; property bool activated: false }
@@ -40,6 +42,12 @@ ShellRoot {
     list.positionViewAtIndex(index, ListView.Contain)
     list.forceLayout()
     return list.itemAtIndex(index)
+  }
+  function innerEdgeX() {
+    var screen = root.host.sidebarController.selectedScreen
+    var panel = root.host.sidebarPanel
+    return Number(screen.x || 0) + (root.host.sidebarController.edge === "right"
+      ? Number(screen.width || 0) - panel.width : panel.width)
   }
   function probe(sidebar, classic) {
     root.expectedSidebar = sidebar
@@ -80,7 +88,7 @@ ShellRoot {
     repeat: true
     onTriggered: {
       try {
-        if (++root.ticks > 80) throw new Error("sidebar fixture timeout")
+        if (++root.ticks > 120) throw new Error("sidebar fixture timeout")
         if (root.probing || layers.running) return
         if (root.host && (!root.host.settingsLoaded || root.host.settingsWriteState === "saving")) return
         var h = root.host
@@ -151,23 +159,64 @@ ShellRoot {
         } else if (root.step === 9) {
           require(h.sidebarPanel.anchors.right && h.sidebarPanel.anchors.top && h.sidebarPanel.anchors.bottom, "three-edge reservation contract")
           require(h.sidebarPanel.exclusiveZone === h.sidebarPanel.implicitWidth, "reservation differs from effective width")
-          root.probe(1,0)
+          require(h.sidebarPanel.resizeHandle.pointerTarget === null, "resize handler must use target: null")
+          root.mutationRevision = h.settingsRevision
+          root.mutationWriteText = h.settingsWriteText
+          var start = root.innerEdgeX()
+          require(controller.beginResize(start), "right-edge resize did not capture")
+          require(controller.updateResize(start - 20), "first preview move")
+          require(h.sidebarPanel.implicitWidth === 340 && h.sidebarPanel.exclusiveZone === 340, "live width/reservation 340")
+          require(controller.updateResize(start - 40), "second preview move")
+          require(h.sidebarPanel.implicitWidth === 360 && h.sidebarPanel.exclusiveZone === 360, "stable right-edge global delta")
+          require(h.settingsRevision === root.mutationRevision, "pointer motion mutated settings")
+          require(h.settings.sidebarExpandedWidth === 320, "pointer motion overwrote requested width")
+          require(h.settingsWriteText === root.mutationWriteText, "pointer motion reached FileView writer")
         } else if (root.step === 10) {
-          controller.screens = [] // Simulated topology, real surface teardown.
+          var committed = controller.finishResize(false)
+          require(committed.accepted, "resize release was rejected")
         } else if (root.step === 11) {
-          require(h.sidebarPanel === null, "zero-screen snapshot retained a surface")
-          root.probe(0,0)
+          require(h.settings.sidebarExpandedWidth === 360, "release did not save effective requested width")
+          require(h.settingsRevision === root.mutationRevision + 1, "changed release must make exactly one settings revision")
+          require(h.sidebarPanel.implicitWidth === 360 && h.sidebarPanel.exclusiveZone === 360, "committed reservation mismatch")
+          root.mutationRevision = h.settingsRevision
+          var startCancel = root.innerEdgeX()
+          require(controller.beginResize(startCancel), "cancel resize did not capture")
+          controller.updateResize(startCancel - 30)
+          require(h.sidebarPanel.implicitWidth === 390, "cancel preview missing")
+          h.sidebarPanel.resizeHandle.cancelActiveResize("fixture-grab-loss")
+          require(!controller.resizeActive, "grab-loss cancellation left resize active")
+          require(h.settingsRevision === root.mutationRevision, "cancel wrote settings")
+          require(h.sidebarPanel.implicitWidth === 360, "cancel did not revert to host width")
         } else if (root.step === 12) {
-          controller.screens = Quickshell.screens
+          root.mutationRevision = h.settingsRevision
+          var startConflict = root.innerEdgeX()
+          require(controller.beginResize(startConflict), "conflict resize did not capture")
+          controller.updateResize(startConflict - 20)
+          h.saveSetting("sidebarExpandedWidth",400)
         } else if (root.step === 13) {
+          require(!controller.resizeActive, "accepted external width did not cancel preview")
+          require(h.settings.sidebarExpandedWidth === 400, "external width was lost")
+          require(h.settingsRevision === root.mutationRevision + 1, "conflict produced stale resize replay")
+          require(h.sidebarPanel.implicitWidth === controller.geometry.width, "panel did not follow latest host width")
+          root.probe(1,0)
+        } else if (root.step === 14) {
+          controller.screens = [] // Simulated topology, real surface teardown.
+        } else if (root.step === 15) {
+          require(h.sidebarPanel === null, "zero-screen snapshot retained a surface")
+          require(!controller.resizeActive, "host removal left resize active")
+          root.probe(0,0)
+        } else if (root.step === 16) {
+          controller.screens = Quickshell.screens
+        } else if (root.step === 17) {
           require(h.sidebarPanel !== null, "topology recovery failed")
           require(h.settings.position === "bottom" && h.settings.iconSize === 42, "classic preferences changed")
+          require(h.settings.sidebarExpandedWidth === 400, "fallback/reconnect forgot requested width")
           root.host.destroy()
           root.host = null
-        } else if (root.step === 14) {
+        } else if (root.step === 18) {
           root.probe(0,0)
         } else {
-          console.log("sidebar: PASS (production host/panel/delegates, literal live title, rail parity, layers, teardown)")
+          console.log("sidebar: PASS (production host/panel/delegates, resize reservation/writer-count, layers, teardown)")
           Quickshell.quit()
         }
         root.step++
