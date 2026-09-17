@@ -33,7 +33,7 @@ grep -q 'function ungroupWorkspaceApplication' DockHost.qml \
   || fail 'DockHost must expose exact-pair ungrouping'
 grep -q 'workspaceGroups' components/Dock.qml \
   || fail 'Dock must consume workspaceGroups'
-grep -q 'buildFlatPresentation' components/Dock.qml \
+grep -q 'buildFlatPresentation' components/DockDesktopModel.js \
   || fail 'flat layout must use workspace-local representation'
 grep -q 'workspaceGroups: workspaceGroups' components/Dock.qml \
   || fail 'workspace-card layout must receive the saved local policy'
@@ -41,7 +41,7 @@ grep -q 'WorkspaceModel.monitorGroupForWorkspace' components/Dock.qml \
   || fail 'FDM-948 inline monitor sections must remain integrated with local grouping'
 grep -q 'DockMonitorLabel' components/Dock.qml \
   || fail 'FDM-948 monitor section labels must survive CM-03 reconciliation'
-if grep -q 'groupWindows: groupWindows' components/Dock.qml; then
+if grep -Eq 'groupWindows: (settings\.)?groupWindows' components/Dock.qml components/DockDesktopModel.js; then
   fail 'production workspace-card rendering must not receive legacy global grouping'
 fi
 grep -q 'Group Windows' components/DockContextMenu.qml \

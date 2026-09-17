@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockDesktopModel.js" as DesktopModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockWindowPreviewModel.js" as PreviewModel
 import "DockWorkspaceModel.js" as WorkspaceModel
@@ -474,32 +475,28 @@ PanelWindow {
       root.workspacePresentationDirty = true
       return
     }
+    var desktop = DesktopModel.build({
+      mode: groupedRequested ? "classic-grouped" : "classic-flat",
+      settings: {
+        pinned: pinned,
+        hiddenApplications: hiddenApplications,
+        workspaceGroups: workspaceGroups,
+        workspaceMonitorScope: workspaceMonitorScope,
+        workspaceMonitorOrder: workspaceMonitorOrder,
+        sortByWorkspace: sortByWorkspace
+      },
+      applications: applications,
+      toplevels: toplevels,
+      hyprToplevels: hyprToplevels,
+      hyprWorkspaces: hyprWorkspaces,
+      hyprMonitors: hyprMonitors,
+      minimizedOrigins: windowActions ? windowActions.minimizedOriginsSnapshot : ({}),
+      focusedWorkspace: focusedScopeWorkspace,
+      dockMonitor: dockHyprMonitor,
+      filteredToplevels: filteredToplevels
+    })
     if (groupedRequested) {
-      var monitor = dockHyprMonitor
-      var ipc = monitor ? monitor.lastIpcObject || monitor : ({})
-      var records = toplevels.map(function(toplevel) {
-        return Object.assign({ toplevel: toplevel }, DockWindowModel.locationForToplevel(
-          toplevel, hyprToplevels, windowActions ? windowActions.minimizedOriginsSnapshot : ({})))
-      })
-      var baseItems = DockModel.buildVisibleItems(
-        pinned, toplevels, applications, hyprToplevels,
-        false, false, hiddenApplications)
-      var localizedItems = WorkspaceGroupModel.prepareWorkspaceItems(
-        baseItems, records, workspaceGroups)
-      var nextPresentation = WorkspaceModel.buildWorkspacePresentation(
-        localizedItems, records, hyprWorkspaces, {
-          monitor: DockWindowModel.monitorIdentity(monitor),
-          monitorScope: workspaceMonitorScope,
-          monitorOrder: workspaceMonitorOrder,
-          activeWorkspace: workspaceMonitorScope === "all" ? focusedScopeWorkspace
-            : DockWindowModel.workspaceIdentity(ipc.activeWorkspace
-            || (monitor ? monitor.activeWorkspace : null)),
-          monitors: hyprMonitors,
-          groupWindows: false,
-          workspaceGroups: workspaceGroups
-        })
-      nextPresentation = WorkspaceGroupModel.decorateWorkspacePresentation(
-        nextPresentation, workspaceGroups)
+      var nextPresentation = desktop.workspacePresentation
       if (badgeTracker && screen)
         badgeTracker.syncWorkspaceScopes(screen.name,
           nextPresentation.groups.reduce(function(items, group) {
@@ -510,15 +507,7 @@ PanelWindow {
         workspacePresentation = nextPresentation
       }
     }
-    var flatRecords = filteredToplevels.map(function(toplevel) {
-      return Object.assign({ toplevel: toplevel }, DockWindowModel.locationForToplevel(
-        toplevel, hyprToplevels, windowActions ? windowActions.minimizedOriginsSnapshot : ({})))
-    })
-    var flatBaseItems = DockModel.buildVisibleItems(
-      pinned, filteredToplevels, applications, hyprToplevels, false,
-      false, hiddenApplications)
-    var nextItems = WorkspaceGroupModel.buildFlatPresentation(
-      flatBaseItems, flatRecords, workspaceGroups, sortByWorkspace)
+    var nextItems = desktop.visibleItems
     if (!DockModel.visibleItemsEqual(visibleItems, nextItems)) {
       windowPreview.dismissImmediately()
       visibleItems = nextItems

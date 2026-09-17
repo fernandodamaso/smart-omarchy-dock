@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd -- "$script_dir/.." && pwd)"
 dock="$project_root/components/Dock.qml"
+desktop_model="$project_root/components/DockDesktopModel.js"
 
 fail() {
   printf 'check_visible_items_snapshot: %s\n' "$1" >&2
@@ -24,14 +25,19 @@ grep -Fq 'interval: 0' <<<"$refresh_timer" \
 grep -Fq 'onTriggered: root.refreshVisibleItems()' <<<"$refresh_timer" \
   || fail 'visibleItems timer must invoke the refresh helper'
 
-build_calls="$(rg -n 'DockModel\.buildVisibleItems\(' "$dock" | wc -l | tr -d ' ')"
+build_calls="$(rg -n 'DockModel\.buildVisibleItems\(' "$desktop_model" | wc -l | tr -d ' ')"
 [[ "$build_calls" == "2" ]] \
   || fail "expected complete-inventory and flat buildVisibleItems calls, found $build_calls"
 refresh_body="$(sed -n '/function refreshVisibleItems()/,/^  }/p' "$dock")"
-grep -Fq 'DockModel.buildVisibleItems(' <<<"$refresh_body" \
-  || fail 'buildVisibleItems must be called by refreshVisibleItems'
+grep -Fq 'var desktop = DesktopModel.build({' <<<"$refresh_body" \
+  || fail 'refreshVisibleItems must delegate to the shared desktop builder'
+[[ "$(grep -Fc 'DesktopModel.build(' "$dock")" == "1" ]] \
+  || fail 'only the imperative refresh may invoke the desktop builder'
+if grep -Fq 'DockModel.buildVisibleItems(' "$dock"; then
+  fail 'classic construction must not be duplicated outside the desktop builder'
+fi
 visible_items_property="$(sed -n '/^[[:space:]]*property var visibleItems:/,/^[[:space:]]*function refreshVisibleItems()/p' "$dock")"
-if grep -Eq 'DockModel\.buildVisibleItems\(' <<<"$visible_items_property"; then
+if grep -Eq '(DockModel\.buildVisibleItems|DesktopModel\.build)\(' <<<"$visible_items_property"; then
   fail 'visibleItems must not call buildVisibleItems from a property binding'
 fi
 
