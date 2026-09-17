@@ -1,0 +1,31 @@
+name: FDM-966 source transfer
+on:
+  push:
+    branches: [agent/fdm-966-source-transfer]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Export committed source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git update-ref refs/heads/export-main 86fb65893295c95df664e6f274b19375a50f088a
+          git update-ref refs/heads/export-sb02 1b06719163a3d333b712cbbbb73582c1a865da06
+          git update-ref refs/heads/export-sb03 c6d9b0dcb8f96f6e61591996bcafc728ec022dfe
+          git update-ref refs/heads/export-sb05 6f60d29d3eb98753857e61f47a0cd730d10efb62
+          mkdir -p /tmp/fdm966-export
+          git bundle create /tmp/fdm966-export/smartdock.bundle refs/heads/export-main refs/heads/export-sb02 refs/heads/export-sb03 refs/heads/export-sb05
+          git bundle verify /tmp/fdm966-export/smartdock.bundle
+          sha256sum /tmp/fdm966-export/smartdock.bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdm966-exact-sources
+          path: /tmp/fdm966-export/smartdock.bundle
+          retention-days: 1
