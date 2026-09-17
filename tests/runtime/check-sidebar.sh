@@ -32,11 +32,21 @@ value=json.load(open(sys.argv[1]))
 value.update(presentationMode='sidebar',pinned=[],hiddenApplications=[],showTrash=False,
              autoHide=False,position='bottom',iconSize=42,sidebarExpandedWidth=320,
              sidebarCollapsed=False,sidebarEdge='left',sidebarMonitor='')
+value['runtimeFixtureUnknown']={'keep': True}
 with open(sys.argv[2],'w') as f: json.dump(value,f)
 PY
 # Save diagnostic output outside the temporary source when a path is requested.
 log="${SMARTDOCK_RUNTIME_LOG:-$temporary/output.log}"
 QT_QPA_PLATFORM=wayland QML2_IMPORT_PATH="$temporary/imports" \
-  timeout 25s qs -p "$temporary" --no-color >"$log" 2>&1 || { cat "$log"; exit 1; }
+  timeout 35s qs -p "$temporary" --no-color >"$log" 2>&1 || { cat "$log"; exit 1; }
 if grep -E 'ERROR|Error:|ReferenceError|TypeError|Unable to assign' "$log"; then cat "$log"; exit 1; fi
-grep -F 'sidebar: PASS' "$log"
+grep -F 'sidebar: PASS (production host/panel/delegates, resize reservation/writer-count, layers, teardown)' "$log"
+python3 - "$temporary/fixture-config.json" <<'PY'
+import json,sys
+value=json.load(open(sys.argv[1]))
+assert value['sidebarExpandedWidth'] == 400, value['sidebarExpandedWidth']
+assert value['sidebarEdge'] == 'right', value['sidebarEdge']
+assert value['runtimeFixtureUnknown'] == {'keep': True}
+assert value['position'] == 'bottom' and value['iconSize'] == 42
+print('sidebar persistence readback: PASS (width=400, unknown/classic keys preserved)')
+PY
