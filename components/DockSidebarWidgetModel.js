@@ -8,20 +8,33 @@ function validId(id) {
     && /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id)
     && ["constructor", "prototype", "__proto__"].indexOf(id) < 0
 }
+function listLike(value) {
+  // Qt/QML often exposes JSON/settings arrays as array-like objects that fail
+  // Array.isArray. Accept those without treating plain objects as lists.
+  if (Array.isArray(value)) return value
+  if (!value || typeof value !== "object" || typeof value.length !== "number") return null
+  var length = Number(value.length)
+  if (!isFinite(length) || length < 0 || Math.floor(length) !== length) return null
+  var out = []
+  for (var i = 0; i < length; ++i) out.push(value[i])
+  return out
+}
 function requestedIds(value) {
-  if (!Array.isArray(value)) return []
+  var list = listLike(value)
+  if (!list) return []
   var seen = Object.create(null)
-  return value.filter(function(id) {
+  return list.filter(function(id) {
     if (!validId(id) || own(seen, id)) return false
     seen[id] = true
     return true
   })
 }
 function idsError(value, registered) {
-  if (!Array.isArray(value)) return "Expected an array of registered widget IDs"
+  var list = listLike(value)
+  if (!list) return "Expected an array of registered widget IDs"
   var seen = Object.create(null)
-  for (var i = 0; i < value.length; ++i) {
-    var id = value[i]
+  for (var i = 0; i < list.length; ++i) {
+    var id = list[i]
     if (!validId(id)) return "Invalid widget ID at index " + i
     if (own(seen, id)) return "Duplicate widget ID at index " + i
     seen[id] = true

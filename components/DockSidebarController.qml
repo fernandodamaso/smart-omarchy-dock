@@ -132,7 +132,6 @@ property bool resizeActive: false
   onWidgetPopupAnchorChanged: if (!root.widgetPopupAnchor) root.closeWidgetPopup()
   onWidgetRegistryChanged: root.syncWidgets()
   onWidgetWorkActiveChanged: root.syncWidgets()
-  onCollapsedChanged: root.closeWidgetPopup()
   onSurfaceInvalidated: root.closeWidgetPopup()
 
   function scheduleRefresh() {
@@ -519,14 +518,17 @@ property bool resizeActive: false
       {localUrgent:row.urgent === true,primaryOwner:row.primaryOwner === true}, activities)
   }
 
-onSettingsChanged: {
+  onSettingsChanged: {
     if (root.resizePreferenceConflict()) root.cancelResize("preference-conflict")
     root.syncWidgets()
     root.scheduleRefresh()
   }
   onModeChanged: root.invalidateSurface()
   onEdgeChanged: root.invalidateSurface()
-  onCollapsedChanged: root.invalidateSurface()
+  onCollapsedChanged: {
+    root.closeWidgetPopup()
+    root.invalidateSurface()
+  }
   onPreferredConnectorChanged: root.invalidateSurface()
   onScreensChanged: root.refresh()
   onMonitorsChanged: root.scheduleRefresh()

@@ -46,6 +46,10 @@ for (const value of [null, {}, 'fixture.one', [1], ['fixture.one','fixture.one']
 }
 assert.deepEqual(plain(Model.requestedIds(['future.clock','future.clock',4,'../x','fixture.one'])), ['future.clock','fixture.one']);
 assert.deepEqual(plain(Model.requestedIds({})), []);
+// QML settings/property maps often expose arrays as array-like objects.
+assert.deepEqual(plain(Model.requestedIds({0:'future.clock',1:'fixture.one',length:2})),
+  ['future.clock','fixture.one']);
+assert.equal(Model.idsError({0:'fixture.one',length:1}, Object.keys(registry)), '');
 let updates = 0;
 const manager = Model.createManager(() => updates++);
 const owner = {};
