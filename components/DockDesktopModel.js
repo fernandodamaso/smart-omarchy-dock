@@ -23,7 +23,6 @@ function build(input) {
   var workspacePresentation = null
   if (sidebar || input.mode === "classic-grouped") {
     var monitor = input.dockMonitor
-    var ipc = monitor ? monitor.lastIpcObject || monitor : ({})
     records = input.toplevels.map(function(toplevel) {
       return Object.assign({ toplevel: toplevel }, DockWindowModel.locationForToplevel(
         toplevel, input.hyprToplevels, input.minimizedOrigins))
@@ -39,8 +38,8 @@ function build(input) {
         monitorScope: settings.workspaceMonitorScope,
         monitorOrder: settings.workspaceMonitorOrder,
         activeWorkspace: settings.workspaceMonitorScope === "all" ? input.focusedWorkspace
-          : DockWindowModel.workspaceIdentity(ipc.activeWorkspace
-          || (monitor ? monitor.activeWorkspace : null)),
+          : DockWindowModel.workspaceIdentity(
+            DockWindowModel.monitorActiveWorkspace(monitor)),
         monitors: input.hyprMonitors,
         groupWindows: false,
         workspaceGroups: settings.workspaceGroups

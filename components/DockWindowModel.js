@@ -160,6 +160,19 @@ function monitorForScreen(screen, monitors) {
   return null
 }
 
+function monitorActiveWorkspace(monitor) {
+  if (!monitor) return null
+  if (monitor.activeWorkspace !== undefined) return monitor.activeWorkspace
+  var ipc = monitor.lastIpcObject || ({})
+  return ipc.activeWorkspace !== undefined ? ipc.activeWorkspace : null
+}
+
+function monitorFocused(monitor) {
+  if (!monitor) return false
+  if (monitor.focused !== undefined) return monitor.focused === true
+  return (monitor.lastIpcObject || ({})).focused === true
+}
+
 // Resolve connector snapshots and IPC ids through the current monitor inventory.
 function canonicalMonitorIdentity(value, monitors) {
   var identity = monitorIdentity(value)
@@ -187,9 +200,8 @@ function focusedWorkspaceIdentity(monitors, focusedWorkspace) {
   for (var i = 0; i < values.length; ++i) {
     var monitor = values[i]
     if (!monitor) continue
-    var ipc = monitor.lastIpcObject || monitor
-    if (ipc.focused !== true) continue
-    var identity = workspaceIdentity(ipc.activeWorkspace)
+    if (!monitorFocused(monitor)) continue
+    var identity = workspaceIdentity(monitorActiveWorkspace(monitor))
     if (identity) return identity
   }
   return workspaceIdentity(focusedWorkspace)

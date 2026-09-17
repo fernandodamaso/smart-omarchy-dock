@@ -53,6 +53,11 @@ HOST_TOOLS = (
 )
 PORT_MIN = 22000
 PORT_MAX = 22999
+# Host Hyprland FD guard: a healthy compositor is a few hundred descriptors.
+# Thousands usually mean a hyprctl/poll leak; abort before the desktop freezes.
+HYPRLAND_FD_SOFT_LIMIT = 800
+HYPRLAND_FD_HARD_LIMIT = 2000
+HYPRLAND_FD_POLL_SECONDS = 5
 ACTIVE_STATES = {"starting", "ready", "stopping"}
 RECORD_FIELDS = (
     "name",
@@ -66,9 +71,12 @@ RECORD_FIELDS = (
     "qemu_start_ticks",
     "qemu_pgid",
     "qemu_window_address",
+    "qemu_window_addresses",
+    "guest_seeded",
     "guest_display",
     "guest_signature",
     "guest_output",
+    "guest_outputs",
     "host_pid",
     "guest_dock_pid",
     "config_path",
@@ -458,9 +466,9 @@ def qemu_argv(paths: dict, port: int) -> list[str]:
         "-drive",
         f"file={seed},media=cdrom,if=virtio,readonly=on",
         "-device",
-        "virtio-vga",
+        "virtio-vga,max_outputs=2",
         "-display",
-        "gtk,gl=off,window-close=on",
+        "gtk,gl=off,window-close=on,show-tabs=on",
         "-netdev",
         f"user,id=net0,hostfwd=tcp:127.0.0.1:{int(port)}-:22",
         "-device",
@@ -618,7 +626,77 @@ def prepare_private_inputs(
         raise
 
 
+def _hyprland_pid() -> int | None:
+    result = subprocess.run(
+        ["pgrep", "-xo", "Hyprland"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    text = result.stdout.strip().splitlines()
+    if not text:
+        return None
+    try:
+        return int(text[0])
+    except ValueError:
+        return None
+
+
+def _hyprland_fd_count(pid: int | None = None) -> int | None:
+    target = pid if pid is not None else _hyprland_pid()
+    if target is None:
+        return None
+    fd_dir = Path(f"/proc/{target}/fd")
+    try:
+        return sum(1 for entry in fd_dir.iterdir() if entry.is_symlink())
+    except (FileNotFoundError, PermissionError, NotADirectoryError):
+        return None
+
+
+def _guard_hyprland_fds(context: str = "") -> int | None:
+    """Abort when host Hyprland FD count indicates a leak.
+
+    Returns the observed count when available. Soft limit logs a warning; hard
+    limit raises so the supervisor can stop the owned QEMU session immediately.
+    """
+    count = _hyprland_fd_count()
+    if count is None:
+        return None
+    where = f" during {context}" if context else ""
+    if count >= HYPRLAND_FD_HARD_LIMIT:
+        raise RuntimeError(
+            f"Hyprland FD leak detected{where}: {count} open descriptors "
+            f"(hard limit {HYPRLAND_FD_HARD_LIMIT}); stopping before host desktop freeze"
+        )
+    if count >= HYPRLAND_FD_SOFT_LIMIT:
+        print(
+            json.dumps(
+                {
+                    "event": "hyprland_fd_soft_limit",
+                    "fd_count": count,
+                    "soft_limit": HYPRLAND_FD_SOFT_LIMIT,
+                    "context": context or None,
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+    return count
+
+
+def _wait_supervised(proc, *, poll_seconds: float = HYPRLAND_FD_POLL_SECONDS) -> int:
+    """Wait for QEMU while rechecking host Hyprland descriptor growth."""
+    while True:
+        try:
+            return proc.wait(timeout=poll_seconds)
+        except subprocess.TimeoutExpired:
+            _guard_hyprland_fds("supervise")
+
+
 def _host_command_json(command: str) -> object:
+    _guard_hyprland_fds(f"hyprctl -j {command}")
     result = subprocess.run(
         ["hyprctl", "-j", command],
         check=True,
@@ -636,9 +714,11 @@ def _settings_digest() -> str:
 
 
 def _capture_host_state(evidence: Path, tag: str) -> dict:
+    _guard_hyprland_fds(f"host-state {tag}")
     state = {
         "active_workspace": _host_command_json("activeworkspace"),
         "active_window": _host_command_json("activewindow"),
+        "hyprland_fd_count": _hyprland_fd_count(),
         "cursor": subprocess.run(
             ["hyprctl", "cursorpos"],
             check=True,
@@ -654,12 +734,28 @@ def _capture_host_state(evidence: Path, tag: str) -> dict:
     return state
 
 
+def _host_focus_signature(state: dict) -> tuple[object, object, object]:
+    workspace = state.get("active_workspace")
+    window = state.get("active_window")
+    workspace = workspace if isinstance(workspace, dict) else {}
+    window = window if isinstance(window, dict) else {}
+    return (
+        workspace.get("id"),
+        workspace.get("name"),
+        window.get("address"),
+    )
+
+
 def _lua_string(value: str) -> str:
     return json.dumps(value)
 
 
+def _qemu_title_pattern(name: str) -> str:
+    return f"^QEMU \\(SmartDock {re.escape(name)}\\)(: virtio-vga\\.1)?$"
+
+
 def _launch_rule(name: str, workspace: str) -> None:
-    title = f"^QEMU \\(SmartDock {re.escape(name)}\\)$"
+    title = _qemu_title_pattern(name)
     rule_name = f"smartdock-dev-{name}"
     expression = (
         "local r=hl.window_rule({ "
@@ -681,7 +777,7 @@ def _launch_rule(name: str, workspace: str) -> None:
 
 def _disable_launch_rule(name: str) -> None:
     rule_name = f"smartdock-dev-{name}"
-    title = f"^QEMU \\(SmartDock {re.escape(name)}\\)$"
+    title = _qemu_title_pattern(name)
     expression = (
         "local r=hl.window_rule({ "
         f"name = {_lua_string(rule_name)}, enabled = false, "
@@ -701,20 +797,41 @@ def _workspace_matches(client: dict, workspace: str) -> bool:
     return str(current.get("name")) == workspace or str(current.get("id")) == workspace
 
 
+def _owned_windows(clients: object, pid: int) -> list[dict]:
+    if not isinstance(clients, list):
+        return []
+    return [client for client in clients if isinstance(client, dict) and client.get("pid") == pid]
+
+
 def _wait_for_owned_window(pid: int, timeout: float = 20.0) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        clients = _host_command_json("clients")
-        matches = [client for client in clients if client.get("pid") == pid]
+        _guard_hyprland_fds("wait-for-owned-window")
+        matches = _owned_windows(_host_command_json("clients"), pid)
         if len(matches) > 1:
             raise RuntimeError(f"QEMU PID {pid} owns {len(matches)} host windows; expected one")
         if len(matches) == 1:
             return matches[0]
-        time.sleep(0.25)
+        time.sleep(0.5)
     raise RuntimeError(f"no unique host window found for owned QEMU PID {pid}")
 
 
+def _wait_for_owned_windows(pid: int, count: int, timeout: float = 10.0) -> list[dict]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        _guard_hyprland_fds("wait-for-owned-windows")
+        matches = _owned_windows(_host_command_json("clients"), pid)
+        if len(matches) >= count:
+            return matches
+        time.sleep(0.5)
+    raise RuntimeError(
+        f"QEMU PID {pid} owns {len(_owned_windows(_host_command_json('clients'), pid))} "
+        f"host windows; expected at least {count}"
+    )
+
+
 def _move_owned_window(pid: int, address: str, workspace: str) -> None:
+    _guard_hyprland_fds("move-owned-window")
     expression = (
         "local w=nil; "
         "for _,candidate in ipairs(hl.get_windows()) do "
@@ -740,22 +857,191 @@ def _place_owned_window(pid: int, workspace: str) -> dict:
     address = client.get("address")
     if not isinstance(address, str) or not address:
         raise RuntimeError("owned QEMU window has no address")
-    if not _workspace_matches(client, workspace):
-        _move_owned_window(pid, address, workspace)
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            matches = [
-                item
-                for item in _host_command_json("clients")
-                if item.get("pid") == pid and item.get("address") == address
-            ]
-            if len(matches) == 1 and _workspace_matches(matches[0], workspace):
-                return matches[0]
-            time.sleep(0.1)
+    if _workspace_matches(client, workspace):
+        return client
+    _move_owned_window(pid, address, workspace)
+    # One bounded verify pass only — avoid tight hyprctl clients polling.
+    time.sleep(0.5)
+    _guard_hyprland_fds("place-owned-window-verify")
+    matches = [
+        item
+        for item in _host_command_json("clients")
+        if item.get("pid") == pid and item.get("address") == address
+    ]
+    if len(matches) == 1 and _workspace_matches(matches[0], workspace):
+        return matches[0]
+    time.sleep(1.0)
+    _guard_hyprland_fds("place-owned-window-retry")
+    matches = [
+        item
+        for item in _host_command_json("clients")
+        if item.get("pid") == pid and item.get("address") == address
+    ]
+    if len(matches) == 1 and _workspace_matches(matches[0], workspace):
+        return matches[0]
+    raise RuntimeError(
+        f"owned QEMU window {address} did not reach workspace {workspace!r}"
+    )
+
+
+def _place_owned_windows(pid: int, workspace: str) -> list[dict]:
+    matches = _wait_for_owned_windows(pid, 2)
+    for client in matches:
+        address = client.get("address")
+        if not isinstance(address, str) or not address:
+            raise RuntimeError("owned QEMU window has no address")
+        if not _workspace_matches(client, workspace):
+            _move_owned_window(pid, address, workspace)
+    time.sleep(0.5)
+    _guard_hyprland_fds("place-owned-windows-verify")
+    placed = _owned_windows(_host_command_json("clients"), pid)
+    if len(placed) >= 2 and all(_workspace_matches(item, workspace) for item in placed):
+        return placed
+    time.sleep(1.0)
+    _guard_hyprland_fds("place-owned-windows-retry")
+    placed = _owned_windows(_host_command_json("clients"), pid)
+    if len(placed) >= 2 and all(_workspace_matches(item, workspace) for item in placed):
+        return placed
+    raise RuntimeError(
+        f"owned QEMU windows did not reach workspace {workspace!r}"
+    )
+
+
+def _atspi_walk(node, pred, depth: int = 0, max_depth: int = 8):
+    if node is None or depth > max_depth:
+        return None
+    try:
+        if pred(node):
+            return node
+        for index in range(node.get_child_count()):
+            found = _atspi_walk(node.get_child_at_index(index), pred, depth + 1, max_depth)
+            if found is not None:
+                return found
+    except Exception:
+        return None
+    return None
+
+
+def _atspi_process_id(app) -> int | None:
+    if app is None:
+        return None
+    getter = getattr(app, "get_process_id", None)
+    if not callable(getter):
+        return None
+    try:
+        value = int(getter())
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _atspi_find_qemu_app(desktop, pid: int):
+    wanted = int(pid)
+    for index in range(desktop.get_child_count()):
+        app = desktop.get_child_at_index(index)
+        if not app or (app.get_name() or "").lower() != "qemu":
+            continue
+        if _atspi_process_id(app) == wanted:
+            return app
+    return None
+
+
+def _atspi_qemu_app(pid: int):
+    try:
+        import gi
+
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi
+    except Exception as error:
+        raise RuntimeError(f"AT-SPI is required to show both QEMU heads: {error}") from error
+    desktop = Atspi.get_desktop(0)
+    app = _atspi_find_qemu_app(desktop, pid)
+    if app is None:
         raise RuntimeError(
-            f"owned QEMU window {address} did not reach workspace {workspace!r}"
+            f"AT-SPI did not find the QEMU GTK application for PID {pid}"
         )
-    return client
+    return Atspi, app
+
+
+def _atspi_click(node, label: str) -> None:
+    from gi.repository import Atspi
+
+    ok = Atspi.Action.do_action(node, 0)
+    if not ok:
+        raise RuntimeError(f"AT-SPI failed to activate {label}")
+
+
+def _qemu_click_named(app, role: str, name: str, root=None):
+    node = _atspi_walk(
+        root or app,
+        lambda item: (item.get_role_name() or "") == role and (item.get_name() or "") == name,
+    )
+    if node is None:
+        raise RuntimeError(f"QEMU GTK menu {role!r} {name!r} was not found")
+    _atspi_click(node, f"{role}:{name}")
+    return node
+
+
+def _qemu_main_frame(app):
+    for index in range(app.get_child_count()):
+        child = app.get_child_at_index(index)
+        title = child.get_name() or ""
+        if (child.get_role_name() or "") == "frame" and ": virtio-vga" not in title:
+            return child
+    return app
+
+
+def _detach_second_qemu_head(pid: int) -> None:
+    Atspi, app = _atspi_qemu_app(pid)
+    if app.get_child_count() >= 2:
+        return
+    _qemu_click_named(app, "radio menu item", "virtio-vga.1")
+    _qemu_click_named(app, "menu item", "Detach Tab")
+    main = _qemu_main_frame(app)
+    try:
+        _qemu_click_named(app, "radio menu item", "virtio-vga.0", root=main)
+    except RuntimeError:
+        pass
+    show_tabs = _atspi_walk(
+        main,
+        lambda item: (item.get_role_name() or "") == "check menu item"
+        and (item.get_name() or "") == "Show Tabs",
+    )
+    if show_tabs is not None:
+        states = show_tabs.get_state_set()
+        if states.contains(Atspi.StateType.CHECKED):
+            _atspi_click(show_tabs, "Show Tabs")
+
+
+def _show_both_qemu_heads(pid: int, workspace: str, name: str) -> list[dict]:
+    _guard_hyprland_fds("show-both-qemu-heads")
+    existing = _owned_windows(_host_command_json("clients"), pid)
+    if len(existing) < 2:
+        _detach_second_qemu_head(pid)
+    heads = _place_owned_windows(pid, workspace)
+    heads = sorted(
+        heads,
+        key=lambda item: (
+            int((item.get("at") or [0, 0])[0] or 0),
+            int((item.get("at") or [0, 0])[1] or 0),
+            str(item.get("address") or ""),
+        ),
+    )
+    expected_titles = {
+        f"QEMU (SmartDock {name})",
+        f"QEMU (SmartDock {name}): virtio-vga.1",
+    }
+    if len(heads) != 2:
+        raise RuntimeError(f"QEMU PID {pid} owns {len(heads)} windows; expected two heads")
+    addresses = [str(item.get("address") or "") for item in heads]
+    titles = [str(item.get("title") or "") for item in heads]
+    if len(set(addresses)) != 2 or "" in addresses:
+        raise RuntimeError("QEMU heads did not have two distinct exact addresses")
+    if set(titles) != expected_titles:
+        raise RuntimeError(f"QEMU heads had unexpected titles: {titles!r}")
+    if not all(_workspace_matches(item, workspace) for item in heads):
+        raise RuntimeError(f"QEMU heads did not reach workspace {workspace!r}")
+    return heads
 
 
 def _process_socket_inodes(pid: int) -> set[str]:
@@ -1189,6 +1475,12 @@ def _read_guest_ready(record: dict) -> dict:
     for key in ("wayland_display", "hyprland_instance_signature", "output"):
         if not data.get(key):
             raise RuntimeError(f"guest readiness missing {key}")
+    outputs = data.get("outputs")
+    if isinstance(outputs, list) and outputs:
+        names = [str(item) for item in outputs if item]
+        if len(names) < 2:
+            raise RuntimeError(f"guest readiness needs two outputs, got {outputs!r}")
+        data["outputs"] = names
     return data
 
 
@@ -1238,6 +1530,9 @@ def guest_capture(name: str) -> Path:
     record["guest_display"] = ready["wayland_display"]
     record["guest_signature"] = ready["hyprland_instance_signature"]
     record["guest_output"] = ready["output"]
+    outputs = ready.get("outputs")
+    if isinstance(outputs, list) and outputs:
+        record["guest_outputs"] = [str(item) for item in outputs if item]
     _commit_live_record(record, allowed_states={"starting", "ready"})
     remote_png = f"/tmp/smartdock-capture-{record['name']}.png"
     runtime = ready.get("xdg_runtime_dir") or "/run/user/1000"
@@ -1246,9 +1541,7 @@ def guest_capture(name: str) -> Path:
             f"export XDG_RUNTIME_DIR={shlex.quote(str(runtime))};",
             f"export WAYLAND_DISPLAY={shlex.quote(ready['wayland_display'])};",
             f"export HYPRLAND_INSTANCE_SIGNATURE={shlex.quote(ready['hyprland_instance_signature'])};",
-            shlex.join(
-                ["timeout", "10s", "grim", "-o", ready["output"], remote_png]
-            ),
+            shlex.join(["timeout", "10s", "grim", remote_png]),
         ]
     )
     result = _run_ssh(record, command, 20)
@@ -1281,6 +1574,7 @@ def guest_capture(name: str) -> Path:
                 "config_path": config_path,
                 "config_target": "guest",
                 "guest_output": ready["output"],
+                "guest_outputs": ready.get("outputs") or [ready["output"]],
                 "guest_display": ready["wayland_display"],
                 "guest_signature": ready["hyprland_instance_signature"],
             },
@@ -1638,6 +1932,9 @@ def start_guest_dock(name: str) -> dict:
     record["guest_display"] = ready["wayland_display"]
     record["guest_signature"] = ready["hyprland_instance_signature"]
     record["guest_output"] = ready["output"]
+    outputs = ready.get("outputs")
+    if isinstance(outputs, list) and outputs:
+        record["guest_outputs"] = [str(item) for item in outputs if item]
     record["config_path"] = GUEST_CONFIG_PATH
     record["guest_config_path"] = GUEST_CONFIG_PATH
     record["target"] = "guest"
@@ -1690,9 +1987,22 @@ def start_guest_dock(name: str) -> dict:
             time.sleep(1)
     if qualified is None:
         raise RuntimeError(last_error)
+    seeded = None
+    if not record.get("guest_seeded", False):
+        seeded = _run_guest_argv(record, [GUEST_CONTROL, "seed-desktop"], 90)
+        if seeded.returncode != 0:
+            raise RuntimeError(
+                "guest seed-desktop failed: "
+                f"{(seeded.stderr or seeded.stdout or '').strip()}"
+            )
+        try:
+            seed_payload = _last_json_value(seeded.stdout)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(f"malformed guest seed JSON: {exc}") from exc
+    else:
+        seed_payload = None
     record["state"] = "ready"
     record["error"] = None
-    _commit_live_record(record, allowed_states={"starting", "ready"})
     evidence = Path(record["evidence_path"])
     (evidence / "guest-dock-status.json").write_text(
         json.dumps(
@@ -1709,6 +2019,13 @@ def start_guest_dock(name: str) -> dict:
         + "\n",
         encoding="utf-8",
     )
+    if seed_payload is not None:
+        (evidence / "guest-seed.json").write_text(
+            json.dumps(seed_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        record["guest_seeded"] = True
+    _commit_live_record(record, allowed_states={"starting", "ready"})
     return record
 
 
@@ -1801,9 +2118,16 @@ command -v wtype >/dev/null || packages+=(wtype)
 command -v python3 >/dev/null || packages+=(python)
 command -v seatd >/dev/null || packages+=(seatd)
 pacman -Q qt6-5compat >/dev/null 2>&1 || packages+=(qt6-5compat)
+command -v foot >/dev/null || packages+=(foot)
+command -v thunar >/dev/null || packages+=(thunar)
+# Preview/QML text needs real fonts; Arch cloud images ship fontconfig only.
+if ! fc-list >/dev/null 2>&1 || [[ "$(fc-list | wc -l)" -eq 0 ]]; then
+  packages+=(ttf-dejavu ttf-liberation ttf-jetbrains-mono-nerd)
+fi
 if ((${#packages[@]})); then
   sudo pacman -Sy --noconfirm "${packages[@]}"
 fi
+fc-cache -f >/dev/null 2>&1 || true
 sudo systemctl enable --now seatd
 command -v Hyprland
 command -v qs
@@ -1811,7 +2135,10 @@ command -v grim
 command -v wtype
 command -v python3
 command -v seatd
+command -v foot
+command -v thunar
 systemctl is-active seatd
+fc-list >/dev/null
 """.strip()
     setup = _run_ssh(record, setup_command, deadline - time.monotonic())
     (evidence / "guest-setup.log").write_text(
@@ -1950,6 +2277,8 @@ def start(
             "base_image": str(paths["base_image"]),
             "host_pid": None,
             "guest_dock_pid": None,
+            "qemu_window_addresses": None,
+            "guest_seeded": False,
             "config_path": GUEST_CONFIG_PATH,
             "guest_config_path": GUEST_CONFIG_PATH,
             "target": "guest",
@@ -2001,6 +2330,16 @@ def start(
 
         client = _place_owned_window(proc.pid, workspace)
         record["qemu_window_address"] = client["address"]
+        heads = _show_both_qemu_heads(proc.pid, workspace, name)
+        leftmost = min(
+            heads,
+            key=lambda item: (
+                int((item.get("at") or [0])[0] or 0),
+                str(item.get("address") or ""),
+            ),
+        )
+        record["qemu_window_address"] = leftmost["address"]
+        record["qemu_window_addresses"] = [item["address"] for item in heads]
         _commit_live_record(record, allowed_states={"starting"})
         _disable_launch_rule(name)
         after_placement = _capture_host_state(evidence, "after-placement")
@@ -2009,6 +2348,9 @@ def start(
             != before["production_settings_sha256"]
         ):
             raise RuntimeError("host production settings hash changed during launch")
+        if (_host_focus_signature(after_placement)
+                != _host_focus_signature(before)):
+            raise RuntimeError("host focus or workspace changed during QEMU placement")
 
         _wait_for_guest_setup(record, evidence)
         sync_source(record)
@@ -2023,6 +2365,9 @@ def start(
         after_setup = _capture_host_state(evidence, "after-setup")
         if after_setup["production_settings_sha256"] != before["production_settings_sha256"]:
             raise RuntimeError("host production settings hash changed during guest setup")
+        if (_host_focus_signature(after_setup)
+                != _host_focus_signature(before)):
+            raise RuntimeError("host focus or workspace changed during guest setup")
         record["error"] = None
         _commit_live_record(record, allowed_states={"starting", "ready"})
         print(
@@ -2034,6 +2379,7 @@ def start(
                     "port": record["port"],
                     "qemu_pid": record["qemu_pid"],
                     "qemu_window_address": record["qemu_window_address"],
+                    "qemu_window_addresses": record["qemu_window_addresses"],
                     "host_pid": record["host_pid"],
                     "guest_dock_pid": record.get("guest_dock_pid"),
                     "config_path": record["config_path"],
@@ -2046,7 +2392,7 @@ def start(
             flush=True,
         )
 
-        returncode = proc.wait()
+        returncode = _wait_supervised(proc)
         latest = read_record(name)
         if latest["state"] in {"stopped", "stopping", "failed"}:
             return latest

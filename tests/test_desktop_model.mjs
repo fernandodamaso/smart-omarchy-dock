@@ -119,7 +119,7 @@ function scopeFor(input, refresh) {
     dockHyprMonitor: input.dockMonitor, focusedScopeWorkspace: input.focusedWorkspace,
     groupedRequested: input.mode === 'classic-grouped',
     windowActions: { minimizedOriginsSnapshot: input.minimizedOrigins },
-    workspaceDragActive: false, workspacePresentationDirty: false,
+    workspaceDragActive: false, workspacePresentationDirty: false, workspaceMonitorDrag: null,
     revealAfterWorkspaceDrag: false, screen: { name: input.dockMonitor?.name || '' },
     windowPreview: { dismissImmediately() { events.push(['dismiss']) } },
     badgeTracker: { syncWorkspaceScopes(owner, items) {

@@ -2,14 +2,14 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: guest-control.sh start-compositor|env|capture|start-dock|stop-dock [png-path]" >&2
+  echo "usage: guest-control.sh start-compositor|env|capture|start-dock|stop-dock|seed-desktop [png-path]" >&2
   exit 2
 }
 
 cmd=${1:-}
 [[ -n "$cmd" ]] || usage
 case "$cmd" in
-  start-compositor|env|capture|start-dock|stop-dock) ;;
+  start-compositor|env|capture|start-dock|stop-dock|seed-desktop) ;;
   *) usage ;;
 esac
 
@@ -68,24 +68,17 @@ finish_ready() {
   export WAYLAND_DISPLAY="$display"
   export HYPRLAND_INSTANCE_SIGNATURE="$sig"
   export XDG_RUNTIME_DIR="$runtime_dir"
-  monitors=$(hyprctl -j monitors)
-  MONITORS_JSON="$monitors" python3 - "$ready" "$runtime_dir" <<'PY'
-import json, os, sys
-from pathlib import Path
-ready_path = Path(sys.argv[1])
-runtime_dir = sys.argv[2]
-data = json.loads(ready_path.read_text(encoding="utf-8"))
-monitors = json.loads(os.environ["MONITORS_JSON"])
-if not isinstance(monitors, list) or len(monitors) != 1:
-    raise SystemExit(f"expected exactly one monitor, got {monitors!r}")
-output = monitors[0].get("name")
-if not output:
-    raise SystemExit("monitor has no name")
-data["output"] = output
-data["xdg_runtime_dir"] = runtime_dir
-ready_path.write_text(json.dumps(data, sort_keys=True) + "\n", encoding="utf-8")
-print(json.dumps(data, sort_keys=True))
-PY
+  helper="$candidate/tests/runtime/dev-session/guest_ready.py"
+  monitors=""
+  local attempt
+  for attempt in $(seq 1 30); do
+    monitors=$(hyprctl -j monitors)
+    if MONITORS_JSON="$monitors" python3 "$helper" >/dev/null; then
+      break
+    fi
+    sleep 0.5
+  done
+  MONITORS_JSON="$monitors" python3 "$helper" "$ready" "$runtime_dir"
 }
 
 compositor_running() {
@@ -221,9 +214,8 @@ capture() {
   mapfile -t ready_fields < <(load_ready)
   export WAYLAND_DISPLAY="${ready_fields[0]}"
   export HYPRLAND_INSTANCE_SIGNATURE="${ready_fields[1]}"
-  output=${ready_fields[2]}
   export XDG_RUNTIME_DIR="${ready_fields[3]:-$runtime_dir}"
-  timeout 10s grim -o "$output" "$png"
+  timeout 10s grim "$png"
 }
 
 start_dock() {
@@ -243,6 +235,18 @@ start_dock() {
   if [[ ! -f "$dest" ]]; then
     cp "$src" "$dest"
     chmod 600 "$dest"
+    python3 - "$dest" <<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+data["workspaceLayout"] = "grouped"
+data["workspaceMonitorScope"] = "all"
+data["sortByWorkspace"] = True
+data["showTrash"] = False
+data["pinned"] = []
+path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+PY
   fi
   export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
   export SMARTDOCK_CONFIG="$dest"
@@ -334,6 +338,46 @@ stop_dock() {
   rm -f "$dock_pidfile"
 }
 
+seed_desktop() {
+  mapfile -t ready_fields < <(load_ready)
+  export WAYLAND_DISPLAY="${ready_fields[0]}"
+  export HYPRLAND_INSTANCE_SIGNATURE="${ready_fields[1]}"
+  export XDG_RUNTIME_DIR="${ready_fields[3]:-$runtime_dir}"
+  READY_JSON="$ready" python3 - <<'PY'
+import json, os, subprocess, time
+from pathlib import Path
+
+ready = json.loads(Path(os.environ["READY_JSON"]).read_text(encoding="utf-8"))
+outputs = [str(item) for item in (ready.get("outputs") or []) if item]
+if len(outputs) < 2:
+    raise SystemExit("seed-desktop requires two guest outputs in ready.json")
+
+def run(argv):
+    result = subprocess.run(argv, check=False, capture_output=True, text=True)
+    return result.returncode, (result.stdout or "").strip(), (result.stderr or "").strip()
+
+logs = []
+for index, output in enumerate(outputs[:2], start=1):
+    ws = str(index)
+    for expr in (
+        f"hl.dsp.focus({{ monitor = {json.dumps(output)} }})",
+        f"hl.dsp.focus({{ workspace = {json.dumps(ws)} }})",
+        f"hl.dsp.workspace.move({{ workspace = {json.dumps(ws)}, monitor = {json.dumps(output)} }})",
+        f"hl.dsp.exec_cmd({json.dumps('/usr/bin/foot')})",
+        f"hl.dsp.exec_cmd({json.dumps('/usr/bin/thunar')})",
+    ):
+        code, stdout, stderr = run(["hyprctl", "dispatch", expr])
+        logs.append({"argv": ["hyprctl", "dispatch", expr], "code": code, "stdout": stdout, "stderr": stderr})
+    time.sleep(1.2)
+
+clients = json.loads(subprocess.check_output(["hyprctl", "-j", "clients"], text=True))
+payload = {"clients": len(clients) if isinstance(clients, list) else 0, "logs": logs, "outputs": outputs}
+if not isinstance(clients, list) or len(clients) < 4:
+    raise SystemExit("seed-desktop expected at least 4 windows: " + json.dumps(payload))
+print(json.dumps(payload, sort_keys=True))
+PY
+}
+
 case "$cmd" in
   start-compositor)
     start_compositor
@@ -349,6 +393,9 @@ case "$cmd" in
     ;;
   stop-dock)
     stop_dock
+    ;;
+  seed-desktop)
+    seed_desktop
     ;;
   *)
     usage

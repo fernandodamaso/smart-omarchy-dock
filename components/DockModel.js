@@ -731,11 +731,16 @@ function focusedWorkspaceIdFromMonitors(monitors, focusedWorkspace) {
   var hasMonitorIpc = false
 
   for (var i = 0; i < values.length; ++i) {
-    var ipc = values[i].lastIpcObject || ({})
-    if (!ipc.activeWorkspace) continue
+    var monitor = values[i]
+    var ipc = monitor.lastIpcObject || ({})
+    var activeWorkspace = monitor.activeWorkspace !== undefined
+      ? monitor.activeWorkspace : ipc.activeWorkspace
+    if (!activeWorkspace) continue
     hasMonitorIpc = true
-    if (ipc.focused === true) {
-      var id = Number(ipc.activeWorkspace.id)
+    var focused = monitor.focused !== undefined ? monitor.focused === true
+      : ipc.focused === true
+    if (focused) {
+      var id = Number(activeWorkspace.id)
       if (Number.isInteger(id) && id > 0) return id
     }
   }
