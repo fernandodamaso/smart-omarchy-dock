@@ -27,8 +27,19 @@ Item {
   readonly property string mode: DockModel.normalizeSetting("presentationMode", settings.presentationMode)
   readonly property string edge: DockModel.normalizeSetting("sidebarEdge", settings.sidebarEdge)
   readonly property bool collapsed: DockModel.normalizeSetting("sidebarCollapsed", settings.sidebarCollapsed)
-  readonly property var geometry: SidebarModel.geometry(selectedScreen ? selectedScreen.width : 0,
+  readonly property var persistentGeometry: SidebarModel.screenGeometry(selectedScreen,
     settings.sidebarExpandedWidth, collapsed)
+  property bool resizeActive: false
+  property real resizeStartGlobalX: 0
+  property int resizeStartWidth: 0
+  property int resizePreviewWidth: 0
+  property int resizeRequestedAtStart: 320
+  property bool resizeCollapsedAtStart: false
+  property string resizeEdgeAtStart: "left"
+  property string resizeConnectorAtStart: ""
+  readonly property var geometry: resizeActive
+    ? SidebarModel.screenGeometry(selectedScreen, resizePreviewWidth, false)
+    : persistentGeometry
   property var registry: ({ nextToken: 1, entries: [] })
   property var folds: ({})
   property var projection: SidebarModel.emptyProjection()
@@ -48,10 +59,93 @@ Item {
     if (initialized) Qt.callLater(root.refresh)
   }
 
+  function clearResizeState() {
+    root.resizeActive = false
+    root.resizeStartGlobalX = 0
+    root.resizeStartWidth = 0
+    root.resizePreviewWidth = 0
+    root.resizeConnectorAtStart = ""
+    root.interactionBusy = false
+  }
+
+  function cancelResize(reason) {
+    if (!root.resizeActive) return false
+    root.clearResizeState()
+    root.scheduleRefresh()
+    return true
+  }
+
   function invalidateSurface() {
+    root.cancelResize("surface-invalidated")
     root.surfaceInvalidated()
     root.interactionBusy = false
     root.scheduleRefresh()
+  }
+
+  function beginResize(globalX) {
+    if (root.mode !== "sidebar" || root.collapsed || !root.selectedScreen
+        || !root.persistentGeometry.mapped || root.interactionBusy || root.resizeActive)
+      return false
+    var pointer = Number(globalX)
+    if (!isFinite(pointer)) return false
+    root.resizeStartGlobalX = pointer
+    root.resizeStartWidth = root.persistentGeometry.expandedWidth
+    root.resizePreviewWidth = root.resizeStartWidth
+    root.resizeRequestedAtStart = DockModel.normalizeSetting(
+      "sidebarExpandedWidth", root.settings.sidebarExpandedWidth)
+    root.resizeCollapsedAtStart = root.collapsed
+    root.resizeEdgeAtStart = root.edge
+    root.resizeConnectorAtStart = root.selectedConnector
+    root.resizeActive = true
+    root.interactionBusy = true
+    root.mutationFeedback = ""
+    return true
+  }
+
+  function updateResize(globalX) {
+    if (!root.resizeActive || !root.selectedScreen
+        || root.selectedConnector !== root.resizeConnectorAtStart) return false
+    root.resizePreviewWidth = SidebarModel.resizeWidth(root.resizeStartWidth,
+      root.resizeStartGlobalX, Number(globalX), root.resizeEdgeAtStart,
+      SidebarModel.logicalScreenWidth(root.selectedScreen))
+    return true
+  }
+
+  function hostIntent(key, value, expectedValue) {
+    if (root.host && typeof root.host.saveSettingIntent === "function")
+      return root.host.saveSettingIntent(key, value, expectedValue)
+    var reply = root.host.saveSetting(key, value)
+    var applied = !!(reply && reply.data && reply.data.applied === true)
+    return { accepted: !!(reply && (reply.ok || applied)),
+      pending: applied && !reply.ok && reply.error && reply.error.code === "E_BUSY",
+      reply: reply }
+  }
+
+  function finishResize(cancelled) {
+    if (!root.resizeActive)
+      return {accepted:false,pending:false,reply:{ok:false,error:{code:"E_STATE",message:"No resize is active."},data:{applied:false}}}
+    var finalWidth = root.resizePreviewWidth
+    var startWidth = root.resizeStartWidth
+    var expected = root.resizeRequestedAtStart
+    root.clearResizeState()
+    if (cancelled === true || finalWidth === startWidth) {
+      root.scheduleRefresh()
+      return {accepted:true,pending:false,noop:true,
+        reply:{ok:true,data:{applied:false,persisted:true,changedKeys:[]},warnings:[]}}
+    }
+    var result = root.hostIntent("sidebarExpandedWidth", finalWidth, expected)
+    if (!result.accepted)
+      root.mutationFeedback = String(result.reply && result.reply.error && result.reply.error.message
+        || "Preference changed elsewhere; resize was not saved.")
+    else root.mutationFeedback = ""
+    root.scheduleRefresh()
+    return result
+  }
+
+  function resizePreferenceConflict() {
+    return root.resizeActive && (
+      DockModel.normalizeSetting("sidebarExpandedWidth", root.settings.sidebarExpandedWidth) !== root.resizeRequestedAtStart
+      || DockModel.normalizeSetting("sidebarCollapsed", root.settings.sidebarCollapsed) !== root.resizeCollapsedAtStart)
   }
 
   function refresh() {
@@ -62,6 +156,7 @@ Item {
       DockModel.normalizeSetting("sidebarMonitor", root.settings.sidebarMonitor),
       root.selectedConnector, root.interactionBusy) : null
     if (next !== root.selectedScreen) {
+      root.cancelResize("host-changed")
       root.surfaceInvalidated()
       root.interactionBusy = false
       root.selectedScreen = next
@@ -122,12 +217,12 @@ Item {
   }
 
   function requestCollapse() {
+    if (root.resizeActive) root.cancelResize("collapse")
     if (root.interactionBusy) return {ok:false,error:{code:"E_BUSY",message:"Finish the active interaction."},data:{applied:false}}
-    var reply = root.host.saveSetting("sidebarCollapsed", !root.collapsed)
-    // An E_BUSY after acceptance describes persistence, not a rejected intent.
-    // Bind to host settings, never queue/replay a previous snapshot or roll back.
-    var applied = reply.data && reply.data.applied === true
-    root.mutationFeedback = reply.ok || applied ? "" : String(reply.error && reply.error.message || "Preference was not accepted.")
+    var expected = root.collapsed
+    var intent = root.hostIntent("sidebarCollapsed", !root.collapsed, expected)
+    var reply = intent.reply
+    root.mutationFeedback = intent.accepted ? "" : String(reply && reply.error && reply.error.message || "Preference was not accepted.")
     return reply
   }
 
@@ -162,7 +257,10 @@ Item {
       {localUrgent:row.urgent === true,primaryOwner:row.primaryOwner === true}, activities)
   }
 
-  onSettingsChanged: root.scheduleRefresh()
+  onSettingsChanged: {
+    if (root.resizePreferenceConflict()) root.cancelResize("preference-conflict")
+    root.scheduleRefresh()
+  }
   onModeChanged: root.invalidateSurface()
   onEdgeChanged: root.invalidateSurface()
   onScreensChanged: root.refresh()
