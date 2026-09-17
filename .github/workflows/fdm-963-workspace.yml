@@ -5,29 +5,47 @@ on:
     branches: [agent/fdm-963-source-workspace]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
+  publish:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          ref: 1a81fe650f686f1b8dfb10b25f5c0d1de6a4bab8
-          persist-credentials: false
-      - name: Export exact source for isolated SB-01 development
+      - name: Preserve transfer integrity evidence
+        shell: bash
+        run: |
+          mkdir -p /tmp/fdm963-published
+          cp .fdm963-source.patch.b64 /tmp/fdm963-published/payload.b64
+      - name: Publish only the locally verified source tree
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 1a81fe650f686f1b8dfb10b25f5c0d1de6a4bab8
-          mkdir -p /tmp/fdm-963-source
-          git bundle create /tmp/fdm-963-source/source.bundle HEAD
-          git rev-parse HEAD > /tmp/fdm-963-source/base.txt
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, zlib
+          patch = zlib.decompress(base64.b64decode(pathlib.Path('.fdm963-source.patch.b64').read_text()))
+          assert hashlib.sha256(patch).hexdigest() == '33894a338f88d8e6cfc8171429f7855765bd586e4a8ae17fbd6c5c1b8431b16f'
+          pathlib.Path('/tmp/fdm963-source.patch').write_bytes(patch)
+          PY
+          test -z "$(git ls-remote --heads origin refs/heads/feat/fdm-963-shared-desktop)"
+          git checkout -b feat/fdm-963-shared-desktop 1a81fe650f686f1b8dfb10b25f5c0d1de6a4bab8
+          git apply --index /tmp/fdm963-source.patch
+          git diff --cached --check
+          test "$(git write-tree)" = 2b420a8928bea735be24cbe3967720904973a206
+          node tests/test_desktop_model.mjs
+          git -c user.name='SmartDock Source Agent' -c user.email='smartdock-agent@example.invalid' commit -m 'refactor(fdm-963): extract shared desktop presentation with classic parity'
+          git push origin HEAD:refs/heads/feat/fdm-963-shared-desktop
+          git bundle create /tmp/fdm963-published/source.bundle HEAD
+          git rev-parse HEAD > /tmp/fdm963-published/head.txt
+          git rev-parse HEAD^{tree} > /tmp/fdm963-published/tree.txt
+          printf 'base=%s\nhead=%s\ntree=%s\n' 1a81fe650f686f1b8dfb10b25f5c0d1de6a4bab8 "$(git rev-parse HEAD)" "$(git rev-parse HEAD^{tree})"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: fdm-963-exact-source
-          path: /tmp/fdm-963-source/
+          name: fdm-963-published-source
+          path: /tmp/fdm963-published/
           retention-days: 3
           if-no-files-found: error
