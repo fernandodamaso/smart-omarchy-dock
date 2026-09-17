@@ -49,15 +49,47 @@ function selectScreen(screens, monitors, order, preferred, current, busy) {
   return ordered.length ? ordered[0].screen : null
 }
 
+function logicalScreenWidth(screen) {
+  if (!screen) return 0
+  var width = Number(screen.width)
+  return isFinite(width) ? Math.max(0, width) : 0
+}
+
 function geometry(screenWidth, requestedWidth, collapsed) {
   var width = Math.max(0, Number(screenWidth) || 0)
   if (!isFinite(width)) width = 0
+  var railWidth = Math.min(56, width)
   var maximum = Math.min(width, Math.max(56, Math.min(480, Math.floor(0.40 * width))))
   var minimum = Math.min(240, maximum)
   var requested = DockModel.normalizeSetting("sidebarExpandedWidth", requestedWidth)
   var expanded = Math.min(maximum, Math.max(minimum, requested))
-  return { mapped: width > 0, width: collapsed ? Math.min(56, width) : expanded,
-    expandedWidth: expanded, minimum: minimum, maximum: maximum }
+  return { mapped: width > 0, width: collapsed ? railWidth : expanded,
+    expandedWidth: expanded, minimum: minimum, maximum: maximum, railWidth: railWidth,
+    screenWidth: width }
+}
+
+// Qt/Quickshell screen dimensions are already logical. Never divide by scale or
+// use available/workarea width here: that can include this panel's own exclusive
+// zone and create a shrinking feedback loop.
+function screenGeometry(screen, requestedWidth, collapsed) {
+  return geometry(logicalScreenWidth(screen), requestedWidth, collapsed)
+}
+
+// Resize from one captured pointer origin. The caller supplies screen-global
+// logical coordinates, so a moving right-anchored panel origin cannot accumulate
+// as extra pointer motion.
+function resizeWidth(startWidth, startGlobalX, currentGlobalX, edge, screenWidth) {
+  var width = Math.max(0, Number(screenWidth) || 0)
+  var bounds = geometry(width, startWidth, false)
+  if (!bounds.mapped) return 0
+  var start = Number(startGlobalX)
+  var current = Number(currentGlobalX)
+  var delta = isFinite(start) && isFinite(current) ? current - start : 0
+  var candidate = Number(startWidth)
+  if (!isFinite(candidate)) candidate = bounds.expandedWidth
+  candidate += edge === "right" ? -delta : delta
+  candidate = Math.round(candidate)
+  return Math.min(bounds.maximum, Math.max(bounds.minimum, candidate))
 }
 
 function recoverAnchor(anchor, oldKeys, rows) {
