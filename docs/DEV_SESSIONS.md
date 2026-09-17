@@ -54,7 +54,9 @@ unset XDG_STATE_HOME
 
 `dock` starts the plugin host (`Overlay.qml` / `DockHost`) and seeds real `foot`/`thunar` windows on both monitors. Interact in the QEMU window the same way as on your desk: right-click menus, window drag, workspace-card drag. A workspace move commits **only on mouse release**. `capture` runs guest `grim` across both outputs into one PNG.
 
-Do not start `tests/runtime/workspace-drag-preview` or any other second qs preview in a named session.
+The fixture preview is retained as reference material for stage two. It is not
+qualified against this consolidated branch. Never run it alongside the
+production dock in the same guest.
 
 ### Host Hyprland FD guard
 
