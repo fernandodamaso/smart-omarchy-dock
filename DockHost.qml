@@ -228,6 +228,27 @@ Item {
     return saveSettings(patch, false)
   }
 
+  // Gesture-owned preferences need one small adapter around the sole writer.
+  // It distinguishes a rejected preflight/stale intent from a live intent that
+  // was accepted but whose async FileView persistence is still pending.
+  function saveSettingIntent(key, value, expectedValue) {
+    var blocked = mutationBlocked()
+    if (blocked) return { accepted: false, pending: false, reply: blocked }
+    if (settings[key] !== expectedValue) {
+      var stale = dockControl.mutationData(settings, settings, [], false, false)
+      stale.currentValue = settings[key]
+      stale.expectedValue = expectedValue
+      return { accepted: false, pending: false,
+        reply: dockControl.failure("E_STALE",
+          "Preference changed after the interaction started; refresh before retrying.", stale) }
+    }
+    var reply = saveSetting(key, value)
+    var applied = !!(reply && reply.data && reply.data.applied === true)
+    var accepted = !!(reply && (reply.ok || applied))
+    var pending = accepted && !reply.ok && !!reply.error && reply.error.code === "E_BUSY"
+    return { accepted: accepted, pending: pending, reply: reply }
+  }
+
   function mutationBlocked() {
     var data = dockControl.mutationData(settings, settings, [], false, false)
     if (!settingsLoaded || settingsReloadPending || settingsWriteState === "saving")
