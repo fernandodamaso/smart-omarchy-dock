@@ -1,0 +1,33 @@
+name: FDM-963 source workspace
+
+on:
+  push:
+    branches: [agent/fdm-963-source-workspace]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: 1a81fe650f686f1b8dfb10b25f5c0d1de6a4bab8
+          persist-credentials: false
+      - name: Export exact source for isolated SB-01 development
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 1a81fe650f686f1b8dfb10b25f5c0d1de6a4bab8
+          mkdir -p /tmp/fdm-963-source
+          git bundle create /tmp/fdm-963-source/source.bundle HEAD
+          git rev-parse HEAD > /tmp/fdm-963-source/base.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdm-963-exact-source
+          path: /tmp/fdm-963-source/
+          retention-days: 3
+          if-no-files-found: error
