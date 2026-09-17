@@ -12,6 +12,11 @@ PanelWindow {
   required property var controller
   readonly property var viewport: sidebarViewport
   readonly property var resizeHandle: resizeHandle
+  readonly property var contextMenu: sidebarContext
+  property var menuTarget: null
+  property var menuAnchor: null
+  property var menuMembers: []
+  property var menuEntry: null
   readonly property string preferenceFeedback: !host ? "" : host.settingsWriteState === "error"
     ? "Unsaved preferences: " + String(host.settingsWriteError || "Persistence failed")
     : host.settingsWriteState === "saving" ? "Saving preferences" : controller.mutationFeedback
@@ -36,10 +41,34 @@ PanelWindow {
   }
 
   function closeSurfaces() {
+    sidebarContext.dismiss()
     picker.visible = false
+    sidebarViewport.cancelInputs("surface-close")
     root.controller.cancelResize("surface-close")
     root.controller.interactionBusy = false
     if (root.host && root.host.badgeTracker) root.host.badgeTracker.syncWorkspaceScopes(root.badgeScopeOwner, [])
+  }
+
+  function openContext(target, anchorItem) {
+    if (root.controller.interactionBusy || !root.controller.targetIsCurrent(target) || !anchorItem) return false
+    root.menuTarget = target
+    root.menuAnchor = anchorItem
+    root.menuMembers = target.kind === "window" ? [target.toplevel] : []
+    root.menuEntry = anchorItem.entry || null
+    sidebarContext.open()
+    return true
+  }
+
+  function refreshContext() {
+    if (!sidebarContext.visible) return
+    var point = root.menuAnchor ? sidebarViewport.mapFromItem(root.menuAnchor, 0, 0) : null
+    if (!root.menuAnchor || !root.menuAnchor.visible || root.menuAnchor.rowKey !== root.menuTarget.key
+        || !root.controller.targetIsCurrent(root.menuTarget) || !point
+        || point.y + root.menuAnchor.height <= 0 || point.y >= sidebarViewport.height) {
+      sidebarContext.dismiss()
+      return
+    }
+    sidebarContext.anchor.updateAnchor()
   }
 
   Ui.BorderSurface {
@@ -80,6 +109,8 @@ PanelWindow {
     DockSidebarViewport {
       id: sidebarViewport
       controller: root.controller
+      onContextRequested: (target, anchorItem) => root.openContext(target, anchorItem)
+      onDismissContextRequested: sidebarContext.dismiss()
       anchors.top: controls.bottom
       anchors.bottom: utilities.top
       anchors.left: parent.left
@@ -143,6 +174,32 @@ PanelWindow {
     onActivated: root.controller.cancelResize("escape")
   }
 
+  DockContextMenu {
+    id: sidebarContext
+    anchorItem: root.menuAnchor
+    position: root.controller.edge
+    autoHide: false
+    pinnedItem: root.menuTarget ? (root.controller.settings.pinned || []).map(DockModel.normalizedId)
+      .indexOf(DockModel.normalizedId(root.menuTarget.desktopId)) >= 0 : false
+    runningToplevels: root.menuMembers
+    windowActions: root.host.windowActions
+    originOnly: true
+    sidebarMode: true
+    workspaceContext: root.menuTarget && root.menuTarget.kind === "workspace" ? root.menuTarget : null
+    externalTargetValidator: function() { return root.controller.targetIsCurrent(root.menuTarget) }
+    interfaceAnimationsEnabled: root.controller.settings.interfaceAnimationsEnabled !== false
+    onOpenNewWindow: {
+      if (root.menuEntry && typeof root.menuEntry.execute === "function") root.menuEntry.execute()
+    }
+    onVisibleChanged: root.controller.interactionBusy = visible || picker.visible
+      || root.controller.resizeActive || root.controller.rowDragActive
+    onKeyboardDismissed: root.controller.releaseNavigationFocus()
+  }
+  Connections {
+    target: sidebarViewport.listView
+    function onContentYChanged() { root.refreshContext() }
+  }
+
   DockAppPicker {
     id: picker
     anchorItem: launcher
@@ -151,14 +208,23 @@ PanelWindow {
     iconOverrides: root.controller.settings.iconOverrides || ({})
     iconReloadRevision: root.host.iconReloadRevision
     onApplicationSelected: desktopId => root.host.pinApplication(desktopId)
-    onVisibleChanged: root.controller.interactionBusy = visible || root.controller.resizeActive
+    onVisibleChanged: root.controller.interactionBusy = visible || sidebarContext.visible || root.controller.resizeActive || root.controller.rowDragActive
   }
   Connections {
     target: root.controller
-    function onRefreshed() { root.syncBadges() }
+    function onRefreshed() { root.syncBadges(); root.refreshContext() }
+    function onToplevelsChanged() { Qt.callLater(root.refreshContext) }
+    function onHyprToplevelsChanged() { Qt.callLater(root.refreshContext) }
+    function onScopeRevisionChanged() { Qt.callLater(root.refreshContext) }
+    function onWorkspacesChanged() { Qt.callLater(root.refreshContext) }
+    function onMonitorsChanged() { Qt.callLater(root.refreshContext) }
+    function onMinimizedOriginsChanged() { Qt.callLater(root.refreshContext) }
+    function onSettingsChanged() { Qt.callLater(root.refreshContext) }
     function onSurfaceInvalidated() { root.closeSurfaces() }
   }
-  onVisibleChanged: root.syncBadges()
+  onVisibleChanged: { root.syncBadges(); if (!visible) root.closeSurfaces() }
+  onWidthChanged: Qt.callLater(root.refreshContext)
+  onHeightChanged: Qt.callLater(root.refreshContext)
   Component.onCompleted: root.syncBadges()
   Component.onDestruction: root.closeSurfaces()
 }

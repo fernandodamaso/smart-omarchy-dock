@@ -1,11 +1,13 @@
-# SB-02/SB-03 — Global sidebar source contract
+# SB-02/SB-03/SB-04 — Global sidebar source contract
 
-**FDM-964 + FDM-965, unreleased Draft foundation.** SB-02 implements shared
+**FDM-964 + FDM-965 + FDM-966, unreleased source candidate.** SB-02 implements shared
 construction, projection, one global panel, app folding/rail, typed preferences
 and initial reservation. SB-03 adds live resize, cancellation and conflict-safe
-preference commits. Neither slice deploys or qualifies a compositor. Classic
+preference commits. SB-04 adds exact-window actions, menus, keyboard navigation
+and single-sidebar drag adapters. These slices do not deploy or qualify a compositor. Classic
 remains the default. Parent contract: FDM-962. Detailed SB-03 behavior is in
-[`SIDEBAR_RESIZE.md`](SIDEBAR_RESIZE.md).
+[`SIDEBAR_RESIZE.md`](SIDEBAR_RESIZE.md); SB-04 is in
+[`SIDEBAR_INTERACTIONS.md`](SIDEBAR_INTERACTIONS.md).
 
 ## Source boundary
 
@@ -41,7 +43,7 @@ retarget or new commit.
 - `DockSidebarController` is the sole host-owned session state object. Its snapshot
   inputs use existing host data/revisions; it adds no timer, IPC, topology listener,
   provider or settings writer. It owns handle tokens, app folds, selection,
-  scroll/focus keys and temporary resize preview state. `interactionBusy` freezes
+  scroll/focus keys, captured menu/input targets and temporary resize/drag state. `interactionBusy` freezes
   preferred reconnects during an active interaction; current-screen removal and
   explicit mode/edge/host changes cancel immediately.
 - `DockHost` owns one mutually exclusive presentation Loader: classic Variants or
@@ -126,13 +128,15 @@ native behavior; no sidebar geometry animation repeatedly retiles the desktop.
 
 ## Validation and explicitly deferred work
 
-Focused source commands now include SB-03:
+Focused source commands include SB-03 and SB-04:
 
 ```bash
 node tests/test_sidebar_model.mjs
 node tests/test_sidebar_host.mjs
 node tests/test_sidebar_geometry.mjs
 node tests/test_sidebar_mutations.mjs
+node tests/test_sidebar_actions.mjs
+node tests/test_sidebar_drag.mjs
 node tests/test_desktop_model.mjs
 python3 -m unittest discover -s tests -p 'test_sidebar_config.py'
 python3 -m unittest discover -s tests -p 'test_sidebar_qml_syntax.py'
@@ -171,8 +175,8 @@ bar creation orders, focus/input, fullscreen on another monitor, plugin validati
 shell-aware lint and rendering remain integrated gates. A stripped plugin guest
 alone does not prove stock-bar coexistence.
 
-Next source slices: **FDM-966/SB-04** supplies exact-target activation, menus,
-keyboard and drag (requires FDM-954); **FDM-967/SB-05** supplies bounded widget
-lifecycle/popups. **FDM-968/SB-06** rebases the accepted source slices and owns
+**FDM-966/SB-04** reuses merged FDM-954 and adds exact-target activation, menus,
+keyboard and drag. **FDM-967/SB-05** supplies bounded widget lifecycle/popups on its
+separate source branch; those changes have not been folded into this SB-04 branch. **FDM-968/SB-06** rebases the accepted source slices and owns
 physical runtime qualification. Keep the feature-bearing PR Draft until the
 integrated core passes SB-06. Source acceptance does not merge, install or deploy.

@@ -229,6 +229,15 @@ Item {
     return true
   }
 
+  // Sidebar header navigation focuses the live owner; it never carries pull
+  // intent. Keep classic header/wheel callers on workspaceOnMonitorRequests.
+  function focusWorkspaceInPlace(workspace) {
+    var destination = resolveWorkspaceDropTarget(canonicalWorkspaceIdentity(workspace))
+    if (!destination) return false
+    return dispatchRequest(DockModel.focusWorkspaceTargetRequest(
+      destination.target, Hyprland.usingLua))
+  }
+
   function workspaceOnMonitorRequests(workspace, monitor) {
     // A present relocation is authoritative even if a delayed event refresh is
     // still pending. Missing inventory remains non-destructive here.

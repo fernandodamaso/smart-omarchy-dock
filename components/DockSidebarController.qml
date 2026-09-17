@@ -3,6 +3,7 @@ import "DockModel.js" as DockModel
 import "DockWindowModel.js" as WindowModel
 import "DockDesktopModel.js" as DesktopModel
 import "DockSidebarModel.js" as SidebarModel
+import "DockSidebarInteractionModel.js" as InteractionModel
 
 // Host-owned session/view state. All compositor data and action/writer services
 // are injected; this object never adds a watcher, provider, timer or config file.
@@ -19,6 +20,11 @@ Item {
   property var minimizedOrigins: ({})
   property string focusedWorkspace: ""
   property int scopeRevision: 0
+  readonly property var windowActions: host ? host.windowActions || null : null
+  property var dragSession: null
+  property var dragTarget: null
+  property var focusReturnTarget: null
+  readonly property bool rowDragActive: dragSession !== null
   property bool interactionBusy: false
   property bool refreshPending: false
   property bool initialized: false
@@ -79,6 +85,8 @@ Item {
   }
 
   function invalidateSurface() {
+    root.cancelRowDrag("surface-invalidated")
+    root.focusReturnTarget = null
     root.cancelResize("surface-invalidated")
     root.surfaceInvalidated()
     root.interactionBusy = false
@@ -154,11 +162,13 @@ Item {
 
   function refresh() {
     if (!root.initialized) return
+    if (root.dragSession && !root.rowDragIsCurrent()) root.cancelRowDrag("source-or-topology-changed")
     root.registry = SidebarModel.reconcileHandles(root.registry, root.toplevels)
     var next = root.mode === "sidebar" ? SidebarModel.selectScreen(root.screens, root.monitors,
       root.settings.workspaceMonitorOrder || [], root.preferredConnector,
       root.selectedConnector, root.interactionBusy) : null
     if (next !== root.selectedScreen) {
+      root.cancelRowDrag("host-changed")
       root.cancelResize("host-changed")
       root.surfaceInvalidated()
       root.interactionBusy = false
@@ -205,6 +215,182 @@ Item {
     root.folds = liveFolds
     root.projection = projected
     root.refreshed()
+  }
+
+
+  // Captured on pointer press/menu open, not looked up by title/index on release.
+  function captureTarget(key) {
+    var row = root.rowsByKey[key]
+    if (!row || !root.windowActions) return null
+    var target = {key:row.key, kind:row.kind, desktopId:row.desktopId || "",
+      workspaceIdentity:row.workspaceIdentity || "", monitorIdentity:row.monitorIdentity || ""}
+    if (row.kind === "window") {
+      var entry = SidebarModel.handleEntry(root.registry, row.toplevel)
+      if (!entry || entry.key !== key || !root.windowActions.isAlive(row.toplevel)) return null
+      target.toplevel = row.toplevel
+      target.address = String(root.windowActions.addressFor(row.toplevel) || "")
+    } else if (row.kind === "workspace") {
+      var destination = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
+      if (!destination) return null
+      target.monitorIdentity = destination.monitor
+    } else if (row.kind !== "application" && row.kind !== "launcher") return null
+    return target
+  }
+
+  function targetIsCurrent(target) {
+    if (!target || !root.windowActions || root.mode !== "sidebar") return false
+    var row = root.rowsByKey[target.key]
+    if (target.desktopId && DockModel.normalizeSetting("hiddenApplications", root.settings.hiddenApplications)
+        .map(DockModel.normalizedId).indexOf(DockModel.normalizedId(target.desktopId)) >= 0) return false
+    if (!row || row.kind !== target.kind) return false
+    if (target.kind === "window") {
+      var entry = SidebarModel.handleEntry(root.registry, target.toplevel)
+      return !!entry && entry.key === target.key && row.toplevel === target.toplevel
+        && root.windowActions.isAlive(target.toplevel)
+        && String(root.windowActions.addressFor(target.toplevel) || "") === target.address
+    }
+    if (target.kind === "workspace") {
+      var current = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
+      return !!current && current.monitor === target.monitorIdentity
+        && row.workspaceIdentity === target.workspaceIdentity
+    }
+    return row.desktopId === target.desktopId
+  }
+
+  function activateTarget(target, control, clickedConnector) {
+    if (root.interactionBusy || !root.targetIsCurrent(target)) return false
+    var accepted = false
+    if (target.kind === "window") {
+      // FDM-954's deliberate Ctrl route. Missing/untrusted modifier state cannot
+      // authorize a move; no frozen workspace override and no focus-derived monitor.
+      var monitor = control === true ? String(clickedConnector || "") : ""
+      if (control === true && (!monitor || monitor !== root.selectedConnector)) return false
+      if (control === true) {
+        monitor = root.windowActions.canonicalMonitorIdentity(monitor)
+        if (!monitor) return false
+      }
+      accepted = root.windowActions.activateToplevel(target.toplevel, true, monitor, true)
+    } else if (target.kind === "workspace") {
+      accepted = root.windowActions.focusWorkspaceInPlace(target.workspaceIdentity)
+    } else if (target.kind === "application") {
+      return root.toggleApplication(target.key)
+    } else if (target.kind === "launcher") {
+      var row = root.rowsByKey[target.key]
+      var entry = row.item ? row.item.entry : null
+      if (entry && typeof entry.execute === "function") { entry.execute(); accepted = true }
+    }
+    if (accepted) root.focusReturnTarget = null
+    return accepted
+  }
+
+  function rememberNavigationFocus() {
+    if (root.focusReturnTarget || !root.windowActions) return
+    var active = root.windowActions.activeToplevel
+    if (root.windowActions.isAlive(active)) root.focusReturnTarget = {
+      toplevel:active, address:String(root.windowActions.addressFor(active) || "")}
+  }
+
+  function releaseNavigationFocus() {
+    var target = root.focusReturnTarget
+    root.focusReturnTarget = null
+    if (!target || !root.windowActions || !root.windowActions.isAlive(target.toplevel)
+        || String(root.windowActions.addressFor(target.toplevel) || "") !== target.address) return false
+    return root.windowActions.activateToplevel(target.toplevel, true, "", true)
+  }
+
+  function topologyStamp() {
+    return JSON.stringify((root.monitors || []).map(function(m) {
+      var ipc = m.lastIpcObject || m
+      return [ipc.id, ipc.name, ipc.x, ipc.y, ipc.width, ipc.height, ipc.scale]
+    }).concat((root.screens || []).map(function(s) {
+      return [s.name, s.x, s.y, s.width, s.height]
+    })))
+  }
+
+  function dragSourceLocation(target) {
+    if (!root.targetIsCurrent(target)) return null
+    if (target.kind === "workspace")
+      return root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
+    if (target.kind !== "window" || !target.address) return null
+    var location = root.windowActions.workspaceMoveLocation(target.toplevel, target.address)
+    if (!location) return null
+    var identity = root.windowActions.canonicalWorkspaceIdentity(location.workspace)
+    var owner = root.windowActions.resolveWorkspaceDropTarget(identity)
+    if (!owner) return null
+    return {identity:identity, monitor:owner.monitor, minimized:location.minimized === true}
+  }
+
+  function beginRowDrag(target) {
+    if (root.interactionBusy || root.resizeActive || root.dragSession) return false
+    var location = root.dragSourceLocation(target)
+    if (!location || !root.selectedConnector) return false
+    root.dragSession = {target:target, location:location, connector:root.selectedConnector,
+      topology:root.topologyStamp()}
+    root.dragTarget = null
+    root.interactionBusy = true
+    return true
+  }
+
+  function rowDragIsCurrent() {
+    var session = root.dragSession
+    if (!session || session.connector !== root.selectedConnector
+        || session.topology !== root.topologyStamp()) return false
+    var current = root.dragSourceLocation(session.target)
+    return !!current && current.identity === session.location.identity
+      && current.monitor === session.location.monitor
+      && current.minimized === session.location.minimized
+  }
+
+  function dragDestination(key) {
+    var session = root.dragSession
+    var row = root.rowsByKey[key]
+    if (!session || !row || !root.rowDragIsCurrent()) return null
+    if (session.target.kind === "workspace") {
+      if (row.kind !== "monitor" || !row.monitorIdentity) return null
+      var monitor = root.windowActions.canonicalMonitorIdentity(row.connector || row.monitorIdentity)
+      if (!monitor || !root.windowActions.canMoveWorkspaceToMonitor(
+          session.location.identity, monitor)) return null
+      return {key:key, identity:session.location.identity, monitor:monitor}
+    }
+    if (["workspace", "application", "window"].indexOf(row.kind) < 0
+        || !row.workspaceIdentity) return null
+    if (row.kind === "window" && root.windowActions.reliableWorkspaceForToplevel(row.toplevel)
+        !== row.workspaceIdentity) return null
+    var destination = root.windowActions.resolveWorkspaceDropTarget(row.workspaceIdentity)
+    if (!destination || !root.windowActions.workspaceMoveWouldChange(
+        [session.target], destination.identity)) return null
+    return {key:key, identity:destination.identity, monitor:destination.monitor}
+  }
+
+  function updateRowDrag(key) {
+    if (!root.rowDragIsCurrent()) { root.cancelRowDrag("stale-source"); return false }
+    root.dragTarget = root.dragDestination(key)
+    return root.dragTarget !== null
+  }
+
+  function cancelRowDrag(reason) {
+    if (!root.dragSession) return false
+    root.dragSession = null
+    root.dragTarget = null
+    root.interactionBusy = false
+    root.scheduleRefresh()
+    return true
+  }
+
+  function finishRowDrag(key) {
+    if (!root.dragSession) return false
+    var session = root.dragSession
+    var hovered = root.dragTarget
+    var destination = root.dragDestination(key)
+    if (destination && hovered && hovered.key === key
+        && (hovered.identity !== destination.identity || hovered.monitor !== destination.monitor))
+      destination = null
+    // Clear state before dispatch; a synchronous host refresh cannot commit twice.
+    root.cancelRowDrag("release")
+    if (!destination) return false
+    if (session.target.kind === "workspace")
+      return root.windowActions.moveWorkspaceToMonitor(session.location.identity, destination.monitor)
+    return root.windowActions.moveCapturedToplevels([session.target], destination.identity)
   }
 
   function toggleApplication(key) {
@@ -265,6 +451,7 @@ Item {
   }
   onModeChanged: root.invalidateSurface()
   onEdgeChanged: root.invalidateSurface()
+  onCollapsedChanged: root.invalidateSurface()
   onPreferredConnectorChanged: root.invalidateSurface()
   onScreensChanged: root.refresh()
   onMonitorsChanged: root.scheduleRefresh()

@@ -23,6 +23,12 @@ PopupWindow {
   property bool interfaceAnimationsEnabled: true
   property bool originOnly: false
   property bool controlItem: false
+  // Optional sidebar adapters; classic menus retain their saved grouping and
+  // numeric move page. The owning controller supplies exact-target validation.
+  property bool sidebarMode: false
+  property var workspaceContext: null
+  property var externalTargetValidator: null
+  signal keyboardDismissed()
 
   signal openLauncher()
   signal openNewWindow()
@@ -103,7 +109,7 @@ PopupWindow {
       ? root.targetContexts[0] : null
     root.groupCandidateSnapshot = root.captureGroupCandidateSnapshot()
     root.openedWorkspaceGroupsSignature = root.workspaceGroupsSignature()
-    root.page = DockMenuModel.initialPage(
+    root.page = root.sidebarMode && root.workspaceContext ? "sidebar-workspace" : DockMenuModel.initialPage(
       root.controlItem, root.targetContexts.length, root.pageTarget !== null,
       root.representedWorkspaceGrouped())
     root.feedbackTitle = ""
@@ -164,6 +170,8 @@ PopupWindow {
   }
 
   function targetIsValid(targetContext) {
+    if (root.sidebarMode && typeof root.externalTargetValidator === "function"
+        && !root.externalTargetValidator()) return false
     return DockMenuModel.targetIsCurrent(
       targetContext,
       root.runningToplevels,
@@ -280,6 +288,7 @@ PopupWindow {
   }
 
   function captureGroupCandidateSnapshot() {
+    if (root.sidebarMode) return []
     if (root.controlItem || root.targetContexts.length !== 1 || !root.pageTarget) return []
     return root.workspaceGroupCandidates(root.pageTarget)
   }
@@ -301,12 +310,14 @@ PopupWindow {
   }
 
   function representedWorkspaceGrouped() {
+    if (root.sidebarMode) return false
     var workspace = root.representedWorkspaceIdentity()
     return workspace !== "" && WorkspaceGroupModel.workspaceGroupEnabled(
       root.workspaceGroups, root.desktopId, workspace)
   }
 
   function canGroupTarget(targetContext) {
+    if (root.sidebarMode) return false
     if (!targetContext || root.targetContexts.length !== 1
         || targetContext !== root.pageTarget || !root.targetIsValid(targetContext)) return false
     var workspace = root.workspaceIdentityForToplevel(targetContext.toplevel)
@@ -420,7 +431,8 @@ PopupWindow {
   }
 
   function moveTargetToWorkspace(targetContext, workspace) {
-    if (!root.targetIsValid(targetContext)) {
+    if ((root.sidebarMode && !root.windowActions.resolveWorkspaceDropTarget(workspace))
+        || !root.targetIsValid(targetContext)) {
       root.dismiss()
       return false
     }
@@ -697,6 +709,8 @@ PopupWindow {
     var target = root.pageTarget
     var valid = root.targetIsValid(target)
     var addressValid = valid && String(target ? target.address : "") !== ""
+    var locationValid = !root.sidebarMode || (valid
+      && root.windowActions.reliableWorkspaceForToplevel(target.toplevel) !== "")
     var index = Math.max(0, root.targetContexts.indexOf(target))
     var subtitle = root.targetTitle(target, index)
     var workspace = root.workspaceLabel(target)
@@ -714,10 +728,10 @@ PopupWindow {
       "window:minimize",
       root.targetMinimized(target) ? "Restore" : "Minimize",
       root.targetMinimized(target) ? "maximize-2" : "minus",
-      addressValid, "minimize-restore", target))
+      addressValid && locationValid, "minimize-restore", target))
     records.push(DockMenuModel.actionRecord(
       "window:workspace", "Move to Workspace…", "arrow-right-left",
-      addressValid, "open-workspaces-page", target, { submenu: true }))
+      addressValid && locationValid, "open-workspaces-page", target, { submenu: true }))
     var windowPin = valid ? root.windowActions.windowWorkspacePin(target.toplevel) : null
     var reliableWorkspace = windowPin ? windowPin.workspace
       : root.workspaceIdentityForToplevel(target ? target.toplevel : null)
@@ -755,6 +769,7 @@ PopupWindow {
   }
 
   function workspacePageActions() {
+    if (root.sidebarMode) return root.sidebarWindowWorkspaceActions()
     var target = root.pageTarget
     var valid = root.targetIsValid(target)
     var currentWorkspace = root.selectedWorkspaceId
@@ -824,7 +839,86 @@ PopupWindow {
     ]
   }
 
+  function workspaceContextIsCurrent() {
+    var target = root.workspaceContext
+    if (!root.sidebarMode || !target || !root.windowActions) return false
+    if (typeof root.externalTargetValidator === "function" && !root.externalTargetValidator()) return false
+    var current = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
+    return !!current && current.monitor === target.monitorIdentity
+  }
+
+  function sidebarWorkspaceActions() {
+    var valid = root.workspaceContextIsCurrent()
+    var workspace = root.workspaceContext ? root.workspaceContext.workspaceIdentity : ""
+    var pin = valid ? root.windowActions.workspaceMonitorPin(workspace) : null
+    return [
+      DockMenuModel.headerRecord("sidebar-workspace:header", "Workspace "
+        + workspace.replace(/^id:|^name:/, ""), ""),
+      DockMenuModel.actionRecord("sidebar-workspace:pin", pin ? "Unpin Workspace from Monitor"
+        : "Pin Workspace to Monitor", pin ? "pin-off" : "pin", valid,
+        pin ? "sidebar-unpin-workspace" : "sidebar-pin-workspace", null),
+      DockMenuModel.actionRecord("sidebar-workspace:move", "Move to Monitor", "arrow-right-left",
+        valid && !pin, "sidebar-open-monitors", null, {submenu:true})
+    ]
+  }
+
+  function sidebarMonitorActions() {
+    var valid = root.workspaceContextIsCurrent()
+    var workspace = root.workspaceContext ? root.workspaceContext.workspaceIdentity : ""
+    var records = [DockMenuModel.actionRecord("sidebar-monitors:back", "Back", "chevron-left", true, "back", null),
+      DockMenuModel.headerRecord("sidebar-monitors:header", "Move Workspace to Monitor", "")]
+    root.windowActions.currentMonitors().forEach(function(monitor) {
+      var identity = root.windowActions.canonicalMonitorIdentity(monitor)
+      if (!identity) return
+      records.push(DockMenuModel.actionRecord("sidebar-monitor:" + identity,
+        root.windowActions.monitorNameForIdentity(identity) || identity, "", valid
+          && root.windowActions.canMoveWorkspaceToMonitor(workspace, identity),
+        "sidebar-move-workspace-monitor", null, {monitor:identity}))
+    })
+    return records
+  }
+
+  function dispatchSidebarWorkspaceAction(record) {
+    if (!root.workspaceContextIsCurrent()) { root.dismiss(); return false }
+    var workspace = root.workspaceContext.workspaceIdentity
+    var changed = false
+    if (record.command === "sidebar-open-monitors") {
+      root.pushPage("sidebar-monitors", null)
+      return true
+    }
+    if (record.command === "sidebar-pin-workspace")
+      changed = root.windowActions.pinWorkspaceToMonitor(workspace)
+    else if (record.command === "sidebar-unpin-workspace")
+      changed = root.windowActions.unpinWorkspaceFromMonitor(workspace)
+    else if (record.command === "sidebar-move-workspace-monitor")
+      changed = root.windowActions.moveWorkspaceToMonitor(workspace, record.monitor)
+    if (changed) root.dismiss()
+    return changed
+  }
+
+  function sidebarWindowWorkspaceActions() {
+    var target = root.pageTarget
+    var valid = root.targetIsValid(target)
+    var current = valid ? root.windowActions.reliableWorkspaceForToplevel(target.toplevel) : ""
+    var records = [DockMenuModel.actionRecord("workspace:back", "Back", "chevron-left", true, "back", null),
+      DockMenuModel.headerRecord("workspace:header", "Move to Workspace", "")]
+    var seen = ({})
+    root.windowActions.currentWorkspaces().forEach(function(workspace) {
+      var identity = root.windowActions.canonicalWorkspaceIdentity(workspace)
+      if (!identity || seen[identity] || !root.windowActions.resolveWorkspaceDropTarget(identity)) return
+      seen[identity] = true
+      records.push(DockMenuModel.actionRecord("workspace:" + identity,
+        "Workspace " + identity.replace(/^id:|^name:/, ""), "",
+        valid && current !== "" && current !== identity && target.address !== ""
+          && root.windowActions.canMoveToplevelToWorkspace(target.toplevel, identity),
+        "move-workspace", target, {workspace:identity, checked:identity === current}))
+    })
+    return records
+  }
+
   function buildPageActions() {
+    if (root.sidebarMode && root.workspaceContext)
+      return root.page === "sidebar-monitors" ? root.sidebarMonitorActions() : root.sidebarWorkspaceActions()
     if (root.controlItem || root.page === "controls") return root.controlPageActions()
     if (root.page === "window") return root.windowPageActions()
     if (root.page === "chooser") return root.chooserPageActions()
@@ -879,6 +973,11 @@ PopupWindow {
   }
 
   function dispatchAction(record, index) {
+    if (root.sidebarMode && root.externalTargetValidator
+        && !root.externalTargetValidator()) {
+      root.dismiss()
+      return false
+    }
     if (!record || record.kind !== "action" || record.enabled === false)
       return false
     root.setActiveMenuIndex(index)
@@ -888,6 +987,8 @@ PopupWindow {
       return false
     }
 
+    if (root.sidebarMode && String(record.command || "").indexOf("sidebar-") === 0)
+      return root.dispatchSidebarWorkspaceAction(record)
     switch (record.command) {
     case "back": return root.goBack()
     case "open-window-page":
@@ -947,8 +1048,13 @@ PopupWindow {
     }
   }
 
-  implicitWidth: root.controlItem ? Style.space(210) : Style.space(320)
-  implicitHeight: Math.min(520, actionColumn.implicitHeight + 12)
+  readonly property real sidebarAvailableWidth: root.anchor.window && root.anchor.window.screen
+    ? Math.max(1, root.anchor.window.screen.width - 16) : Style.space(320)
+  readonly property real sidebarAvailableHeight: root.anchor.window
+    ? Math.max(1, root.anchor.window.height - 16) : 520
+  implicitWidth: root.sidebarMode ? Math.min(Style.space(320), root.sidebarAvailableWidth)
+    : root.controlItem ? Style.space(210) : Style.space(320)
+  implicitHeight: Math.min(root.sidebarMode ? root.sidebarAvailableHeight : 520, 520, actionColumn.implicitHeight + 12)
   color: "transparent"
   grabFocus: true
 
@@ -1025,7 +1131,7 @@ PopupWindow {
                  || event.key === Qt.Key_Backspace
                  || event.key === Qt.Key_Left) {
         if (root.pageStack.length > 0) root.goBack()
-        else root.dismiss()
+        else { root.dismiss(); if (root.sidebarMode) root.keyboardDismissed() }
         event.accepted = true
       }
     }

@@ -4,6 +4,18 @@ if [[ "${SMARTDOCK_ISOLATED_RUNTIME:-}" != "1" ]]; then
   echo 'Use the disposable session in docs/DEV_SESSIONS.md; stop its normal dock before this fixture.' >&2
   exit 2
 fi
+mode="${1:-fixture}"
+if [[ "$mode" != "fixture" && "$mode" != "--native" ]]; then
+  echo 'Usage: check-sidebar.sh [--native]' >&2
+  exit 2
+fi
+if [[ "$mode" == "--native" ]]; then
+  : "${SMARTDOCK_RUNTIME_LOG:?Set an evidence log path outside the temporary fixture source}"
+  duration="${SMARTDOCK_NATIVE_SECONDS:-120}"
+  if [[ ! "$duration" =~ ^[0-9]+$ ]] || (( duration < 1 || duration > 300 )); then
+    echo 'SMARTDOCK_NATIVE_SECONDS must be 1..300.' >&2; exit 2
+  fi
+fi
 command -v qs >/dev/null
 command -v hyprctl >/dev/null
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -22,7 +34,11 @@ def visit(x):
 visit(json.load(sys.stdin))'
 cp -R "$root/components" "$root/config" "$temporary/"
 cp "$root/DockHost.qml" "$temporary/DockHost.qml"
-cp "$root/tests/runtime/sidebar.qml" "$temporary/shell.qml"
+if [[ "$mode" == "--native" ]]; then
+  cp "$root/tests/runtime/sidebar-native.qml" "$temporary/shell.qml"
+else
+  cp "$root/tests/runtime/sidebar.qml" "$temporary/shell.qml"
+fi
 ln -s "$root/assets" "$temporary/assets"
 mkdir "$temporary/imports"
 ln -s "${OMARCHY_PATH:-/usr/share/omarchy}/shell" "$temporary/imports/qs"
@@ -37,6 +53,16 @@ with open(sys.argv[2],'w') as f: json.dump(value,f)
 PY
 # Save diagnostic output outside the temporary source when a path is requested.
 log="${SMARTDOCK_RUNTIME_LOG:-$temporary/output.log}"
+if [[ "$mode" == "--native" ]]; then
+  status=0
+  QT_QPA_PLATFORM=wayland QML2_IMPORT_PATH="$temporary/imports" \
+    timeout "${duration}s" qs -p "$temporary" --no-color >"$log" 2>&1 || status=$?
+  if [[ "$status" != 0 && "$status" != 124 ]]; then cat "$log"; exit 1; fi
+  if grep -E 'ERROR|Error:|ReferenceError|TypeError|Unable to assign' "$log"; then exit 1; fi
+  grep -F '"event":"ready"' "$log" >/dev/null
+  printf 'Native observer stopped; evidence: %s\nNo acceptance verdict: SB-06 must qualify the native matrix.\n' "$log"
+  exit 0
+fi
 QT_QPA_PLATFORM=wayland QML2_IMPORT_PATH="$temporary/imports" \
   timeout 35s qs -p "$temporary" --no-color >"$log" 2>&1 || { cat "$log"; exit 1; }
 if grep -E 'ERROR|Error:|ReferenceError|TypeError|Unable to assign' "$log"; then cat "$log"; exit 1; fi

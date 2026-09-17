@@ -115,6 +115,10 @@ ShellRoot {
           root.firstDelegate = root.delegateFor(root.firstKey)
           require(root.firstDelegate !== null, "production delegate not created")
           require(root.firstDelegate.kind === "window", "wrong production delegate")
+          require(root.firstDelegate.input !== null, "production row pointer adapter missing")
+          require(h.sidebarPanel.viewport.keyboard !== null, "production keyboard adapter missing")
+          require(h.sidebarPanel.contextMenu.sidebarMode, "shared menu sidebar adapter missing")
+          require(!h.sidebarPanel.contextMenu.canGroupTarget(null), "sidebar must not expose saved grouping")
           root.appKey = controller.rowsByKey[root.firstKey].applicationKey
           a.title = "<literal title, not markup>"
           a.activated = true

@@ -10,6 +10,13 @@ Item {
   id: root
   required property var row
   required property var controller
+  property var viewport: null
+  readonly property var input: rowInput
+  readonly property string desktopId: String(row.desktopId || "")
+  readonly property var entry: row.item ? row.item.entry : null
+  readonly property var browserProfileService: controller.host ? controller.host.browserProfileService : null
+  readonly property string browserProfileKey: profile ? profile.key : ""
+  readonly property bool navigable: ["window", "workspace", "application", "launcher"].indexOf(kind) >= 0
   required property bool collapsed
   required property real rowHeight
   readonly property string rowKey: row.key
@@ -30,10 +37,14 @@ Item {
   clip: true
   Accessible.role: kind === "application" ? Accessible.Button : Accessible.ListItem
   Accessible.name: accessibleLabel
+  Keys.forwardTo: root.viewport ? [root.viewport.keyboard] : []
+  onActiveFocusChanged: if (activeFocus) root.controller.focusedRowKey = root.rowKey
+  opacity: root.controller.dragSession && root.controller.dragSession.target.key === root.rowKey ? 0.4 : 1
 
   Ui.BorderSurface {
     anchors.fill: parent
     color: root.focusedWindow || root.row.active || root.row.focused
+      || (root.controller.dragTarget && root.controller.dragTarget.key === root.rowKey)
       ? Style.selectedFillFor(Color.foreground, Color.accent) : "transparent"
     borderSpec: root.activeFocus ? Border.controlSpec("focus", Color.foreground, Color.accent) : Border.none()
   }
@@ -73,6 +84,20 @@ Item {
     font.pixelSize: root.kind === "monitor" || root.kind === "section" ? Style.font.caption : Style.font.bodySmall
     font.bold: root.kind === "workspace" || root.kind === "application"
   }
+  DockSidebarRowInput {
+    id: rowInput
+    anchors.fill: parent
+    controller: root.controller
+    rowKey: root.rowKey
+    enabled: root.navigable
+    onFocusRequested: root.forceActiveFocus(Qt.MouseFocusReason)
+    onActivated: function(target, control, connector, modifiers) {
+      if (root.viewport) root.viewport.activate(target, control, connector, modifiers)
+    }
+    onContextRequested: target => { if (root.viewport) root.viewport.contextRequested(target, root) }
+    onDragMoved: point => { if (root.viewport) root.viewport.moveDrag(point) }
+    onDragReleased: point => { if (root.viewport) root.viewport.finishDrag(point) }
+  }
   Ui.Button {
     id: fold
     objectName: "sidebar-app-fold"
@@ -83,9 +108,9 @@ Item {
     height: root.rowHeight
     iconText: root.row.folded ? "▸" : "▾"
     tooltipText: root.row.folded ? "Expand " + root.liveTitle : "Fold " + root.liveTitle
-    focusable: visible
-    onActiveFocusChanged: if (activeFocus) root.controller.focusedRowKey = root.rowKey
-    onClicked: root.controller.toggleApplication(root.rowKey)
+    focusable: false
+    enabled: !root.controller.interactionBusy
+    onClicked: { root.forceActiveFocus(Qt.MouseFocusReason); root.controller.toggleApplication(root.rowKey) }
   }
   DockApplicationBadge {
     anchors.right: artwork.right
@@ -95,7 +120,7 @@ Item {
   // Text-only hover help; never a thumbnail, automatic preview or activation.
   HoverHandler { id: hover }
   Controls.ToolTip {
-    visible: hover.hovered && (root.collapsed || label.truncated)
+    visible: hover.hovered && !root.controller.rowDragActive && (root.collapsed || label.truncated)
     delay: 400
     contentItem: Text {
       text: root.accessibleLabel
