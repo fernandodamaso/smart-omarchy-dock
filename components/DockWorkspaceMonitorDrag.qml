@@ -170,7 +170,7 @@ Item {
     grabOffset = Qt.point(scenePoint.x - origin.x, scenePoint.y - origin.y)
     try {
       card.grabToImage(function(result) {
-        if (generation !== captureGeneration || !active || ending) return
+        if (generation !== captureGeneration || ending) return
         if (!result || !result.url) {
           cancel("capture failed")
           return
@@ -187,14 +187,8 @@ Item {
   }
 
   function resetBeginFailure() {
-    sourceDock = null
-    sourceWorkspace = ""
-    sourceMonitor = ""
-    sourceLabel = ""
-    sourceCount = 0
-    pendingMonitor = ""
-    moveDispatched = false
     clearPointerState()
+    clearPending()
   }
 
   function begin(dock, workspace, label, count, monitor, scenePoint) {
@@ -247,18 +241,28 @@ Item {
           }
         }
         var merged = geometrySnapshots.slice()
+        var index = -1
         for (var i = 0; i < merged.length; ++i) {
-          if (merged[i].dock !== dock) continue
-          merged = merged.slice()
-          merged[i] = { dock: dock, sections: selected, fallback: geometryAvailable(dock)
-            ? (typeof dock.workspaceMonitorViewportRect === "function"
-              ? dock.workspaceMonitorViewportRect() : dock.dropRect) : Qt.rect(0, 0, 0, 0) }
-          geometrySnapshots = merged
-          sectionHits = merged.reduce(function(result, snapshot) {
-            return result.concat(snapshot.sections)
-          }, [])
-          return
+          if (merged[i].dock === dock) {
+            index = i
+            break
+          }
         }
+        var snapshot = {
+          dock: dock,
+          sections: selected,
+          fallback: geometryAvailable(dock)
+            ? (typeof dock.workspaceMonitorViewportRect === "function"
+              ? dock.workspaceMonitorViewportRect() : dock.dropRect)
+            : Qt.rect(0, 0, 0, 0)
+        }
+        if (index < 0) merged.push(snapshot)
+        else merged[index] = snapshot
+        geometrySnapshots = merged
+        sectionHits = merged.reduce(function(result, entry) {
+          return result.concat(entry.sections)
+        }, [])
+        return
       }
       sectionHits = snapshotSectionHits()
     } catch (error) {
@@ -294,9 +298,11 @@ Item {
     pointerScene = scenePoint
     pointerVirtual = sceneToVirtual(sourceDock, scenePoint)
     pointerDock = pointerDockAt(pointerVirtual)
-    hoveredTarget = null
-    hoveredMonitor = ""
+    var nextHoveredTarget = null
+    var nextHoveredMonitor = ""
     if (!captureReady) {
+      hoveredTarget = null
+      hoveredMonitor = ""
       for (var waitingIndex = 0; waitingIndex < docks.length; ++waitingIndex) {
         if (docks[waitingIndex]) docks[waitingIndex].workspaceMonitorDropHighlighted = false
       }
@@ -305,8 +311,8 @@ Item {
     var covering = sectionHitAt(pointerVirtual)
     var section = sectionTargetAt(pointerVirtual)
     if (section) {
-      hoveredTarget = section.dock
-      hoveredMonitor = section.identity
+      nextHoveredTarget = section.dock
+      nextHoveredMonitor = section.identity
     }
     for (var i = 0; i < docks.length; ++i) {
       var dock = docks[i]
@@ -325,7 +331,7 @@ Item {
         }
         continue
       }
-      if (!hoveredMonitor && !covering && dock !== sourceDock
+      if (!nextHoveredMonitor && !covering && dock !== sourceDock
           && geometryAvailable(dock) && (dock.dragRevealed || dock.dockShown)
           && contains((function() {
             for (var s = 0; s < geometrySnapshots.length; ++s)
@@ -333,10 +339,12 @@ Item {
             return null
           })(), pointerVirtual)
           && canTargetMonitor(dock.monitorIdentity)) {
-        hoveredTarget = dock
-        hoveredMonitor = String(dock.monitorIdentity)
+        nextHoveredTarget = dock
+        nextHoveredMonitor = String(dock.monitorIdentity)
       }
     }
+    hoveredTarget = nextHoveredTarget
+    hoveredMonitor = nextHoveredMonitor
     if (hoveredTarget) hoveredTarget.workspaceMonitorDropHighlighted = true
     return captureReady && hoveredMonitor !== ""
   }
@@ -373,7 +381,6 @@ Item {
     captureReady = false
     ghostImage = null
     ghostUrl = ""
-    ghostSize = Qt.size(0, 0)
     grabOffset = Qt.point(0, 0)
   }
 
@@ -387,6 +394,7 @@ Item {
     sourceMonitor = ""
     sourceLabel = ""
     sourceCount = 0
+    ghostSize = Qt.size(0, 0)
   }
 
   function reconcileCompositorOwnership() {
@@ -444,15 +452,7 @@ Item {
     if ((!active && !awaitingConfirmation) || ending) return
     ending = true
     clearPointerState()
-    confirmationTimer.stop()
-    awaitingConfirmation = false
-    pendingMonitor = ""
-    moveDispatched = false
-    sourceDock = null
-    sourceWorkspace = ""
-    sourceMonitor = ""
-    sourceLabel = ""
-    sourceCount = 0
+    clearPending()
     ended()
     ending = false
   }

@@ -48,6 +48,7 @@ Item {
   property DockWorkspaceDrag workspaceDrag: null
   property bool workspaceDragEnabled: false
   property bool workspaceGestureOwned: false
+  property bool workspaceGestureConsumed: false
   readonly property bool workspaceDragActive: workspaceDrag !== null && workspaceDrag.active
   readonly property bool workspaceInputSuppressed: workspaceDragActive || workspaceGestureOwned
   property var browserProfileService: null
@@ -602,7 +603,13 @@ Item {
     enabled: root.presentationActive && !root.workspaceInputSuppressed
     acceptedButtons: Qt.LeftButton
     acceptedModifiers: Qt.NoModifier
-    onTapped: root.dispatchPointerAction("left", {})
+    onTapped: {
+      if (root.workspaceGestureConsumed) {
+        root.workspaceGestureConsumed = false
+        return
+      }
+      root.dispatchPointerAction("left", {})
+    }
   }
 
   TapHandler {
@@ -669,6 +676,25 @@ Item {
 
   // Separate from pin reordering: both axes, activate on press so
   // layer-shell can keep the grab, and no target translation.
+  function updateWorkspaceGesture(scenePoint, pressPoint) {
+    if (root.workspaceGestureOwned) {
+      if (root.workspaceDrag && root.workspaceDrag.sourceItem === root)
+        root.workspaceDrag.updatePointer(scenePoint)
+      return
+    }
+    var dx = scenePoint.x - pressPoint.x
+    var dy = scenePoint.y - pressPoint.y
+    if (Math.sqrt(dx * dx + dy * dy) < Application.styleHints.startDragDistance)
+      return
+    root.workspaceGestureOwned = true
+    root.workspaceGestureConsumed = true
+    root.dismissPopups()
+    root.previewDismissRequested()
+    if (root.workspaceDrag)
+      root.workspaceDrag.begin(root, root.runningToplevels,
+        scenePoint, applicationArtwork.renderedSource)
+  }
+
   DragHandler {
     id: workspaceDragHandler
     enabled: root.workspaceDragEnabled && root.presentationActive
@@ -686,20 +712,18 @@ Item {
     onActiveChanged: {
       if (active) {
         workspaceReleaseCleanup.stop()
-        root.workspaceGestureOwned = true
-        root.dismissPopups()
-        root.previewDismissRequested()
-        if (root.workspaceDrag)
-          root.workspaceDrag.begin(root, root.runningToplevels,
-            centroid.scenePosition, applicationArtwork.renderedSource)
+        root.workspaceGestureConsumed = false
+        root.updateWorkspaceGesture(
+          centroid.scenePosition, centroid.scenePressPosition)
       } else {
         // active=false also means cancellation. Only a released exclusive
         // grab may commit; this next-turn fallback only cancels/cleans up.
         workspaceReleaseCleanup.restart()
       }
     }
-    onActiveTranslationChanged: if (active && root.workspaceDrag)
-      root.workspaceDrag.updatePointer(centroid.scenePosition)
+    onActiveTranslationChanged: if (active)
+      root.updateWorkspaceGesture(
+        centroid.scenePosition, centroid.scenePressPosition)
     onGrabChanged: (transition, point) => root.workspaceGrabChanged(transition, point)
     onCanceled: root.cancelWorkspaceDrag("grab stolen")
     onEnabledChanged: if (!enabled) root.cancelWorkspaceDrag("handler disabled")
@@ -712,6 +736,7 @@ Item {
     onTriggered: {
       root.cancelWorkspaceDrag("grab ended without release")
       root.workspaceGestureOwned = false
+      root.workspaceGestureConsumed = false
     }
   }
 

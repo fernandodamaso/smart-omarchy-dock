@@ -597,7 +597,6 @@ PanelWindow {
     }
     if (groupedRequested) {
       var monitor = dockHyprMonitor
-      var ipc = monitor ? monitor.lastIpcObject || monitor : ({})
       var records = toplevels.map(function(toplevel) {
         return Object.assign({ toplevel: toplevel }, DockWindowModel.locationForToplevel(
           toplevel, hyprToplevels, windowActions ? windowActions.minimizedOriginsSnapshot : ({})))
@@ -613,8 +612,8 @@ PanelWindow {
           monitorScope: workspaceMonitorScope,
           monitorOrder: workspaceMonitorOrder,
           activeWorkspace: workspaceMonitorScope === "all" ? focusedScopeWorkspace
-            : DockWindowModel.workspaceIdentity(ipc.activeWorkspace
-            || (monitor ? monitor.activeWorkspace : null)),
+            : DockWindowModel.workspaceIdentity(
+              DockWindowModel.monitorActiveWorkspace(monitor)),
           monitors: hyprMonitors,
           groupWindows: false,
           workspaceGroups: workspaceGroups
@@ -1161,7 +1160,9 @@ PanelWindow {
         windowDragActive: root.workspaceDragActive
         monitorDragActive: root.workspaceMonitorDragActive
         dragScenePosition: root.workspaceDragActive ? workspaceDrag.pointerScene
-          : root.workspaceMonitorDragActive ? root.workspaceMonitorDrag.pointerScene
+          : root.workspaceMonitorDragActive ? Qt.point(
+              root.workspaceMonitorDrag.pointerVirtual.x - root.sceneOrigin.x,
+              root.workspaceMonitorDrag.pointerVirtual.y - root.sceneOrigin.y)
           : Qt.point(0, 0)
         onViewportChanged: {
           windowPreview.refreshAnchorGeometry()
@@ -1317,7 +1318,7 @@ PanelWindow {
               }
 
               Rectangle {
-                visible: workspaceCardSlot.modelData.item._monitorDragPlaceholder
+                visible: workspaceCardSlot.modelData.item._monitorDragPlaceholder === true
                 width: workspaceCardSlot.naturalWidth
                 height: workspaceCardSlot.naturalHeight
                 radius: Math.max(12, Style.cornerRadius - 4)

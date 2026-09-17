@@ -122,6 +122,21 @@ assert.deepEqual(Array.from(initial.monitorGroups, group => group.description),
   'compact labels retain the complete monitor description')
 assert.deepEqual(Array.from(initial.groups.filter(group => group.active), group => group.identity),
   ['id:1', 'id:3'], 'each monitor active workspace gets active card styling')
+
+const liveOverStale = buildAll({
+  monitors: [
+    { ...left, focused: true, activeWorkspace: { id: 1 },
+      lastIpcObject: { id: 0, name: 'DP-1', focused: false,
+        activeWorkspace: { id: 2 } } },
+    { id: 1, name: 'HDMI-A-1', focused: false, activeWorkspace: { id: 3 },
+      lastIpcObject: { ...right.lastIpcObject, focused: true,
+        activeWorkspace: { id: 2 } } }
+  ]
+})
+assert.equal(liveOverStale.primaryWorkspaceIdentity, 'id:1')
+assert.deepEqual(Array.from(liveOverStale.groups.filter(group => group.active),
+  group => group.identity), ['id:1', 'id:3'],
+  'dedicated live monitor properties override stale IPC snapshots')
 assert.equal(initial.globalLaunchers.length, 1, 'closed global launchers remain singleton')
 assert.deepEqual(Array.from(initial.renderedItems, item => item.presentationId),
   ['id:3/three', 'id:1/one', 'id:10/ten', 'global/closed'],

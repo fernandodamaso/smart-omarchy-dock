@@ -295,15 +295,13 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     var connector = String(
       monitorIpc.name !== undefined ? monitorIpc.name : monitorDescriptor.name || ""
     ).trim()
-    var activeDescriptor = monitorIpc.activeWorkspace !== undefined
-      ? monitorIpc.activeWorkspace : monitorDescriptor.activeWorkspace
+    var activeDescriptor = DockWindowModel.monitorActiveWorkspace(monitorDescriptor)
     var activeWorkspace = DockWindowModel.workspaceIdentity(activeDescriptor)
     addMonitorActiveEvidence(owner, activeWorkspace)
     if (activeWorkspace) addOwnerEvidence(activeOwners, activeWorkspace, owner, false)
     if (allMonitors) addWorkspace(activeWorkspace,
       activeDescriptor ? activeDescriptor.name : "")
-    var focused = monitorIpc.focused !== undefined
-      ? monitorIpc.focused === true : monitorDescriptor.focused === true
+    var focused = DockWindowModel.monitorFocused(monitorDescriptor)
     if (focused) focusedMonitorEvidence[owner] = true
     monitorMetadata[owner] = {
       identity: owner,

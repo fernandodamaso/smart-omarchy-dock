@@ -161,4 +161,22 @@ TestCase {
     compare(layout.contentX, before, 'a new drag gets a fresh dwell')
     layout.windowDragActive = false
   }
+
+  function test_monitorDragDwellScrollAndCleanup() {
+    var layout = makeLayout()
+    var next = findChild(layout, "nextCards")
+    layout.monitorDragActive = true
+    layout.dragScenePosition = next.mapToItem(null, next.width / 2, next.height / 2)
+    wait(100)
+    compare(layout.contentX, 0, "monitor drags must dwell before scrolling")
+    tryVerify(function() { return layout.contentX > 0 }, 700)
+    layout.dragScenePosition = layout.mapToItem(null, 100, 100)
+    var before = layout.contentX
+    wait(120)
+    compare(layout.contentX, before, "leaving navigation stops monitor scrolling")
+    layout.monitorDragActive = false
+    wait(320)
+    compare(layout.contentX, before, "ending monitor drag stops both timers")
+    compare(layout.dragNavigationDirection, 0)
+  }
 }

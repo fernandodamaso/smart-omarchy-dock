@@ -111,3 +111,61 @@ The exact Omarchy environment used for imports was `omarchy 4.0.3-1`, with
 Real integration is implemented and locally validated; delivery and physical
 qualification remain incomplete by design. Do not merge, deploy, or update the
 installed plugin from this branch.
+
+## Review fixes — working-tree candidate (2026-09-17)
+
+The eight findings in `docs/superpowers/plans/2026-09-17-workspace-drag-review-fixes.md`
+were applied to the working tree from head
+`5ff09e85f6ab2e671e91b75f5a4a923321cf6a73`. No commit, push, merge, deployment,
+installed-plugin edit, or host-settings mutation was made. The pre-existing
+integration plan remains byte-for-byte preserved; its checksum is recorded in
+`~/.local/state/smartdock/workspace-drag-review-20260917T123008/preserved-plan.sha256`.
+
+The candidate now measures semantic drag distance from Qt's press position,
+preserves owned handlers through source clipping/collapse, keeps source and
+destination coordinate spaces separate, retains captured placeholder size
+through confirmation, merges revealed geometry without replacing unrelated
+snapshots, and gates presentation styling and updates by source identity.
+The final review pass also fixed Escape focus routing, clears icon click
+suppression after an outside release, starts an icon drag on a single initial
+move beyond the platform threshold, and makes the input fixture execute the
+production suppression bindings.
+
+Headless evidence is stored outside Git at
+`~/.local/state/smartdock/workspace-drag-review-20260917T123008/`:
+
+- Production Qt pointer harness: 15 passed (`workspace_input_final.log`).
+- Focused monitor-drag and layout suites: 14 and 10 passed.
+- Full QML suite: 234 passed, 0 failed (`qml_tests_final.log`).
+- All `tests/test_*.mjs`, provider tests (20), shell syntax, plugin validation,
+  targeted `qmllint`, and `git diff --check`: passed.
+- Full Python suite: 118 tests with one known browser-preview baseline failure
+  containing five QML assertions; the workspace-drag input cases in that run
+  passed. This remains the documented pre-existing baseline failure.
+- Standalone startup smoke reached `Configuration Loaded` and exited 124 at
+  the six-second timeout; stripped-shell `ToplevelManager` warnings are the
+  existing startup-harness limitation.
+
+The read-only independent review was performed by Herdr agent `astra-review2`
+using `gpt-6-astra` at high reasoning effort. Astra identified three additional
+in-scope regressions and one fixture-coverage gap; each was corrected and the
+affected/full suites were rerun. The review transcript is retained at
+`astra-review-final.log` in the evidence directory.
+
+The isolated guest session `workspace-drag-fix-20260917` used standalone mode
+with `Virtual-1` and `Virtual-2`, completed two sync/restart cycles, and
+produced `frame-001.png` through `frame-003.png`. Its two QEMU windows were
+silently placed on coding workspace 2 at addresses
+`0x564e341d0f80` and `0x564e341d3da0`; the session was stopped and both windows
+were removed. The seed evidence retained timestamp/size `1789660559 1978` and
+SHA-256
+`225f6ccc50e664e5627e261a960e44184c0ea3bf419766e850c29fed2fd8f7b8` across
+both restarts. Host production settings retained SHA-256
+`c0f5098ec03ef1da1006dbed8e30d44a8366dbed8e30d44b9e8ca81880969379ff77e9cc4bd8`.
+
+Native press-drag-release qualification on the real dock remains pending: the
+available computer-use surface exposed Chrome but could not target the native
+QEMU windows. Guest startup, captures, and seed persistence are supplemental
+evidence only and do not qualify Hyprland pointer grabs, focus, auto-hide, or
+live image behavior. Keep this candidate Draft/unqualified until those native
+checks are performed.

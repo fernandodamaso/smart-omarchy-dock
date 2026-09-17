@@ -21,16 +21,10 @@ Rectangle {
   property string workspaceOwnerMonitor: ""
   property bool workspaceMonitorGestureOwned: false
   property bool workspaceMonitorGestureStarted: false
-  property point workspaceMonitorPressPoint: Qt.point(0, 0)
   readonly property bool workspaceMonitorDragActive:
     workspaceMonitorDrag && workspaceMonitorDrag.active
-  readonly property bool workspaceMonitorDragSource: workspaceMonitorDragActive
-    || workspaceMonitorDrag && workspaceMonitorDrag.awaitingConfirmation
-    && workspaceMonitorDrag.sourceDock === workspaceMonitorDragDock
-    && workspaceMonitorDrag.sourceWorkspace === workspaceIdentity
-  readonly property bool workspaceMonitorDragSourceActive:
-    workspaceMonitorDrag && (workspaceMonitorDrag.active
-      || workspaceMonitorDrag.awaitingConfirmation)
+  readonly property bool workspaceMonitorDragSource: workspaceMonitorDrag
+    && (workspaceMonitorDrag.active || workspaceMonitorDrag.awaitingConfirmation)
     && workspaceMonitorDrag.sourceDock === workspaceMonitorDragDock
     && workspaceMonitorDrag.sourceWorkspace === workspaceIdentity
   readonly property bool headerInputSuppressed: windowDragActive
@@ -54,16 +48,14 @@ Rectangle {
   signal activated()
 
   function cancelWorkspaceMonitorDrag(reason) {
-    if (root.workspaceMonitorDrag
-        && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock
-        && root.workspaceMonitorDrag.sourceWorkspace === root.workspaceIdentity)
+    if (root.workspaceMonitorGestureStarted && root.workspaceMonitorDrag
+        && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock)
       root.workspaceMonitorDrag.cancel(reason)
   }
 
   function workspaceMonitorGrabChanged(transition, point) {
-    if (!root.workspaceMonitorDrag
-        || root.workspaceMonitorDrag.sourceDock !== root.workspaceMonitorDragDock
-        || root.workspaceMonitorDrag.sourceWorkspace !== root.workspaceIdentity) return
+    if (!root.workspaceMonitorGestureStarted || !root.workspaceMonitorDrag
+        || root.workspaceMonitorDrag.sourceDock !== root.workspaceMonitorDragDock) return
     if (transition === PointerDevice.UngrabExclusive) {
       if (point.state === EventPoint.Released)
         root.workspaceMonitorDrag.finish(point.scenePosition)
@@ -75,10 +67,26 @@ Rectangle {
     }
   }
 
-  onPresentationVisibleChanged: if (!presentationVisible && !workspaceMonitorDragSource)
-    cancelWorkspaceMonitorDrag("source hidden")
-  onWorkspaceIdentityChanged: cancelWorkspaceMonitorDrag("workspace changed")
-  onWorkspaceOwnerMonitorChanged: cancelWorkspaceMonitorDrag("workspace owner changed")
+  function updateWorkspaceMonitorGesture(scenePoint, pressPoint) {
+    if (!root.workspaceMonitorDrag || root.workspaceMonitorGestureOwned) {
+      if (root.workspaceMonitorGestureStarted
+          && root.workspaceMonitorDrag
+          && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock)
+        root.workspaceMonitorDrag.updatePointer(scenePoint)
+      return
+    }
+    var dx = scenePoint.x - pressPoint.x
+    var dy = scenePoint.y - pressPoint.y
+    if (Math.sqrt(dx * dx + dy * dy) < Application.styleHints.startDragDistance)
+      return
+    root.workspaceMonitorGestureOwned = true
+    root.workspaceMonitorGestureStarted = root.workspaceMonitorDrag.begin(
+      root.workspaceMonitorDragDock, root.workspaceIdentity, root.label, root.count,
+      root.workspaceOwnerMonitor, scenePoint)
+    if (root.workspaceMonitorGestureStarted)
+      header.forceActiveFocus(Qt.MouseFocusReason)
+  }
+
   onWorkspaceMonitorDragDockChanged: cancelWorkspaceMonitorDrag("dock changed")
   onWindowDragActiveChanged: if (windowDragActive)
     cancelWorkspaceMonitorDrag("window drag started")
@@ -110,8 +118,6 @@ Rectangle {
     id: header
     color: "transparent"
     radius: Math.max(10, root.radius - 2)
-    border.width: activeFocus && !root.workspaceMonitorDragSource ? 1 : 0
-    border.color: Color.accent
     x: 1
     y: 1
     width: Math.min(80, Math.max(root.slotSize, title.implicitWidth + 16))
@@ -148,7 +154,10 @@ Rectangle {
       enabled: root.switchable && !root.headerInputSuppressed
       onPressedChanged: if (pressed)
         header.forceActiveFocus(Qt.MouseFocusReason)
-      onTapped: root.activated()
+      onTapped: {
+        if (!root.headerInputSuppressed) root.activated()
+        header.focus = false
+      }
     }
     HoverHandler {
       id: headerHover
@@ -167,11 +176,11 @@ Rectangle {
     }
     DragHandler {
       id: workspaceMonitorDragHandler
-      enabled: root.switchable && root.workspaceIdentity !== ""
-        && root.workspaceMonitorDrag && root.workspaceMonitorDragDock
-        && root.presentationVisible && !root.windowDragActive
+      enabled: root.workspaceMonitorDrag && root.workspaceMonitorDragDock
         && (active || root.workspaceMonitorGestureOwned
-          || !root.workspaceMonitorDrag.active)
+          || (root.switchable && root.workspaceIdentity !== ""
+            && root.presentationVisible))
+        && !root.windowDragActive
       target: null
       acceptedButtons: Qt.LeftButton
       dragThreshold: 0
@@ -184,31 +193,16 @@ Rectangle {
         if (active) {
           workspaceMonitorReleaseCleanup.stop()
           root.workspaceMonitorGestureStarted = false
-          root.workspaceMonitorPressPoint = centroid.scenePosition
+          root.updateWorkspaceMonitorGesture(
+            centroid.scenePosition, centroid.scenePressPosition)
         } else {
           workspaceMonitorReleaseCleanup.restart()
           header.focus = false
         }
       }
-      onActiveTranslationChanged: {
-        if (!active || !root.workspaceMonitorDrag) return
-        var dx = centroid.scenePosition.x - root.workspaceMonitorPressPoint.x
-        var dy = centroid.scenePosition.y - root.workspaceMonitorPressPoint.y
-        var distance = Math.sqrt(dx * dx + dy * dy)
-        if (!root.workspaceMonitorGestureStarted
-            && distance >= Application.styleHints.startDragDistance) {
-          if (root.workspaceMonitorDrag.begin(root.workspaceMonitorDragDock,
-            root.workspaceIdentity, root.label, root.count,
-            root.workspaceOwnerMonitor, centroid.scenePosition)) {
-            root.workspaceMonitorGestureStarted = true
-            root.workspaceMonitorGestureOwned = true
-            header.forceActiveFocus(Qt.MouseFocusReason)
-          }
-        } else if (root.workspaceMonitorGestureStarted
-            && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock) {
-          root.workspaceMonitorDrag.updatePointer(centroid.scenePosition)
-        }
-      }
+      onActiveTranslationChanged: if (active)
+        root.updateWorkspaceMonitorGesture(
+          centroid.scenePosition, centroid.scenePressPosition)
       onGrabChanged: (transition, point) => {
         if (transition === PointerDevice.GrabPassive
             || transition === PointerDevice.GrabExclusive)

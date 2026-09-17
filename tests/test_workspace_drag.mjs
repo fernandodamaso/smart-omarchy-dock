@@ -304,6 +304,8 @@ for (const mutate of [
   assert.match(handler, /header\.forceActiveFocus\(Qt\.MouseFocusReason\)/)
   assert.doesNotMatch(groupSource, /focus: root.workspaceMonitorDragSource/,
     'taking focus on the card at drag start cancels the layer-shell pointer grab')
+  assert.doesNotMatch(groupSource, /border\.width: activeFocus/,
+    'workspace numbers never draw a mouse or keyboard focus accent ring')
   assert.match(groupSource, /header\.focus = false/,
     'release must drop header focus so hover does not restore the accent ring')
   assert.match(read('Dock.qml'),
@@ -312,8 +314,9 @@ for (const mutate of [
   assert.doesNotMatch(read('Dock.qml'),
     /keyboardFocus: workspaceMonitorDragSourceActive/,
     'starting a drag must not recommit layer-surface state and cancel its grab')
-  assert.match(groupSource,
-    /onWorkspaceOwnerMonitorChanged: cancelWorkspaceMonitorDrag\("workspace owner changed"\)/)
+  assert.doesNotMatch(groupSource,
+    /onWorkspace(?:Identity|OwnerMonitor)Changed: cancelWorkspaceMonitorDrag/,
+    'delegate reuse must not cancel a host-owned drag; the coordinator validates live ownership')
   assert.match(read('Dock.qml'),
     /onDockShownChanged:[^\n]+hoveredTarget === root[^\n]+cancel/,
     'a destination disappearing under the pointer cancels the gesture')
@@ -322,14 +325,29 @@ for (const mutate of [
     'the card ghost follows the pointer from the original grab offset')
   assert.match(read('Dock.qml'), /workspaceDragMapItem/,
     'card capture maps through a QQuickItem, not the PanelWindow')
-  assert.match(groupSource, /TapHandler \{[\s\S]*?onTapped: root\.activated\(\)/,
-    'ordinary header clicks must retain the existing activation path')
+  assert.match(groupSource,
+    /TapHandler \{[\s\S]*?onTapped: \{[\s\S]*?root\.activated\(\)[\s\S]*?header\.focus = false/,
+    'ordinary header clicks activate without retaining a mouse focus ring')
   assert.match(groupSource, /onPressedChanged: if \(pressed\)/,
     'header press must take layer focus before the drag threshold or the grab is lost on the first move')
   assert.match(groupSource, /Application\.styleHints\.startDragDistance/,
     'workspace monitor drag begins only after the platform distance threshold')
+  assert.match(groupSource, /function updateWorkspaceMonitorGesture\(scenePoint, pressPoint\)/,
+    'header threshold ownership is kept in one local gesture helper')
+  assert.match(groupSource, /centroid\.scenePressPosition/,
+    'header threshold distance starts at the actual pointer press')
+  assert.doesNotMatch(groupSource, /workspaceMonitorPressPoint/,
+    'header must not maintain a second press-point copy')
   assert.match(groupSource, /workspaceMonitorGestureStarted/,
     'press-time grab and threshold-crossing gesture state are separate')
+  assert.match(groupSource,
+    /active \|\| root\.workspaceMonitorGestureOwned[\s\S]*root\.switchable && root\.workspaceIdentity !== ""[\s\S]*root\.presentationVisible/,
+    'an active gesture survives delegate reuse without making idle cards hittable')
+  assert.match(groupSource,
+    /workspaceMonitorDragSource: workspaceMonitorDrag[\s\S]*workspaceMonitorDrag\.sourceDock === workspaceMonitorDragDock[\s\S]*workspaceMonitorDrag\.sourceWorkspace === workspaceIdentity/,
+    'source styling requires both dock and workspace identity')
+  assert.doesNotMatch(groupSource, /workspaceMonitorDragSourceActive/,
+    'unused duplicate source predicate is removed')
   assert.match(groupSource,
     /width: Math.min\(80, Math.max\(root\.slotSize, title\.implicitWidth \+ 16\)\)/,
     'the workspace number column must be at least one icon wide so card drag is hittable')
@@ -367,6 +385,12 @@ for (const mutate of [
   assert.match(read('Dock.qml'),
     /workspaceMonitorDrag\.updatePointer\(root\.workspaceMonitorDrag\.pointerScene\)/,
     'scrolling a destination dock must refresh monitor section targeting')
+  assert.match(read('Dock.qml'),
+    /workspaceMonitorDrag\.pointerVirtual\.x - root\.sceneOrigin\.x/,
+    'monitor-drag coordinates are converted into each destination dock scene')
+  assert.match(read('Dock.qml'),
+    /workspaceMonitorDrag\.pointerVirtual\.y - root\.sceneOrigin\.y/,
+    'monitor-drag vertical coordinates use the destination scene origin')
   assert.match(dragSource,
     /function finish\([\s\S]*moveWorkspaceToMonitor/,
     'the compositor move happens only after a released exclusive grab calls finish')
@@ -406,6 +430,25 @@ for (const mutate of [
     'section hits use the dock Item that owns card geometry')
   assert.match(dragSource, /cancel\("capture failed"\)/,
     'a failed card snapshot aborts the gesture before dispatch')
+  const pointerState = dragSource.slice(
+    dragSource.indexOf('function clearPointerState'),
+    dragSource.indexOf('function clearPending')
+  )
+  assert.doesNotMatch(pointerState, /ghostSize/,
+    'pending confirmation retains the captured placeholder dimensions')
+  const pendingState = dragSource.slice(
+    dragSource.indexOf('function clearPending'),
+    dragSource.indexOf('function reconcileCompositorOwnership')
+  )
+  assert.match(pendingState, /ghostSize = Qt\.size\(0, 0\)/,
+    'terminal confirmation cleanup clears captured dimensions')
+  assert.match(dragSource, /function resetBeginFailure\(\)[\s\S]*clearPointerState\(\)[\s\S]*clearPending\(\)/,
+    'failed begin uses the same pointer and pending cleanup')
+  assert.match(dragSource, /function endSession\(\)[\s\S]*clearPointerState\(\)[\s\S]*clearPending\(\)/,
+    'session end uses the same pointer and pending cleanup')
+  assert.match(dragSource,
+    /var index = -1[\s\S]*if \(index < 0\) merged\.push\(snapshot\)[\s\S]*else merged\[index\] = snapshot/,
+    'targeted refresh replaces or appends one dock snapshot')
 
   const transitions = { UngrabExclusive: 1, CancelGrabExclusive: 2, CancelGrabPassive: 3 }
   for (const [transition, state, expected] of [[1, 1, 'finish'], [1, 0, 'cancel'],
@@ -414,7 +457,7 @@ for (const mutate of [
     const dock = {}
     const group = methods('DockWorkspaceGroup.qml', { PointerDevice: transitions,
       EventPoint: { Released: 1 }, workspaceMonitorDragDock: dock,
-      workspaceIdentity: 'id:3',
+      workspaceIdentity: 'id:3', workspaceMonitorGestureStarted: true,
       workspaceMonitorDrag: {
         sourceDock: dock,
         sourceWorkspace: 'id:3',

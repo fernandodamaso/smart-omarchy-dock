@@ -65,6 +65,10 @@ TestCase {
         function mapToItem(item, x, y) { return Qt.point(x + 10, y + 20) }
         function grabToImage(callback) {
           if (dock.captureMode === "throw") throw new Error("capture")
+          if (dock.captureMode === "sync") {
+            callback({ url: "image://workspace-drag-test" })
+            return
+          }
           dock.pendingCapture = callback
           Qt.callLater(function() {
             if (dock.pendingCapture !== callback) return
@@ -86,7 +90,10 @@ TestCase {
     Components.DockWorkspaceMonitorDrag {
       windowActions: actions
       property int endings: 0
+      property var projectionChanges: []
       onEnded: endings++
+      onProjectionMonitorChanged: projectionChanges =
+        projectionChanges.concat([projectionMonitor])
     }
   }
 
@@ -139,6 +146,7 @@ TestCase {
     compare(scene.drag.hoveredTarget, null)
     compare(scene.drag.hoveredMonitor, "")
     compare(scene.drag.pointerDock, null)
+    compare(scene.drag.ghostSize, Qt.size(0, 0))
     compare(scene.source.dragRevealed, false)
     compare(scene.destination.dragRevealed, false)
     compare(scene.source.workspaceMonitorDropHighlighted, false)
@@ -147,6 +155,14 @@ TestCase {
 
   function test_captureFailureAndStaleCallbacksNeverDispatch() {
     var scene = makeScene()
+    scene.source.captureMode = "sync"
+    verify(scene.drag.begin(scene.source, "id:3", "Work", 0, "id:0", Qt.point(100, 100)))
+    compare(scene.drag.captureReady, true,
+      "a synchronous grab callback must arm the live drag")
+    scene.drag.cancel("synchronous capture cleanup")
+    verifyClean(scene)
+
+    scene = makeScene()
     scene.source.cardAvailable = false
     verify(!scene.drag.begin(scene.source, "id:3", "Work", 0, "id:0", Qt.point(100, 100)))
     verifyClean(scene)
@@ -196,6 +212,9 @@ TestCase {
     compare(actions.moves, 1)
     verify(!scene.drag.finish(Qt.point(2436, -784)))
     compare(scene.drag.awaitingConfirmation, true)
+    compare(scene.drag.active, false)
+    compare(scene.drag.ghostUrl, "")
+    compare(scene.drag.ghostSize, Qt.size(120, 50))
     actions.ownerMonitor = "id:1"
     verify(scene.drag.reconcileCompositorOwnership())
     verifyClean(scene)
@@ -280,6 +299,64 @@ TestCase {
     compare(scene.drag.awaitingConfirmation, true)
     scene.drag.confirmationTimedOut()
     compare(scene.drag.endings, 1)
+    verifyClean(scene)
+  }
+
+  function test_rightToLeftPointerKeepsStableProjection() {
+    var source = makeDock({
+      monitorIdentity: "id:0",
+      monitorOrigin: Qt.point(1920, 0),
+      sceneOrigin: Qt.point(1920, 1014),
+      monitorRect: Qt.rect(1920, 0, 1920, 1080),
+      dockShown: true,
+      dropRect: Qt.rect(2520, 1014, 720, 66)
+    })
+    var destination = makeDock({
+      monitorIdentity: "id:1",
+      monitorOrigin: Qt.point(0, 0),
+      sceneOrigin: Qt.point(0, 1014),
+      monitorRect: Qt.rect(0, 0, 1920, 1080),
+      dockShown: true,
+      dropRect: Qt.rect(600, 1014, 720, 66),
+      sectionHits: [{ identity: "id:1", rect: Qt.rect(600, 1014, 720, 66) }]
+    })
+    var drag = createTemporaryObject(dragComponent, testCase)
+    verify(drag)
+    drag.registerDock(source)
+    drag.registerDock(destination)
+
+    verify(drag.begin(source, "id:3", "3", 1, "id:0", Qt.point(120, 30)))
+    tryCompare(drag, "captureReady", true, 1000)
+    drag.updatePointer(Qt.point(-1000, 30))
+    compare(drag.pointerVirtual, Qt.point(920, 1044))
+    compare(drag.projectionMonitor, "id:1")
+
+    drag.projectionChanges = []
+    drag.updatePointer(Qt.point(-990, 30))
+    compare(drag.projectionMonitor, "id:1")
+    compare(drag.projectionChanges.length, 0,
+      "moving within one target must not transiently remove its placeholder")
+    drag.cancel("test cleanup")
+    verifyClean({ drag: drag, source: source, destination: destination })
+  }
+
+  function test_pendingSizeClearsAndNextDragCapturesFreshDimensions() {
+    var scene = makeScene()
+    scene.destination.dockShown = true
+    verify(scene.drag.begin(scene.source, "id:3", "Work", 0, "id:0", Qt.point(100, 100)))
+    tryCompare(scene.drag, "captureReady", true, 1000)
+    scene.drag.updatePointer(Qt.point(2436, -784))
+    verify(scene.drag.finish(Qt.point(2436, -784)))
+    compare(scene.drag.ghostSize, Qt.size(120, 50))
+    scene.drag.confirmationTimedOut()
+    verifyClean(scene)
+
+    scene = makeScene()
+    scene.source.card.width = 200
+    scene.source.card.height = 70
+    verify(scene.drag.begin(scene.source, "id:3", "Work", 0, "id:0", Qt.point(100, 100)))
+    compare(scene.drag.ghostSize, Qt.size(200, 70))
+    scene.drag.cancel("explicit cancellation")
     verifyClean(scene)
   }
 
@@ -436,6 +513,75 @@ TestCase {
     scene.drag.confirmationTimedOut()
     compare(actions.moves, 1)
     compare(actions.movedMonitor, "id:1")
+    verifyClean(scene)
+  }
+
+  function test_revealAddsDestinationWithoutRefreshingSource() {
+    var scene = makeScene()
+    var sourceA = Qt.rect(0, 0, 100, 40)
+    var sourceB = Qt.rect(60, 0, 40, 40)
+    var destinationC = Qt.rect(100, 100, 100, 40)
+    var destinationD = Qt.rect(120, 100, 80, 40)
+    scene.source.dropRect = sourceA
+    scene.source.sectionHits = [{ identity: "id:0", rect: sourceA }]
+    scene.destination.dropRect = destinationC
+    scene.destination.sectionHits = [{ identity: "id:1", rect: destinationC }]
+    verify(scene.drag.begin(scene.source, "id:3", "Work", 0, "id:0",
+      Qt.point(100, 100)))
+    tryCompare(scene.drag, "captureReady", true, 1000)
+    scene.source.sectionHits = [{ identity: "id:0", rect: sourceB }]
+    scene.destination.dockShown = true
+    scene.drag.refreshTargetGeometry(scene.destination)
+    compare(scene.drag.geometrySnapshots.length, 2)
+    compare(scene.drag.geometrySnapshots[0].dock, scene.source)
+    compare(scene.drag.geometrySnapshots[0].sections[0].rect, sourceA)
+    compare(scene.drag.geometrySnapshots[1].dock, scene.destination)
+    compare(scene.drag.geometrySnapshots[1].sections[0].rect, destinationC)
+    compare(scene.drag.sectionHitAt(Qt.point(20, 20)).rect, sourceA)
+
+    scene.destination.sectionHits = [{ identity: "id:1", rect: destinationD }]
+    scene.destination.dropRect = destinationD
+    scene.drag.refreshTargetGeometry(scene.destination)
+    compare(scene.drag.geometrySnapshots.length, 2)
+    compare(scene.drag.geometrySnapshots[0].sections[0].rect, sourceA)
+    compare(scene.drag.geometrySnapshots[1].sections[0].rect, destinationD)
+    scene.drag.cancel("test cleanup")
+    verifyClean(scene)
+  }
+
+  function test_targetedScrollKeepsSourceAndThirdDockSnapshots() {
+    var scene = makeScene()
+    var third = makeDock({
+      monitorIdentity: "id:2",
+      monitorOrigin: Qt.point(1920, 0),
+      sceneOrigin: Qt.point(1920, 744),
+      monitorRect: Qt.rect(1920, 0, 1920, 1080),
+      dockShown: true,
+      dropRect: Qt.rect(2100, 800, 120, 40)
+    })
+    scene.drag.registerDock(third)
+    var sourceRect = Qt.rect(0, 0, 100, 40)
+    var destinationRect = Qt.rect(100, 100, 100, 40)
+    var thirdRect = Qt.rect(2100, 800, 120, 40)
+    scene.source.sectionHits = [{ identity: "id:0", rect: sourceRect }]
+    scene.destination.dockShown = true
+    scene.destination.dropRect = destinationRect
+    scene.destination.sectionHits = [{ identity: "id:1", rect: destinationRect }]
+    third.sectionHits = [{ identity: "id:2", rect: thirdRect }]
+    verify(scene.drag.begin(scene.source, "id:3", "Work", 0, "id:0",
+      Qt.point(100, 100)))
+    tryCompare(scene.drag, "captureReady", true, 1000)
+    var updatedDestination = Qt.rect(140, 100, 60, 40)
+    scene.destination.sectionHits = [
+      { identity: "id:1", rect: updatedDestination }
+    ]
+    scene.destination.dropRect = updatedDestination
+    scene.drag.refreshTargetGeometry(scene.destination)
+    compare(scene.drag.geometrySnapshots.length, 3)
+    compare(scene.drag.geometrySnapshots[0].sections[0].rect, sourceRect)
+    compare(scene.drag.geometrySnapshots[1].sections[0].rect, updatedDestination)
+    compare(scene.drag.geometrySnapshots[2].sections[0].rect, thirdRect)
+    scene.drag.cancel("test cleanup")
     verifyClean(scene)
   }
 }
