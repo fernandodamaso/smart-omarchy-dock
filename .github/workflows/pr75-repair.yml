@@ -54,10 +54,10 @@ jobs:
 
           replace('tests/test_workspace_drag.mjs',
                   "for (const [transition, state, expected] of [[1, 1, 'finish'], [1, 0, 'cancel'],\n    [2, 1, 'cancel'], [3, 1, 'cancel']])",
-                  "for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'cancel'],\n    [2, 0x08, 'cancel'], [3, 0x08, 'cancel']])")
+                  "for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'cancel'],\n    [2, 0x08, 'cancel'], [3, 0x08, 'cancel']])", count=2)
           replace('tests/test_workspace_drag.mjs',
-                  '      EventPoint: { Released: 1 }, workspaceMonitorDragDock: dock,',
-                  '      workspaceMonitorDragDock: dock,')
+                  '      EventPoint: { Released: 1 }, ',
+                  '      ', count=2)
 
           replace('tests/test_dev_session.py',
                   '        with mock.patch("dev_session._guard_hyprland_fds"):\n            with mock.patch("dev_session._owned_windows", return_value=heads):\n                with mock.patch("dev_session._place_owned_windows", return_value=heads):\n                    actual = _show_both_qemu_heads(9, "4", "visual-a")',
@@ -73,7 +73,6 @@ jobs:
           PY
 
           git diff --check
-          git diff --exit-code -- .github/workflows/pr75-repair.yml || true
 
       - name: Commit repaired branch
         shell: bash
