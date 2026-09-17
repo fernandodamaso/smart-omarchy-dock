@@ -77,6 +77,18 @@ TestCase {
     compare(handle.pointerTarget,null,"native handler must not move the handle target")
   }
 
+  function test_collapse_during_resize_writes_only_collapse_field() {
+    var c=makeController("left")
+    verify(c.beginResize(0)); c.updateResize(70); compare(c.geometry.width,390)
+    var reply=c.requestCollapse()
+    verify(reply.ok)
+    verify(!c.resizeActive)
+    compare(writer.writes.length,1)
+    compare(writer.writes[0].key,"sidebarCollapsed")
+    compare(writer.writes[0].value,true)
+    compare(writer.writes[0].expectedValue,false)
+  }
+
   function test_conflicts_and_surface_changes_cancel_preview() {
     var c=makeController("left")
     verify(c.beginResize(0)); c.updateResize(80)
