@@ -7,25 +7,38 @@ permissions:
 jobs:
   export:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - name: Export committed source only
+      - name: Install the unchanged CI Qt dependency set
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-window qml6-module-qttest qt6-declarative-dev-tools
+      - name: Package offscreen test tools (no project or credentials)
         shell: bash
         run: |
           set -euo pipefail
-          git update-ref refs/heads/export-main 86fb65893295c95df664e6f274b19375a50f088a
-          git update-ref refs/heads/export-sb02 1b06719163a3d333b712cbbbb73582c1a865da06
-          git update-ref refs/heads/export-sb03 c6d9b0dcb8f96f6e61591996bcafc728ec022dfe
-          git update-ref refs/heads/export-sb05 6f60d29d3eb98753857e61f47a0cd730d10efb62
-          mkdir -p /tmp/fdm966-export
-          git bundle create /tmp/fdm966-export/smartdock.bundle refs/heads/export-main refs/heads/export-sb02 refs/heads/export-sb03 refs/heads/export-sb05
-          git bundle verify /tmp/fdm966-export/smartdock.bundle
-          sha256sum /tmp/fdm966-export/smartdock.bundle
+          mkdir -p /tmp/qt-portable/{bin,lib,qml,plugins}
+          cp /usr/lib/qt6/bin/{qmltestrunner,qmlformat,qmllint} /tmp/qt-portable/bin/
+          cp -a /usr/lib/x86_64-linux-gnu/qt6/qml/. /tmp/qt-portable/qml/
+          cp -a /usr/lib/x86_64-linux-gnu/qt6/plugins/. /tmp/qt-portable/plugins/
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,shutil,subprocess
+          root=Path('/tmp/qt-portable')
+          # ldd lists transitive ELF dependencies. Use the container's newer
+          # glibc/libstdc++; package the versioned Qt/ICU/platform dependencies.
+          skip=re.compile(r'^(libc\.|libm\.|libpthread\.|librt\.|libdl\.|libstdc\+\+\.|libgcc_s\.|ld-linux)')
+          binaries=list((root/'bin').iterdir())+list((root/'qml').rglob('*.so'))+list((root/'plugins').rglob('*.so'))
+          for binary in binaries:
+              output=subprocess.run(['ldd',str(binary)],capture_output=True,text=True).stdout
+              for value in re.findall(r'=> (/[^\s]+)',output):
+                  source=Path(value)
+                  if not skip.match(source.name): shutil.copy2(source,root/'lib'/source.name)
+          PY
+          tar -C /tmp -czf /tmp/qt-portable.tar.gz qt-portable
+          sha256sum /tmp/qt-portable.tar.gz
       - uses: actions/upload-artifact@v4
         with:
-          name: fdm966-exact-sources
-          path: /tmp/fdm966-export/smartdock.bundle
+          name: fdm966-qt-offscreen-tools
+          path: /tmp/qt-portable.tar.gz
           retention-days: 1
