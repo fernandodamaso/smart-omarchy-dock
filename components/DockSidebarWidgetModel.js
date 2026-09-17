@@ -1,0 +1,268 @@
+.pragma library
+
+// Internal source-registered providers only. This module never loads a URL,
+// executes a command, owns a timer or emits desktop notifications.
+function own(object, key) { return Object.prototype.hasOwnProperty.call(object, key) }
+function validId(id) {
+  return typeof id === "string" && id.length <= 64
+    && /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id)
+    && ["constructor", "prototype", "__proto__"].indexOf(id) < 0
+}
+function requestedIds(value) {
+  if (!Array.isArray(value)) return []
+  var seen = Object.create(null)
+  return value.filter(function(id) {
+    if (!validId(id) || own(seen, id)) return false
+    seen[id] = true
+    return true
+  })
+}
+function idsError(value, registered) {
+  if (!Array.isArray(value)) return "Expected an array of registered widget IDs"
+  var seen = Object.create(null)
+  for (var i = 0; i < value.length; ++i) {
+    var id = value[i]
+    if (!validId(id)) return "Invalid widget ID at index " + i
+    if (own(seen, id)) return "Duplicate widget ID at index " + i
+    seen[id] = true
+    if (!Array.isArray(registered) || registered.indexOf(id) < 0)
+      return "Unregistered widget ID at index " + i
+  }
+  return ""
+}
+function descriptorFor(registry, id) {
+  if (!registry || !own(registry, id) || !validId(id)) return null
+  var descriptor = registry[id]
+  return descriptor && descriptor.id === id && typeof descriptor.acquire === "function"
+    ? descriptor : null
+}
+function effectiveIds(value, registry) {
+  return requestedIds(value).filter(function(id) { return descriptorFor(registry, id) !== null })
+}
+function validStatus(status) {
+  return ["loading", "ready", "unavailable", "error"].indexOf(status) >= 0
+}
+function revision(value) {
+  return typeof value === "number" && isFinite(value) && value >= 0
+    && Math.floor(value) === value && value <= 9007199254740991
+}
+function finite(value, fallback) {
+  return typeof value === "number" && isFinite(value) ? value : fallback
+}
+function footerLayout(availableContentHeight, windowRowHeight, count, collapsed) {
+  var available = Math.max(0, finite(availableContentHeight, 0))
+  var row = Math.max(1, finite(windowRowHeight, 44))
+  var cap = Math.min(240, Math.floor(0.30 * available), Math.max(0, available - 2 * row))
+  var mode = count <= 0 ? "none" : cap < row ? "overflow"
+    : collapsed || cap < 2 * row ? "compact" : "expanded"
+  return {cap:cap, mode:mode, height:mode === "none" || mode === "overflow" ? 0 : cap}
+}
+// Coordinates are logical pixels relative to a full-height edge panel. The
+// compositor performs the final slide adjustment for other exclusive surfaces.
+function popupGeometry(screenWidth, screenHeight, panelWidth, edge, anchorY, wantedWidth, wantedHeight) {
+  var sw = Math.max(1, finite(screenWidth, 1))
+  var sh = Math.max(1, finite(screenHeight, 1))
+  var panel = Math.max(0, Math.min(sw, finite(panelWidth, 0)))
+  var gap = Math.min(8, Math.max(0, sw - panel - 1))
+  var remaining = Math.max(1, sw - panel - gap)
+  var width = Math.max(1, Math.min(sw, remaining, finite(wantedWidth, 320)))
+  var height = Math.max(1, Math.min(sh, finite(wantedHeight, 400)))
+  var origin = edge === "right" ? sw - panel : 0
+  var proposed = edge === "right" ? origin - gap - width : panel + gap
+  var screenX = Math.max(0, Math.min(sw - width, proposed))
+  var y = Math.max(0, Math.min(sh - height, finite(anchorY, 0) - height / 2))
+  return {x:screenX - origin, y:y, width:width, height:height, screenX:screenX}
+}
+function emptyCounters() {
+  return {acquisitions:0, releases:0, activations:0, suspensions:0,
+    acceptedUpdates:0, ignoredUpdates:0, failures:0}
+}
+// Pure requested/effective readback, including dry runs. Never acquire a lease
+// merely to answer a config/status request; do not expose view payloads here.
+function describe(value, registry, runtime) {
+  var ids = requestedIds(value)
+  var current = Object.create(null)
+  if (runtime && Array.isArray(runtime.rows)) runtime.rows.forEach(function(row) { current[row.id] = row })
+  return {total:ids.length, truncated:Math.max(0, ids.length - 32),
+    counters:runtime ? runtime.counters : emptyCounters(),
+    rows:ids.slice(0, 32).map(function(id) {
+      var descriptor = descriptorFor(registry, id)
+      var live = current[id]
+      return {id:id, registered:descriptor !== null,
+        available:descriptor !== null && descriptor.available !== false,
+        status:live ? live.status : descriptor && descriptor.available !== false ? "loading" : "unavailable",
+        revision:live ? live.revision : 0, active:live ? live.active : false,
+        errorCode:live ? live.errorCode : descriptor ? "" : "unregistered"}
+    })}
+}
+
+// One manager per host-owned sidebar controller, never one per view. A provider
+// lends a lease; only that lease decides how to reference-count shared backends.
+// setActive(true, publish) gets a NEW generation callback on each activation.
+function createManager(onChanged) {
+  var entries = Object.create(null)
+  var ordered = []
+  var counters = emptyCounters()
+  var disposed = false
+  var batching = false
+  var dirty = false
+  function bump(key) { counters[key] = Math.min(1000000000, counters[key] + 1) }
+  function changed() {
+    if (disposed) return
+    if (batching) { dirty = true; return }
+    onChanged()
+  }
+  function failed(entry, code) {
+    entry.status = "error"
+    entry.errorCode = code
+    entry.data = null
+    bump("failures")
+    changed()
+  }
+  function publishFor(entry, generation) {
+    return function(value) {
+      if (disposed || entries[entry.id] !== entry || !entry.active || entry.generation !== generation) {
+        bump("ignoredUpdates")
+        return
+      }
+      if (!value || !validStatus(value.status) || !revision(value.revision)) {
+        failed(entry, "invalid-update")
+        return
+      }
+      if (entry.received && value.revision <= entry.revision) {
+        bump("ignoredUpdates")
+        return
+      }
+      entry.received = true
+      entry.status = value.status
+      entry.revision = value.revision
+      entry.data = value.status === "ready" ? value.data : null
+      entry.errorCode = value.status === "error" ? "provider-error" : ""
+      bump("acceptedUpdates")
+      changed()
+    }
+  }
+  function deactivate(entry) {
+    ++entry.generation // Revoke callbacks BEFORE invoking any provider code.
+    entry.data = null
+    if (!entry.active) return
+    entry.active = false
+    bump("suspensions")
+    try { entry.lease.setActive(false, null) }
+    catch (error) { failed(entry, "suspend-failed") }
+  }
+  function release(entry) {
+    deactivate(entry)
+    var lease = entry.lease
+    entry.lease = null
+    if (!lease) return
+    bump("releases")
+    try { lease.release() }
+    catch (error) { failed(entry, "release-failed") }
+  }
+  function activate(entry, active) {
+    if (!entry.lease || entry.active === active) return
+    if (!active) { deactivate(entry); changed(); return }
+    entry.active = true
+    entry.received = false
+    entry.revision = 0
+    entry.status = "loading"
+    entry.errorCode = ""
+    ++entry.generation
+    bump("activations")
+    try { entry.lease.setActive(true, publishFor(entry, entry.generation)) }
+    catch (error) {
+      release(entry)
+      failed(entry, "activate-failed")
+    }
+    changed()
+  }
+  function acquire(entry, owner) {
+    if (!entry.descriptor || entry.descriptor.available === false) return
+    bump("acquisitions")
+    try {
+      var lease = entry.descriptor.acquire(owner)
+      if (!lease || typeof lease.setActive !== "function" || typeof lease.release !== "function") {
+        if (lease && typeof lease.release === "function") {
+          bump("releases")
+          try { lease.release() } catch (error) { bump("failures") }
+        }
+        failed(entry, "invalid-lease")
+        return
+      }
+      entry.lease = lease
+    } catch (error) { failed(entry, "acquire-failed") }
+  }
+  function newEntry(id, descriptor, owner) {
+    var entry = {id:id, descriptor:descriptor, lease:null, active:false, generation:0, token:{},
+      acquireFactory:descriptor ? descriptor.acquire : null,
+      registeredAvailable:descriptor !== null && descriptor.available !== false,
+      status:descriptor && descriptor.available !== false ? "loading" : "unavailable",
+      revision:0, received:false, data:null, errorCode:descriptor ? "" : "unregistered"}
+    entries[id] = entry
+    acquire(entry, owner)
+    return entry
+  }
+  return {
+    reconcile:function(value, registry, active, owner) {
+      if (disposed) return
+      batching = true
+      var next = requestedIds(value)
+      if (JSON.stringify(next) !== JSON.stringify(ordered)) dirty = true
+      Object.keys(entries).forEach(function(id) {
+        if (next.indexOf(id) < 0) { release(entries[id]); delete entries[id]; dirty = true }
+      })
+      ordered = next
+      ordered.forEach(function(id) {
+        var descriptor = descriptorFor(registry, id)
+        var entry = entries[id]
+        // Metadata, snapshot revisions and view factories never restart a lease.
+        // Only registry removal/replacement of its acquisition boundary does.
+        if (entry && (Boolean(entry.descriptor) !== Boolean(descriptor)
+            || entry.descriptor && descriptor && (entry.acquireFactory !== descriptor.acquire
+              || entry.registeredAvailable !== (descriptor.available !== false)))) {
+          release(entry)
+          delete entries[id]
+          entry = null
+        }
+        if (!entry) { entry = newEntry(id, descriptor, owner); dirty = true }
+        else if (entry.descriptor !== descriptor) { entry.descriptor = descriptor; dirty = true }
+        activate(entry, active === true)
+      })
+      batching = false
+      if (dirty) { dirty = false; changed() }
+    },
+    ids:function() { return ordered.slice() },
+    view:function(id) {
+      var entry = entries[id]
+      if (!entry) return null
+      return {id:id, descriptor:entry.descriptor, token:entry.token, generation:entry.generation,
+        registered:entry.descriptor !== null,
+        available:entry.descriptor !== null && entry.descriptor.available !== false,
+        status:entry.status, revision:entry.revision, active:entry.active, data:entry.data,
+        provider:entry.lease ? entry.lease.provider : null, errorCode:entry.errorCode}
+    },
+    viewFailed:function(id, expected) {
+      var entry = entries[id]
+      if (disposed || !entry || !expected || expected.token !== entry.token
+          || expected.generation !== entry.generation || expected.revision !== entry.revision) return
+      if (entry.errorCode !== "view-error") failed(entry, "view-error")
+    },
+    diagnostics:function() {
+      return {total:ordered.length, truncated:Math.max(0, ordered.length - 32),
+        counters:Object.assign({}, counters), rows:ordered.slice(0, 32).map(function(id) {
+          var entry = entries[id]
+          return {id:id, registered:entry.descriptor !== null,
+            available:entry.descriptor !== null && entry.descriptor.available !== false,
+            status:entry.status, revision:entry.revision, active:entry.active, errorCode:entry.errorCode}
+        })}
+    },
+    dispose:function() {
+      if (disposed) return
+      disposed = true
+      Object.keys(entries).forEach(function(id) { release(entries[id]) })
+      entries = Object.create(null)
+      ordered = []
+    }
+  }
+}

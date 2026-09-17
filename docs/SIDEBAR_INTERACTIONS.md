@@ -10,8 +10,7 @@ and merges `main` at `86fb65893295c95df664e6f274b19375a50f088a`, which contains
 FDM-954/PR #79 and the newer classic workspace-drag integration. The single
 `Dock.qml` merge conflict preserves SB-01's shared `DockDesktopModel` builder and
 the newer classic drag coordinator. The builder uses the current native
-`monitorActiveWorkspace` helper. SB-05/PR #78 is a separate, not-yet-integrated
-branch; SB-06 must combine its footer with this viewport/menu/resize composition.
+`monitorActiveWorkspace` helper. SB-05/PR #78 widget footer/lifecycle is folded into the FDM-968 integration candidate with this viewport/menu/resize composition.
 
 No installed plugin, production configuration, topbar or compositor binding is
 changed. No second action controller, writer, process, monitor watcher or saved

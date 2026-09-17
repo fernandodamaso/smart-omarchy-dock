@@ -1,0 +1,57 @@
+import QtQuick
+
+// A view consumes a snapshot, never a provider lease. The reusable loader also
+// gives pure-Qt tests a real production component without mocking an Omarchy UI.
+Item {
+  id: root
+  required property var controller
+  required property string widgetId
+  property string presentation: "expanded"
+  property bool viewEnabled: true
+  property Item popupAnchor: root
+  readonly property var snapshot: controller.widgetView(widgetId)
+  readonly property var factory: {
+    if (!viewEnabled || !snapshot || !snapshot.active || snapshot.status !== "ready" || !snapshot.descriptor) return null
+    return snapshot.descriptor[presentation + "View"] || null
+  }
+  readonly property bool hasView: loader.status === Loader.Ready && loader.item !== null
+  readonly property var loadedItem: loader.item
+  readonly property var widgetContext: ({id:widgetId, status:snapshot ? snapshot.status : "unavailable",
+    revision:snapshot ? snapshot.revision : 0, data:snapshot ? snapshot.data : null,
+    provider:snapshot ? snapshot.provider : null, presentation:presentation,
+    openPopup:function() { return root.controller.openWidgetPopup(root.widgetId, root.popupAnchor) },
+    closePopup:function() { root.controller.closeWidgetPopup() }})
+  implicitHeight: hasView && isFinite(loader.item.implicitHeight) ? Math.max(0, loader.item.implicitHeight) : 0
+  clip: true
+
+  Loader {
+    id: loader
+    anchors.fill: parent
+    sourceComponent: root.factory
+    onLoaded: {
+      try {
+        if (typeof item.widgetContext === "undefined") throw new Error("Missing widgetContext")
+        item.widgetContext = Qt.binding(function() { return root.widgetContext })
+      } catch (error) {
+        // Do not log provider exceptions or view data; defer unloading the item
+        // until its creation signal returns, and capture this exact widget ID.
+        var id = root.widgetId
+        var expected = root.snapshot
+        var owner = root.controller
+        Qt.callLater(function() {
+          if (owner && typeof owner.widgetViewFailed === "function") owner.widgetViewFailed(id, expected)
+        })
+      }
+    }
+    onStatusChanged: {
+      if (status === Loader.Error) {
+        var id = root.widgetId
+        var expected = root.snapshot
+        var owner = root.controller
+        Qt.callLater(function() {
+          if (owner && typeof owner.widgetViewFailed === "function") owner.widgetViewFailed(id, expected)
+        })
+      }
+    }
+  }
+}

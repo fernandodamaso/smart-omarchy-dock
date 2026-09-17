@@ -4,9 +4,11 @@ import "DockWindowModel.js" as WindowModel
 import "DockDesktopModel.js" as DesktopModel
 import "DockSidebarModel.js" as SidebarModel
 import "DockSidebarInteractionModel.js" as InteractionModel
+import "DockSidebarWidgetModel.js" as SidebarWidgetModel
 
 // Host-owned session/view state. All compositor data and action/writer services
-// are injected; this object never adds a watcher, provider, timer or config file.
+// are injected. Widget leases belong to this host session, never to a view.
+// This object adds no compositor watcher, notification daemon or config writer.
 Item {
   id: root
   required property var host
@@ -36,7 +38,7 @@ Item {
   readonly property bool collapsed: DockModel.normalizeSetting("sidebarCollapsed", settings.sidebarCollapsed)
   readonly property var persistentGeometry: SidebarModel.screenGeometry(selectedScreen,
     settings.sidebarExpandedWidth, collapsed)
-  property bool resizeActive: false
+property bool resizeActive: false
   property real resizeStartGlobalX: 0
   property int resizeStartWidth: 0
   property int resizePreviewWidth: 0
@@ -47,6 +49,15 @@ Item {
   readonly property var geometry: resizeActive
     ? SidebarModel.screenGeometry(selectedScreen, resizePreviewWidth, false)
     : persistentGeometry
+  // Source-registered factories only. Tests inject a registry here, never through
+  // settings/CLI. Production DockHost supplies its own (initially empty) registry.
+  property var widgetRegistry: ({})
+  property var widgetManager: null
+  property var widgetIds: []
+  property int widgetRevision: 0
+  property string widgetPopupId: ""
+  property Item widgetPopupAnchor: null
+  readonly property bool widgetWorkActive: mode === "sidebar" && selectedScreen !== null && geometry.mapped
   property var registry: ({ nextToken: 1, entries: [] })
   property var folds: ({})
   property var projection: SidebarModel.emptyProjection()
@@ -61,6 +72,68 @@ Item {
   signal aboutToRefresh()
   signal refreshed()
   signal surfaceInvalidated()
+  signal widgetAnchorChanged()
+
+  function widgetView(id) {
+    var revision = root.widgetRevision
+    return root.widgetManager ? root.widgetManager.view(id) : null
+  }
+
+  function widgetsChanged() {
+    if (!root.initialized || !root.widgetManager) return
+    var ids = root.widgetManager.ids()
+    // Snapshot updates must not reset the delegate model or popup anchor.
+    if (JSON.stringify(ids) !== JSON.stringify(root.widgetIds)) root.widgetIds = ids
+    root.widgetRevision = (root.widgetRevision + 1) % 1000000000
+    if (!root.widgetPopupId) return
+    var view = root.widgetManager.view(root.widgetPopupId)
+    if (!ids.length || root.widgetPopupId !== "*" && (!view || !view.registered || !view.available))
+      root.closeWidgetPopup()
+  }
+
+  function syncWidgets() {
+    if (!root.initialized || !root.widgetManager) return
+    root.widgetManager.reconcile(root.settings.sidebarWidgets, root.widgetRegistry,
+      root.widgetWorkActive, root)
+    root.widgetsChanged()
+  }
+
+  function openWidgetPopup(id, anchor) {
+    if (!root.widgetWorkActive || !anchor || !anchor.visible || !root.widgetIds.length) return false
+    var view = root.widgetView(id)
+    // Unknown imported IDs may display their unavailable status in overflow, but
+    // they cannot execute a factory or open a provider popup.
+    if (id !== "*" && (!view || !view.registered || !view.available)) return false
+    root.widgetPopupAnchor = anchor
+    root.widgetPopupId = id
+    root.widgetAnchorChanged()
+    return true
+  }
+
+  function closeWidgetPopup() {
+    root.widgetPopupId = ""
+    root.widgetPopupAnchor = null
+  }
+
+  function widgetViewFailed(id, expected) {
+    if (root.widgetManager) root.widgetManager.viewFailed(id, expected)
+  }
+
+  Connections {
+    target: root.widgetPopupAnchor
+    ignoreUnknownSignals: true
+    function onDestroyed() { root.closeWidgetPopup() }
+    function onVisibleChanged() { if (!root.widgetPopupAnchor || !root.widgetPopupAnchor.visible) root.closeWidgetPopup() }
+    function onXChanged() { root.widgetAnchorChanged() }
+    function onYChanged() { root.widgetAnchorChanged() }
+    function onWidthChanged() { root.widgetAnchorChanged() }
+    function onHeightChanged() { root.widgetAnchorChanged() }
+  }
+  onWidgetPopupAnchorChanged: if (!root.widgetPopupAnchor) root.closeWidgetPopup()
+  onWidgetRegistryChanged: root.syncWidgets()
+  onWidgetWorkActiveChanged: root.syncWidgets()
+  onCollapsedChanged: root.closeWidgetPopup()
+  onSurfaceInvalidated: root.closeWidgetPopup()
 
   function scheduleRefresh() {
     if (initialized) Qt.callLater(root.refresh)
@@ -174,6 +247,7 @@ Item {
       root.interactionBusy = false
       root.selectedScreen = next
     }
+    root.syncWidgets()
     if (root.interactionBusy && next) {
       root.refreshPending = true
       return
@@ -445,8 +519,9 @@ Item {
       {localUrgent:row.urgent === true,primaryOwner:row.primaryOwner === true}, activities)
   }
 
-  onSettingsChanged: {
+onSettingsChanged: {
     if (root.resizePreferenceConflict()) root.cancelResize("preference-conflict")
+    root.syncWidgets()
     root.scheduleRefresh()
   }
   onModeChanged: root.invalidateSurface()
@@ -463,5 +538,14 @@ Item {
   onFocusedWorkspaceChanged: root.scheduleRefresh()
   onScopeRevisionChanged: root.scheduleRefresh()
   onInteractionBusyChanged: if (!interactionBusy) root.scheduleRefresh()
-  Component.onCompleted: { initialized = true; root.refresh() }
+  Component.onCompleted: {
+    root.widgetManager = SidebarWidgetModel.createManager(function() { root.widgetsChanged() })
+    root.initialized = true
+    root.refresh()
+  }
+  Component.onDestruction: {
+    root.initialized = false
+    root.closeWidgetPopup()
+    if (root.widgetManager) root.widgetManager.dispose()
+  }
 }

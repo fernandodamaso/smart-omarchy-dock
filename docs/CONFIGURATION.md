@@ -6,7 +6,7 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 50 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 51 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
@@ -36,6 +36,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 50 rows 
 | `sidebarMonitor` | `""` | Exact case-sensitive connector, or empty for automatic placement. Disconnected preferences are retained; control characters are rejected. |
 | `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
 | `sidebarCollapsed` | `false` | Explicit icon rail. Every eligible window remains represented; expanded width and session app folds are retained. |
+| `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. Production registry initially empty; unknown imports retained requested and unavailable effective. Explicit invalid writes fail; readiness/auth is not validation. Preference reset clears. |
 | `position` | `"bottom"` | String: top, bottom, left, right. Vertical edges render workspaceLayout as flat. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
 | `reserveSpace` | `true` | Boolean; effective false while autoHide is enabled, without erasing this request. |
@@ -130,7 +131,7 @@ effective persistent width and whether that geometry can map. These are source
 projections, not proof that the compositor mapped a surface. No screen means
 zero width and `mapped: false`. Width uses unreserved logical screen geometry.
 
-The five sidebar settings support the existing typed set/apply/reset/schema/get
+The six sidebar settings support the existing typed set/apply/reset/schema/get
 commands. Width writes accept integers 240–480; the runtime may clamp the effective
 width below 240 on narrow screens without rewriting the requested value. The
 expanded resize handle lives inside the reserved width. Pointer motion changes only
@@ -147,5 +148,13 @@ retry persists the latest complete host snapshot. See `SIDEBAR_RESIZE.md` for th
 exact geometry, cancellation, writer-count and deferred runtime contracts.
 
 This is an **unreleased Draft foundation**, not integrated sidebar acceptance.
-SB-04 owns full navigation/menus/keyboard/drag, SB-05 widgets, and SB-06 live
-qualification. See the source-only `docs/SIDEBAR.md` contract.
+SB-03 owns resize gestures, SB-04 owns full navigation/menus/keyboard/drag,
+SB-05 adds internal bounded widget slots (not live provider integrations), and
+SB-06 owns live qualification. See the source-only `docs/SIDEBAR.md` contract.
+
+`sidebarWidgets` uses the internal source registry, currently empty. The CLI schema's
+`registeredIds` is authoritative for new writes. Unknown imports are never executed;
+requested readback retains them and `data.presentation.widgets` reports unavailable
+state. `config get --effective` lists only registered IDs. Empty configuration
+reserves no footer gap and starts no provider. These controls do not change stock
+topbar services. Source adapter/view/lifecycle API: `docs/SIDEBAR_WIDGETS.md`.

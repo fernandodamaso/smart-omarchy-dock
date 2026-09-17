@@ -27,6 +27,7 @@ export function hostHarness(settings, applications = []) {
     DockModel: loadModel('DockModel'), DockWindowModel: loadModel('DockWindowModel'),
     WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel'),
     SidebarModel: loadModel('DockSidebarModel'),
+    SidebarWidgetModel: loadModel('DockSidebarWidgetModel'),
     TrashModel: loadModel('DockTrashModel') };
   const writes = [];
   let cached = '', host;

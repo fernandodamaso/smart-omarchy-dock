@@ -102,6 +102,7 @@ const shared = { console: { warn() {} }, ConfigModel: model,
   DockModel: loadModel('DockModel.js'), DockWindowModel: loadModel('DockWindowModel.js'),
   WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js'),
   SidebarModel: loadModel('DockSidebarModel.js'),
+  SidebarWidgetModel: loadModel('DockSidebarWidgetModel.js'),
   TrashModel: loadModel('DockTrashModel.js') };
 let disk = null, cached = '', writes = 0, failWrite = false, deferWrite = false;
 let host;

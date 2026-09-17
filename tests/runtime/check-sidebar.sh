@@ -34,6 +34,8 @@ def visit(x):
 visit(json.load(sys.stdin))'
 cp -R "$root/components" "$root/config" "$temporary/"
 cp "$root/DockHost.qml" "$temporary/DockHost.qml"
+mkdir -p "$temporary/tests"
+cp -R "$root/tests/fixtures" "$temporary/tests/"
 if [[ "$mode" == "--native" ]]; then
   cp "$root/tests/runtime/sidebar-native.qml" "$temporary/shell.qml"
 else
@@ -64,15 +66,16 @@ if [[ "$mode" == "--native" ]]; then
   exit 0
 fi
 QT_QPA_PLATFORM=wayland QML2_IMPORT_PATH="$temporary/imports" \
-  timeout 35s qs -p "$temporary" --no-color >"$log" 2>&1 || { cat "$log"; exit 1; }
+  timeout 60s qs -p "$temporary" --no-color >"$log" 2>&1 || { cat "$log"; exit 1; }
 if grep -E 'ERROR|Error:|ReferenceError|TypeError|Unable to assign' "$log"; then cat "$log"; exit 1; fi
-grep -F 'sidebar: PASS (production host/panel/delegates, resize reservation/writer-count, layers, teardown)' "$log"
+grep -F 'sidebar: PASS (production host/panel/delegates/widgets, resize reservation/writer-count, leases/popups, layers, teardown)' "$log"
 python3 - "$temporary/fixture-config.json" <<'PY'
 import json,sys
 value=json.load(open(sys.argv[1]))
-assert value['sidebarExpandedWidth'] == 400, value['sidebarExpandedWidth']
-assert value['sidebarEdge'] == 'right', value['sidebarEdge']
+assert value['sidebarExpandedWidth'] == 240, value['sidebarExpandedWidth']
+assert value['sidebarEdge'] == 'left', value['sidebarEdge']
+assert value['sidebarCollapsed'] is True, value['sidebarCollapsed']
 assert value['runtimeFixtureUnknown'] == {'keep': True}
 assert value['position'] == 'bottom' and value['iconSize'] == 42
-print('sidebar persistence readback: PASS (width=400, unknown/classic keys preserved)')
+print('sidebar persistence readback: PASS (width=240, collapsed, unknown/classic keys preserved)')
 PY

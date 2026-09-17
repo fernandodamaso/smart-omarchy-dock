@@ -1,13 +1,15 @@
-# SB-02/SB-03/SB-04 — Global sidebar source contract
+# SB-02/SB-03/SB-04/SB-05 — Global sidebar source contract
 
-**FDM-964 + FDM-965 + FDM-966, unreleased source candidate.** SB-02 implements shared
-construction, projection, one global panel, app folding/rail, typed preferences
-and initial reservation. SB-03 adds live resize, cancellation and conflict-safe
-preference commits. SB-04 adds exact-window actions, menus, keyboard navigation
-and single-sidebar drag adapters. These slices do not deploy or qualify a compositor. Classic
-remains the default. Parent contract: FDM-962. Detailed SB-03 behavior is in
-[`SIDEBAR_RESIZE.md`](SIDEBAR_RESIZE.md); SB-04 is in
-[`SIDEBAR_INTERACTIONS.md`](SIDEBAR_INTERACTIONS.md).
+**FDM-964 + FDM-965 + FDM-966 + FDM-967, unreleased integrated source candidate.**
+SB-02 implements shared construction, projection, one global panel, app folding/rail,
+typed preferences and initial reservation. SB-03 adds live resize, cancellation and
+conflict-safe preference commits. SB-04 adds exact-window actions, menus, keyboard
+navigation and single-sidebar drag adapters. SB-05 adds host-owned widget leases and
+a bounded footer with no production providers. These slices do not deploy or qualify
+a compositor. Classic remains the default. Parent contract: FDM-962. Detailed SB-03
+behavior is in [`SIDEBAR_RESIZE.md`](SIDEBAR_RESIZE.md); SB-04 is in
+[`SIDEBAR_INTERACTIONS.md`](SIDEBAR_INTERACTIONS.md); SB-05 is in
+[`SIDEBAR_WIDGETS.md`](SIDEBAR_WIDGETS.md).
 
 ## Source boundary
 
@@ -42,10 +44,12 @@ retarget or new commit.
   nearest surviving neighbor.
 - `DockSidebarController` is the sole host-owned session state object. Its snapshot
   inputs use existing host data/revisions; it adds no timer, IPC, topology listener,
-  provider or settings writer. It owns handle tokens, app folds, selection,
-  scroll/focus keys, captured menu/input targets and temporary resize/drag state. `interactionBusy` freezes
-  preferred reconnects during an active interaction; current-screen removal and
-  explicit mode/edge/host changes cancel immediately.
+provider or settings writer. SB-05 adds host-owned widget leases with no production
+  providers initially. It owns handle tokens, app folds, selection, scroll/focus
+  keys, captured menu/input targets and temporary resize/drag state. It emits
+  `aboutToRefresh`, `refreshed` and `surfaceInvalidated`. `interactionBusy` freezes
+  preferred reconnects during an active interaction or open widget popup; current-screen
+  removal and explicit mode/edge/host changes cancel immediately.
 - `DockHost` owns one mutually exclusive presentation Loader: classic Variants or
   one `DockSidebar`. Destruction precedes deferred creation. The existing action,
   monitor-drag, badge and config services remain singletons. `saveSettingIntent`
@@ -81,11 +85,11 @@ scope is removed. A sidebar never registers as an invisible classic monitor dock
 
 ## Settings, geometry and resize
 
-The five keys are typed through bundled defaults/schema, runtime normalization,
+The six keys are typed through bundled defaults/schema, runtime normalization,
 the existing strict host validator, Python CLI parsing and the sole FileView writer:
 `presentationMode`, `sidebarEdge`, `sidebarMonitor`, `sidebarExpandedWidth`, and
-`sidebarCollapsed`. See `CONFIGURATION.md` for their inventory and
-`SIDEBAR_RESIZE.md` for gesture/persistence semantics.
+`sidebarCollapsed`, plus SB-05 `sidebarWidgets`. See `CONFIGURATION.md` for their
+inventory and `SIDEBAR_RESIZE.md` for gesture/persistence semantics.
 
 Requested classic settings, unknown extension keys, pins, artwork, hidden apps and
 provider preferences are preserved. `data.presentation` describes effective screen,
@@ -176,7 +180,7 @@ shell-aware lint and rendering remain integrated gates. A stripped plugin guest
 alone does not prove stock-bar coexistence.
 
 **FDM-966/SB-04** reuses merged FDM-954 and adds exact-target activation, menus,
-keyboard and drag. **FDM-967/SB-05** supplies bounded widget lifecycle/popups on its
-separate source branch; those changes have not been folded into this SB-04 branch. **FDM-968/SB-06** rebases the accepted source slices and owns
-physical runtime qualification. Keep the feature-bearing PR Draft until the
+keyboard and drag. **FDM-967/SB-05** supplies bounded widget lifecycle/popups; see
+[the provider/view API](SIDEBAR_WIDGETS.md). **FDM-968/SB-06** owns this integrated
+candidate and physical runtime qualification. Keep the feature-bearing PR Draft until the
 integrated core passes SB-06. Source acceptance does not merge, install or deploy.
