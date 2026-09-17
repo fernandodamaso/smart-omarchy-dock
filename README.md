@@ -751,10 +751,11 @@ window-icon activation focuses the exact window in place; Ctrl+click explicitly
 permits pulling its workspace to the clicked dock. SmartDock also has
 **session-only movement pins** owned by the
 shared window-action controller: an individual window can be pinned to its
-current reliable workspace from its context menu, and a workspace can be pinned
-to its current monitor through the shared API consumed by the workspace-header
-menu added in FDM-943. These pins are deliberately not settings, Hyprland rules,
-or persistent configuration; restarting the SmartDock host clears them.
+current reliable workspace from its context menu. The controller also retains
+workspace-monitor pin enforcement for callers that establish such a pin, though
+the current workspace header has no pin menu. These pins are deliberately not
+settings, Hyprland rules, or persistent configuration; restarting the SmartDock
+host clears them.
 
 A window workspace pin blocks SmartDock menu and drag relocations to another
 workspace, including represented groups when any captured member is pinned.

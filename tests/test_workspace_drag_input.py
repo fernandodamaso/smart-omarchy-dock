@@ -528,31 +528,30 @@ Item {{
       mouseClick(icon, 30, 30, Qt.LeftButton)
       compare(icon.activationCalls, 1)
     }}
-    function test_iconCtrlHeldAcrossCanceledGestureDoesNotActivate() {{
+    function test_iconCtrlReleasedBeforeCanceledGestureEndsDoesNotActivate() {{
       var icon = freshIcon()
       var delta = Application.styleHints.startDragDistance + 7
-      keyPress(Qt.Key_Control)
-      mousePress(icon, 30, 30, Qt.LeftButton)
-      mouseMove(icon, 30 + delta, 30, 20)
+      mousePress(icon, 30, 30, Qt.LeftButton, Qt.ControlModifier)
+      mouseMove(icon, 30 + delta, 30, 20,
+        Qt.LeftButton, Qt.ControlModifier)
       compare(icon.beginCalls, 1)
-      keyRelease(Qt.Key_Control)
-      mouseMove(scene, 600, 200, 20)
+      mouseMove(scene, 600, 200, 20, Qt.LeftButton, Qt.NoModifier)
       mouseRelease(scene, 600, 200, Qt.LeftButton)
       tryCompare(icon, "workspaceGestureOwned", false)
       compare(icon.activationCalls, 0)
       mouseClick(icon, 30, 30, Qt.LeftButton)
       compare(icon.activationCalls, 1)
     }}
-    function test_iconCtrlReleasedAfterCanceledGestureDoesNotActivate() {{
+    function test_iconCtrlHeldThroughCanceledGestureDoesNotActivate() {{
       var icon = freshIcon()
       var delta = Application.styleHints.startDragDistance + 7
-      keyPress(Qt.Key_Control)
-      mousePress(icon, 30, 30, Qt.LeftButton)
-      mouseMove(icon, 30 + delta, 30, 20)
+      mousePress(icon, 30, 30, Qt.LeftButton, Qt.ControlModifier)
+      mouseMove(icon, 30 + delta, 30, 20,
+        Qt.LeftButton, Qt.ControlModifier)
       compare(icon.beginCalls, 1)
-      mouseMove(scene, 600, 200, 20)
-      mouseRelease(scene, 600, 200, Qt.LeftButton)
-      keyRelease(Qt.Key_Control)
+      mouseMove(scene, 600, 200, 20,
+        Qt.LeftButton, Qt.ControlModifier)
+      mouseRelease(scene, 600, 200, Qt.LeftButton, Qt.ControlModifier)
       tryCompare(icon, "workspaceGestureOwned", false)
       compare(icon.activationCalls, 0)
       mouseClick(icon, 30, 30, Qt.LeftButton)
