@@ -24,7 +24,7 @@ Item {
   property point pointerScene: Qt.point(0, 0)
   property bool captureReady: false
   property int captureGeneration: 0
-  property var ghostImage: null
+  property QtObject ghostImage: null
   property url ghostUrl: ""
   property size ghostSize: Qt.size(0, 0)
   property point grabOffset: Qt.point(0, 0)
