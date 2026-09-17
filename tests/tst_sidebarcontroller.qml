@@ -17,9 +17,17 @@ TestCase {
     }
   }
   Component { id: factory; DockSidebarController { host: writer } }
+  Component {
+    id: toplevelFactory
+    QtObject {
+      property string appId: "browser"
+      property string title: ""
+    }
+  }
   function test_actual_controller_identity_folds_and_collapse_intent() {
-    var a = {appId:"browser",title:"A"}
-    var b = {appId:"browser",title:"B"}
+    // Native toplevel handles must keep QObject identity across property injection.
+    var a = createTemporaryObject(toplevelFactory, this, {title:"A"})
+    var b = createTemporaryObject(toplevelFactory, this, {title:"B"})
     var screen = {name:"DP-1",width:1920,height:1080}
     var c = createTemporaryObject(factory, this, {
       settings: {presentationMode:"sidebar",pinned:[],workspaceGroups:[],sidebarCollapsed:false},
@@ -29,13 +37,18 @@ TestCase {
         {wayland:b,address:"0xb",lastIpcObject:{workspace:{id:1},monitor:0}}]
     })
     verify(c !== null)
+    verify(c.toplevels[0] === a)
+    verify(c.hyprToplevels[0].wayland === a)
     c.refresh()
     compare(c.selectedConnector,"DP-1")
     compare(c.registry.entries.length,2)
     var windows = c.projection.rows.filter(function(r) {return r.kind === "window"})
     compare(windows.length,2)
     var first = windows[0].key
-    var app = c.projection.rows.filter(function(r) {return r.kind === "application"})[0]
+    compare(windows[0].workspaceIdentity,"id:1")
+    var apps = c.projection.rows.filter(function(r) {return r.kind === "application"})
+    compare(apps.length,1)
+    var app = apps[0]
     c.toggleApplication(app.key); c.refresh()
     compare(c.projection.rows.filter(function(r) {return r.kind === "window"}).length,0)
     c.settings = Object.assign({},c.settings,{sidebarCollapsed:true}); c.refresh()
