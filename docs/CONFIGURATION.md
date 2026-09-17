@@ -34,7 +34,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 50 rows 
 | `presentationMode` | `"classic"` | Classic per-screen docks or one global sidebar. Sidebar is an unreleased integrated candidate. |
 | `sidebarEdge` | `"left"` | Global sidebar edge; leaves classic position unchanged. |
 | `sidebarMonitor` | `""` | Exact case-sensitive connector, or empty for automatic placement. Disconnected preferences are retained; control characters are rejected. |
-| `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference. |
+| `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
 | `sidebarCollapsed` | `false` | Explicit icon rail. Every eligible window remains represented; expanded width and session app folds are retained. |
 | `position` | `"bottom"` | String: top, bottom, left, right. Vertical edges render workspaceLayout as flat. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
@@ -115,7 +115,7 @@ Existing unknown keys and untouched legacy values survive minimal mutations. New
 
 `controlCommand` is executable configuration: store only an intentionally chosen command, quote it literally, and never run it merely to check validity. The existing launcher action can execute it later. Pointer `close` can close every live member of an application group when used. Changes to either require explicit intent; schema reads, dry runs and metadata validation do not execute them.
 
-## Sidebar presentation (SB-02 source foundation)
+## Sidebar presentation (SB-02 + SB-03 source foundation)
 
 Classic remains the default. `presentationMode: "sidebar"` selects one panel,
 while classic preferences remain requested data and return unchanged on switching
@@ -132,10 +132,20 @@ zero width and `mapped: false`. Width uses unreserved logical screen geometry.
 
 The five sidebar settings support the existing typed set/apply/reset/schema/get
 commands. Width writes accept integers 240–480; the runtime may clamp the effective
-width below 240 on narrow screens without rewriting the requested value. Collapsing
-preserves the expanded width and session-only app folds. Unknown keys, pins,
-artwork, hidden apps, and provider preferences survive unrelated changes.
+width below 240 on narrow screens without rewriting the requested value. The
+expanded resize handle lives inside the reserved width. Pointer motion changes only
+temporary effective geometry; a changed release submits one `sidebarExpandedWidth`
+intent. No-op release and cancellation write nothing. Collapsing submits only
+`sidebarCollapsed`, preserves expanded width and retains session-only app folds.
+Unknown keys, pins, artwork, hidden apps and provider preferences survive unrelated
+changes.
+
+Gesture commits use the existing sole writer. A stale captured field is rejected
+rather than replayed; an accepted write may report persistence pending without
+becoming a rejected intent. Persistence failure keeps the accepted live value and
+retry persists the latest complete host snapshot. See `SIDEBAR_RESIZE.md` for the
+exact geometry, cancellation, writer-count and deferred runtime contracts.
 
 This is an **unreleased Draft foundation**, not integrated sidebar acceptance.
-SB-03 owns resize gestures, SB-04 full navigation/menus/keyboard/drag, SB-05 widgets,
-and SB-06 live qualification. See the source-only `docs/SIDEBAR.md` contract.
+SB-04 owns full navigation/menus/keyboard/drag, SB-05 widgets, and SB-06 live
+qualification. See the source-only `docs/SIDEBAR.md` contract.
