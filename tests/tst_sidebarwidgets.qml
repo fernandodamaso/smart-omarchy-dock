@@ -7,6 +7,8 @@ TestCase {
   id: testCase
   name: "SidebarWidgets"
   when: windowShown
+  // TestCase is hidden by default; popup anchors need an actual visible parent.
+  visible: true
   width: 640; height: 480
   QtObject { id: writer; function saveSetting(key,value) { return {ok:true,data:{applied:true}} } }
   Component { id: factory; DockSidebarController { host: writer } }
@@ -73,8 +75,19 @@ TestCase {
     var p = createTemporaryObject(providerFactory,testCase)
     var c = build(p)
     var anchor=createTemporaryObject(anchorFactory,testCase)
+    verify(anchor !== null)
+    compare(anchor.visible,true,"fixture anchor must be effectively visible")
+    verify(c.widgetWorkActive)
+    anchor.visible=false
+    verify(!c.openWidgetPopup("fixture.one",anchor),"hidden anchors fail closed")
+    compare(c.widgetPopupId,"")
+    anchor.visible=true
     verify(c.openWidgetPopup("fixture.one",anchor))
     compare(c.widgetPopupId,"fixture.one")
+    anchor.visible=false
+    compare(c.widgetPopupId,"","hiding an open popup anchor closes the session")
+    anchor.visible=true
+    verify(c.openWidgetPopup("fixture.one",anchor))
     verify(c.openWidgetPopup("*",anchor)); compare(c.widgetPopupId,"*")
     verify(!c.openWidgetPopup("not.enabled",anchor)); compare(c.widgetPopupId,"*")
     c.closeWidgetPopup(); compare(c.widgetPopupId,"")
