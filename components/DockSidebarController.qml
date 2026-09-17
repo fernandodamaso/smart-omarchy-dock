@@ -100,19 +100,25 @@ property bool resizeActive: false
 
   function openWidgetPopup(id, anchor) {
     if (!root.widgetWorkActive || !anchor || !anchor.visible || !root.widgetIds.length) return false
+    if (root.interactionBusy && !root.widgetPopupId) return false
     var view = root.widgetView(id)
     // Unknown imported IDs may display their unavailable status in overflow, but
     // they cannot execute a factory or open a provider popup.
     if (id !== "*" && (!view || !view.registered || !view.available)) return false
     root.widgetPopupAnchor = anchor
     root.widgetPopupId = id
+    root.interactionBusy = true
     root.widgetAnchorChanged()
     return true
   }
 
   function closeWidgetPopup() {
+    var hadPopup = root.widgetPopupId !== ""
     root.widgetPopupId = ""
     root.widgetPopupAnchor = null
+    // Clear only the popup-owned busy bit when no other interaction remains.
+    if (hadPopup && !root.resizeActive && !root.rowDragActive)
+      root.interactionBusy = false
   }
 
   function widgetViewFailed(id, expected) {
