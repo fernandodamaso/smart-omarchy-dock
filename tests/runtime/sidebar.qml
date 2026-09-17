@@ -29,6 +29,8 @@ ShellRoot {
   property var windowKeys: []
   property int mutationRevision: 0
   property string mutationWriteText: ""
+  property int resizePreviewB: 0
+  property int resizePreviewC: 0
   QtObject { id: a; property string appId: "fixture.browser"; property string title: "Alpha"; property bool activated: false }
   QtObject { id: b; property string appId: "fixture.browser"; property string title: "Beta"; property bool activated: false }
   QtObject { id: c; property string appId: "fixture.browser"; property string title: "Other workspace"; property bool activated: false }
@@ -213,32 +215,39 @@ ShellRoot {
           require(h.sidebarPanel.resizeHandle.pointerTarget === null, "resize handler must use target: null")
           root.mutationRevision = h.settingsRevision
           root.mutationWriteText = h.settingsWriteText
+          var maxWidth = controller.geometry.maximum
+          var previewA = Math.min(maxWidth, 340)
+          var previewB = Math.min(maxWidth, 360)
+          var previewC = Math.min(maxWidth, 390)
+          require(previewB > 320 && previewC > previewB, "screen too narrow for resize fixture deltas")
           var start = root.innerEdgeX()
           require(controller.beginResize(start), "right-edge resize did not capture")
-          require(controller.updateResize(start - 20), "first preview move")
-          require(h.sidebarPanel.implicitWidth === 340 && h.sidebarPanel.exclusiveZone === 340, "live width/reservation 340")
-          require(controller.updateResize(start - 40), "second preview move")
-          require(h.sidebarPanel.implicitWidth === 360 && h.sidebarPanel.exclusiveZone === 360, "stable right-edge global delta")
+          require(controller.updateResize(start - (previewA - 320)), "first preview move")
+          require(h.sidebarPanel.implicitWidth === previewA && h.sidebarPanel.exclusiveZone === previewA, "live width/reservation preview A")
+          require(controller.updateResize(start - (previewB - 320)), "second preview move")
+          require(h.sidebarPanel.implicitWidth === previewB && h.sidebarPanel.exclusiveZone === previewB, "stable right-edge global delta")
           require(h.settingsRevision === root.mutationRevision, "pointer motion mutated settings")
           require(h.settings.sidebarExpandedWidth === 320, "pointer motion overwrote requested width")
           require(h.settingsWriteText === root.mutationWriteText, "pointer motion reached FileView writer")
           require(widgetOne.subscriptions === 2, "live resize restarted widget providers")
+          root.resizePreviewB = previewB
+          root.resizePreviewC = previewC
         } else if (root.step === 10) {
           var committed = controller.finishResize(false)
           require(committed.accepted, "resize release was rejected")
         } else if (root.step === 11) {
-          require(h.settings.sidebarExpandedWidth === 360, "release did not save effective requested width")
+          require(h.settings.sidebarExpandedWidth === root.resizePreviewB, "release did not save effective requested width")
           require(h.settingsRevision === root.mutationRevision + 1, "changed release must make exactly one settings revision")
-          require(h.sidebarPanel.implicitWidth === 360 && h.sidebarPanel.exclusiveZone === 360, "committed reservation mismatch")
+          require(h.sidebarPanel.implicitWidth === root.resizePreviewB && h.sidebarPanel.exclusiveZone === root.resizePreviewB, "committed reservation mismatch")
           root.mutationRevision = h.settingsRevision
           var startCancel = root.innerEdgeX()
           require(controller.beginResize(startCancel), "cancel resize did not capture")
-          controller.updateResize(startCancel - 30)
-          require(h.sidebarPanel.implicitWidth === 390, "cancel preview missing")
+          controller.updateResize(startCancel - (root.resizePreviewC - root.resizePreviewB))
+          require(h.sidebarPanel.implicitWidth === root.resizePreviewC, "cancel preview missing")
           h.sidebarPanel.resizeHandle.cancelActiveResize("fixture-grab-loss")
           require(!controller.resizeActive, "grab-loss cancellation left resize active")
           require(h.settingsRevision === root.mutationRevision, "cancel wrote settings")
-          require(h.sidebarPanel.implicitWidth === 360, "cancel did not revert to host width")
+          require(h.sidebarPanel.implicitWidth === root.resizePreviewB, "cancel did not revert to host width")
           require(widgetOne.subscriptions === 2, "cancel resize restarted widget providers")
         } else if (root.step === 12) {
           root.mutationRevision = h.settingsRevision
@@ -341,7 +350,8 @@ ShellRoot {
           root.probe(0,0)
         } else {
           console.log("sidebar: PASS (production host/panel/delegates/widgets, resize reservation/writer-count, leases/popups, layers, teardown)")
-          Quickshell.quit()
+          fixtureTimer.running = false
+          Qt.quit()
         }
         root.step++
       } catch (error) { root.fail(error) }
