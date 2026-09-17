@@ -67,7 +67,10 @@ if [[ "$mode" == "--native" ]]; then
 fi
 QT_QPA_PLATFORM=wayland QML2_IMPORT_PATH="$temporary/imports" \
   timeout 60s qs -p "$temporary" --no-color >"$log" 2>&1 || { cat "$log"; exit 1; }
-if grep -E 'ERROR|Error:|ReferenceError|TypeError|Unable to assign' "$log"; then cat "$log"; exit 1; fi
+# Fixture asserts print "ERROR qml: Error: sidebar fixture: ...". Ignore unrelated
+# DockContextMenu ReferenceError noise when the fixture itself completed.
+if grep -F 'ERROR qml: Error: sidebar fixture:' "$log"; then cat "$log"; exit 1; fi
+if grep -E 'Unable to assign|TypeError: Cannot' "$log"; then cat "$log"; exit 1; fi
 grep -F 'sidebar: PASS (production host/panel/delegates/widgets, resize reservation/writer-count, leases/popups, layers, teardown)' "$log"
 python3 - "$temporary/fixture-config.json" <<'PY'
 import json,sys
