@@ -1,0 +1,26 @@
+name: FDM-964 source workspace
+on:
+  push:
+    branches: [agent/fdm-964-source-workspace]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: 6b13dd60233f45accb70e09a07e95464966e2d6c
+      - name: Package exact accepted source
+        run: |
+          git branch sb02-base HEAD
+          git bundle create /tmp/sb02-base.bundle sb02-base
+          git rev-parse HEAD > /tmp/sb02-base.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdm-964-base
+          retention-days: 3
+          path: |
+            /tmp/sb02-base.bundle
+            /tmp/sb02-base.txt
