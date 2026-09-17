@@ -410,6 +410,11 @@ function settingsDefaults() {
     workspaceBadgeTextColor: "",
     borderWidthEnabled: false,
     borderWidth: 2,
+    presentationMode: "classic",
+    sidebarEdge: "left",
+    sidebarMonitor: "",
+    sidebarExpandedWidth: 320,
+    sidebarCollapsed: false,
     position: "bottom",
     fullLength: false,
     reserveSpace: true,
@@ -533,6 +538,16 @@ function effectiveBorderWidth(enabled, override, themeWidth) {
 function normalizeSetting(key, value) {
   var defaults = settingsDefaults()
   switch (key) {
+  case "presentationMode":
+    return value === "sidebar" ? "sidebar" : "classic"
+  case "sidebarEdge":
+    return value === "right" ? "right" : "left"
+  case "sidebarMonitor":
+    return typeof value === "string" && !/[\x00-\x1f\x7f-\x9f]/.test(value) ? value : ""
+  case "sidebarExpandedWidth":
+    return steppedNumber(value, 240, 480, 1, defaults.sidebarExpandedWidth, 0)
+  case "sidebarCollapsed":
+    return typeof value === "boolean" ? value : false
   case "iconSize":
     return steppedNumber(value, 24, 96, 1, defaults.iconSize, 0)
   case "magnification":

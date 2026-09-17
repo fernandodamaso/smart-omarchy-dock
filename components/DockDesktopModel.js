@@ -6,22 +6,29 @@
 
 // Pure construction only. The caller supplies normalized settings and snapshots;
 // it retains refresh scheduling, drag freeze, comparisons, badges and previews.
-// SB-01 exposes classic modes only. Sidebar projection/configuration is SB-02.
+// Sidebar requests all-monitor native inventory without changing saved classic settings.
 function build(input) {
-  if (input.mode !== "classic-flat" && input.mode !== "classic-grouped")
+  var sidebar = input.mode === "sidebar"
+  if (!sidebar && input.mode !== "classic-flat" && input.mode !== "classic-grouped")
     throw new Error("Unsupported desktop presentation mode: " + input.mode)
+  if (sidebar) input = Object.assign({}, input, {
+    filteredToplevels: input.toplevels,
+    settings: Object.assign({}, input.settings, {
+      workspaceMonitorScope: "all", workspaceGroups: [], sortByWorkspace: false
+    })
+  })
 
   var settings = input.settings
   var records = []
   var workspacePresentation = null
-  if (input.mode === "classic-grouped") {
+  if (sidebar || input.mode === "classic-grouped") {
     var monitor = input.dockMonitor
     var ipc = monitor ? monitor.lastIpcObject || monitor : ({})
     records = input.toplevels.map(function(toplevel) {
       return Object.assign({ toplevel: toplevel }, DockWindowModel.locationForToplevel(
         toplevel, input.hyprToplevels, input.minimizedOrigins))
     })
-    var baseItems = DockModel.buildVisibleItems(
+    var baseItems = sidebar ? sidebarBaseItems(input) : DockModel.buildVisibleItems(
       settings.pinned, input.toplevels, input.applications, input.hyprToplevels,
       false, false, settings.hiddenApplications)
     var localizedItems = WorkspaceGroupModel.prepareWorkspaceItems(
@@ -47,14 +54,24 @@ function build(input) {
     return Object.assign({ toplevel: toplevel }, DockWindowModel.locationForToplevel(
       toplevel, input.hyprToplevels, input.minimizedOrigins))
   })
-  var flatBaseItems = DockModel.buildVisibleItems(
+  var flatBaseItems = sidebar ? baseItems : DockModel.buildVisibleItems(
     settings.pinned, input.filteredToplevels, input.applications, input.hyprToplevels,
     false, false, settings.hiddenApplications)
   var visibleItems = WorkspaceGroupModel.buildFlatPresentation(
     flatBaseItems, flatRecords, settings.workspaceGroups, settings.sortByWorkspace)
   return {
-    records: input.mode === "classic-grouped" ? records : flatRecords,
+    records: sidebar || input.mode === "classic-grouped" ? records : flatRecords,
     visibleItems: visibleItems,
     workspacePresentation: workspacePresentation
   }
+}
+
+// An empty Wayland appId is not evidence for matching a pin's empty StartupWMClass.
+// Keep such handles reachable with neutral artwork; classic matching is unchanged.
+function sidebarBaseItems(input) {
+  var known = input.toplevels.filter(function(t) { return !!String(t.appId || "").trim() })
+  var unknown = input.toplevels.filter(function(t) { return !String(t.appId || "").trim() })
+  return DockModel.buildVisibleItems(input.settings.pinned, known, input.applications,
+    input.hyprToplevels, false, false, input.settings.hiddenApplications).concat(
+      DockModel.buildVisibleItems([], unknown, [], input.hyprToplevels, false, false, []))
 }

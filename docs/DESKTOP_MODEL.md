@@ -2,7 +2,8 @@
 
 `components/DockDesktopModel.js` extracts the classic construction path from
 `Dock.qml` without introducing a sidebar, configuration migration or service.
-The extraction baseline is `1a81fe650f686f1b8dfb10b25f5c0d1de6a4bab8`.
+The SB-02 sidebar extension is documented in `SIDEBAR.md`; the classic extraction
+contract below remains unchanged. The extraction baseline is `1a81fe650f686f1b8dfb10b25f5c0d1de6a4bab8`.
 
 ## Snapshot interface
 
@@ -22,12 +23,13 @@ The caller supplies normalized settings and array snapshots. `minimizedOrigins`
 is the host-owned snapshot (or an empty object); `focusedWorkspace` is the
 canonical focused workspace identity, and `dockMonitor` is the resolved native
 monitor or null. `filteredToplevels` is the existing classic window-scope result,
-including its urgent-exception policy. No setting is written or renormalized by
-the builder. Unsupported modes throw rather than silently selecting a renderer.
+including its urgent-exception policy. No caller setting is written by the builder. Sidebar mode copies its presentation
+settings to enforce all-monitor scope and inactive classic grouping; classic mode
+retains the normalization boundary below. Unsupported modes throw rather than silently selecting a renderer.
 
 - `records` retains actual toplevel object identities and native location data.
   Grouped mode uses the complete inventory; flat mode uses the filtered inventory.
-- `visibleItems` is **always** the classic filtered flat presentation, even in
+- In classic modes, `visibleItems` is **always** the classic filtered flat presentation, even in
   grouped mode. It retains saved local grouping and optional workspace sorting.
 - `workspacePresentation` is the unprojected native grouped presentation in
   grouped mode, or **null** in flat mode. Null means the classic caller leaves its
@@ -114,3 +116,13 @@ no classic saved grouping; add its projection as `DockSidebarModel.js`, not by
 repurposing animated reconciliation. Keep one existing host/action/writer/provider
 path. Record the child PR's exact parent base and rerun evidence after any
 retarget/rebase, as required by `docs/DELIVERY.md`.
+
+## SB-02 extension
+
+`mode: "sidebar"` now requests all windows on all monitors, regardless of classic
+`filteredToplevels`, `workspaceGroups` or sorting preferences. The input is not
+mutated. `records` is complete inventory; `visibleItems` is all-window flat data;
+`workspacePresentation` retains the native grouped shape. The sidebar projection
+adds stable handle identities and structural application grouping. See `SIDEBAR.md`.
+The unknown-app-ID pin-matching guard is sidebar-only; classic characterization
+remains the original immutable oracle.

@@ -839,3 +839,12 @@ and live destination; lost grabs, invalid releases or incompatible layout change
 clear the feedback without moving windows. See the
 [implementation plan and remote/local handoff](docs/superpowers/plans/2026-09-09-smartdock-workspace-drag.md)
 for test coverage and the separate real-pointer Omarchy qualification gate.
+
+### Global sidebar source foundation (FDM-964 / SB-02)
+
+The unreleased sidebar candidate adds `presentationMode` (default `classic`),
+`sidebarEdge` (`left`), `sidebarMonitor` (automatic), `sidebarExpandedWidth` (320),
+and `sidebarCollapsed` (false). It shows monitor/workspace/application/window
+hierarchy or every individual window icon in a rail; only app groups fold.
+Classic preferences remain unchanged. This source slice is Draft, not a deployed
+or fully interactive sidebar release. [Implementation and qualification](docs/SIDEBAR.md).

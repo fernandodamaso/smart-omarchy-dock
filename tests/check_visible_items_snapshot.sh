@@ -25,7 +25,7 @@ grep -Fq 'interval: 0' <<<"$refresh_timer" \
 grep -Fq 'onTriggered: root.refreshVisibleItems()' <<<"$refresh_timer" \
   || fail 'visibleItems timer must invoke the refresh helper'
 
-build_calls="$(rg -n 'DockModel\.buildVisibleItems\(' "$desktop_model" | wc -l | tr -d ' ')"
+build_calls="$(sed -n '/^function build(input)/,/^}/p' "$desktop_model" | rg -n 'DockModel\.buildVisibleItems\(' | wc -l | tr -d ' ')"
 [[ "$build_calls" == "2" ]] \
   || fail "expected complete-inventory and flat buildVisibleItems calls, found $build_calls"
 refresh_body="$(sed -n '/function refreshVisibleItems()/,/^  }/p' "$dock")"

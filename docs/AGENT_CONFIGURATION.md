@@ -146,3 +146,19 @@ bash ./uninstall.sh --cli-only
 Client files live under `${XDG_DATA_HOME:-$HOME/.local/share}/smartdock-cli`; the shared wrapper is `${XDG_BIN_HOME:-$HOME/.local/bin}/smartdock`. Client-only installation/removal does not install/start a dock, user config, autostart, agent launchers or provider. It coexists with standalone in either order; removal retains the wrapper while another bundle owns it. When both exist the wrapper prefers the client-only adapter, so refresh that bundle deliberately from the intended checkout.
 
 The adapter uses standard-library Python and bounded argv subprocesses: `qs list --all --json` and exact `qs ipc --pid PID call -- smartdock request PAYLOAD`. It does not use the Omarchy wrapper's newest-instance selection, guess wrapper flags or implement sockets. Standalone lifecycle commands are explicit and separate, never a way to configure a plugin. Full Omarchy IPC/FileView/theme/image/monitor behavior belongs to the exact-SHA local handoff; this guide does not authorize deployment or claim those checks passed.
+
+## Sidebar candidate boundary
+
+Before a sidebar request, discover `presentationMode`, `sidebarEdge`,
+`sidebarMonitor`, `sidebarExpandedWidth`, and `sidebarCollapsed` through the runtime
+schema. They may be unavailable in the installed version. Source SB-02 is a Draft
+foundation, not permission to deploy or change the production desktop.
+
+Use the sole host writer and change only the requested sidebar field. Never copy
+classic values into sidebar preferences, rewrite classic `workspaceGroups` to fold
+apps, or save a topology-clamped width. Collapsing preserves expanded width; app
+folds are host-session state. Keep the saved connector on disconnect. Inspect
+requested and effective values plus `data.presentation` for placement and geometry.
+Do not infer rejection from `E_BUSY` when `data.applied` is true, or claim durability
+without persisted readback. Physical qualification belongs to SB-06; the source
+handoff and runnable production fixture are documented in `docs/SIDEBAR.md` in the source checkout.

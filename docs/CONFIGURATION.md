@@ -6,7 +6,7 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 45 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 50 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
@@ -31,6 +31,11 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 45 rows 
 | `workspaceBadgeTextColor` | `""` | Color string; requires workspaceBadgeTextColorEnabled. |
 | `borderWidthEnabled` | `false` | Boolean; enables a fixed width instead of theme-owned widths. |
 | `borderWidth` | `2` | Integer 0–8 logical pixels; relevant only with borderWidthEnabled. |
+| `presentationMode` | `"classic"` | Classic per-screen docks or one global sidebar. Sidebar is an unreleased integrated candidate. |
+| `sidebarEdge` | `"left"` | Global sidebar edge; leaves classic position unchanged. |
+| `sidebarMonitor` | `""` | Exact case-sensitive connector, or empty for automatic placement. Disconnected preferences are retained; control characters are rejected. |
+| `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference. |
+| `sidebarCollapsed` | `false` | Explicit icon rail. Every eligible window remains represented; expanded width and session app folds are retained. |
 | `position` | `"bottom"` | String: top, bottom, left, right. Vertical edges render workspaceLayout as flat. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
 | `reserveSpace` | `true` | Boolean; effective false while autoHide is enabled, without erasing this request. |
@@ -42,7 +47,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 45 rows 
 | `sortByWorkspace` | `false` | Boolean; flat-layout workspace sorting; closed pins remain first. |
 | `workspaceLayout` | `"flat"` | String: flat or grouped. Grouped cards render on top/bottom only. |
 | `workspaceMonitorScope` | `"all"` | String: all or current-monitor; grouped cards only. |
-| `workspaceMonitorOrder` | `[]` | Exact case-sensitive connector-name array. Empty uses automatic physical x/y order; configured connected monitors lead, unlisted connected monitors append automatically, and disconnected names remain saved for reconnect. Grouped/all presentation only; never reconfigures Hyprland monitors. |
+| `workspaceMonitorOrder` | `[]` | Exact case-sensitive connector-name array. Empty uses automatic physical x/y order; configured connected monitors lead, unlisted connected monitors append automatically, and disconnected names remain saved for reconnect. Classic grouped/all and global sidebar presentation; never reconfigures Hyprland monitors. |
 | `groupWindows` | `false` | Deprecated/inactive compatibility Boolean. Stored legacy `true` is preserved on read and unrelated writes but never changes presentation; new attempts to enable it are rejected. |
 | `workspaceGroups` | `[]` | Strict opt-in `{desktopId, workspace}` pairs. Workspace identities are canonical `id:N` or safe `name:N`; duplicate pairs and ambiguous/special identities are rejected atomically. |
 | `interfaceAnimationsEnabled` | `true` | Boolean; interface transitions, not every compositor animation or attention nudge. |
@@ -109,3 +114,28 @@ Icon overrides are app-wide and SmartDock-only. Set/reset changes one latest-map
 Existing unknown keys and untouched legacy values survive minimal mutations. New unknown keys are rejected. An explicit array/object patch replaces that whole key, not a deep merge. Prefer `apps`/`icons` commands for individual membership/order/artwork changes and touched-key rollback after fresh readback.
 
 `controlCommand` is executable configuration: store only an intentionally chosen command, quote it literally, and never run it merely to check validity. The existing launcher action can execute it later. Pointer `close` can close every live member of an application group when used. Changes to either require explicit intent; schema reads, dry runs and metadata validation do not execute them.
+
+## Sidebar presentation (SB-02 source foundation)
+
+Classic remains the default. `presentationMode: "sidebar"` selects one panel,
+while classic preferences remain requested data and return unchanged on switching
+back. `sidebarMonitor` is an exact case-sensitive connector (empty is automatic);
+disconnected names remain saved. Placement does not filter the window inventory.
+
+Sidebar effective output uses all monitors, structural workspace-local application
+groups, persistent reservation, icons capped at 32, and no previews or auto-hide.
+Classic click/middle-click/scroll actions are reported as `null` (inactive).
+The `presentation` diagnostic lists inactive classic settings, selected connector,
+effective persistent width and whether that geometry can map. These are source
+projections, not proof that the compositor mapped a surface. No screen means
+zero width and `mapped: false`. Width uses unreserved logical screen geometry.
+
+The five sidebar settings support the existing typed set/apply/reset/schema/get
+commands. Width writes accept integers 240–480; the runtime may clamp the effective
+width below 240 on narrow screens without rewriting the requested value. Collapsing
+preserves the expanded width and session-only app folds. Unknown keys, pins,
+artwork, hidden apps, and provider preferences survive unrelated changes.
+
+This is an **unreleased Draft foundation**, not integrated sidebar acceptance.
+SB-03 owns resize gestures, SB-04 full navigation/menus/keyboard/drag, SB-05 widgets,
+and SB-06 live qualification. See the source-only `docs/SIDEBAR.md` contract.

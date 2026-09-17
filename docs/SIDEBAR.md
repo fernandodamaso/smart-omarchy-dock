@@ -1,0 +1,156 @@
+# SB-02 — Global sidebar source contract
+
+**FDM-964, unreleased Draft foundation.** This slice implements shared construction,
+projection, one global panel, app folding/rail, typed preferences and initial
+reservation. It does not deploy, qualify a compositor, or complete the integrated
+sidebar. Classic remains the default. Parent contract: FDM-962.
+
+## Source boundary
+
+Start base: `6b13dd60233f45accb70e09a07e95464966e2d6c` on
+`feat/fdm-963-shared-desktop` (PR #74). Stack SB-02 against that exact accepted
+source, not production `main`, until the parent lands. See `DELIVERY.md` for fresh
+base/head evidence after any rebase, retarget or new commit.
+
+- `DockDesktopModel.build(input)` now accepts `mode: "sidebar"`, using the existing
+  native workspace construction with all windows/monitors and no classic saved
+  grouping. Classic inputs and the 264-case characterization remain unchanged.
+  Unknown Wayland app IDs are isolated from pin matching in sidebar mode; an empty
+  StartupWMClass is not evidence that a pin owns an unidentified handle.
+- `DockWorkspaceModel.monitorMetadataCompare(a, b, order)` extracts the existing
+  physical/configured comparator unchanged so connected screens without workspace
+  descriptors use the same ordering. The existing monitor-label implementation is
+  untouched; broader FDM-949 qualification remains open.
+- `DockSidebarModel.reconcileHandles(previous, toplevels)` allocates session tokens
+  once per actual live handle and prunes closure. `project(input)` consumes the
+  native desktop, screen/monitor snapshots, pins, registry, folds and collapsed
+  flag. It returns `monitorSections`, `launchers`, `unassignedWindows`, `rows` and
+  `badgeItems`. Row keys are domain identities, not list indices or addresses.
+- `selectScreen(screens, monitors, order, preferred, currentConnector, busy)` retains
+  a connected fallback, honors a preferred connector at idle, and cancels retention
+  on removal. Focus or unrelated screen addition never relocates the panel.
+- `geometry(logicalWidth, requestedWidth, collapsed)` returns mapping eligibility,
+  current/expanded widths and runtime limits. `recoverAnchor(anchor, oldKeys, rows)`
+  keeps the first visible key and offset or nearest surviving neighbor.
+- `DockSidebarController` is the sole host-owned session state object. Its snapshot
+  inputs use existing host data/revisions; it adds no timer, IPC, topology listener,
+  provider or settings writer. It owns handle tokens, app folds, selection and
+  scroll/focus keys. It emits `aboutToRefresh`, `refreshed` and `surfaceInvalidated`.
+  Its `interactionBusy` boundary retains layout and defers preferred-screen return
+  while an existing popup is open, but removal tears down immediately.
+- `DockHost` owns one mutually exclusive presentation Loader: classic Variants or
+  one `DockSidebar`. Destruction precedes deferred creation. The existing action,
+  monitor-drag, badge and config services remain singletons. Classic sidebar-edge
+  preference changes do not recreate classic renderers.
+- `DockSidebarViewport` uses Quickshell `ScriptModel.objectProp: "key"` and actual
+  `DockSidebarRow` delegates. Before model reconciliation it guards the scroll
+  anchor; background data/focus refreshes are not scroll commands. Rows bind live
+  title/focus, share `DockAppIcon`/profile artwork and `DockApplicationBadge`, and
+  render user titles as plain text. No thumbnail or automatic flyout exists.
+
+## Behavior and ownership
+
+Visual order comes from native monitor/workspace hierarchy, not `renderedItems`.
+Applications group only within a workspace, pinned apps lead in pin order, and
+members retain first-seen handle order. Empty/named/unknown-owner workspaces stay
+represented. Sticky/minimized membership follows native resolution. Unsupported
+locations appear once under Unassigned windows; closed pins appear once under
+Pinned; hidden apps are excluded. Unknown application handles have distinct app
+identities. A connected empty monitor gets a header, never an invented workspace.
+
+Only application groups fold, with session-only state. Workspaces and monitors do
+not collapse or display window-total counters. Rail mode removes application and
+window names and emits every window icon, including folded members, retaining the
+wide-mode fold state. Native primary-workspace traversal assigns one app-wide badge
+owner; a folded app header can own it. Other indicators use actual window-address
+records, not an invented per-window share of an app total.
+
+The classic control command, application pin picker and optional Open Trash remain
+available as utilities using existing host actions. They are not widget providers.
+The application picker closes before surface destruction; only the sidebar's badge
+scope is removed. A sidebar never registers as an invisible classic monitor dock.
+
+## Settings and geometry
+
+The five keys are typed through bundled defaults/schema, runtime normalization,
+the existing strict host validator, Python CLI parsing and the sole FileView writer:
+`presentationMode`, `sidebarEdge`, `sidebarMonitor`, `sidebarExpandedWidth`, and
+`sidebarCollapsed`. See `CONFIGURATION.md` for their complete inventory.
+
+Requested classic settings, unknown extension keys, pins, artwork, hidden apps and
+provider preferences are preserved. `data.presentation` describes effective screen,
+width, mapping eligibility and inactive classic fields. A dry-run reports the
+proposed projection without writing. Classic action policies are `null` in sidebar
+effective output, not falsely active. Theme values are not claimed as decoded
+rendering evidence. Explicit collapse sends one field to the host, preserves width,
+and distinguishes preflight rejection from accepted-but-saving. The UI reads the
+host's persistence state; it never replays an old snapshot or claims early durability.
+
+For unreserved logical screen width W, rail = min(56, W); expanded maximum =
+min(W, max(56, min(480, floor(0.40 × W)))); minimum = min(240, maximum).
+Clamp the requested expanded width to those runtime bounds, never back into the
+saved preference. No scale division or workarea feedback loop. Zero width does not
+map. The panel anchors top/bottom plus left or right, uses normal Top layer, and
+reserves the effective persistent width exactly once. Eight pixels inside expanded
+width are reserved for SB-03's future inner-edge handle, not an active resize target.
+Rows are at least 44 logical pixels and grow with semantic font metrics; icons cap
+at 32. The stock topbar is neither disabled nor assigned guessed pixel dimensions.
+
+## Native composition inspection
+
+Inspected Omarchy Quattro source `9c5482c58dbe4974de337450754885083c91eada`:
+`shell/Ui/Button.qml`, `shell/Ui/BorderSurface.qml`, `shell/Commons/Style.qml` and
+`shell/plugins/dev-gallery/GalleryPanel.qml`. Buttons supply native focus/hover,
+keyboard activation, tooltip and theme state; BorderSurface composes semantic
+border specifications. Sidebar rows retain domain identity/artwork/attention logic
+rather than replacing the generic kit. Upstream inspection is not proof of the
+installed ABI: SB-06 records the actual Omarchy/Quickshell/Qt revisions and validates
+full-shell/topbar compatibility. Generic native Button color transitions remain
+native behavior; no sidebar geometry animation repeatedly retiles the desktop.
+
+## Validation and explicitly deferred work
+
+Focused source commands:
+
+```bash
+node tests/test_sidebar_model.mjs
+node tests/test_sidebar_host.mjs
+node tests/test_desktop_model.mjs
+python3 -m unittest discover -s tests -p 'test_sidebar_config.py'
+python3 -m unittest discover -s tests -p 'test_sidebar_qml_syntax.py'
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+```
+
+Then run the complete current `.github/workflows/ci.yml` matrix and
+`git diff --check`. The Qt test instantiates the production controller; source
+host-method tests substitute unavailable services only. Syntax parsing is not
+rendering. `tests/runtime/sidebar.qml` and `check-sidebar.sh` instantiate the actual
+host/writer/panel/viewport/rows and probe native layer counts. Fixture window and
+monitor snapshots are explicitly synthetic; the renderer/controller are not copied.
+The fixture checks literal title updates without delegate recreation, folded-to-rail
+parity, actual delegate/surface destruction, badge cleanup, classic/sidebar mode
+switches, both edges, and simulated zero-screen recovery. It does not certify real
+hotplug or physical pointer behavior.
+
+**Runtime fixture and compositor checks are unexecuted by the remote source slice.**
+FDM-968/SB-06 owns their execution and any demonstrated fixes. Inside the disposable
+Omarchy Wayland session from `DEV_SESSIONS.md`, first stop that session's ordinary
+dock, then run (never alongside a production host):
+
+```bash
+SMARTDOCK_ISOLATED_RUNTIME=1 SMARTDOCK_RUNTIME_LOG=/tmp/sidebar-runtime.log \
+  bash tests/runtime/check-sidebar.sh
+```
+
+The wrapper refuses an already mapped SmartDock layer, uses a disposable config,
+and removes its temporary source on exit. Retain sanitized logs/captures and stop
+the named guest. Real multi-monitor/fractional/portrait/hotplug, full-shell stock
+bar creation orders, focus/input, plugin validation, shell-aware lint and rendering
+remain integrated gates. A stripped plugin guest alone does not prove stock-bar
+coexistence.
+
+Next source slices: **FDM-965/SB-03** implements resize/cancellation/persistence
+races; **FDM-966/SB-04** supplies exact-target activation, menus, keyboard and drag
+(requires FDM-954); **FDM-967/SB-05** supplies bounded widget lifecycle/popups. These
+are not claimed implemented by SB-02. Keep the feature-bearing PR Draft until the
+integrated core passes SB-06. Source acceptance does not merge, install or deploy.

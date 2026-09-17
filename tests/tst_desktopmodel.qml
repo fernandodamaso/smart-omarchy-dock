@@ -56,7 +56,7 @@ TestCase {
 
   function test_unsupported_mode_is_not_silently_classic() {
     var rejected = false
-    try { DesktopModel.build(snapshot("sidebar")) } catch (error) { rejected = true }
+    try { DesktopModel.build(snapshot("unsupported")) } catch (error) { rejected = true }
     verify(rejected)
   }
 }

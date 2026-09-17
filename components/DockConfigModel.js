@@ -29,6 +29,8 @@ function valueError(value, spec) {
     if (spec.minimum !== undefined && value < spec.minimum) return "Value is below " + spec.minimum
     if (spec.maximum !== undefined && value > spec.maximum) return "Value is above " + spec.maximum
   }
+  if (spec.format === "monitor-connector" && /[\x00-\x1f\x7f-\x9f]/.test(value))
+    return "Monitor connector must not contain control characters"
   if (spec.enum && spec.enum.indexOf(value) < 0) return "Expected one of: " + spec.enum.join(", ")
   if (spec.format === "color" && value !== ""
       && !/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value)

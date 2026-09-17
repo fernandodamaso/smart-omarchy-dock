@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "DockModel.js" as DockModel
+import "DockSidebarModel.js" as SidebarModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockTrashModel.js" as TrashModel
 import "DockConfigModel.js" as ConfigModel
@@ -47,7 +48,8 @@ Item {
       writeState: root.host.settingsWriteState,
       writeError: root.host.settingsWriteError,
       persisted: root.host.settingsPersisted && !root.host.settingsReloadPending,
-      defaultsInUse: root.host.settingsDefaultsInUse
+      defaultsInUse: root.host.settingsDefaultsInUse,
+      presentation: root.presentationData(root.host.settings)
     }
   }
 
@@ -61,6 +63,36 @@ Item {
       result[name] = Object.assign({}, root.metadata.settings[name], { default: root.defaults[name] })
     }
     return result
+  }
+
+  // Requested preferences remain untouched. These diagnostics describe only the
+  // selected presentation; geometry is unavailable without a connected screen.
+  function presentationData(requested) {
+    var sidebar = DockModel.normalizeSetting("presentationMode", requested.presentationMode) === "sidebar"
+    var controller = root.host.sidebarController
+    var screen = SidebarModel.selectScreen(root.host.connectedScreens || [],
+      root.host.hyprMonitors || [], requested.workspaceMonitorOrder || [],
+      DockModel.normalizeSetting("sidebarMonitor", requested.sidebarMonitor),
+      controller ? controller.selectedConnector : "", controller ? controller.interactionBusy : false)
+    var bounds = SidebarModel.geometry(screen ? screen.width : 0,
+      requested.sidebarExpandedWidth, requested.sidebarCollapsed === true)
+    return {
+      mode: sidebar ? "sidebar" : "classic",
+      screen: sidebar && screen ? screen.name : null,
+      width: sidebar ? bounds.width : null,
+      expandedWidth: sidebar ? bounds.expandedWidth : null,
+      mapped: sidebar ? bounds.mapped : null,
+      inactiveClassicSettings: sidebar ? ["position", "workspaceLayout", "workspaceGroups",
+        "windowScope", "workspaceMonitorScope", "reserveSpace", "autoHide", "showPreviews",
+        "clickAction", "middleClickAction", "scrollAction", "magnification", "iconSize",
+        "sortByWorkspace", "fullLength", "margin", "backgroundOpacity", "backgroundColorEnabled",
+        "backgroundColor", "borderColorEnabled", "borderColor", "borderWidthEnabled", "borderWidth",
+        "workspaceBadgeBackgroundColorEnabled", "workspaceBadgeBackgroundColor", "workspaceBadgeTextColorEnabled",
+        "workspaceBadgeTextColor", "hoverGlowEnabled", "hoverGlowOpacity", "hoverGlowRadius", "magnificationRadius",
+        "urgentWindowAnimationEnabled", "showUrgentOutsideScope"] : [],
+      // SB-02 is a rendering/configuration foundation, not integrated acceptance.
+      sidebarStage: "foundation; interactions/resize/widgets pending integrated qualification"
+    }
   }
 
   function effectiveSettings(requested) {
@@ -86,6 +118,37 @@ Item {
     result.reserveSpace = DockModel.shouldReserveSpace(result.reserveSpace, result.autoHide)
     if (result.position === "left" || result.position === "right") result.workspaceLayout = "flat"
     if (result.workspaceLayout === "flat") result.workspaceMonitorScope = "all"
+    if (result.presentationMode === "sidebar") {
+      var presentation = root.presentationData(requested)
+      result.position = result.sidebarEdge
+      result.sidebarMonitor = presentation.screen
+      result.sidebarExpandedWidth = presentation.expandedWidth
+      result.windowScope = "all"
+      result.workspaceMonitorScope = "all"
+      result.workspaceLayout = "grouped"
+      result.workspaceGroups = []
+      result.reserveSpace = true
+      result.autoHide = false
+      result.showPreviews = false
+      result.magnification = 1
+      result.hoverGlowEnabled = false
+      result.urgentWindowAnimationEnabled = false
+      result.showUrgentOutsideScope = false
+      result.backgroundOpacity = 1
+      result.backgroundColorEnabled = false
+      result.borderColorEnabled = false
+      result.borderWidthEnabled = false
+      result.workspaceBadgeBackgroundColorEnabled = false
+      result.workspaceBadgeTextColorEnabled = false
+      result.iconSize = 32
+      result.sortByWorkspace = false
+      result.fullLength = true
+      result.margin = 0
+      // Sidebar navigation is not the classic configurable launcher policy.
+      result.clickAction = null
+      result.middleClickAction = null
+      result.scrollAction = null
+    }
     // Rendering resolves theme values in each dock. Null is deliberately not an
     // invented resolved color/width; requested overrides remain fully available.
     var colors = ["backgroundColor", "borderColor", "workspaceBadgeBackgroundColor", "workspaceBadgeTextColor"]
@@ -103,6 +166,7 @@ Item {
     data.changedKeys = changedKeys
     data.requested = requested
     data.effective = root.effectiveSettings(requested)
+    data.presentation = root.presentationData(requested)
     data.diff = Object.create(null)
     for (var i = 0; i < changedKeys.length; ++i) {
       var key = changedKeys[i]
