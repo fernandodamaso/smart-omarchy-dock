@@ -86,7 +86,7 @@ Item {
       root.forceActiveFocus(Qt.MouseFocusReason)
     if (!root.workspaceDrag || root.workspaceDrag.sourceItem !== root) return
     if (transition === PointerDevice.UngrabExclusive) {
-      if (point.state === EventPoint.Released)
+      if (point.state === Qt.TouchPointReleased)
         root.workspaceDrag.finish(point.scenePosition)
       else
         cancelWorkspaceDrag("non-release ungrab")
