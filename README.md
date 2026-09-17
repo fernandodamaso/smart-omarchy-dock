@@ -844,7 +844,13 @@ for test coverage and the separate real-pointer Omarchy qualification gate.
 
 The unreleased sidebar candidate adds `presentationMode` (default `classic`),
 `sidebarEdge` (`left`), `sidebarMonitor` (automatic), `sidebarExpandedWidth` (320),
-and `sidebarCollapsed` (false). It shows monitor/workspace/application/window
+`sidebarCollapsed` (false), and `sidebarWidgets` (empty). It shows monitor/workspace/application/window
 hierarchy or every individual window icon in a rail; only app groups fold.
 Classic preferences remain unchanged. This source slice is Draft, not a deployed
 or fully interactive sidebar release. [Implementation and qualification](docs/SIDEBAR.md).
+
+The SB-05 [internal widget foundation](docs/SIDEBAR_WIDGETS.md) adds bounded footer
+slots, host-owned leases and one inward popup. The production registry is empty: no
+clock/calendar, Herdr, Todoist or universal external plugin integration is claimed.
+Empty configuration adds no gap/work; unknown imported IDs are unavailable, never
+executed. Test providers exist only in fixtures. Full runtime acceptance is SB-06.

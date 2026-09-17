@@ -415,6 +415,17 @@ def scalar_value(text, spec):
              or kind == 'object' and isinstance(value, dict))
     if not valid:
         raise CliError('E_VALIDATION', 'Value must have the declared type: ' + kind)
+    if kind == 'array' and spec.get('format') == 'sidebar-widget-ids':
+        registered = spec.get('registeredIds')
+        if not isinstance(registered, list) or any(type(item) is not str for item in registered):
+            raise CliError('E_PROTOCOL', 'Live schema did not provide the internal widget registry.')
+        seen = set()
+        for item in value:
+            if type(item) is not str or item not in registered or item in seen:
+                raise CliError('E_VALIDATION', 'Widget IDs must be registered, unique strings.')
+            seen.add(item)
+        # Authentication/readiness is deliberately not a validation prerequisite.
+        # The host repeats authoritative validation, including config.apply.
     return value
 
 

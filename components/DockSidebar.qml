@@ -11,6 +11,8 @@ PanelWindow {
   required property var host
   required property var controller
   readonly property var viewport: sidebarViewport
+  readonly property var widgetArea: widgets
+  readonly property var widgetOverflowButton: widgetOverflow
   readonly property string preferenceFeedback: !host ? "" : host.settingsWriteState === "error"
     ? "Unsaved preferences: " + String(host.settingsWriteError || "Persistence failed")
     : host.settingsWriteState === "saving" ? "Saving preferences" : controller.mutationFeedback
@@ -35,6 +37,7 @@ PanelWindow {
 
   function closeSurfaces() {
     picker.visible = false
+    root.controller.closeWidgetPopup()
     root.controller.interactionBusy = false
     if (root.host && root.host.badgeTracker) root.host.badgeTracker.syncWorkspaceScopes(root.badgeScopeOwner, [])
   }
@@ -50,17 +53,33 @@ PanelWindow {
       x: surface.contentLeftInset
       width: Math.max(0, surface.width - surface.contentLeftInset - surface.contentRightInset)
       y: surface.contentTopInset
-      Ui.Button {
+      Row {
         width: parent.width
         height: sidebarViewport.rowHeight
-        iconText: root.controller.collapsed ? "»" : "«"
-        tooltipText: (root.controller.collapsed ? "Expand sidebar" : "Collapse to icon rail")
-          + (root.preferenceFeedback ? " · " + root.preferenceFeedback : "")
-        Accessible.role: Accessible.Button
-        Accessible.name: tooltipText
-        focusable: true
-        enabled: !root.controller.interactionBusy
-        onClicked: root.controller.requestCollapse()
+        Ui.Button {
+          width: parent.width - widgetOverflow.width
+          height: sidebarViewport.rowHeight
+          iconText: root.controller.collapsed ? "»" : "«"
+          tooltipText: (root.controller.collapsed ? "Expand sidebar" : "Collapse to icon rail")
+            + (root.preferenceFeedback ? " · " + root.preferenceFeedback : "")
+          Accessible.role: Accessible.Button
+          Accessible.name: tooltipText
+          focusable: true
+          enabled: !root.controller.interactionBusy
+          onClicked: root.controller.requestCollapse()
+        }
+        Ui.Button {
+          id: widgetOverflow
+          visible: widgets.overflowNeeded
+          width: visible ? Math.min(sidebarViewport.rowHeight, parent.width / 2) : 0
+          height: parent.height
+          iconText: "…"
+          tooltipText: "Widgets"
+          Accessible.role: Accessible.Button
+          Accessible.name: "Open widgets"
+          focusable: visible
+          onClicked: widgets.openOverflow(widgetOverflow)
+        }
       }
       Text {
         width: parent.width
@@ -78,11 +97,21 @@ PanelWindow {
       id: sidebarViewport
       controller: root.controller
       anchors.top: controls.bottom
-      anchors.bottom: utilities.top
+      anchors.bottom: widgets.top
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.leftMargin: surface.contentLeftInset + (!root.controller.collapsed && root.controller.edge === "right" ? 8 : 0)
       anchors.rightMargin: surface.contentRightInset + (!root.controller.collapsed && root.controller.edge === "left" ? 8 : 0)
+    }
+    DockSidebarWidgetArea {
+      id: widgets
+      controller: root.controller
+      panel: root
+      anchors.left: sidebarViewport.left
+      anchors.right: sidebarViewport.right
+      anchors.bottom: utilities.top
+      availableContentHeight: Math.max(0, utilities.y - controls.y - controls.height)
+      windowRowHeight: sidebarViewport.rowHeight
     }
     Column {
       id: utilities
@@ -90,7 +119,7 @@ PanelWindow {
       width: Math.max(0, surface.width - surface.contentLeftInset - surface.contentRightInset)
       anchors.bottom: parent.bottom
       anchors.bottomMargin: surface.contentBottomInset
-      // Utilities are not widgets. SB-05 supplies the bounded provider footer.
+      // Utilities remain reachable outside both independently scrolling viewports.
       Ui.Button {
         id: launcher
         width: parent.width
@@ -127,7 +156,10 @@ PanelWindow {
     iconOverrides: root.controller.settings.iconOverrides || ({})
     iconReloadRevision: root.host.iconReloadRevision
     onApplicationSelected: desktopId => root.host.pinApplication(desktopId)
-    onVisibleChanged: root.controller.interactionBusy = visible
+    onVisibleChanged: {
+      root.controller.interactionBusy = visible
+      if (visible) root.controller.closeWidgetPopup()
+    }
   }
   Connections {
     target: root.controller

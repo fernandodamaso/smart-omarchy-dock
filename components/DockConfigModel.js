@@ -1,4 +1,5 @@
 .pragma library
+.import "DockSidebarWidgetModel.js" as SidebarWidgetModel
 .import "DockIconModel.js" as DockIconModel
 .import "DockWorkspaceGroupModel.js" as DockWorkspaceGroupModel
 
@@ -38,6 +39,8 @@ function valueError(value, spec) {
     return "Expected empty, #RRGGBB, Qt #AARRGGBB or @theme.token"
   if (spec.type === "array") {
     if (!Array.isArray(value)) return "Expected an array"
+    if (spec.format === "sidebar-widget-ids")
+      return SidebarWidgetModel.idsError(value, spec.registeredIds)
     if (spec.format === "workspace-groups")
       return DockWorkspaceGroupModel.workspaceGroupsError(value)
     if (spec.format === "application-ids") {

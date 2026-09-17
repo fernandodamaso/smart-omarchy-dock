@@ -1,4 +1,5 @@
 .pragma library
+.import "DockSidebarWidgetModel.js" as SidebarWidgetModel
 
 function normalizedId(value) {
   return String(value || "").toLowerCase().replace(/\.desktop$/, "")
@@ -415,6 +416,7 @@ function settingsDefaults() {
     sidebarMonitor: "",
     sidebarExpandedWidth: 320,
     sidebarCollapsed: false,
+    sidebarWidgets: [],
     position: "bottom",
     fullLength: false,
     reserveSpace: true,
@@ -546,6 +548,8 @@ function normalizeSetting(key, value) {
     return typeof value === "string" && !/[\x00-\x1f\x7f-\x9f]/.test(value) ? value : ""
   case "sidebarExpandedWidth":
     return steppedNumber(value, 240, 480, 1, defaults.sidebarExpandedWidth, 0)
+  case "sidebarWidgets":
+    return SidebarWidgetModel.requestedIds(value)
   case "sidebarCollapsed":
     return typeof value === "boolean" ? value : false
   case "iconSize":

@@ -1,6 +1,6 @@
-# SB-02 — Global sidebar source contract
+# SB-02 / SB-05 — Global sidebar source contract
 
-**FDM-964, unreleased Draft foundation.** This slice implements shared construction,
+**FDM-964 and FDM-967, unreleased Draft foundation.** This slice implements shared construction,
 projection, one global panel, app folding/rail, typed preferences and initial
 reservation. It does not deploy, qualify a compositor, or complete the integrated
 sidebar. Classic remains the default. Parent contract: FDM-962.
@@ -34,7 +34,8 @@ base/head evidence after any rebase, retarget or new commit.
   keeps the first visible key and offset or nearest surviving neighbor.
 - `DockSidebarController` is the sole host-owned session state object. Its snapshot
   inputs use existing host data/revisions; it adds no timer, IPC, topology listener,
-  provider or settings writer. It owns handle tokens, app folds, selection and
+  or settings writer. SB-05 adds host-owned widget leases with no production
+  providers initially. It owns handle tokens, app folds, selection and
   scroll/focus keys. It emits `aboutToRefresh`, `refreshed` and `surfaceInvalidated`.
   Its `interactionBusy` boundary retains layout and defers preferred-screen return
   while an existing popup is open, but removal tears down immediately.
@@ -72,10 +73,10 @@ scope is removed. A sidebar never registers as an invisible classic monitor dock
 
 ## Settings and geometry
 
-The five keys are typed through bundled defaults/schema, runtime normalization,
+The six keys are typed through bundled defaults/schema, runtime normalization,
 the existing strict host validator, Python CLI parsing and the sole FileView writer:
 `presentationMode`, `sidebarEdge`, `sidebarMonitor`, `sidebarExpandedWidth`, and
-`sidebarCollapsed`. See `CONFIGURATION.md` for their complete inventory.
+`sidebarCollapsed`, plus SB-05 `sidebarWidgets`. See `CONFIGURATION.md` for their complete inventory.
 
 Requested classic settings, unknown extension keys, pins, artwork, hidden apps and
 provider preferences are preserved. `data.presentation` describes effective screen,
@@ -151,6 +152,8 @@ coexistence.
 
 Next source slices: **FDM-965/SB-03** implements resize/cancellation/persistence
 races; **FDM-966/SB-04** supplies exact-target activation, menus, keyboard and drag
-(requires FDM-954); **FDM-967/SB-05** supplies bounded widget lifecycle/popups. These
-are not claimed implemented by SB-02. Keep the feature-bearing PR Draft until the
+(requires FDM-954); **FDM-967/SB-05** adds bounded widget lifecycle/popups on the accepted SB-02
+head `1b06719163a3d333b712cbbbb73582c1a865da06`, with its Draft PR stacked against
+`feat/fdm-964-global-sidebar`. See [the provider/view API](SIDEBAR_WIDGETS.md).
+SB-03/SB-04 work is not implicitly included or runtime-qualified by this slice. Keep the feature-bearing PR Draft until the
 integrated core passes SB-06. Source acceptance does not merge, install or deploy.

@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import "DockModel.js" as DockModel
 import "DockSidebarModel.js" as SidebarModel
+import "DockSidebarWidgetModel.js" as SidebarWidgetModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockTrashModel.js" as TrashModel
 import "DockConfigModel.js" as ConfigModel
@@ -90,8 +91,10 @@ Item {
         "workspaceBadgeBackgroundColorEnabled", "workspaceBadgeBackgroundColor", "workspaceBadgeTextColorEnabled",
         "workspaceBadgeTextColor", "hoverGlowEnabled", "hoverGlowOpacity", "hoverGlowRadius", "magnificationRadius",
         "urgentWindowAnimationEnabled", "showUrgentOutsideScope"] : [],
-      // SB-02 is a rendering/configuration foundation, not integrated acceptance.
-      sidebarStage: "foundation; interactions/resize/widgets pending integrated qualification"
+      widgets: SidebarWidgetModel.describe(requested.sidebarWidgets, root.host.sidebarWidgetRegistry || {},
+        controller && controller.widgetManager ? controller.widgetManager.diagnostics() : null),
+      // Source slices remain unreleased until the integrated SB-06 runtime gate.
+      sidebarStage: "foundation with internal widget slots; integrated qualification pending"
     }
   }
 
@@ -103,6 +106,7 @@ Item {
       var value = requested[key] === undefined ? root.defaults[key] : requested[key]
       result[key] = DockModel.normalizeSetting(key, value)
     }
+    result.sidebarWidgets = SidebarWidgetModel.effectiveIds(requested.sidebarWidgets, root.host.sidebarWidgetRegistry || {})
     result.iconOverrides = ConfigModel.effectiveIcons(requested.iconOverrides)
     result.workspaceGroups = WorkspaceGroupModel.normalizeWorkspaceGroups(
       requested.workspaceGroups === undefined ? root.defaults.workspaceGroups : requested.workspaceGroups)

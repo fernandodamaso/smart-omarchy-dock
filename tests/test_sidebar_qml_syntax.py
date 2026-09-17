@@ -12,7 +12,9 @@ class SidebarQmlSyntaxTests(unittest.TestCase):
     def test_production_qml_parses(self):
         for name in ['DockHost.qml', 'components/DockSidebarController.qml',
                      'components/DockSidebar.qml','components/DockSidebarViewport.qml',
-                     'components/DockSidebarRow.qml','tests/runtime/sidebar.qml']:
+                     'components/DockSidebarRow.qml','components/DockSidebarWidgetArea.qml',
+                     'components/DockSidebarWidgetView.qml','tests/fixtures/SidebarWidgetFixture.qml',
+                     'tests/tst_sidebarwidgets.qml','tests/runtime/sidebar.qml']:
             with self.subTest(file=name):
                 result = subprocess.run([FORMATTER, str(ROOT / name)], capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 0, result.stderr)

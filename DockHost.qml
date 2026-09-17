@@ -26,6 +26,9 @@ Item {
   readonly property var hyprWorkspaces: Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
   readonly property var desktopToplevels: ToplevelManager.toplevels.values || []
   readonly property var hyprToplevels: Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
+  // Internal provider adapters register here in their own source slices. No
+  // external QML paths, configurable commands, test IDs or additional services.
+  readonly property var sidebarWidgetRegistry: ({})
   readonly property var sidebarController: sidebarState
   readonly property var sidebarPanel: rendererMode === "sidebar" && presentationLoader.item
     ? presentationLoader.item.panel : null
@@ -513,6 +516,7 @@ Item {
 
   DockSidebarController {
     id: sidebarState
+    widgetRegistry: root.sidebarWidgetRegistry
     host: root
     settings: root.settings
     screens: root.connectedScreens

@@ -22,6 +22,8 @@ def visit(x):
 visit(json.load(sys.stdin))'
 cp -R "$root/components" "$root/config" "$temporary/"
 cp "$root/DockHost.qml" "$temporary/DockHost.qml"
+mkdir -p "$temporary/tests"
+cp -R "$root/tests/fixtures" "$temporary/tests/"
 cp "$root/tests/runtime/sidebar.qml" "$temporary/shell.qml"
 ln -s "$root/assets" "$temporary/assets"
 mkdir "$temporary/imports"
@@ -37,6 +39,6 @@ PY
 # Save diagnostic output outside the temporary source when a path is requested.
 log="${SMARTDOCK_RUNTIME_LOG:-$temporary/output.log}"
 QT_QPA_PLATFORM=wayland QML2_IMPORT_PATH="$temporary/imports" \
-  timeout 25s qs -p "$temporary" --no-color >"$log" 2>&1 || { cat "$log"; exit 1; }
+  timeout 45s qs -p "$temporary" --no-color >"$log" 2>&1 || { cat "$log"; exit 1; }
 if grep -E 'ERROR|Error:|ReferenceError|TypeError|Unable to assign' "$log"; then cat "$log"; exit 1; fi
 grep -F 'sidebar: PASS' "$log"

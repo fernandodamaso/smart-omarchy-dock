@@ -27,6 +27,14 @@
     "sidebarEdge": {"type":"string","enum":["left","right"],"description":"Global sidebar edge; leaves classic position unchanged."},
     "sidebarMonitor": {"type":"string","format":"monitor-connector","description":"Exact case-sensitive connector, or empty for automatic placement. Disconnected preferences are retained; control characters are rejected."},
     "sidebarExpandedWidth": {"type":"integer","minimum":240,"maximum":480,"description":"Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference."},
+    "sidebarWidgets": {
+      "type": "array",
+      "format": "sidebar-widget-ids",
+      "registeredIds": [],
+      "uniqueItems": true,
+      "resetWithPreferences": true,
+      "description": "Ordered internal widget IDs. No production providers are registered yet. Unknown imported IDs are retained but unavailable; explicit writes require registered IDs."
+    },
     "sidebarCollapsed": {"type":"boolean","description":"Explicit icon rail. Every eligible window remains represented; expanded width and session app folds are retained."},
     "position": {"type":"string","enum":["top","bottom","left","right"],"description":"Dock edge. Left/right temporarily render workspaceLayout as flat."},
     "fullLength": {"type":"boolean","description":"Extend the dock along its available screen edge."},

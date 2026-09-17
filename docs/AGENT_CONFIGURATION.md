@@ -150,7 +150,7 @@ The adapter uses standard-library Python and bounded argv subprocesses: `qs list
 ## Sidebar candidate boundary
 
 Before a sidebar request, discover `presentationMode`, `sidebarEdge`,
-`sidebarMonitor`, `sidebarExpandedWidth`, and `sidebarCollapsed` through the runtime
+`sidebarMonitor`, `sidebarExpandedWidth`, `sidebarCollapsed`, and `sidebarWidgets` through the runtime
 schema. They may be unavailable in the installed version. Source SB-02 is a Draft
 foundation, not permission to deploy or change the production desktop.
 
@@ -162,3 +162,13 @@ requested and effective values plus `data.presentation` for placement and geomet
 Do not infer rejection from `E_BUSY` when `data.applied` is true, or claim durability
 without persisted readback. Physical qualification belongs to SB-06; the source
 handoff and runnable production fixture are documented in `docs/SIDEBAR.md` in the source checkout.
+
+For widget requests, read the selected host's `sidebarWidgets.registeredIds`; do not
+assume clock/Herdr/Todoist IDs or inject test IDs. This source slice has no production
+providers. New ordered arrays must be registered/unique; never store provider paths,
+commands, tokens or credentials here. Unknown imported IDs stay requested but
+unavailable and are not executed. Preserve them on unrelated changes; do not
+repair/delete them silently. Provider readiness/authentication is distinct from
+typed write validation. Inspect bounded `data.presentation.widgets` diagnostics
+without logging task/window content. Source API: `docs/SIDEBAR_WIDGETS.md`; actual
+Omarchy footer/input/popup qualification stays with SB-06.

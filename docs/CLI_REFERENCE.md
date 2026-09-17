@@ -127,7 +127,7 @@ Full `install.sh` is an explicit standalone installation with separate lifecycle
 ## Sidebar configuration and diagnostics
 
 The SB-02 candidate adds `presentationMode`, `sidebarEdge`, `sidebarMonitor`,
-`sidebarExpandedWidth` and `sidebarCollapsed`. Discover these keys on the selected
+`sidebarExpandedWidth`, `sidebarCollapsed` and `sidebarWidgets`. Discover these keys on the selected
 host; do not assume an installed release implements this candidate.
 
 In an isolated candidate session only:
@@ -153,3 +153,22 @@ replayed as though rejected. `config retry` uses the latest host snapshot.
 
 These controls do not install widgets or alter the stock topbar. This Draft slice
 is not an integrated release; see `docs/SIDEBAR.md` in the source checkout.
+
+### Internal widget IDs (SB-05)
+
+```sh
+smartdock config schema sidebarWidgets --json
+smartdock config get sidebarWidgets --json
+smartdock config set sidebarWidgets '[]' --json
+smartdock config get --effective --json
+```
+
+`sidebarWidgets` is an ordered, duplicate-free array of IDs from live
+`registeredIds`, initially empty. Explicit unknown IDs/types/duplicates fail with
+`E_VALIDATION`; `config apply` validates atomically at the host. Registration is
+independent of authentication or loading/error status. Imported unknown IDs survive
+unrelated writes and appear unavailable under `data.presentation.widgets`; they
+are omitted from effective `sidebarWidgets` and never executed. Diagnostics contain
+at most 32 status rows plus aggregate lifecycle counters, never task/window content
+or credentials. Clearing/resetting this key removes all widget space/work. No
+clock/Herdr/Todoist/test provider or external QML path is enabled by this candidate.
