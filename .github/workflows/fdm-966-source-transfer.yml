@@ -3,53 +3,14 @@ on:
   push:
     branches: [agent/fdm-966-source-transfer]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  publish:
-    if: "github.event.head_commit.message == 'chore: publish verified FDM-966 handoff'"
+  archived:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 1
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - name: Verify and publish the preserved candidate without changing main
-        shell: bash
-        env:
-          EXPECTED_HEAD: 95daecd02ea9db19f21c29510477a127c8076b00
-          EXPECTED_TREE: a3666e6668f385d9f36e002ee69603585466014d
-          EXPECTED_BASE: c6d9b0dcb8f96f6e61591996bcafc728ec022dfe
-          EXPECTED_MAIN: 86fb65893295c95df664e6f274b19375a50f088a
+      - name: Confirm transfer retired
         run: |
-          set -euo pipefail
-          test "$(find transfer/fdm966 -maxdepth 1 -type f -name 'part-*' | wc -l)" -eq 16
-          cat transfer/fdm966/part-* > /tmp/FDM-966.bundle
-          test "$(wc -c < /tmp/FDM-966.bundle)" -eq 31218
-          echo 'cd001c62da3065bb0350c74550dc9786c0d18bcb0d61da85b602e8af9da26699  /tmp/FDM-966.bundle' | sha256sum --check
-          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main refs/heads/feat/fdm-965-sidebar-resize:refs/remotes/origin/feat/fdm-965-sidebar-resize
-          test "$(git rev-parse origin/main)" = "$EXPECTED_MAIN"
-          test "$(git rev-parse origin/feat/fdm-965-sidebar-resize)" = "$EXPECTED_BASE"
-          git bundle verify /tmp/FDM-966.bundle
-          target=refs/heads/feat/fdm-966-sidebar-interactions
-          git fetch /tmp/FDM-966.bundle "$target:$target"
-          test "$(git rev-parse "$target")" = "$EXPECTED_HEAD"
-          test "$(git rev-parse "$target^{tree}")" = "$EXPECTED_TREE"
-          git merge-base --is-ancestor "$EXPECTED_MAIN" "$EXPECTED_HEAD"
-          git merge-base --is-ancestor "$EXPECTED_BASE" "$EXPECTED_HEAD"
-          test "$(git rev-parse "$EXPECTED_HEAD^")" = 56825df7fc61bed63c5f6bcb20288feaa2729912
-          test -z "$(git ls-tree -r --name-only "$EXPECTED_HEAD" -- transfer/fdm966 .github/workflows/fdm-966-source-transfer.yml)"
-          git diff --check "$EXPECTED_BASE...$EXPECTED_HEAD"
-          existing=$(git ls-remote --heads origin "$target")
-          if [ -n "$existing" ]; then
-            test "$(printf '%s' "$existing" | cut -f1)" = "$EXPECTED_HEAD"
-          fi
-          git push origin "$target:$target"
-          test "$(git ls-remote --heads origin "$target" | cut -f1)" = "$EXPECTED_HEAD"
-          {
-            echo '## Preserved FDM-966 candidate published'
-            echo "base: $EXPECTED_BASE"
-            echo "main: $EXPECTED_MAIN"
-            echo "head: $EXPECTED_HEAD"
-            echo "tree: $EXPECTED_TREE"
-            echo 'No main update, deployment, source rewrite, or CI acceptance claimed by this transfer.'
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo 'The exact FDM-966 source transfer completed.'
+          echo 'Candidate: 95daecd02ea9db19f21c29510477a127c8076b00'
+          echo 'Delivery: PR 80; this helper no longer has write permissions or transfer payloads.'
