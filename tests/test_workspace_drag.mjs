@@ -230,6 +230,91 @@ for (const mutate of [
   }
 }
 
+// Dock-local geometry is translated into Hyprland's logical virtual space.
+{
+  const Qt = {
+    point: (x, y) => ({ x, y }),
+    size: (width, height) => ({ width, height }),
+    rect: (x, y, width, height) => ({ x, y, width, height })
+  }
+  const dock = methods('Dock.qml', {
+    Qt,
+    monitorOrigin: Qt.point(-1536, 240),
+    monitorRect: Qt.rect(-1536, 240, 1536, 864),
+    sceneOrigin: Qt.point(-1536, 900)
+  })
+  assert.deepEqual(dock.monitorLogicalOrigin({
+    lastIpcObject: { x: -1536, y: 240 }
+  }, { x: 12, y: 13 }), { x: -1536, y: 240 })
+  assert.deepEqual(dock.monitorLogicalSize({
+    lastIpcObject: { width: 1920, height: 1080, scale: 1.25 }
+  }, { width: 999, height: 999 }), { width: 1536, height: 864 })
+  assert.deepEqual(dock.workspaceMonitorVirtualRect({
+    x: 600.5,
+    y: 790.25,
+    width: 720,
+    height: 70
+  }, 0, -780), { x: -935.5, y: 910.25, width: 720, height: 70 })
+  assert.deepEqual(dock.workspaceMonitorVisibleRect({
+    x: 600.5,
+    y: 790.25,
+    width: 720,
+    height: 70
+  }, 0, -600), { x: -935.5, y: 1090.25, width: 720, height: 13.75 },
+  'drop geometry is clipped to the visible monitor while the dock animates')
+}
+
+// Workspace headers retain click activation while a threshold DragHandler owns
+// only the cross-monitor gesture and commits only a released exclusive grab.
+{
+  const groupSource = read('DockWorkspaceGroup.qml')
+  const handler = groupSource.match(
+    /DragHandler \{\s+id: workspaceMonitorDragHandler([\s\S]*?)\n    \}/)?.[1] || ''
+  assert.match(handler, /target: null/)
+  assert.match(handler, /acceptedButtons: Qt\.LeftButton/)
+  assert.match(handler, /acceptedModifiers: Qt\.NoModifier/)
+  assert.match(handler, /PointerHandler\.CanTakeOverFromItems/)
+  assert.match(handler, /header\.forceActiveFocus\(Qt\.MouseFocusReason\)/)
+  assert.match(read('Dock.qml'),
+    /WlrLayershell\.keyboardFocus: workspaceMonitorDragAvailable\s+\? WlrKeyboardFocus\.OnDemand : WlrKeyboardFocus\.None/,
+    'keyboard mode must remain stable while the pointer handler owns its grab')
+  assert.doesNotMatch(read('Dock.qml'),
+    /keyboardFocus: workspaceMonitorDragSourceActive/,
+    'starting a drag must not recommit layer-surface state and cancel its grab')
+  assert.match(groupSource,
+    /onWorkspaceOwnerMonitorChanged: cancelWorkspaceMonitorDrag\("workspace owner changed"\)/)
+  assert.match(read('Dock.qml'),
+    /onDockShownChanged:[^\n]+hoveredTarget === root[^\n]+cancel/,
+    'a destination disappearing under the pointer cancels the gesture')
+  assert.match(read('Dock.qml'),
+    /x: Math\.max\(0, Math\.min\(root\.width - width, pointerLocal\.x - width \/ 2\)\)/,
+    'the per-screen proxy stays visible inside the active dock surface')
+  assert.match(groupSource, /TapHandler \{ enabled:[^\n]+; onTapped: root\.activated\(\) \}/,
+    'ordinary header clicks must retain the existing activation path')
+
+  const transitions = { UngrabExclusive: 1, CancelGrabExclusive: 2, CancelGrabPassive: 3 }
+  for (const [transition, state, expected] of [[1, 1, 'finish'], [1, 0, 'cancel'],
+    [2, 1, 'cancel'], [3, 1, 'cancel']]) {
+    const calls = []
+    const dock = {}
+    const group = methods('DockWorkspaceGroup.qml', { PointerDevice: transitions,
+      EventPoint: { Released: 1 }, workspaceMonitorDragDock: dock,
+      workspaceIdentity: 'id:3',
+      workspaceMonitorDrag: {
+        sourceDock: dock,
+        sourceWorkspace: 'id:3',
+        finish: point => { calls.push(['finish', point]); group.workspaceMonitorDrag.sourceDock = null },
+        cancel: () => { calls.push(['cancel']); group.workspaceMonitorDrag.sourceDock = null }
+      } })
+    const point = { state, scenePosition: { x: 143, y: 52 } }
+    group.workspaceMonitorGrabChanged(transition, point)
+    group.workspaceMonitorGrabChanged(transition, point)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0][0], expected)
+    if (expected === 'finish') assert.equal(calls[0][1], point.scenePosition)
+  }
+}
+
 // A known non-sticky fallback source is safe: the command uses its exact
 // address and the destination is independently validated, never guessed.
 for (const workspace of [{}, { id: -99, name: 'special:scratch' }]) {

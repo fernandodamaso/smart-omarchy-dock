@@ -20,6 +20,7 @@ PanelWindow {
   required property var settings
   required property bool showTrash
   required property var windowActions
+  required property var workspaceMonitorDrag
   required property var badgeTracker
   required property int trashItemCount
   required property bool trashStateKnown
@@ -42,10 +43,56 @@ PanelWindow {
   signal openTrashRequested()
   signal emptyTrashRequested()
 
+  function monitorLogicalOrigin(monitor, fallbackScreen) {
+    var ipc = monitor ? monitor.lastIpcObject || monitor : ({})
+    var x = Number(ipc.x)
+    var y = Number(ipc.y)
+    if (!isFinite(x)) x = Number(fallbackScreen && fallbackScreen.x) || 0
+    if (!isFinite(y)) y = Number(fallbackScreen && fallbackScreen.y) || 0
+    return Qt.point(x, y)
+  }
+
+  function monitorLogicalSize(monitor, fallbackScreen) {
+    var ipc = monitor ? monitor.lastIpcObject || monitor : ({})
+    var scale = Number(ipc.scale)
+    var width = Number(ipc.width)
+    var height = Number(ipc.height)
+    if (isFinite(scale) && scale > 0) {
+      width /= scale
+      height /= scale
+    }
+    if (!isFinite(width) || width <= 0)
+      width = Number(fallbackScreen && fallbackScreen.width) || 0
+    if (!isFinite(height) || height <= 0)
+      height = Number(fallbackScreen && fallbackScreen.height) || 0
+    return Qt.size(width, height)
+  }
+
+  function workspaceMonitorVirtualRect(item, offsetX, offsetY) {
+    if (!item) return Qt.rect(0, 0, 0, 0)
+    return Qt.rect(sceneOrigin.x + Number(item.x || 0) + Number(offsetX || 0),
+      sceneOrigin.y + Number(item.y || 0) + Number(offsetY || 0),
+      item.width, item.height)
+  }
+
+  function workspaceMonitorVisibleRect(item, offsetX, offsetY) {
+    var rect = workspaceMonitorVirtualRect(item, offsetX, offsetY)
+    var left = Math.max(rect.x, monitorRect.x)
+    var top = Math.max(rect.y, monitorRect.y)
+    var right = Math.min(rect.x + rect.width,
+      monitorRect.x + monitorRect.width)
+    var bottom = Math.min(rect.y + rect.height,
+      monitorRect.y + monitorRect.height)
+    return Qt.rect(left, top, Math.max(0, right - left),
+      Math.max(0, bottom - top))
+  }
+
   property int dragSource: -1
   property int dragTarget: -1
   property int openMenuCount: 0
   property bool autoHideRevealed: false
+  property bool dragRevealed: false
+  property bool workspaceMonitorDropHighlighted: false
   property int badgeStateRevision: 0
   readonly property bool workspaceDragActive: workspaceDrag.active
   readonly property DockWorkspaceDrag workspaceDragController: workspaceDrag
@@ -291,6 +338,35 @@ PanelWindow {
     var revision = scopeRevision
     return DockWindowModel.monitorForScreen(screen, hyprMonitors)
   }
+  readonly property string monitorIdentity:
+    DockWindowModel.canonicalMonitorIdentity(dockHyprMonitor, hyprMonitors)
+  readonly property point monitorOrigin:
+    monitorLogicalOrigin(dockHyprMonitor, screen)
+  readonly property size monitorSize:
+    monitorLogicalSize(dockHyprMonitor, screen)
+  readonly property point sceneOrigin: Qt.point(
+    monitorOrigin.x + (vertical && position === "right"
+      ? Math.max(0, monitorSize.width - width) : 0),
+    monitorOrigin.y + (!vertical && position === "bottom"
+      ? Math.max(0, monitorSize.height - height) : 0))
+  readonly property rect monitorRect: Qt.rect(
+    monitorOrigin.x, monitorOrigin.y, monitorSize.width, monitorSize.height)
+  readonly property rect revealRect: workspaceMonitorVirtualRect(revealStrip)
+  readonly property rect dropRect: dockShown
+    ? workspaceMonitorVisibleRect(dockBackground,
+      dockAutoHideOffset.x, dockAutoHideOffset.y)
+    : Qt.rect(0, 0, 0, 0)
+  readonly property bool workspaceMonitorDragAvailable:
+    grouped && !vertical && monitorIdentity !== "" && visible
+  readonly property bool workspaceMonitorDragActive:
+    workspaceMonitorDrag !== null && workspaceMonitorDrag.active
+  readonly property bool workspaceMonitorDragSourceActive:
+    workspaceMonitorDragActive && workspaceMonitorDrag.sourceDock === root
+  readonly property color workspaceMonitorDragAccent: Color.accent
+  readonly property color workspaceMonitorDragBackground: Color.menu.background
+  readonly property color workspaceMonitorDragForeground: Color.menu.text
+  readonly property string workspaceMonitorDragFontFamily: Style.font.family
+  readonly property int workspaceMonitorDragFontSize: Style.font.bodySmall
   readonly property string focusedScopeWorkspace: {
     var revision = scopeRevision
     return DockWindowModel.focusedWorkspaceIdentity(
@@ -385,7 +461,8 @@ PanelWindow {
   readonly property bool keepAutoHideOpen: windowPointer.hovered
     || appPicker.visible || openMenuCount > 0
     || dragSource >= 0 || windowPreview.interactionActive || workspaceDragActive
-  readonly property bool dockShown: !autoHide || autoHideRevealed
+    || workspaceMonitorDragSourceActive || dragRevealed
+  readonly property bool dockShown: !autoHide || autoHideRevealed || dragRevealed
   readonly property real pointerPosition: !pointer.hovered
     ? -10000
     : vertical
@@ -483,6 +560,10 @@ PanelWindow {
 
   function cancelWorkspaceGesture(reason) {
     if (workspaceDrag) workspaceDrag.cancel(reason)
+    if (workspaceMonitorDrag && workspaceMonitorDrag.active
+        && (workspaceMonitorDrag.sourceDock === root
+          || workspaceMonitorDrag.hoveredTarget === root || dragRevealed))
+      workspaceMonitorDrag.cancel(reason)
   }
 
   function workspaceDropTargetAt(scenePoint) {
@@ -601,6 +682,7 @@ PanelWindow {
   onWidthChanged: root.cancelWorkspaceGesture("surface resized")
   onHeightChanged: root.cancelWorkspaceGesture("surface resized")
   onVisibleChanged: if (!visible) root.cancelWorkspaceGesture("surface hidden")
+  onDockShownChanged: if (!dockShown && workspaceMonitorDrag && workspaceMonitorDrag.active && workspaceMonitorDrag.hoveredTarget === root) workspaceMonitorDrag.cancel("destination hidden")
   onPinnedChanged: root.scheduleVisibleItemsRefresh()
   onWorkspaceMonitorScopeChanged: root.scheduleVisibleItemsRefresh()
   onWorkspaceMonitorOrderChanged: root.scheduleVisibleItemsRefresh()
@@ -614,11 +696,18 @@ PanelWindow {
     if (!grouped && badgeTracker && screen) badgeTracker.syncWorkspaceScopes(screen.name, [])
     if (grouped) Qt.callLater(root.revealActiveWorkspace)
   }
-  onDockHyprMonitorChanged: root.scheduleVisibleItemsRefresh()
-  onHyprMonitorsChanged: root.scheduleVisibleItemsRefresh()
+  onDockHyprMonitorChanged: {
+    root.cancelWorkspaceGesture("monitor mapping changed")
+    root.scheduleVisibleItemsRefresh()
+  }
+  onHyprMonitorsChanged: {
+    root.cancelWorkspaceGesture("monitor inventory changed")
+    root.scheduleVisibleItemsRefresh()
+  }
   onHyprWorkspacesChanged: root.scheduleVisibleItemsRefresh()
   Component.onDestruction: {
     root.cancelWorkspaceGesture("surface destroyed")
+    if (workspaceMonitorDrag) workspaceMonitorDrag.unregisterDock(root)
     if (badgeTracker && screen) badgeTracker.syncWorkspaceScopes(screen.name, [])
   }
   onWorkspaceCountsRevisionChanged: root.scheduleVisibleItemsRefresh()
@@ -632,7 +721,10 @@ PanelWindow {
     root.scheduleVisibleItemsRefresh()
   }
 
-  Component.onCompleted: root.scheduleVisibleItemsRefresh()
+  Component.onCompleted: {
+    workspaceMonitorDrag.registerDock(root)
+    root.scheduleVisibleItemsRefresh()
+  }
 
   Connections {
     target: root.windowActions
@@ -717,7 +809,8 @@ PanelWindow {
   WlrLayershell.exclusiveZone: reserveSpace ? reservedSize : 0
   WlrLayershell.namespace: "smartdock"
   WlrLayershell.layer: WlrLayer.Top
-  WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+  WlrLayershell.keyboardFocus: workspaceMonitorDragAvailable
+    ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
   mask: Region {
     item: root.dockShown ? interactionArea : revealStrip
   }
@@ -745,6 +838,42 @@ PanelWindow {
     }
     onAboutToBegin: root.prepareWorkspacePresentation()
     onEnded: root.finishWorkspacePresentation()
+  }
+
+  Rectangle {
+    id: workspaceMonitorDragProxy
+    visible: root.workspaceMonitorDragActive
+      && root.workspaceMonitorDrag.pointerDock === root
+    enabled: false
+    z: 101
+    readonly property point pointerLocal: Qt.point(
+      root.workspaceMonitorDrag.pointerVirtual.x - root.sceneOrigin.x,
+      root.workspaceMonitorDrag.pointerVirtual.y - root.sceneOrigin.y)
+    x: Math.max(0, Math.min(root.width - width, pointerLocal.x - width / 2))
+    y: Math.max(0, Math.min(root.height - height, pointerLocal.y - height / 2))
+    width: Math.min(180,
+      Math.max(42, workspaceMonitorDragProxyLabel.implicitWidth + 18))
+    height: 30
+    radius: height / 2
+    color: root.workspaceMonitorDrag.background
+    border.color: root.workspaceMonitorDrag.accent
+    border.width: 1
+    opacity: 0.9
+
+    Text {
+      id: workspaceMonitorDragProxyLabel
+      anchors.centerIn: parent
+      width: parent.width - 18
+      elide: Text.ElideRight
+      horizontalAlignment: Text.AlignHCenter
+      text: root.workspaceMonitorDrag.sourceLabel
+        + (root.workspaceMonitorDrag.sourceCount > 0
+          ? " · " + root.workspaceMonitorDrag.sourceCount : "")
+      color: root.workspaceMonitorDrag.foreground
+      font.family: root.workspaceMonitorDrag.fontFamily
+      font.pixelSize: root.workspaceMonitorDrag.fontSize
+      font.bold: true
+    }
   }
 
   Timer {
@@ -792,6 +921,7 @@ PanelWindow {
     color: root.dockBackgroundColor
     borderSpec: root.dockBorderSpec
     transform: Translate {
+      id: dockAutoHideOffset
       x: !root.autoHide || root.dockShown
         ? 0
         : root.position === "left"
@@ -805,6 +935,17 @@ PanelWindow {
 
       Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
       Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+    }
+
+    Rectangle {
+      anchors.fill: parent
+      visible: root.workspaceMonitorDropHighlighted
+      enabled: false
+      z: 90
+      radius: parent.radius
+      color: Util.alpha(Color.accent, 0.12)
+      border.color: Color.accent
+      border.width: 2
     }
 
     Rectangle {
@@ -986,6 +1127,10 @@ PanelWindow {
                 modelData: workspaceCardSlot.modelData.item
                 property var modelData
                 label: modelData.label
+                workspaceIdentity: modelData.identity
+                workspaceOwnerMonitor: String(modelData.monitorIdentity || "")
+                workspaceMonitorDrag: root.workspaceMonitorDrag
+                workspaceMonitorDragDock: root
                 showFullLabel: modelData.showFullLabel === true
                 count: modelData.count
                 urgent: modelData.urgent === true && root.attentionBadgesEnabled

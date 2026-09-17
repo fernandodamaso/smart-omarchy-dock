@@ -521,9 +521,22 @@ Item {
     return !pin || pin.monitor === requested
   }
 
+  function workspaceMonitorMoveRequest(workspace, monitor) {
+    var identity = canonicalWorkspaceIdentity(workspace)
+    var requested = canonicalMonitorIdentity(monitor)
+    var resolved = identity ? resolveWorkspaceDropTarget(identity) : null
+    if (!resolved || !requested || resolved.monitor === requested
+        || !canRelocateWorkspaceToMonitor(identity, requested)) return ""
+    return DockModel.moveWorkspaceToMonitorRequest(
+      workspaceCommandTarget(identity), requested, Hyprland.usingLua)
+  }
+
+  function canMoveWorkspaceToMonitor(workspace, monitor) {
+    return workspaceMonitorMoveRequest(workspace, monitor) !== ""
+  }
+
   function moveWorkspaceToMonitor(workspace, monitor) {
-    if (!canRelocateWorkspaceToMonitor(workspace, monitor)) return false
-    return dispatchRequests(workspaceOnMonitorRequests(workspace, monitor))
+    return dispatchRequest(workspaceMonitorMoveRequest(workspace, monitor))
   }
 
   function resolveOriginTarget(recorded, originOnly) {

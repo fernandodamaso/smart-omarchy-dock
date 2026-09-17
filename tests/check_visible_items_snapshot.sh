@@ -35,7 +35,8 @@ if grep -Eq 'DockModel\.buildVisibleItems\(' <<<"$visible_items_property"; then
   fail 'visibleItems must not call buildVisibleItems from a property binding'
 fi
 
-grep -Fq 'Component.onCompleted: root.scheduleVisibleItemsRefresh()' "$dock" \
+on_completed="$(sed -n '/Component.onCompleted:/,/^[[:space:]]*  }/p' "$dock")"
+grep -Fq 'root.scheduleVisibleItemsRefresh()' <<<"$on_completed" \
   || fail 'visibleItems must refresh after startup'
 grep -Eq '^[[:space:]]*onSettingsChanged:.*root\.scheduleVisibleItemsRefresh\(\)' "$dock" \
   || fail 'settings changes must refresh visibleItems'
