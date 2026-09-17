@@ -49,19 +49,18 @@ Rectangle {
 
   function cancelWorkspaceMonitorDrag(reason) {
     if (root.workspaceMonitorGestureStarted && root.workspaceMonitorDrag
-        && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock)
+        && root.workspaceMonitorDrag.sourceDock === root.workspaceMonitorDragDock) {
+      root.workspaceMonitorGestureStarted = false
       root.workspaceMonitorDrag.cancel(reason)
+    }
   }
 
   function workspaceMonitorGrabChanged(transition, point) {
     if (!root.workspaceMonitorGestureStarted || !root.workspaceMonitorDrag
         || root.workspaceMonitorDrag.sourceDock !== root.workspaceMonitorDragDock) return
     if (transition === PointerDevice.UngrabExclusive) {
-      // QEventPoint::Released maps to Qt::TouchPointReleased (0x08).
-      if (point.state === 0x08)
-        root.workspaceMonitorDrag.finish(point.scenePosition)
-      else
-        cancelWorkspaceMonitorDrag("non-release ungrab")
+      root.workspaceMonitorGestureStarted = false
+      root.workspaceMonitorDrag.finish(point.scenePosition)
     } else if (transition === PointerDevice.CancelGrabExclusive
         || transition === PointerDevice.CancelGrabPassive) {
       cancelWorkspaceMonitorDrag("grab cancelled")

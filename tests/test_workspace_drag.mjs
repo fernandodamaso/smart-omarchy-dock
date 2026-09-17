@@ -211,7 +211,7 @@ for (const mutate of [
     'active=false must not disable the handler before the release transition is delivered')
 
   const transitions = { UngrabExclusive: 1, CancelGrabExclusive: 2, CancelGrabPassive: 3 }
-  for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'cancel'],
+  for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'finish'],
     [2, 0x08, 'cancel'], [3, 0x08, 'cancel']]) {
     const calls = []
     const item = methods('DockItem.qml', { PointerDevice: transitions,
@@ -451,7 +451,7 @@ for (const mutate of [
     'targeted refresh replaces or appends one dock snapshot')
 
   const transitions = { UngrabExclusive: 1, CancelGrabExclusive: 2, CancelGrabPassive: 3 }
-  for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'cancel'],
+  for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'finish'],
     [2, 0x08, 'cancel'], [3, 0x08, 'cancel']]) {
     const calls = []
     const dock = {}
