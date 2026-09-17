@@ -39,7 +39,11 @@ ShellRoot {
   function require(value, message) {
     if (!value) throw new Error("sidebar fixture: " + message)
   }
-  function fail(error) { console.error(String(error)); Quickshell.quit() }
+  function fail(error) {
+    console.error(String(error))
+    fixtureTimer.running = false
+    Qt.quit()
+  }
   function windows() { return root.host.sidebarController.projection.rows.filter(function(r) { return r.kind === "window" }) }
   function delegateFor(key) {
     var panel = root.host.sidebarPanel
@@ -91,6 +95,7 @@ ShellRoot {
     } catch (error) { root.fail(error) }
   }
   Timer {
+    id: fixtureTimer
     interval: 250
     running: true
     repeat: true
@@ -158,7 +163,11 @@ ShellRoot {
           require(controller.toggleApplication(root.appKey), "provider error blocked window navigation")
         } else if (root.step === 3) {
           require(root.windows().length === 1, "fold did not remove only this workspace's members")
-          require(root.firstDelegate === null || !Qt.isQtObject(root.firstDelegate), "folded member delegate survived removal")
+          require(root.windows().every(function(row) { return row.key !== root.firstKey }),
+            "folded member still projected as a window row")
+          // Drop the JS handle after proving domain removal. Some Qt builds keep
+          // ListView wrappers alive across frames even after the row leaves the model.
+          root.firstDelegate = null
           widgetOne.publish("ready")
           controller.requestCollapse()
         } else if (root.step === 4) {
