@@ -46,6 +46,16 @@ TestCase {
     verify(!c.resizeActive)
   }
 
+  function test_legacy_effective_width_keeps_exact_host_stale_token() {
+    var c=makeController("left")
+    c.settings=Object.assign({},c.settings,{sidebarExpandedWidth:"320"})
+    compare(c.geometry.width,320)
+    verify(c.beginResize(0)); c.updateResize(40); c.finishResize(false)
+    compare(writer.writes.length,1)
+    compare(writer.writes[0].value,360)
+    compare(writer.writes[0].expectedValue,"320")
+  }
+
   function test_right_edge_uses_stable_global_delta() {
     var c=makeController("right")
     verify(c.beginResize(-100)); verify(c.updateResize(-140)); compare(c.geometry.width,360)
