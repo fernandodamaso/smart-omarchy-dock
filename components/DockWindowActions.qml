@@ -242,6 +242,11 @@ Item {
     // activation cannot accidentally pull it onto the activating monitor.
     if (workspaceMonitorPin(workspace)) return [focusRequest]
 
+    var current = resolveWorkspaceDropTarget(
+      canonicalWorkspaceIdentity(workspace))
+    if (current && current.monitor === canonicalMonitorIdentity(monitor))
+      return [focusRequest]
+
     var moveRequest = DockModel.moveWorkspaceToMonitorRequest(
       workspace, monitor, Hyprland.usingLua)
     if (moveRequest) return [focusRequest, moveRequest, focusRequest]

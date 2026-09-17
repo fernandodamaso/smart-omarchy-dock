@@ -521,7 +521,7 @@ Input precedence is intentionally strict:
 
 - Right click always opens the existing application context menu.
 - Left click with no modifier uses `clickAction`.
-- Ctrl+Left click uses the same `clickAction`; `focus-or-launch` also moves that window's workspace onto the clicked dock monitor. In grouped workspace cards, window icons pull their workspace on any click, matching the card name. Ordinary clicks do not give the dock keyboard focus; a workspace-header drag captures it only until release or Escape.
+- Ctrl+Left click uses the same `clickAction`; `focus-or-launch` explicitly moves that window's workspace onto the clicked dock monitor. Plain Left click focuses the exact window in place, including window icons inside grouped workspace cards. The dock uses on-demand keyboard focus so Ctrl can be held before entering it.
 - Middle click with no modifier uses `middleClickAction`.
 - Ctrl+Middle click uses the same `middleClickAction`, including the workspace pull when that action is `focus-or-launch`.
 - Vertical-dominant scrolling uses `scrollAction`; horizontal/tied gestures pass through.
@@ -745,9 +745,11 @@ members; hide and launcher pinning remain application-wide. Pinned reordering
 and redundant per-icon workspace labels are disabled in grouped mode; running-
 window dragging is described below.
 
-Clicking a grouped workspace header and activating a window both use one shared
-workspace-on-monitor path. By default that keeps the existing pull-and-focus
-behavior. SmartDock now also has **session-only movement pins** owned by the
+Clicking a grouped workspace header uses one shared workspace-on-monitor path
+and by default pulls that workspace to the clicked dock before focusing it. Plain
+window-icon activation focuses the exact window in place; Ctrl+click explicitly
+permits pulling its workspace to the clicked dock. SmartDock also has
+**session-only movement pins** owned by the
 shared window-action controller: an individual window can be pinned to its
 current reliable workspace from its context menu, and a workspace can be pinned
 to its current monitor through the shared API consumed by the workspace-header
@@ -757,9 +759,10 @@ or persistent configuration; restarting the SmartDock host clears them.
 A window workspace pin blocks SmartDock menu and drag relocations to another
 workspace, including represented groups when any captured member is pinned.
 SmartDock minimize/restore keeps the recorded origin and does not clear the pin.
-A workspace monitor pin makes workspace-header, app-icon, preview, cycling and
-restore activation focus the workspace where it already lives instead of
-pulling it to the dock monitor. External Hyprland shortcuts/tools remain free to
+A workspace monitor pin makes workspace-header, Ctrl app-icon, preview, cycling
+and restore activation focus the workspace where it already lives instead of
+pulling it to the dock monitor. Plain app-icon activation already stays in
+place. External Hyprland shortcuts/tools remain free to
 move windows and workspaces; once SmartDock observes a confirmed external move,
 close, or monitor disconnect it drops only the affected session pin. Transient
 or incomplete refreshes do not by themselves clear pin state. Group/Ungroup
