@@ -26,6 +26,7 @@ Item {
   readonly property string selectedConnector: selectedScreen ? selectedScreen.name : ""
   readonly property string mode: DockModel.normalizeSetting("presentationMode", settings.presentationMode)
   readonly property string edge: DockModel.normalizeSetting("sidebarEdge", settings.sidebarEdge)
+  readonly property string preferredConnector: DockModel.normalizeSetting("sidebarMonitor", settings.sidebarMonitor)
   readonly property bool collapsed: DockModel.normalizeSetting("sidebarCollapsed", settings.sidebarCollapsed)
   readonly property var persistentGeometry: SidebarModel.screenGeometry(selectedScreen,
     settings.sidebarExpandedWidth, collapsed)
@@ -152,8 +153,7 @@ Item {
     if (!root.initialized) return
     root.registry = SidebarModel.reconcileHandles(root.registry, root.toplevels)
     var next = root.mode === "sidebar" ? SidebarModel.selectScreen(root.screens, root.monitors,
-      root.settings.workspaceMonitorOrder || [],
-      DockModel.normalizeSetting("sidebarMonitor", root.settings.sidebarMonitor),
+      root.settings.workspaceMonitorOrder || [], root.preferredConnector,
       root.selectedConnector, root.interactionBusy) : null
     if (next !== root.selectedScreen) {
       root.cancelResize("host-changed")
@@ -263,6 +263,7 @@ Item {
   }
   onModeChanged: root.invalidateSurface()
   onEdgeChanged: root.invalidateSurface()
+  onPreferredConnectorChanged: root.invalidateSurface()
   onScreensChanged: root.refresh()
   onMonitorsChanged: root.scheduleRefresh()
   onWorkspacesChanged: root.scheduleRefresh()
