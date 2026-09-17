@@ -68,6 +68,10 @@ Standalone lifecycle (explicit; not plugin configuration):
   launch [--daemonize] | --daemonize
   restart | stop | update | uninstall | autostart enable|disable|status
 
+Local development (existing Omarchy plugin, no second dock):
+  dev use PATH|BRANCH         Switch to a local checkout, including uncommitted edits
+  dev list | status | reload | reset
+
 Bare smartdock shows help. Unknown commands exit 2, without starting anything.
 Install just this client with: bash ./install.sh --cli-only
 '''
