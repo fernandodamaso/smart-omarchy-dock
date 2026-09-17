@@ -29,7 +29,50 @@ Use the verified Arch cloud image (do not invent another):
 ~/.local/state/smartdock/dev-sessions/_kvm-feasibility/images/Arch-Linux-x86_64-cloudimg.qcow2
 ```
 
-Host packages for the supervisor: `qemu-desktop`, `edk2-ovmf`, `cloud-utils`, plus `ssh` / `scp` / `hyprctl`. Guest packages are installed inside the VM (`Hyprland`, `qs`, `grim`, `wtype`, `python3`, `seatd`, `qt6-5compat`).
+Host packages for the supervisor: `qemu-desktop`, `edk2-ovmf`, `cloud-utils`, `python-atspi`, plus `ssh` / `scp` / `hyprctl`. The supervisor uses AT-SPI once at start to detach the second virtio head into its own window. Guest packages are installed inside the VM (`Hyprland`, `qs`, `grim`, `wtype`, `python3`, `seatd`, `qt6-5compat`, `foot`, `thunar`, plus fonts when `fc-list` is empty: `ttf-dejavu`, `ttf-liberation`, `ttf-jetbrains-mono-nerd`). Arch cloud images ship fontconfig without font files; without those packages QML text renders as empty squares.
+
+The guest compositor is **two virtio-gpu heads**, shown as **two QEMU windows tiled left-to-right** on the session workspace. The supervisor detaches `virtio-vga.1` automatically; do not use the View menu. `grim` still captures both guest outputs into one PNG.
+
+### Visual testing (production dock)
+
+```bash
+unset XDG_STATE_HOME
+./scripts/dev-session start visual-a \
+  --source /absolute/path/to/worktree \
+  --base-image /home/admin/.local/state/smartdock/dev-sessions/_kvm-feasibility/images/Arch-Linux-x86_64-cloudimg.qcow2 \
+  --mode plugin \
+  --workspace 1
+```
+
+In a second terminal:
+
+```bash
+unset XDG_STATE_HOME
+./scripts/dev-session dock visual-a
+./scripts/dev-session capture visual-a
+```
+
+`dock` starts the plugin host (`Overlay.qml` / `DockHost`) and seeds real `foot`/`thunar` windows on both monitors. Interact in the QEMU window the same way as on your desk: right-click menus, window drag, workspace-card drag. A workspace move commits **only on mouse release**. `capture` runs guest `grim` across both outputs into one PNG.
+
+The fixture preview is retained as reference material for stage two. It is not
+qualified against this consolidated branch. Never run it alongside the
+production dock in the same guest.
+
+### Host Hyprland FD guard
+
+`dev-session` aborts if the host Hyprland process accumulates too many open
+file descriptors (soft warning at 800, hard stop at 2000), including a
+periodic `/proc` check while `start` supervises QEMU. A healthy desktop is
+usually a few hundred; thousands indicate a leak, often from host-side
+`hyprctl` polling. On desktop slowdown, stop the session immediately and check:
+
+```bash
+pid=$(pgrep -xo Hyprland)
+find "/proc/$pid/fd" -maxdepth 1 -type l | wc -l
+```
+
+Prefer a single `./scripts/dev-session exec …` guest script for repeated
+input/capture. Do not run host-side `hyprctl` polling loops from agents.
 
 ### Two terminals (start stays open)
 
@@ -63,7 +106,7 @@ Plugin mode uses `--mode plugin` on one name only. That session copies Omarchy `
 
 Public `dock` injects `--runtime standalone|plugin --instance GUEST_DOCK_PID` from the named record. Do not pass `--instance` or `--runtime` yourself. `status --json` labels targeting with `target: guest`, `guest_dock_pid`, and `guest_config_path` (inside the VM). Those fields are never the host production dock; `host_pid`/`config_path` are aliases for the same guest process and guest file. Keep using SSH to the named guest. Never write host `~/.config/smartdock/dock.json`.
 
-`sync` of a `ready` session stops the guest dock, clears `host_pid`/`guest_dock_pid`, and sets `state=starting`. The next `dock NAME` (no argv) restarts it through the guest host contract. `dock NAME -- …` is rejected until that restart.
+`sync` of a `ready` session stops the guest dock, clears `host_pid`/`guest_dock_pid`, and sets `state=starting` while retaining the private `guest_seeded` record flag. The first `dock NAME` runs `seed-desktop`, verifies its JSON payload into `evidence/guest-seed.json`, and sets `guest_seeded=true`; later restarts skip seeding. The next `dock NAME` (no argv) restarts it through the guest host contract. `dock NAME -- …` is rejected until that restart.
 
 ```bash
 unset XDG_STATE_HOME
@@ -147,7 +190,7 @@ qemu-system-x86_64 \
 
 The feasibility experiment verified that its QEMU window ended on workspace `4` without following focus. Its temporary script selected the first window with class `qemu`; that shortcut must **not** be copied into the launcher because another QEMU window could already belong to the user.
 
-The launcher must establish a current-version silent/no-initial-focus launch rule first, then identify the new QEMU window by the owned VM PID and its exact address in `hyprctl clients -j`. Require exactly one match. If a delegated window ignores the rule, move only that address with `movetoworkspacesilent` and verify the target workspace afterward. A class-only match or an active-window dispatcher is an ownership failure.
+The launcher establishes one escaped silent/no-initial-focus title rule before QEMU starts. It matches both exact owned titles: `QEMU (SmartDock NAME)` and `QEMU (SmartDock NAME): virtio-vga.1`. After detaching the second head, it requires exactly two PID-owned clients with distinct exact addresses, records the left-to-right `qemu_window_addresses` list, and retains the leftmost `qemu_window_address` for compatibility. If a delegated window ignores the rule, move only those exact addresses with `movetoworkspacesilent` and verify the target workspace afterward. A class-only match or an active-window dispatcher is an ownership failure. Before/after active workspace and window evidence must be unchanged.
 
 Authorized test workspace for this run was `4`. General sessions use the coding agent's workspace unless the user explicitly selects another. Never switch the user's active workspace.
 

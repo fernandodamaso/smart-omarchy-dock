@@ -72,6 +72,14 @@ TestCase {
     ]
     compare(DockWindowModel.focusedWorkspaceIdentity(
       monitors, { id: 3, name: "3" }), "special:notes")
+
+    monitors = [
+      { focused: true, activeWorkspace: { id: 1 },
+        lastIpcObject: { focused: false, activeWorkspace: { id: 2 } } },
+      { focused: false, activeWorkspace: { id: 2 },
+        lastIpcObject: { focused: true, activeWorkspace: { id: 2 } } }
+    ]
+    compare(DockWindowModel.focusedWorkspaceIdentity(monitors, null), "id:1")
   }
 
   function test_resolvesKnownNormalAndMinimizedLocations() {

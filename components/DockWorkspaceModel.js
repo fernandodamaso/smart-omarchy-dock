@@ -8,8 +8,8 @@ function activationTarget(identity) {
 }
 
 function workspaceCompare(a, b) {
-  var left = typeof a === "string" ? a : a.identity
-  var right = typeof b === "string" ? b : b.identity
+  var left = typeof a === "string" ? a : (a._monitorDragSortIdentity || a.identity)
+  var right = typeof b === "string" ? b : (b._monitorDragSortIdentity || b.identity)
   var leftNumeric = left.indexOf("id:") === 0
   var rightNumeric = right.indexOf("id:") === 0
   if (leftNumeric && rightNumeric)
@@ -92,6 +92,113 @@ function monitorGroupForWorkspace(monitorGroups, workspaceIdentity, present) {
     if (group && group.firstWorkspaceIdentity === identity) return group
   }
   return null
+}
+
+function projectMonitorDrag(presentation, drag, visibleMonitorIdentity) {
+  if (!presentation || !drag || !drag.workspaceIdentity
+      || !drag.sourceMonitor || !drag.targetMonitor
+      || drag.sourceMonitor === drag.targetMonitor)
+    return presentation
+
+  var sourceIdentity = String(drag.workspaceIdentity)
+  var sourceMonitor = String(drag.sourceMonitor)
+  var targetMonitor = String(drag.targetMonitor)
+  var groups = presentation.groups || []
+  var sourceIndex = -1
+  for (var sourcePosition = 0; sourcePosition < groups.length; ++sourcePosition) {
+    var sourceGroup = groups[sourcePosition]
+    if (sourceGroup && sourceGroup.identity === sourceIdentity
+        && String(sourceGroup.monitorIdentity || "") === sourceMonitor) {
+      sourceIndex = sourcePosition
+      break
+    }
+  }
+
+  var monitorGroups = presentation.monitorGroups || []
+  var targetVisible = false
+  for (var monitorIndex = 0; monitorIndex < monitorGroups.length; ++monitorIndex) {
+    if (String(monitorGroups[monitorIndex].identity || "") === targetMonitor) {
+      targetVisible = true
+      break
+    }
+  }
+  if (!targetVisible) {
+    targetVisible = String(visibleMonitorIdentity || "") === targetMonitor
+      && groups.some(function(group) {
+        return group && String(group.monitorIdentity || "") === targetMonitor
+      })
+  }
+  if (sourceIndex < 0 && !targetVisible) return presentation
+
+  var nextGroups = groups
+  if (sourceIndex >= 0) {
+    var derivedSource = Object.assign({}, groups[sourceIndex], {
+      _monitorDragSource: true,
+      _monitorDragOccupied: false
+    })
+    nextGroups = groups.slice()
+    nextGroups[sourceIndex] = derivedSource
+  }
+
+  if (!targetVisible) {
+    return Object.assign({}, presentation, { groups: nextGroups })
+  }
+
+  var placeholderIdentity = "workspace-monitor-placeholder:" + sourceIdentity
+  var placeholder = {
+    identity: placeholderIdentity,
+    monitorIdentity: targetMonitor,
+    label: String(drag.label || sourceIdentity),
+    showFullLabel: sourceIdentity.indexOf("id:") === 0,
+    activationTarget: activationTarget(sourceIdentity),
+    active: false,
+    items: [],
+    count: Math.max(0, Number(drag.count) || 0),
+    urgent: false,
+    _monitorDragPlaceholder: true,
+    _monitorDragOccupied: true,
+    _monitorDragSortIdentity: sourceIdentity
+  }
+
+  var insertion = -1
+  var lastTarget = -1
+  for (var groupIndex = 0; groupIndex < nextGroups.length; ++groupIndex) {
+    var group = nextGroups[groupIndex]
+    if (!group || String(group.monitorIdentity || "") !== targetMonitor) continue
+    lastTarget = groupIndex
+    if (workspaceCompare(placeholder, group) < 0 && insertion < 0)
+      insertion = groupIndex
+  }
+  if (insertion < 0 && lastTarget >= 0) insertion = lastTarget + 1
+  if (insertion < 0) insertion = nextGroups.length
+  nextGroups = nextGroups.slice()
+  nextGroups.splice(insertion, 0, placeholder)
+
+  var nextMonitorGroups = monitorGroups
+  var targetSection = -1
+  for (var sectionIndex = 0; sectionIndex < monitorGroups.length; ++sectionIndex) {
+    if (String(monitorGroups[sectionIndex].identity || "") === targetMonitor) {
+      targetSection = sectionIndex
+      break
+    }
+  }
+  if (targetSection >= 0) {
+    var firstTarget = nextGroups.find(function(group) {
+      return group && String(group.monitorIdentity || "") === targetMonitor
+    })
+    if (firstTarget) {
+      var derivedSection = Object.assign({}, monitorGroups[targetSection], {
+        firstWorkspaceIdentity: firstTarget.identity
+      })
+      nextMonitorGroups = monitorGroups.slice()
+      nextMonitorGroups[targetSection] = derivedSection
+    }
+  }
+
+  return Object.assign({}, presentation, {
+    groups: nextGroups,
+    monitorGroups: nextMonitorGroups
+  })
 }
 
 function buildWorkspacePresentation(appItems, records, workspaces, context) {
@@ -188,15 +295,13 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
     var connector = String(
       monitorIpc.name !== undefined ? monitorIpc.name : monitorDescriptor.name || ""
     ).trim()
-    var activeDescriptor = monitorIpc.activeWorkspace !== undefined
-      ? monitorIpc.activeWorkspace : monitorDescriptor.activeWorkspace
+    var activeDescriptor = DockWindowModel.monitorActiveWorkspace(monitorDescriptor)
     var activeWorkspace = DockWindowModel.workspaceIdentity(activeDescriptor)
     addMonitorActiveEvidence(owner, activeWorkspace)
     if (activeWorkspace) addOwnerEvidence(activeOwners, activeWorkspace, owner, false)
     if (allMonitors) addWorkspace(activeWorkspace,
       activeDescriptor ? activeDescriptor.name : "")
-    var focused = monitorIpc.focused !== undefined
-      ? monitorIpc.focused === true : monitorDescriptor.focused === true
+    var focused = DockWindowModel.monitorFocused(monitorDescriptor)
     if (focused) focusedMonitorEvidence[owner] = true
     monitorMetadata[owner] = {
       identity: owner,

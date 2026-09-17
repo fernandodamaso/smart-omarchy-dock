@@ -486,19 +486,19 @@ TestCase {
     verify(!DockModel.shouldRefreshWorkspaceState("urgent"))
   }
 
-  function test_resolvesFocusedWorkspaceFromMonitorIpc() {
+  function test_prefersLiveFocusedWorkspaceOverStaleMonitorIpc() {
     var monitors = [
       {
-        focused: false,
-        activeWorkspace: { id: 2 },
+        focused: true,
+        activeWorkspace: { id: 1 },
         lastIpcObject: {
           focused: false,
-          activeWorkspace: { id: 1, name: "" }
+          activeWorkspace: { id: 2, name: "" }
         }
       },
       {
         focused: false,
-        activeWorkspace: { id: 1 },
+        activeWorkspace: { id: 2 },
         lastIpcObject: {
           focused: true,
           activeWorkspace: { id: 2, name: "" }
@@ -506,8 +506,8 @@ TestCase {
       }
     ]
 
-    compare(DockModel.focusedWorkspaceIdFromMonitors(monitors, { id: 1 }), 2)
-    compare(DockModel.focusedWorkspaceIdFromMonitors(monitors, null), 2)
+    compare(DockModel.focusedWorkspaceIdFromMonitors(monitors, { id: 2 }), 1)
+    compare(DockModel.focusedWorkspaceIdFromMonitors(monitors, null), 1)
   }
 
   function test_prefersIpcWorkspaceOccupancyForVisibility() {

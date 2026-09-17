@@ -70,6 +70,24 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual([e["path"] for e in entries], ["keep.txt"])
         self.assertNotEqual(before, after)
 
+    def test_two_head_placement_and_seed_state_are_persistent_contracts(self):
+        import inspect
+
+        launcher = inspect.getsource(ds._launch_rule)
+        disabler = inspect.getsource(ds._disable_launch_rule)
+        pattern = inspect.getsource(ds._qemu_title_pattern)
+        self.assertIn("virtio-vga", pattern)
+        self.assertIn("_qemu_title_pattern(name)", launcher)
+        self.assertIn("_qemu_title_pattern(name)", disabler)
+        start_dock = inspect.getsource(ds.start_guest_dock)
+        self.assertIn("guest_seeded", start_dock)
+        self.assertIn('"seed-desktop"', start_dock)
+        start = inspect.getsource(ds.start)
+        self.assertIn("qemu_window_addresses", start)
+        focus_signature = inspect.getsource(ds._host_focus_signature)
+        self.assertIn("active_workspace", focus_signature)
+        self.assertIn("active_window", focus_signature)
+
     def test_sync_applies_unstaged_rename_and_removes_old_guest_path(self):
         self.init_source()
         (self.source / "tracked.txt").rename(self.source / "renamed file.txt")
@@ -235,6 +253,7 @@ ds._disable_launch_rule = lambda *a: None
 ds.qemu_argv = lambda *a: [sys.executable, "-c", "import time; time.sleep(60)"]
 ds._wait_for_owned_port = lambda *a: None
 ds._place_owned_window = lambda *a: {"address": "0xfixture"}
+ds._show_both_qemu_heads = lambda *a: [{"address": "0xfixture", "at": [0, 0]}]
 def gate(record, evidence):
     if phase == "boot":
         (root / "gate").write_text("boot")
