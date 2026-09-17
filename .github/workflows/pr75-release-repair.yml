@@ -1,0 +1,98 @@
+name: PR 75 Release Repair
+
+on:
+  push:
+    branches: [feat/workspace-drag-consolidated]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/workspace-drag-consolidated
+          fetch-depth: 0
+
+      - name: Apply transition-based release fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              found = text.count(old)
+              if found != count:
+                  raise SystemExit(f"{path}: expected {count} occurrence(s), found {found}: {old!r}")
+              p.write_text(text.replace(old, new))
+
+          replace(
+              'components/DockItem.qml',
+              '''    if (transition === PointerDevice.UngrabExclusive) {
+      // QEventPoint::Released maps to Qt::TouchPointReleased (0x08).
+      if (point.state === 0x08)
+        root.workspaceDrag.finish(point.scenePosition)
+      else
+        cancelWorkspaceDrag("non-release ungrab")
+    } else if (transition === PointerDevice.CancelGrabExclusive''',
+              '''    if (transition === PointerDevice.UngrabExclusive) {
+      root.workspaceDrag.finish(point.scenePosition)
+    } else if (transition === PointerDevice.CancelGrabExclusive''')
+
+          replace(
+              'components/DockWorkspaceGroup.qml',
+              '''    if (transition === PointerDevice.UngrabExclusive) {
+      // QEventPoint::Released maps to Qt::TouchPointReleased (0x08).
+      if (point.state === 0x08)
+        root.workspaceMonitorDrag.finish(point.scenePosition)
+      else
+        cancelWorkspaceMonitorDrag("non-release ungrab")
+    } else if (transition === PointerDevice.CancelGrabExclusive''',
+              '''    if (transition === PointerDevice.UngrabExclusive) {
+      root.workspaceMonitorDrag.finish(point.scenePosition)
+    } else if (transition === PointerDevice.CancelGrabExclusive''')
+
+          replace(
+              'tests/test_workspace_drag.mjs',
+              "for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'cancel'],\n    [2, 0x08, 'cancel'], [3, 0x08, 'cancel']])",
+              "for (const [transition, state, expected] of [[1, 0x08, 'finish'], [1, 0, 'finish'],\n    [2, 0x08, 'cancel'], [3, 0x08, 'cancel']])",
+              count=2)
+          PY
+          git diff --check
+
+      - name: Install targeted Qt test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update >/dev/null
+          sudo apt-get install --yes --no-install-recommends \
+            qml6-module-qtqml-workerscript \
+            qml6-module-qtquick \
+            qml6-module-qtquick-window \
+            qml6-module-qttest \
+            qt6-declarative-dev-tools >/dev/null
+
+      - name: Verify release lifecycle fix
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -euo pipefail
+          node tests/test_workspace_drag.mjs
+          python3 -m unittest discover -s tests -p 'test_workspace_drag_input.py'
+
+      - name: Commit repaired branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add components/DockItem.qml components/DockWorkspaceGroup.qml tests/test_workspace_drag.mjs
+          git diff --cached --check
+          git commit -m 'fix: finish workspace drags on normal ungrab'
+          git push origin HEAD:feat/workspace-drag-consolidated
