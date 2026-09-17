@@ -17,6 +17,10 @@ case "${1:-}" in
       "$client_dir/scripts/smartdock_cli.py" "$app_dir/scripts/smartdock_cli.py"; do
       if [[ -f "$adapter" ]]; then
         if command -v python3 >/dev/null 2>&1; then
+          if [[ "${1:-}" == dev ]]; then
+            shift
+            exec python3 -B "$(dirname -- "$adapter")/smartdock_dev.py" "$@"
+          fi
           exec python3 -B "$adapter" "$@"
         fi
         break

@@ -34,6 +34,8 @@ test ! -e "$XDG_CACHE_HOME"
 test ! -e "$QS_INSTALL_LOG"
 "$XDG_BIN_HOME/smartdock" agent-guide >/dev/null
 "$XDG_BIN_HOME/smartdock" help >/dev/null
+"$XDG_BIN_HOME/smartdock" dev --help >/dev/null
+test -f "$XDG_DATA_HOME/smartdock-cli/docs/DEV_SWITCH.md"
 test ! -e "$QS_INSTALL_LOG"
 if bash "$repo/uninstall.sh" --cli-only --purge; then
   echo 'Client-only purge must be rejected' >&2
