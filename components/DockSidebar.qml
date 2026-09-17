@@ -11,6 +11,7 @@ PanelWindow {
   required property var host
   required property var controller
   readonly property var viewport: sidebarViewport
+  readonly property var resizeHandle: resizeHandle
   readonly property string preferenceFeedback: !host ? "" : host.settingsWriteState === "error"
     ? "Unsaved preferences: " + String(host.settingsWriteError || "Persistence failed")
     : host.settingsWriteState === "saving" ? "Saving preferences" : controller.mutationFeedback
