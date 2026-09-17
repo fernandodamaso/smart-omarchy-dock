@@ -26,7 +26,16 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import base64, hashlib, pathlib, zlib
-          patch = zlib.decompress(base64.b64decode(pathlib.Path('.fdm963-source.patch.b64').read_text()))
+          payload = pathlib.Path('.fdm963-source.patch.b64').read_text().strip()
+          # Correct six transfer-text errors verified against the local original.
+          # Both the original payload/patch hashes and the complete Git tree
+          # must match before any candidate branch can be created or pushed.
+          corrections = [[514, 518, 'RXVV', 'x'], [1675, 1676, 'P', 'J'], [1677, 1678, 'J', 'Z'], [6396, 6396, '', '/'], [16061, 16061, '', '/'], [16628, 16628, '', '/']]
+          for start, end, old, new in reversed(corrections):
+              assert payload[start:end] == old
+              payload = payload[:start] + new + payload[end:]
+          assert hashlib.sha256(payload.encode()).hexdigest() == '75f8dbaf89f5545b700fe4e50864bb7a9d8fcc5f8653b33e8a225239a2971040'
+          patch = zlib.decompress(base64.b64decode(payload))
           assert hashlib.sha256(patch).hexdigest() == '33894a338f88d8e6cfc8171429f7855765bd586e4a8ae17fbd6c5c1b8431b16f'
           pathlib.Path('/tmp/fdm963-source.patch').write_bytes(patch)
           PY
