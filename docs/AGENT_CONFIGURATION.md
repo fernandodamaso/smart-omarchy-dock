@@ -79,7 +79,7 @@ This changes SmartDock motion, not compositor-wide animations. The attention bad
 
 ### Horizontal workspace cards
 
-The example explicitly moves to the bottom; do not move a vertical dock without permission. A requested grouped layout renders flat on left/right without being erased. Grouped-card monitor scope is separate from flat running-window scope.
+The example explicitly moves to the bottom; do not move a left dock without permission. A requested grouped layout renders flat on the left without being erased. Grouped-card monitor scope is separate from flat running-window scope.
 
 <!-- recipe: workspace-cards -->
 ```json
