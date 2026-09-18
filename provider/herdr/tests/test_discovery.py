@@ -80,17 +80,20 @@ class DiscoveryTests(unittest.TestCase):
         )
         self.assertEqual(parse_session_list(text), {})
 
-    def test_fingerprint_does_not_run_metadata_command(self):
+    def test_fingerprint_detects_new_named_socket_without_running_metadata(self):
         with tempfile.TemporaryDirectory() as home:
             calls = []
+            sessions = Path(home, ".config/herdr/sessions")
+            sessions.mkdir(parents=True)
             discovery = Discovery(
                 runner=lambda *args: calls.append(args) or RunResult(True, ""),
                 home=home,
             )
             self.assertFalse(discovery.changed())
-            path = Path(home, ".config/herdr")
-            path.mkdir(parents=True)
-            (path / "new.sock").touch()
+            named = sessions / "work"
+            named.mkdir()
+            discovery.last_fingerprint = discovery.fingerprint()
+            (named / "herdr.sock").touch()
             self.assertTrue(discovery.changed())
             self.assertEqual(calls, [])
 
