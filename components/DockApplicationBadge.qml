@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import "DockBadgeModel.js" as BadgeModel
 
 Rectangle {
   id: root
@@ -9,14 +10,10 @@ Rectangle {
   // the existing grouped/ungrouped primary-item ownership gate unchanged.
   required property string severity
 
-  readonly property var tokenParts: String(severity || "").split(":")
-  readonly property bool numeric: tokenParts.length >= 2
-    && tokenParts[0] === "count"
-    && isFinite(Number(tokenParts[1]))
-    && Number(tokenParts[1]) > 0
-  readonly property int count: numeric ? Math.floor(Number(tokenParts[1])) : 0
-  readonly property string sourceSeverity: numeric && tokenParts.length >= 3
-    ? tokenParts[2] : severity
+  readonly property var decoded: BadgeModel.decodeApplicationBadgeToken(severity)
+  readonly property bool numeric: decoded.kind === "count"
+  readonly property int count: decoded.count
+  readonly property string sourceSeverity: decoded.severity
   readonly property bool urgent: sourceSeverity === "urgent"
   readonly property bool attention: sourceSeverity === "attention"
 

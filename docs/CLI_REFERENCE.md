@@ -123,3 +123,59 @@ Every response uses `apiVersion: 1`, Boolean `ok`, object `data`, array `warning
 From the intended source checkout, `bash ./install.sh --cli-only` installs the wrapper at `${XDG_BIN_HOME:-$HOME/.local/bin}/smartdock` and the adapter, defaults, schema, agent guide, reference and inventory under `${XDG_DATA_HOME:-$HOME/.local/share}/smartdock-cli`. `bash ./uninstall.sh --cli-only` removes this bundle while preserving settings, plugin and standalone ownership. Both installation orders retain the wrapper while another bundle owns it. Help and guide use the installed bundle, not `.source-dir`. When both bundles exist the wrapper prefers client-only assets; update that bundle explicitly from the intended source.
 
 Full `install.sh` is an explicit standalone installation with separate lifecycle effects and optional autostart; it is not needed to configure the plugin. Explicit wrapper commands `launch`/`--daemonize`, `restart`, `stop`, `update`, `uninstall`, and `autostart enable|disable|status` remain standalone lifecycle commands, outside this versioned control-command JSON contract. `smartdock update` is not a plugin or client-only updater. Use client-only reinstall for client updates and the normal, separately authorized Omarchy deployment path for a released plugin. No merge/deploy is authorized by this candidate reference.
+
+## Sidebar configuration and diagnostics
+
+The SB-02 candidate adds `presentationMode`, `sidebarEdge`, `sidebarMonitor`,
+`sidebarExpandedWidth`, `sidebarCollapsed`, `sidebarCollapsedByMonitor`,
+`sidebarBrowserTabsEnabled` and
+`sidebarWidgets`. Discover these keys on the selected
+host; do not assume an installed release implements this candidate.
+
+In an isolated candidate session only:
+
+```sh
+smartdock config set presentationMode sidebar --json
+smartdock config set sidebarEdge right --json
+smartdock config set sidebarMonitor DP-1 --json
+smartdock config set sidebarExpandedWidth 320 --json
+smartdock config set sidebarCollapsed true --json
+smartdock config apply --json '{"sidebarCollapsedByMonitor":{"DP-1":true,"HDMI-A-1":false}}'
+smartdock config get --effective --json
+smartdock config set presentationMode classic --json
+```
+
+`data.presentation` reports the primary screen, full `screens` list for mirrored
+panels, per-screen `collapsedByScreen`, effective width, geometry mapping
+eligibility, and inactive classic settings. Saved disconnected monitor preferences
+remain visible in requested output; effective `sidebarMonitor` names the primary
+mapped connector or is null with no screens. Empty preference maps every connected
+output. Global `sidebarCollapsed` is the default rail when a connector has no map
+entry. `sidebarExpandedWidth`
+is the effective expanded width, while `presentation.width` is the current
+rail/expanded width on the primary screen.
+A successful model projection is not live rendering evidence. Existing persistence
+flags remain authoritative: accepted-but-saving (`data.applied: true`) must not be
+replayed as though rejected. `config retry` uses the latest host snapshot.
+
+These controls do not install widgets or alter the stock topbar. This Draft slice
+is not an integrated release; see `docs/SIDEBAR.md` in the source checkout.
+
+### Internal widget IDs (SB-05)
+
+```sh
+smartdock config schema sidebarWidgets --json
+smartdock config get sidebarWidgets --json
+smartdock config set sidebarWidgets '[]' --json
+smartdock config get --effective --json
+```
+
+`sidebarWidgets` is an ordered, duplicate-free array of IDs from live
+`registeredIds`, initially empty. Explicit unknown IDs/types/duplicates fail with
+`E_VALIDATION`; `config apply` validates atomically at the host. Registration is
+independent of authentication or loading/error status. Imported unknown IDs survive
+unrelated writes and appear unavailable under `data.presentation.widgets`; they
+are omitted from effective `sidebarWidgets` and never executed. Diagnostics contain
+at most 32 status rows plus aggregate lifecycle counters, never task/window content
+or credentials. Clearing/resetting this key removes all widget space/work. No
+clock/Herdr/Todoist/test provider or external QML path is enabled by this candidate.

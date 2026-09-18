@@ -70,6 +70,10 @@ each Chrome item shows only the fallback count owned by its represented window.
 Application-wide LauncherEntry counts retain precedence and render only on the
 primary visible item.
 
+Sidebar nesting of ordinary open tabs (titles only) is documented separately in
+[`browser-tabs.md`](browser-tabs.md). Do not overload `activities` for a general
+tab list.
+
 ## Validation
 
 Provider parsing and activation are covered by

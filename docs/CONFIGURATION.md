@@ -6,7 +6,7 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 45 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
@@ -31,6 +31,14 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 45 rows 
 | `workspaceBadgeTextColor` | `""` | Color string; requires workspaceBadgeTextColorEnabled. |
 | `borderWidthEnabled` | `false` | Boolean; enables a fixed width instead of theme-owned widths. |
 | `borderWidth` | `2` | Integer 0–8 logical pixels; relevant only with borderWidthEnabled. |
+| `presentationMode` | `"classic"` | Classic per-screen docks or mirrored sidebar panels. Sidebar is an unreleased integrated candidate. |
+| `sidebarEdge` | `"left"` | Sidebar panel edge; leaves classic position unchanged. |
+| `sidebarMonitor` | `""` | Empty maps a mirrored panel on every connected screen. A connected connector maps only that output. Disconnected preferences are retained and fall back to all connected screens; control characters are rejected. |
+| `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
+| `sidebarCollapsed` | `false` | Default icon rail for monitors without a `sidebarCollapsedByMonitor` override. Expanded width and session app folds are retained. |
+| `sidebarCollapsedByMonitor` | `{}` | Object map of exact connector → boolean. Missing connectors follow `sidebarCollapsed`. Disconnected names retained; control characters and non-booleans rejected. |
+| `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. Production registry initially empty; unknown imports retained requested and unavailable effective. Explicit invalid writes fail; readiness/auth is not validation. Preference reset clears. |
+| `sidebarBrowserTabsEnabled` | `true` | When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of `browserActivityMutedServices`. See the [online browser-tabs guide](https://github.com/fernandodamaso/smart-omarchy-dock/blob/370585ccfaed98f1d04954d8598a868aef80a087/docs/browser-tabs.md); it is not part of the offline CLI documentation bundle. |
 | `position` | `"bottom"` | String: top, bottom, left, right. Vertical edges render workspaceLayout as flat. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
 | `reserveSpace` | `true` | Boolean; effective false while autoHide is enabled, without erasing this request. |
@@ -42,7 +50,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 45 rows 
 | `sortByWorkspace` | `false` | Boolean; flat-layout workspace sorting; closed pins remain first. |
 | `workspaceLayout` | `"flat"` | String: flat or grouped. Grouped cards render on top/bottom only. |
 | `workspaceMonitorScope` | `"all"` | String: all or current-monitor; grouped cards only. |
-| `workspaceMonitorOrder` | `[]` | Exact case-sensitive connector-name array. Empty uses automatic physical x/y order; configured connected monitors lead, unlisted connected monitors append automatically, and disconnected names remain saved for reconnect. Grouped/all presentation only; never reconfigures Hyprland monitors. |
+| `workspaceMonitorOrder` | `[]` | Exact case-sensitive connector-name array. Empty uses automatic physical x/y order; configured connected monitors lead, unlisted connected monitors append automatically, and disconnected names remain saved for reconnect. Classic grouped/all and global sidebar presentation; never reconfigures Hyprland monitors. |
 | `groupWindows` | `false` | Deprecated/inactive compatibility Boolean. Stored legacy `true` is preserved on read and unrelated writes but never changes presentation; new attempts to enable it are rejected. |
 | `workspaceGroups` | `[]` | Strict opt-in `{desktopId, workspace}` pairs. Workspace identities are canonical `id:N` or safe `name:N`; duplicate pairs and ambiguous/special identities are rejected atomically. |
 | `interfaceAnimationsEnabled` | `true` | Boolean; interface transitions, not every compositor animation or attention nudge. |
@@ -109,3 +117,52 @@ Icon overrides are app-wide and SmartDock-only. Set/reset changes one latest-map
 Existing unknown keys and untouched legacy values survive minimal mutations. New unknown keys are rejected. An explicit array/object patch replaces that whole key, not a deep merge. Prefer `apps`/`icons` commands for individual membership/order/artwork changes and touched-key rollback after fresh readback.
 
 `controlCommand` is executable configuration: store only an intentionally chosen command, quote it literally, and never run it merely to check validity. The existing launcher action can execute it later. Pointer `close` can close every live member of an application group when used. Changes to either require explicit intent; schema reads, dry runs and metadata validation do not execute them.
+
+## Sidebar presentation (SB-02 + SB-03 source foundation)
+
+Classic remains the default. `presentationMode: "sidebar"` maps mirrored panels on
+connected screens (or one panel when `sidebarMonitor` names a connected connector),
+while classic preferences remain requested data and return unchanged on switching
+back. Empty `sidebarMonitor` means every connected monitor; a set connector maps
+only that output. Disconnected names remain saved and fall back to all connected
+screens. Placement does not filter the window inventory.
+
+Sidebar effective output uses all monitors, structural workspace-local application
+groups, persistent reservation, icons capped at 32, and no previews or auto-hide.
+Classic click/middle-click/scroll actions are reported as `null` (inactive).
+The `presentation` diagnostic lists inactive classic settings, primary connector,
+full `screens` list, effective persistent width and whether that geometry can map.
+These are source projections, not proof that the compositor mapped a surface. No
+screen means zero width and `mapped: false`. Width uses unreserved logical screen
+geometry. Each output reserves its own exclusive zone from its clamped width.
+
+The seven sidebar settings support the existing typed set/apply/reset/schema/get
+commands. Width writes accept integers 240–480; the runtime may clamp the effective
+width below 240 on narrow screens without rewriting the requested value. The
+expanded resize handle lives inside the reserved width. Pointer motion changes only
+temporary effective geometry; a changed release submits one `sidebarExpandedWidth`
+intent. No-op release and cancellation write nothing. Collapsing a panel submits
+only `sidebarCollapsedByMonitor` for that connector, preserves expanded width and
+retains session-only app folds. Global `sidebarCollapsed` remains the default for
+monitors without an override.
+Unknown keys, pins, artwork, hidden apps and provider preferences survive unrelated
+changes. Empty `sidebarCollapsedByMonitor` follows `sidebarCollapsed` on every
+output; a connector key overrides only that panel.
+
+Gesture commits use the existing sole writer. A stale captured field is rejected
+rather than replayed; an accepted write may report persistence pending without
+becoming a rejected intent. Persistence failure keeps the accepted live value and
+retry persists the latest complete host snapshot. See `SIDEBAR_RESIZE.md` for the
+exact geometry, cancellation, writer-count and deferred runtime contracts.
+
+This is an **unreleased Draft foundation**, not integrated sidebar acceptance.
+SB-03 owns resize gestures, SB-04 owns full navigation/menus/keyboard/drag,
+SB-05 adds internal bounded widget slots (not live provider integrations), and
+SB-06 owns live qualification. See the source-only `docs/SIDEBAR.md` contract.
+
+`sidebarWidgets` uses the internal source registry, currently empty. The CLI schema's
+`registeredIds` is authoritative for new writes. Unknown imports are never executed;
+requested readback retains them and `data.presentation.widgets` reports unavailable
+state. `config get --effective` lists only registered IDs. Empty configuration
+reserves no footer gap and starts no provider. These controls do not change stock
+topbar services. Source adapter/view/lifecycle API: `docs/SIDEBAR_WIDGETS.md`.

@@ -21,6 +21,55 @@ Item {
   property var browserProfileService: null
   readonly property var applications: DesktopEntries.applications.values || []
   property int iconReloadRevision: 0
+  readonly property var connectedScreens: Quickshell.screens
+  readonly property var hyprMonitors: Hyprland.monitors ? Hyprland.monitors.values || [] : []
+  readonly property var hyprWorkspaces: Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
+  readonly property var desktopToplevels: ToplevelManager.toplevels.values || []
+  readonly property var hyprToplevels: Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
+  // Internal provider adapters register here in their own source slices. No
+  // external QML paths, configurable commands, test IDs or additional services.
+  readonly property var sidebarWidgetRegistry: ({})
+  readonly property var sidebarController: sidebarState
+  readonly property var sidebarPanels: rendererMode === "sidebar" && presentationLoader.item
+    ? presentationLoader.item.panels : []
+  // Primary surface for harnesses that still expect a single panel reference.
+  readonly property var sidebarPanel: sidebarPanels.length ? sidebarPanels[0] : null
+  property bool rendererInitialized: false
+  property bool rendererReady: false
+  property string rendererMode: "classic"
+  property string rendererEdge: "left"
+  property var rendererScreen: null
+
+  function syncRenderer() {
+    if (!root.rendererInitialized) return
+    var mode = DockModel.normalizeSetting("presentationMode", root.settings.presentationMode)
+    var edge = mode === "sidebar" ? DockModel.normalizeSetting("sidebarEdge", root.settings.sidebarEdge) : "left"
+    // Mode/edge recreate the Loader. Screen membership is owned by Variants over
+    // mappedScreens and must not tear every panel down on hotplug or preference.
+    if (mode !== root.rendererMode || edge !== root.rendererEdge) {
+      // Synchronous Loader teardown precedes deferred creation of the new branch.
+      // The old Dock/Sidebar owns its popup, drag and badge-scope destruction.
+      root.rendererReady = false
+      root.rendererMode = mode
+      root.rendererEdge = edge
+    }
+    root.rendererScreen = mode === "sidebar" ? sidebarState.selectedScreen : null
+    Qt.callLater(root.activateRenderer)
+  }
+
+  function activateRenderer() {
+    var mode = DockModel.normalizeSetting("presentationMode", root.settings.presentationMode)
+    var edge = mode === "sidebar" ? DockModel.normalizeSetting("sidebarEdge", root.settings.sidebarEdge) : "left"
+    if (mode !== root.rendererMode || edge !== root.rendererEdge) {
+      root.syncRenderer()
+      return
+    }
+    root.rendererScreen = mode === "sidebar" ? sidebarState.selectedScreen : null
+    root.rendererReady = mode === "classic"
+      || (sidebarState.mappedScreens && sidebarState.mappedScreens.length > 0)
+  }
+
+  onSettingsChanged: if (rendererInitialized) Qt.callLater(root.syncRenderer)
 
   property int trashItemCount: 0
   property bool trashStateKnown: false
@@ -43,6 +92,7 @@ Item {
   property bool workspaceCountsRefreshPending: false
   property int scopeRevision: scopeRefreshController.revision
   readonly property var windowActions: windowActionsController
+  readonly property var workspaceMonitorDrag: workspaceMonitorDragController
   readonly property var badgeTracker: badgeTrackerController
   readonly property bool showTrash: showTrashSetting
 
@@ -183,6 +233,27 @@ Item {
     var patch = Object.create(null)
     patch[key] = value
     return saveSettings(patch, false)
+  }
+
+  // Gesture-owned preferences need one small adapter around the sole writer.
+  // It distinguishes a rejected preflight/stale intent from a live intent that
+  // was accepted but whose async FileView persistence is still pending.
+  function saveSettingIntent(key, value, expectedValue) {
+    var blocked = mutationBlocked()
+    if (blocked) return { accepted: false, pending: false, reply: blocked }
+    if (settings[key] !== expectedValue) {
+      var stale = dockControl.mutationData(settings, settings, [], false, false)
+      stale.currentValue = settings[key]
+      stale.expectedValue = expectedValue
+      return { accepted: false, pending: false,
+        reply: dockControl.failure("E_STALE",
+          "Preference changed after the interaction started; refresh before retrying.", stale) }
+    }
+    var reply = saveSetting(key, value)
+    var applied = !!(reply && reply.data && reply.data.applied === true)
+    var accepted = !!(reply && (reply.ok || applied))
+    var pending = accepted && !reply.ok && !!reply.error && reply.error.code === "E_BUSY"
+    return { accepted: accepted, pending: pending, reply: reply }
   }
 
   function mutationBlocked() {
@@ -342,6 +413,8 @@ Item {
   }
 
   Component.onCompleted: {
+    rendererInitialized = true
+    Qt.callLater(root.syncRenderer)
     refreshWorkspaceCounts()
     scopeRefreshController.requestRefresh()
   }
@@ -466,35 +539,92 @@ Item {
     launcherBadgeMode: root.settings.launcherBadgeMode === "dots-only" ? "dots-only" : "automatic"
   }
 
-  Variants {
-    model: Quickshell.screens
-    delegate: Component {
-      Dock {
-        required property var modelData
-        screen: modelData
-        settings: root.settings
-        iconOverrides: root.settings.iconOverrides || ({})
-        iconReloadRevision: root.iconReloadRevision
-        browserProfileService: root.browserProfileService
-        browserProfileBadgesEnabled: root.settings.browserProfileBadgesEnabled !== false
-        showTrash: root.showTrash
-        windowActions: root.windowActions
-        workspaceMonitorDrag: workspaceMonitorDragController
-        badgeTracker: root.badgeTracker
-        trashItemCount: root.trashItemCount
-        trashStateKnown: root.trashStateKnown
-        workspaceWindowCounts: root.workspaceWindowCounts
-        workspaceCountsReady: root.workspaceCountsReady
-        workspaceCountsRevision: root.workspaceCountsRevision
-        scopeRevision: root.scopeRevision
-        onReorderRequested: (sourceDesktopId, targetDesktopId) => root.reorderPinned(sourceDesktopId, targetDesktopId)
-        onPinRequested: desktopId => root.pinApplication(desktopId)
-        onUnpinRequested: desktopId => root.unpinApplication(desktopId)
-        onHideRequested: desktopId => root.hideApplication(desktopId)
-        onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
-        onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
-        onOpenTrashRequested: root.openTrash()
-        onEmptyTrashRequested: root.emptyTrash()
+  DockSidebarController {
+    id: sidebarState
+    widgetRegistry: root.sidebarWidgetRegistry
+    host: root
+    settings: root.settings
+    screens: root.connectedScreens
+    monitors: root.hyprMonitors
+    workspaces: root.hyprWorkspaces
+    applications: root.applications
+    toplevels: root.desktopToplevels
+    hyprToplevels: root.hyprToplevels
+    minimizedOrigins: root.windowActions.minimizedOriginsSnapshot
+    scopeRevision: root.scopeRevision
+    focusedWorkspace: {
+      var revision = root.scopeRevision
+      return DockWindowModel.focusedWorkspaceIdentity(root.hyprMonitors, Hyprland.focusedWorkspace)
+    }
+    onSelectedScreenChanged: root.rendererScreen = selectedScreen
+    onMappedScreensChanged: if (root.rendererInitialized) Qt.callLater(root.activateRenderer)
+    onSurfaceInvalidated: {
+      if (root.rendererMode === "sidebar") root.rendererReady = false
+      Qt.callLater(root.syncRenderer)
+    }
+  }
+
+  Loader {
+    id: presentationLoader
+    active: root.rendererReady
+    sourceComponent: root.rendererMode === "sidebar" ? sidebarPresentation : classicPresentation
+  }
+
+  Component {
+    id: sidebarPresentation
+    Item {
+      id: sidebarRoot
+      readonly property var panels: sidebarVariants.instances
+      readonly property var panel: panels.length ? panels[0] : null
+      Variants {
+        id: sidebarVariants
+        model: sidebarState.mappedScreens
+        delegate: Component {
+          DockSidebar {
+            required property var modelData
+            screen: modelData
+            host: root
+            controller: sidebarState
+          }
+        }
+      }
+    }
+  }
+
+  Component {
+    id: classicPresentation
+    Item {
+      Variants {
+        model: Quickshell.screens
+        delegate: Component {
+          Dock {
+            required property var modelData
+            screen: modelData
+            settings: root.settings
+            iconOverrides: root.settings.iconOverrides || ({})
+            iconReloadRevision: root.iconReloadRevision
+            browserProfileService: root.browserProfileService
+            browserProfileBadgesEnabled: root.settings.browserProfileBadgesEnabled !== false
+            showTrash: root.showTrash
+            windowActions: root.windowActions
+            workspaceMonitorDrag: workspaceMonitorDragController
+            badgeTracker: root.badgeTracker
+            trashItemCount: root.trashItemCount
+            trashStateKnown: root.trashStateKnown
+            workspaceWindowCounts: root.workspaceWindowCounts
+            workspaceCountsReady: root.workspaceCountsReady
+            workspaceCountsRevision: root.workspaceCountsRevision
+            scopeRevision: root.scopeRevision
+            onReorderRequested: (sourceDesktopId, targetDesktopId) => root.reorderPinned(sourceDesktopId, targetDesktopId)
+            onPinRequested: desktopId => root.pinApplication(desktopId)
+            onUnpinRequested: desktopId => root.unpinApplication(desktopId)
+            onHideRequested: desktopId => root.hideApplication(desktopId)
+            onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
+            onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
+            onOpenTrashRequested: root.openTrash()
+            onEmptyTrashRequested: root.emptyTrash()
+          }
+        }
       }
     }
   }
