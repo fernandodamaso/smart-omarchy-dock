@@ -1,0 +1,37 @@
+name: FDM-970 isolated source export
+on:
+  push:
+    branches: [chore/fdm-970-source-transfer-20260918]
+    paths: [.github/workflows/fdm-970-source-transfer.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: 5eb3b2349d3914c7ee0eecc73a2515c535080cf1
+          fetch-depth: 0
+          path: smartdock
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          repository: njpatel/omaherdr
+          ref: c20d9b0db3a65b5a7590876c56026bc906306e04
+          path: omaherdr
+          persist-credentials: false
+      - name: Export source without credentials or runner environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir export
+          git -C smartdock bundle create ../export/smartdock.bundle HEAD
+          git -C omaherdr archive HEAD > export/omaherdr.tar
+          printf '%s\n' 'smartdock 5eb3b2349d3914c7ee0eecc73a2515c535080cf1' 'omaherdr c20d9b0db3a65b5a7590876c56026bc906306e04' > export/SOURCES.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdm-970-pinned-sources
+          path: export/
+          retention-days: 1
