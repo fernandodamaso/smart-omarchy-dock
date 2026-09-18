@@ -10,8 +10,13 @@ DockLauncherBadgeService {
   // Browser-window profile snapshots (FDM profile badges) ride the same
   // plugin-owned singleton so multi-screen overlays share one provider.
   property alias browserProfileService: browserProfiles
+  property alias herdrService: herdr
 
   DockBrowserProfileService {
     id: browserProfiles
+  }
+
+  DockHerdrService {
+    id: herdr
   }
 }
