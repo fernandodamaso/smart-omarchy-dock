@@ -68,7 +68,8 @@ assert.ok(expression && update);
 let stops = 0, restarts = 0;
 const scope = vm.createContext({
   windowPointer: { hovered: false }, appPicker: { visible: false },
-  windowPreview: { interactionActive: false }, openMenuCount: 0, dragSource: -1,
+  windowPreview: { interactionActive: false }, positionDragSurface: { pressed: false },
+  openMenuCount: 0, dragSource: -1,
   autoHide: true, autoHideRevealed: false, workspaceDragActive: false,
   workspaceMonitorDragSourceActive: false, dragRevealed: false,
   hideTimer: { stop() { stops++; }, restart() { restarts++; } },
@@ -80,7 +81,7 @@ assert.equal(scope.keepAutoHideOpen, false);
 for (const [object, key, value] of [[scope.windowPointer, 'hovered', true],
   [scope.appPicker, 'visible', true], [scope.windowPreview, 'interactionActive', true],
   [scope, 'openMenuCount', 1], [scope, 'dragSource', 0],
-  [scope, 'workspaceDragActive', true],
+  [scope, 'workspaceDragActive', true], [scope.positionDragSurface, 'pressed', true],
   [scope, 'workspaceMonitorDragSourceActive', true], [scope, 'dragRevealed', true]]) {
   const old = object[key];
   object[key] = value;
