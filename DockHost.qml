@@ -621,6 +621,8 @@ Item {
             onHideRequested: desktopId => root.hideApplication(desktopId)
             onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
             onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
+            onPositionRequested: (position, expectedPosition) =>
+              root.saveSettingIntent("position", position, expectedPosition)
             onOpenTrashRequested: root.openTrash()
             onEmptyTrashRequested: root.emptyTrash()
           }
