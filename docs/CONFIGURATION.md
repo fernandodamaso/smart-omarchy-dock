@@ -39,7 +39,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows 
 | `sidebarCollapsedByMonitor` | `{}` | Object map of exact connector → boolean. Missing connectors follow `sidebarCollapsed`. Disconnected names retained; control characters and non-booleans rejected. |
 | `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. Production registry initially empty; unknown imports retained requested and unavailable effective. Explicit invalid writes fail; readiness/auth is not validation. Preference reset clears. |
 | `sidebarBrowserTabsEnabled` | `true` | When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of `browserActivityMutedServices`. See the [online browser-tabs guide](https://github.com/fernandodamaso/smart-omarchy-dock/blob/370585ccfaed98f1d04954d8598a868aef80a087/docs/browser-tabs.md); it is not part of the offline CLI documentation bundle. |
-| `position` | `"bottom"` | String: top, bottom, left, right. Vertical edges render workspaceLayout as flat. |
+| `position` | `"bottom"` | String: bottom or left. Legacy requested top is effective bottom and right is effective left. Left renders workspaceLayout as flat. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
 | `reserveSpace` | `true` | Boolean; effective false while autoHide is enabled, without erasing this request. |
 | `autoHide` | `false` | Boolean; existing edge-reveal auto-hide, not a new hide-mode enum. |
@@ -48,7 +48,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows 
 | `scrollAction` | `"none"` | String: none or cycle-windows. |
 | `controlCommand` | `"omarchy-menu toggle apps"` | Nonempty string; executable-on-use launcher configuration, never executed by validation. |
 | `sortByWorkspace` | `false` | Boolean; flat-layout workspace sorting; closed pins remain first. |
-| `workspaceLayout` | `"flat"` | String: flat or grouped. Grouped cards render on top/bottom only. |
+| `workspaceLayout` | `"flat"` | String: flat or grouped. Grouped cards render on the bottom dock only. |
 | `workspaceMonitorScope` | `"all"` | String: all or current-monitor; grouped cards only. |
 | `workspaceMonitorOrder` | `[]` | Exact case-sensitive connector-name array. Empty uses automatic physical x/y order; configured connected monitors lead, unlisted connected monitors append automatically, and disconnected names remain saved for reconnect. Classic grouped/all and global sidebar presentation; never reconfigures Hyprland monitors. |
 | `groupWindows` | `false` | Deprecated/inactive compatibility Boolean. Stored legacy `true` is preserved on read and unrelated writes but never changes presentation; new attempts to enable it are rejected. |
