@@ -38,9 +38,8 @@ TestCase {
   }
 
   function drag(surface, fromX, fromY, toX, toY) {
-    mousePress(surface, fromX, fromY, Qt.LeftButton)
-    mouseMove(surface, toX, toY, 20, Qt.LeftButton)
-    mouseRelease(surface, toX, toY, Qt.LeftButton)
+    mouseDrag(surface, fromX, fromY, toX - fromX, toY - fromY,
+      Qt.LeftButton, Qt.NoModifier, 20)
   }
 
   function test_bottom_drag_left_commits_once() {
