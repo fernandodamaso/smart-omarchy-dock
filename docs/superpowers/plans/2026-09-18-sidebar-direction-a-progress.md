@@ -172,11 +172,11 @@ Row and Viewport both pass `sidebarRowHasNumericAlert(collapsed, controller.badg
 
 Let `rowY(key)` be the ListView y of that row (continuous heights; no guessed offsets). Metrics fields from `sidebarRowMetrics` on that row:
 
-- **spanTop** (monitor or workspace): `rowY(first) + first.contentY`  
+- **spanTop** (monitor or workspace): `rowY(first) + first.contentY`
   (excludes the first row’s own `gapBefore` / inter-section gap)
-- **workspaceBottom**: `rowY(last) + last.contentY + last.contentHeight + space(5)`  
+- **workspaceBottom**: `rowY(last) + last.contentY + last.contentHeight + space(5)`
   (workspace `endPadding` only — do **not** add monitor’s +5 when the same last row also has `layoutPadMonitorEnd`)
-- **monitorBottom**: `rowY(last) + last.contentY + last.contentHeight + last.gapAfter`  
+- **monitorBottom**: `rowY(last) + last.contentY + last.contentHeight + last.gapAfter`
   (`gapAfter` already includes workspace5 + monitor5 when both flags are set on that last row)
 
 Following row’s inter-section `gapBefore` is never part of either span.
