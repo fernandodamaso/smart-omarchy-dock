@@ -7,6 +7,7 @@ TestCase {
 
   name: "DockPositionDrag"
   when: windowShown
+  visible: true
   width: 420
   height: 220
 
