@@ -8,7 +8,7 @@
 """One explicitly selected Herdr server -> private JSON-lines transport.
 
 stdin: snapshot | quit. stdout: snapshot | event | status | error records.
-This is an inactive transport scaffold, not the shared SmartDock provider.
+The SmartDock-owned provider supervises this private transport; it is not a public RPC surface.
 """
 import argparse
 import json
@@ -27,10 +27,10 @@ MAX_EVENT_BYTES = 1024 * 1024
 MAX_COMMAND_BYTES = 4096
 STATUSES = frozenset(("blocked", "done", "working", "idle", "unknown"))
 STRUCTURAL = [
-    "workspace.created", "workspace.updated", "workspace.renamed", "workspace.moved",
+    "workspace.created", "workspace.updated", "workspace.metadata_updated", "workspace.renamed", "workspace.moved",
     "workspace.reordered", "workspace.closed", "workspace.focused",
     "tab.created", "tab.closed", "tab.focused", "tab.renamed", "tab.moved",
-    "pane.created", "pane.closed", "pane.focused", "pane.moved", "pane.exited",
+    "pane.created", "pane.updated", "pane.closed", "pane.focused", "pane.moved", "pane.exited",
     "pane.agent_detected", "layout.updated",
 ]
 IDENTITIES = ("pane_id", "terminal_id", "tab_id", "workspace_id")
