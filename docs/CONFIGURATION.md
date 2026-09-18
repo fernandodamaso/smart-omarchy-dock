@@ -6,7 +6,7 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 51 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
@@ -31,12 +31,14 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 51 rows 
 | `workspaceBadgeTextColor` | `""` | Color string; requires workspaceBadgeTextColorEnabled. |
 | `borderWidthEnabled` | `false` | Boolean; enables a fixed width instead of theme-owned widths. |
 | `borderWidth` | `2` | Integer 0–8 logical pixels; relevant only with borderWidthEnabled. |
-| `presentationMode` | `"classic"` | Classic per-screen docks or one global sidebar. Sidebar is an unreleased integrated candidate. |
-| `sidebarEdge` | `"left"` | Global sidebar edge; leaves classic position unchanged. |
-| `sidebarMonitor` | `""` | Exact case-sensitive connector, or empty for automatic placement. Disconnected preferences are retained; control characters are rejected. |
+| `presentationMode` | `"classic"` | Classic per-screen docks or mirrored sidebar panels. Sidebar is an unreleased integrated candidate. |
+| `sidebarEdge` | `"left"` | Sidebar panel edge; leaves classic position unchanged. |
+| `sidebarMonitor` | `""` | Empty maps a mirrored panel on every connected screen. A connected connector maps only that output. Disconnected preferences are retained and fall back to all connected screens; control characters are rejected. |
 | `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
-| `sidebarCollapsed` | `false` | Explicit icon rail. Every eligible window remains represented; expanded width and session app folds are retained. |
+| `sidebarCollapsed` | `false` | Default icon rail for monitors without a `sidebarCollapsedByMonitor` override. Expanded width and session app folds are retained. |
+| `sidebarCollapsedByMonitor` | `{}` | Object map of exact connector → boolean. Missing connectors follow `sidebarCollapsed`. Disconnected names retained; control characters and non-booleans rejected. |
 | `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. Production registry initially empty; unknown imports retained requested and unavailable effective. Explicit invalid writes fail; readiness/auth is not validation. Preference reset clears. |
+| `sidebarBrowserTabsEnabled` | `true` | When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of `browserActivityMutedServices`. See [`browser-tabs.md`](browser-tabs.md). |
 | `position` | `"bottom"` | String: top, bottom, left, right. Vertical edges render workspaceLayout as flat. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
 | `reserveSpace` | `true` | Boolean; effective false while autoHide is enabled, without erasing this request. |
@@ -118,28 +120,34 @@ Existing unknown keys and untouched legacy values survive minimal mutations. New
 
 ## Sidebar presentation (SB-02 + SB-03 source foundation)
 
-Classic remains the default. `presentationMode: "sidebar"` selects one panel,
+Classic remains the default. `presentationMode: "sidebar"` maps mirrored panels on
+connected screens (or one panel when `sidebarMonitor` names a connected connector),
 while classic preferences remain requested data and return unchanged on switching
-back. `sidebarMonitor` is an exact case-sensitive connector (empty is automatic);
-disconnected names remain saved. Placement does not filter the window inventory.
+back. Empty `sidebarMonitor` means every connected monitor; a set connector maps
+only that output. Disconnected names remain saved and fall back to all connected
+screens. Placement does not filter the window inventory.
 
 Sidebar effective output uses all monitors, structural workspace-local application
 groups, persistent reservation, icons capped at 32, and no previews or auto-hide.
 Classic click/middle-click/scroll actions are reported as `null` (inactive).
-The `presentation` diagnostic lists inactive classic settings, selected connector,
-effective persistent width and whether that geometry can map. These are source
-projections, not proof that the compositor mapped a surface. No screen means
-zero width and `mapped: false`. Width uses unreserved logical screen geometry.
+The `presentation` diagnostic lists inactive classic settings, primary connector,
+full `screens` list, effective persistent width and whether that geometry can map.
+These are source projections, not proof that the compositor mapped a surface. No
+screen means zero width and `mapped: false`. Width uses unreserved logical screen
+geometry. Each output reserves its own exclusive zone from its clamped width.
 
-The six sidebar settings support the existing typed set/apply/reset/schema/get
+The seven sidebar settings support the existing typed set/apply/reset/schema/get
 commands. Width writes accept integers 240–480; the runtime may clamp the effective
 width below 240 on narrow screens without rewriting the requested value. The
 expanded resize handle lives inside the reserved width. Pointer motion changes only
 temporary effective geometry; a changed release submits one `sidebarExpandedWidth`
-intent. No-op release and cancellation write nothing. Collapsing submits only
-`sidebarCollapsed`, preserves expanded width and retains session-only app folds.
+intent. No-op release and cancellation write nothing. Collapsing a panel submits
+only `sidebarCollapsedByMonitor` for that connector, preserves expanded width and
+retains session-only app folds. Global `sidebarCollapsed` remains the default for
+monitors without an override.
 Unknown keys, pins, artwork, hidden apps and provider preferences survive unrelated
-changes.
+changes. Empty `sidebarCollapsedByMonitor` follows `sidebarCollapsed` on every
+output; a connector key overrides only that panel.
 
 Gesture commits use the existing sole writer. A stale captured field is rejected
 rather than replayed; an accepted write may report persistence pending without

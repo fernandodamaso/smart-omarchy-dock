@@ -5,6 +5,9 @@ import "DockDesktopModel.js" as DesktopModel
 import "DockSidebarModel.js" as SidebarModel
 import "DockSidebarInteractionModel.js" as InteractionModel
 import "DockSidebarWidgetModel.js" as SidebarWidgetModel
+import "DockBadgeModel.js" as BadgeModel
+import "DockBrowserActivityModel.js" as ActivityModel
+import "DockFullscreenModel.js" as FullscreenModel
 
 // Host-owned session/view state. All compositor data and action/writer services
 // are injected. Widget leases belong to this host session, never to a view.
@@ -30,15 +33,20 @@ Item {
   property bool interactionBusy: false
   property bool refreshPending: false
   property bool initialized: false
+  // Mirrored panels: empty sidebarMonitor maps every connected screen; a set
+  // connector maps only that output. selectedScreen is the primary (first mapped).
+  property var mappedScreens: []
   property var selectedScreen: null
   readonly property string selectedConnector: selectedScreen ? selectedScreen.name : ""
   readonly property string mode: DockModel.normalizeSetting("presentationMode", settings.presentationMode)
   readonly property string edge: DockModel.normalizeSetting("sidebarEdge", settings.sidebarEdge)
   readonly property string preferredConnector: DockModel.normalizeSetting("sidebarMonitor", settings.sidebarMonitor)
   readonly property bool collapsed: DockModel.normalizeSetting("sidebarCollapsed", settings.sidebarCollapsed)
+  readonly property var collapsedByMonitor: DockModel.normalizeSetting(
+    "sidebarCollapsedByMonitor", settings.sidebarCollapsedByMonitor)
   readonly property var persistentGeometry: SidebarModel.screenGeometry(selectedScreen,
-    settings.sidebarExpandedWidth, collapsed)
-property bool resizeActive: false
+    settings.sidebarExpandedWidth, collapsedFor(selectedScreen))
+  property bool resizeActive: false
   property real resizeStartGlobalX: 0
   property int resizeStartWidth: 0
   property int resizePreviewWidth: 0
@@ -46,9 +54,8 @@ property bool resizeActive: false
   property var resizeExpectedCollapseAtStart: undefined
   property string resizeEdgeAtStart: "left"
   property string resizeConnectorAtStart: ""
-  readonly property var geometry: resizeActive
-    ? SidebarModel.screenGeometry(selectedScreen, resizePreviewWidth, false)
-    : persistentGeometry
+  property var resizeScreenAtStart: null
+  readonly property var geometry: geometryFor(selectedScreen)
   // Source-registered factories only. Tests inject a registry here, never through
   // settings/CLI. Production DockHost supplies its own (initially empty) registry.
   property var widgetRegistry: ({})
@@ -57,22 +64,57 @@ property bool resizeActive: false
   property int widgetRevision: 0
   property string widgetPopupId: ""
   property Item widgetPopupAnchor: null
-  readonly property bool widgetWorkActive: mode === "sidebar" && selectedScreen !== null && geometry.mapped
+  readonly property bool widgetWorkActive: mode === "sidebar" && mappedScreens.length > 0
+
+  // Map override when present; otherwise the global sidebarCollapsed default.
+  function collapsedFor(screen) {
+    var name = screen && screen.name ? String(screen.name) : ""
+    var map = root.collapsedByMonitor
+    if (name && map && Object.prototype.hasOwnProperty.call(map, name))
+      return map[name] === true
+    return root.collapsed
+  }
+
+  // Shared expanded-width preference, clamped per output so each panel fits its screen.
+  function geometryFor(screen) {
+    if (root.resizeActive)
+      return SidebarModel.screenGeometry(screen, root.resizePreviewWidth, false)
+    return SidebarModel.screenGeometry(screen, root.settings.sidebarExpandedWidth,
+      root.collapsedFor(screen))
+  }
   property var registry: ({ nextToken: 1, entries: [] })
   property var folds: ({})
   property var projection: SidebarModel.emptyProjection()
-  property var scrollAnchor: ({key:"",offset:0})
+  property var railProjection: SidebarModel.emptyProjection()
+  // Session-only scroll memory keyed by connector × expanded|rail. Not config.
+  property var scrollStates: ({})
   property string focusedRowKey: ""
   property string mutationFeedback: ""
-  readonly property var rowsByKey: {
-    var result = Object.create(null)
-    projection.rows.forEach(function(row) { result[row.key] = row })
-    return result
-  }
+  // Intra-row keyboard focus for the browser-tab mute (eye) control.
+  property string alertControlKey: ""
+  readonly property var rowsByKey: SidebarModel.indexRowsByKey(projection, railProjection)
   signal aboutToRefresh()
   signal refreshed()
   signal surfaceInvalidated()
   signal widgetAnchorChanged()
+  signal pinPickerRequested(var anchor)
+
+  function projectionFor(collapsed) {
+    return collapsed ? root.railProjection : root.projection
+  }
+
+  function readScrollState(connector, collapsed) {
+    return SidebarModel.readScrollState(root.scrollStates, connector, collapsed)
+  }
+
+  function writeScrollState(connector, collapsed, anchor, keys) {
+    root.scrollStates = SidebarModel.writeScrollState(
+      root.scrollStates, connector, collapsed, anchor, keys)
+  }
+
+  function requestPinPicker(anchor) {
+    root.pinPickerRequested(anchor || null)
+  }
 
   function widgetView(id) {
     var revision = root.widgetRevision
@@ -151,7 +193,9 @@ property bool resizeActive: false
     root.resizePreviewWidth = 0
     root.resizeExpectedWidthAtStart = undefined
     root.resizeExpectedCollapseAtStart = undefined
+    root.resizeEdgeAtStart = "left"
     root.resizeConnectorAtStart = ""
+    root.resizeScreenAtStart = null
     root.interactionBusy = false
   }
 
@@ -171,21 +215,24 @@ property bool resizeActive: false
     root.scheduleRefresh()
   }
 
-  function beginResize(globalX) {
-    if (root.mode !== "sidebar" || root.collapsed || !root.selectedScreen
-        || !root.persistentGeometry.mapped || root.interactionBusy || root.resizeActive)
+  // screen is the panel output initiating the gesture; shared width still commits once.
+  function beginResize(globalX, screen) {
+    var target = screen || root.selectedScreen
+    if (root.mode !== "sidebar" || root.collapsedFor(target) || !target
+        || !root.geometryFor(target).mapped || root.interactionBusy || root.resizeActive)
       return false
     var pointer = Number(globalX)
     if (!isFinite(pointer)) return false
     root.resizeStartGlobalX = pointer
-    root.resizeStartWidth = root.persistentGeometry.expandedWidth
+    root.resizeStartWidth = root.geometryFor(target).expandedWidth
     root.resizePreviewWidth = root.resizeStartWidth
     // Capture the exact host values for the stale check. Effective geometry may
     // normalize compatible legacy bytes, but that must not manufacture a conflict.
     root.resizeExpectedWidthAtStart = root.settings.sidebarExpandedWidth
-    root.resizeExpectedCollapseAtStart = root.settings.sidebarCollapsed
+    root.resizeExpectedCollapseAtStart = root.collapsedFor(target)
     root.resizeEdgeAtStart = root.edge
-    root.resizeConnectorAtStart = root.selectedConnector
+    root.resizeConnectorAtStart = target.name || ""
+    root.resizeScreenAtStart = target
     root.resizeActive = true
     root.interactionBusy = true
     root.mutationFeedback = ""
@@ -193,11 +240,12 @@ property bool resizeActive: false
   }
 
   function updateResize(globalX) {
-    if (!root.resizeActive || !root.selectedScreen
-        || root.selectedConnector !== root.resizeConnectorAtStart) return false
+    var target = root.resizeScreenAtStart
+    if (!root.resizeActive || !target
+        || (target.name || "") !== root.resizeConnectorAtStart) return false
     root.resizePreviewWidth = SidebarModel.resizeWidth(root.resizeStartWidth,
       root.resizeStartGlobalX, Number(globalX), root.resizeEdgeAtStart,
-      SidebarModel.logicalScreenWidth(root.selectedScreen))
+      SidebarModel.logicalScreenWidth(target))
     return true
   }
 
@@ -235,33 +283,44 @@ property bool resizeActive: false
   function resizePreferenceConflict() {
     return root.resizeActive && (
       root.settings.sidebarExpandedWidth !== root.resizeExpectedWidthAtStart
-      || root.settings.sidebarCollapsed !== root.resizeExpectedCollapseAtStart)
+      || root.collapsedFor(root.resizeScreenAtStart) !== root.resizeExpectedCollapseAtStart)
   }
 
   function refresh() {
     if (!root.initialized) return
     if (root.dragSession && !root.rowDragIsCurrent()) root.cancelRowDrag("source-or-topology-changed")
     root.registry = SidebarModel.reconcileHandles(root.registry, root.toplevels)
-    var next = root.mode === "sidebar" ? SidebarModel.selectScreen(root.screens, root.monitors,
+    var nextMapped = root.mode === "sidebar" ? SidebarModel.selectScreens(root.screens, root.monitors,
       root.settings.workspaceMonitorOrder || [], root.preferredConnector,
-      root.selectedConnector, root.interactionBusy) : null
-    if (next !== root.selectedScreen) {
+      root.mappedScreens, root.interactionBusy) : []
+    var nextPrimary = nextMapped.length ? nextMapped[0] : null
+    var mappedChanged = nextMapped.length !== root.mappedScreens.length
+      || nextMapped.some(function(screen, index) {
+        return !root.mappedScreens[index] || root.mappedScreens[index].name !== screen.name
+      })
+    if (mappedChanged) {
+      if (root.resizeActive && root.resizeScreenAtStart
+          && !nextMapped.some(function(screen) { return screen.name === root.resizeConnectorAtStart }))
+        root.cancelResize("host-changed")
       root.cancelRowDrag("host-changed")
-      root.cancelResize("host-changed")
-      root.surfaceInvalidated()
-      root.interactionBusy = false
-      root.selectedScreen = next
+      // Do not tear down all panels on hotplug; Variants adopts mappedScreens.
+      root.mappedScreens = nextMapped
+      root.selectedScreen = nextPrimary
+    } else if (nextPrimary !== root.selectedScreen) {
+      root.selectedScreen = nextPrimary
     }
     root.syncWidgets()
-    if (root.interactionBusy && next) {
+    if (root.interactionBusy && nextMapped.length) {
       root.refreshPending = true
       return
     }
     root.refreshPending = false
     root.aboutToRefresh()
-    var previous = root.projection.rows.map(function(row) { return row.key })
-    if (root.mode !== "sidebar" || !next) {
+    var previous = SidebarModel.unionProjectionRows(root.projection, root.railProjection)
+      .map(function(row) { return row.key })
+    if (root.mode !== "sidebar" || !nextPrimary) {
       root.projection = SidebarModel.emptyProjection()
+      root.railProjection = SidebarModel.emptyProjection()
       root.refreshed()
       return
     }
@@ -274,25 +333,53 @@ property bool resizeActive: false
       }, applications: root.applications, toplevels: root.toplevels,
       filteredToplevels: root.toplevels, hyprToplevels: root.hyprToplevels,
       hyprWorkspaces: root.workspaces, hyprMonitors: root.monitors,
-      dockMonitor: WindowModel.monitorForScreen(next, root.monitors),
+      dockMonitor: WindowModel.monitorForScreen(nextPrimary, root.monitors),
       minimizedOrigins: root.minimizedOrigins, focusedWorkspace: root.focusedWorkspace
     })
-    var projected = SidebarModel.project({desktop: desktop, screens: root.screens,
+    var browserTabs = (function() {
+      var service = root.host ? root.host.browserProfileService : null
+      var revision = service ? service.revision : 0
+      if (!service || !service.available) return ({})
+      return service.tabs || ({})
+    })()
+    var projectInput = {
+      desktop: desktop, screens: root.screens,
       monitors: root.monitors, monitorOrder: root.settings.workspaceMonitorOrder || [],
-      pinned: root.settings.pinned || [], registry: root.registry,
-      folds: root.folds, collapsed: root.collapsed})
-    root.scrollAnchor = SidebarModel.recoverAnchor(root.scrollAnchor, previous, projected.rows)
+      pinned: root.settings.pinned || [],
+      hiddenApplications: DockModel.normalizeSetting("hiddenApplications",
+        root.settings.hiddenApplications),
+      registry: root.registry,
+      folds: root.folds,
+      sidebarBrowserTabsEnabled: DockModel.normalizeSetting(
+        "sidebarBrowserTabsEnabled", root.settings.sidebarBrowserTabsEnabled),
+      browserTabs: browserTabs
+    }
+    var projected = SidebarModel.project(Object.assign({}, projectInput, { collapsed: false }))
+    var railProjected = SidebarModel.project(Object.assign({}, projectInput, { collapsed: true }))
+    var nextRows = SidebarModel.unionProjectionRows(projected, railProjected)
+    // Scroll anchors are per connector×mode; viewports capture/restore via scrollStates.
     if (root.focusedRowKey) root.focusedRowKey = SidebarModel.recoverAnchor(
-      {key:root.focusedRowKey,offset:0}, previous, projected.rows).key
-    // Prune vanished applications; no preferences are written by session folds.
+      {key:root.focusedRowKey,offset:0}, previous, nextRows).key
+    // Prune vanished application and browser-tab folds; session-only.
     var liveFolds = Object.create(null)
     projected.monitorSections.forEach(function(m) {
       m.workspaces.forEach(function(w) {
-        w.applications.forEach(function(a) { if (root.folds[a.key]) liveFolds[a.key] = true })
+        w.applications.forEach(function(a) {
+          if (root.folds[a.key]) liveFolds[a.key] = true
+          a.windows.forEach(function(window) {
+            var tabsKey = window.tabsKey || ("tabs:" + window.key)
+            if (root.folds[tabsKey]) liveFolds[tabsKey] = true
+          })
+        })
       })
+    })
+    projected.unassignedWindows.forEach(function(window) {
+      var tabsKey = window.tabsKey || ("tabs:" + window.key)
+      if (root.folds[tabsKey]) liveFolds[tabsKey] = true
     })
     root.folds = liveFolds
     root.projection = projected
+    root.railProjection = railProjected
     root.refreshed()
   }
 
@@ -308,6 +395,14 @@ property bool resizeActive: false
       if (!entry || entry.key !== key || !root.windowActions.isAlive(row.toplevel)) return null
       target.toplevel = row.toplevel
       target.address = String(root.windowActions.addressFor(row.toplevel) || "")
+    } else if (row.kind === "browser-tab") {
+      var tabEntry = SidebarModel.handleEntry(root.registry, row.toplevel)
+      if (!tabEntry || !root.windowActions.isAlive(row.toplevel)) return null
+      target.toplevel = row.toplevel
+      target.address = String(row.address || root.windowActions.addressFor(row.toplevel) || "")
+      target.targetId = String(row.targetId || "")
+      target.windowAddress = String(row.windowAddress || "").toLowerCase()
+      target.windowKey = String(row.windowKey || "")
     } else if (row.kind === "workspace") {
       var destination = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
       if (!destination) return null
@@ -328,6 +423,12 @@ property bool resizeActive: false
         && root.windowActions.isAlive(target.toplevel)
         && String(root.windowActions.addressFor(target.toplevel) || "") === target.address
     }
+    if (target.kind === "browser-tab") {
+      return row.targetId === target.targetId
+        && row.windowKey === target.windowKey
+        && root.windowActions.isAlive(target.toplevel)
+        && String(row.windowAddress || "").toLowerCase() === target.windowAddress
+    }
     if (target.kind === "workspace") {
       var current = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
       return !!current && current.monitor === target.monitorIdentity
@@ -336,27 +437,69 @@ property bool resizeActive: false
     return row.desktopId === target.desktopId
   }
 
+  // True when connector names a currently mapped sidebar panel output.
+  function connectorIsMapped(name) {
+    var connector = String(name || "")
+    if (!connector) return false
+    return (root.mappedScreens || []).some(function(screen) {
+      return screen && screen.name === connector
+    })
+  }
+
   function activateTarget(target, control, clickedConnector) {
     if (root.interactionBusy || !root.targetIsCurrent(target)) return false
     var accepted = false
     if (target.kind === "window") {
       // FDM-954's deliberate Ctrl route. Missing/untrusted modifier state cannot
       // authorize a move; no frozen workspace override and no focus-derived monitor.
+      // Accept any currently mapped panel connector (mirrored surfaces), not only
+      // the primary selectedScreen.
       var monitor = control === true ? String(clickedConnector || "") : ""
-      if (control === true && (!monitor || monitor !== root.selectedConnector)) return false
+      if (control === true && !root.connectorIsMapped(monitor)) return false
       if (control === true) {
         monitor = root.windowActions.canonicalMonitorIdentity(monitor)
         if (!monitor) return false
       }
       accepted = root.windowActions.activateToplevel(target.toplevel, true, monitor, true)
+    } else if (target.kind === "browser-tab") {
+      accepted = root.activateBrowserTab(target)
     } else if (target.kind === "workspace") {
       accepted = root.windowActions.focusWorkspaceInPlace(target.workspaceIdentity)
     } else if (target.kind === "application") {
       return root.toggleApplication(target.key)
     } else if (target.kind === "launcher") {
       var row = root.rowsByKey[target.key]
-      var entry = row.item ? row.item.entry : null
-      if (entry && typeof entry.execute === "function") { entry.execute(); accepted = true }
+      if (!row) return false
+      // Focus-or-launch: prefer strip-attached windows, then hierarchy windows
+      // with the same desktop id (covers catalog/id alias mismatches).
+      var wins = (row.windows && row.windows.length) ? row.windows : []
+      if (!wins.length) {
+        var want = DockModel.normalizedId(row.desktopId || target.desktopId)
+        var projectedRows = (root.projection && root.projection.rows) || []
+        wins = projectedRows.filter(function(candidate) {
+          return candidate && candidate.kind === "window"
+            && DockModel.normalizedId(candidate.desktopId) === want
+        })
+      }
+      if (wins.length) {
+        var focus = wins[0]
+        for (var i = 0; i < wins.length; ++i) {
+          if (wins[i] && wins[i].toplevel && wins[i].toplevel.activated === true) {
+            focus = wins[i]
+            break
+          }
+        }
+        if (focus && focus.urgent) {
+          for (var u = 0; u < wins.length; ++u) {
+            if (wins[u] && wins[u].urgent) { focus = wins[u]; break }
+          }
+        }
+        if (focus && focus.toplevel)
+          accepted = root.windowActions.activateToplevel(focus.toplevel, true, "", true)
+      } else {
+        var entry = row.item ? row.item.entry : null
+        if (entry && typeof entry.execute === "function") { entry.execute(); accepted = true }
+      }
     }
     if (accepted) root.focusReturnTarget = null
     return accepted
@@ -370,6 +513,7 @@ property bool resizeActive: false
   }
 
   function releaseNavigationFocus() {
+    root.clearAlertControl()
     var target = root.focusReturnTarget
     root.focusReturnTarget = null
     if (!target || !root.windowActions || !root.windowActions.isAlive(target.toplevel)
@@ -399,11 +543,12 @@ property bool resizeActive: false
     return {identity:identity, monitor:owner.monitor, minimized:location.minimized === true}
   }
 
-  function beginRowDrag(target) {
+  function beginRowDrag(target, connector) {
     if (root.interactionBusy || root.resizeActive || root.dragSession) return false
     var location = root.dragSourceLocation(target)
-    if (!location || !root.selectedConnector) return false
-    root.dragSession = {target:target, location:location, connector:root.selectedConnector,
+    var host = String(connector || root.selectedConnector || "")
+    if (!location || !root.connectorIsMapped(host)) return false
+    root.dragSession = {target:target, location:location, connector:host,
       topology:root.topologyStamp()}
     root.dragTarget = null
     root.interactionBusy = true
@@ -412,7 +557,7 @@ property bool resizeActive: false
 
   function rowDragIsCurrent() {
     var session = root.dragSession
-    if (!session || session.connector !== root.selectedConnector
+    if (!session || !root.connectorIsMapped(session.connector)
         || session.topology !== root.topologyStamp()) return false
     var current = root.dragSourceLocation(session.target)
     return !!current && current.identity === session.location.identity
@@ -422,8 +567,20 @@ property bool resizeActive: false
 
   function dragDestination(key) {
     var session = root.dragSession
+    if (!session || !root.rowDragIsCurrent()) return null
+    var footerMonitor = InteractionModel.parseNewWorkspaceFooterKey(key)
+    if (footerMonitor !== "") {
+      if (!root.windowActions || session.target.kind !== "window") return null
+      var footerCanonical = root.windowActions.canonicalMonitorIdentity(footerMonitor)
+      if (!footerCanonical) return null
+      var source = root.windowActions.workspaceMoveLocation(
+        session.target.toplevel, session.target.address)
+      if (!source) return null
+      if (root.windowActions.windowWorkspacePin(session.target.toplevel)) return null
+      return {key:key, kind:"new-workspace", monitor:footerCanonical}
+    }
     var row = root.rowsByKey[key]
-    if (!session || !row || !root.rowDragIsCurrent()) return null
+    if (!row) return null
     if (session.target.kind === "workspace") {
       if (row.kind !== "monitor" || !row.monitorIdentity) return null
       var monitor = root.windowActions.canonicalMonitorIdentity(row.connector || row.monitorIdentity)
@@ -461,19 +618,28 @@ property bool resizeActive: false
     var session = root.dragSession
     var hovered = root.dragTarget
     var destination = root.dragDestination(key)
-    if (destination && hovered && hovered.key === key
-        && (hovered.identity !== destination.identity || hovered.monitor !== destination.monitor))
-      destination = null
+    if (destination && hovered && hovered.key === key) {
+      var hoveredKind = hovered.kind || ""
+      var destinationKind = destination.kind || ""
+      if (hoveredKind === "new-workspace" || destinationKind === "new-workspace") {
+        if (hoveredKind !== destinationKind || hovered.monitor !== destination.monitor)
+          destination = null
+      } else if (hovered.identity !== destination.identity || hovered.monitor !== destination.monitor) {
+        destination = null
+      }
+    }
     // Clear state before dispatch; a synchronous host refresh cannot commit twice.
     root.cancelRowDrag("release")
     if (!destination) return false
+    if (destination.kind === "new-workspace")
+      return root.windowActions.moveCapturedWindowToNewWorkspace(session.target, destination.monitor)
     if (session.target.kind === "workspace")
       return root.windowActions.moveWorkspaceToMonitor(session.location.identity, destination.monitor)
-    return root.windowActions.moveCapturedToplevels([session.target], destination.identity)
+    return root.windowActions.moveCapturedToplevels([session.target], destination.identity, true)
   }
 
   function toggleApplication(key) {
-    if (root.interactionBusy || root.collapsed) return false
+    if (root.interactionBusy) return false
     var row = root.rowsByKey[key]
     if (!row || row.kind !== "application") return false
     var next = Object.assign({}, root.folds)
@@ -484,12 +650,54 @@ property bool resizeActive: false
     return true
   }
 
-  function requestCollapse() {
+  // Expand/fold Chrome tabs under a window row. folds[tabsKey] === true means expanded.
+  function toggleWindowTabs(key) {
+    if (root.interactionBusy) return false
+    var row = root.rowsByKey[key]
+    if (!row || row.kind !== "window" || row.tabsExpandable !== true) return false
+    var tabsKey = row.tabsKey || ("tabs:" + row.key)
+    var next = Object.assign({}, root.folds)
+    if (next[tabsKey]) delete next[tabsKey]
+    else next[tabsKey] = true
+    root.folds = next
+    root.scheduleRefresh()
+    return true
+  }
+
+  function activateBrowserTab(target) {
+    var service = root.host ? root.host.browserProfileService : null
+    if (!service || !service.available
+        || typeof service.allTabRows !== "function"
+        || service.activationInFlight === true) return false
+    var targetId = String(target && target.targetId || "")
+    var address = String(target && target.windowAddress || "").toLowerCase()
+    var verified = service.allTabRows().some(function(row) {
+      return String(row.targetId || "") === targetId
+        && String(row.windowAddress || "").toLowerCase() === address
+    })
+    if (!verified || !target.toplevel) return false
+    if (!root.windowActions.activateToplevel(target.toplevel, true, "", true))
+      return false
+    return service.activateTarget(targetId)
+  }
+
+  // Toggle collapse for one panel connector. Writes only sidebarCollapsedByMonitor.
+  function requestCollapse(screen) {
+    var target = screen || root.selectedScreen
+    var connector = target && target.name ? String(target.name) : ""
+    if (!connector)
+      return {ok:false,error:{code:"E_STATE",message:"No sidebar output to collapse."},data:{applied:false}}
     if (root.resizeActive) root.cancelResize("collapse")
-    if (root.interactionBusy) return {ok:false,error:{code:"E_BUSY",message:"Finish the active interaction."},data:{applied:false}}
-    var intent = root.hostIntent("sidebarCollapsed", !root.collapsed, root.settings.sidebarCollapsed)
+    if (root.interactionBusy)
+      return {ok:false,error:{code:"E_BUSY",message:"Finish the active interaction."},data:{applied:false}}
+    var expected = root.settings.sidebarCollapsedByMonitor
+    var currentMap = DockModel.normalizeSetting("sidebarCollapsedByMonitor", expected)
+    var nextMap = Object.assign({}, currentMap)
+    nextMap[connector] = !root.collapsedFor(target)
+    var intent = root.hostIntent("sidebarCollapsedByMonitor", nextMap, expected)
     var reply = intent.reply
-    root.mutationFeedback = intent.accepted ? "" : String(reply && reply.error && reply.error.message || "Preference was not accepted.")
+    root.mutationFeedback = intent.accepted ? ""
+      : String(reply && reply.error && reply.error.message || "Preference was not accepted.")
     return reply
   }
 
@@ -524,6 +732,127 @@ property bool resizeActive: false
       {localUrgent:row.urgent === true,primaryOwner:row.primaryOwner === true}, activities)
   }
 
+  // Read-only sidebar attention. Empty default: count 0 / countVisible false /
+  // severity none. Browser windows use address-scoped activity presentation
+  // (not app-wide launcher aggregates). Browser tabs match RAW activities by
+  // targetId + windowAddress; own count stays visible even when the service is
+  // muted. Expanded application groups omit attention (children own it).
+  function attentionForRow(row) {
+    var empty = BadgeModel.emptyAttention()
+    if (!row || root.settings.attentionBadgesEnabled === false) return empty
+    if (row.kind === "monitor" || row.kind === "workspace" || row.kind === "section")
+      return empty
+    if (row.kind === "application" && !row.folded) return empty
+
+    var mode = root.settings.launcherBadgeMode === "dots-only"
+      ? BadgeModel.BADGE_COUNT_MODE_DOTS_ONLY : BadgeModel.BADGE_COUNT_MODE_AUTOMATIC
+    var mutedServices = DockModel.normalizeSetting(
+      "browserActivityMutedServices", root.settings.browserActivityMutedServices)
+    var tracker = root.host ? root.host.badgeTracker : null
+    var trackerRevision = tracker ? tracker.revision : 0
+    var service = root.host ? root.host.browserProfileService : null
+    var serviceRevision = service ? service.revision : 0
+
+    if (row.kind === "browser-tab") {
+      if (!service || !service.available) return empty
+      var raw = ActivityModel.activityForTarget(service.activities, row.targetId,
+        row.windowAddress || row.address)
+      if (!raw) return empty
+      var muted = mutedServices.indexOf(raw.serviceId) >= 0
+      var tabCount = {
+        authoritative: true,
+        count: raw.count,
+        visible: true
+      }
+      var tabPresentation = BadgeModel.applicationBadgePresentation(
+        true, mode, tabCount, BadgeModel.BADGE_NONE)
+      return BadgeModel.attentionFromPresentation(tabPresentation, {
+        serviceId: raw.serviceId,
+        serviceLabel: raw.label,
+        muted: muted
+      })
+    }
+
+    var addresses = root.addressesForRow(row)
+    // Window / folded-app browser counts: exact represented addresses only —
+    // never the app-wide launcher aggregate when browser state is authoritative.
+    if ((row.kind === "window" || row.kind === "application") && service
+        && service.available && addresses.length && tracker) {
+      var rawActivities = ActivityModel.rawRowsForAddresses(service.activities, addresses)
+      var browser = tracker.browserCountFor(row.desktopId, rawActivities)
+      if (browser && browser.authoritative === true) {
+        var tokenSeverity = BadgeModel.decodeApplicationBadgeToken(
+          root.badgeForRow(row)).severity
+        var presented = ActivityModel.presentation(rawActivities, mutedServices)
+        var top = null
+        for (var i = 0; i < presented.rows.length; ++i) {
+          if (!presented.rows[i].muted) { top = presented.rows[i]; break }
+        }
+        if (!top && presented.rows.length) top = presented.rows[0]
+        var windowPresentation = BadgeModel.applicationBadgePresentation(
+          true, mode, browser, tokenSeverity)
+        return BadgeModel.attentionFromPresentation(windowPresentation, {
+          serviceId: top ? top.serviceId : "",
+          serviceLabel: top ? top.label : "",
+          muted: top ? top.muted === true : false
+        })
+      }
+    }
+
+    // Non-browser / launcher ownership: preserve classic badgeForRow token.
+    if (!tracker || !row.item) return empty
+    return BadgeModel.attentionFromBadgeToken(root.badgeForRow(row))
+  }
+
+  // Window-only informational state. Pinned = Hyprland per-window IPC pinned
+  // (sticky), not settings.pinned launcher membership or session movement locks.
+  // Display fullscreen via isDisplayFullscreen(lastIpcObject) so Super+F
+  // maximize, menu fullscreen, and client F11 all light the indicator without
+  // broadening menu mode(). Application group headers never pretend a single
+  // fullscreen state. Hyprland "fullscreen" / pin raw events refresh via
+  // scopeRevision → scheduleRefresh, which re-reads handle.lastIpcObject.
+  function windowStateForRow(row) {
+    var none = { fullscreen: false, pinned: false, minimized: false }
+    if (!row || row.kind !== "window") return none
+    var minimized = row.minimized === true
+    var fullscreen = false
+    var pinned = false
+    if (row.toplevel) {
+      var handle = WindowModel.handleForToplevel(row.toplevel, root.hyprToplevels)
+      if (handle) {
+        var ipc = handle.lastIpcObject || ({})
+        pinned = ipc.pinned === true
+        fullscreen = FullscreenModel.isDisplayFullscreen(ipc)
+      }
+    }
+    return { fullscreen: fullscreen, pinned: pinned, minimized: minimized }
+  }
+
+  function rowHasAlertControl(row) {
+    if (!row || row.kind !== "browser-tab") return false
+    var attention = root.attentionForRow(row)
+    return !!attention.serviceId && (attention.count > 0 || attention.muted === true
+      || attention.countVisible === true)
+  }
+
+  function toggleRowActivityMute(rowKey) {
+    var row = root.rowsByKey[rowKey]
+    if (!row || !root.host || typeof root.host.toggleBrowserActivityMute !== "function")
+      return false
+    var attention = root.attentionForRow(row)
+    if (!attention.serviceId) return false
+    var reply = root.host.toggleBrowserActivityMute(attention.serviceId)
+    var accepted = !!(reply && (reply.ok || (reply.data && reply.data.applied === true)))
+    root.mutationFeedback = accepted ? ""
+      : String(reply && reply.error && reply.error.message
+        || "Preference was not accepted.")
+    return accepted
+  }
+
+  function clearAlertControl() {
+    root.alertControlKey = ""
+  }
+
   onSettingsChanged: {
     if (root.resizePreferenceConflict()) root.cancelResize("preference-conflict")
     root.syncWidgets()
@@ -531,11 +860,23 @@ property bool resizeActive: false
   }
   onModeChanged: root.invalidateSurface()
   onEdgeChanged: root.invalidateSurface()
+  // Per-panel collapse updates geometry bindings; do not tear the Loader down.
   onCollapsedChanged: {
     root.closeWidgetPopup()
-    root.invalidateSurface()
+    root.scheduleRefresh()
   }
-  onPreferredConnectorChanged: root.invalidateSurface()
+  onCollapsedByMonitorChanged: {
+    root.closeWidgetPopup()
+    if (root.resizePreferenceConflict()) root.cancelResize("preference-conflict")
+    root.scheduleRefresh()
+  }
+  // Preference remaps Variants without tearing the Loader; cancel in-flight
+  // gestures that captured a different host mapping.
+  onPreferredConnectorChanged: {
+    root.cancelResize("host-changed")
+    root.cancelRowDrag("host-changed")
+    root.scheduleRefresh()
+  }
   onScreensChanged: root.refresh()
   onMonitorsChanged: root.scheduleRefresh()
   onWorkspacesChanged: root.scheduleRefresh()
@@ -546,6 +887,12 @@ property bool resizeActive: false
   onFocusedWorkspaceChanged: root.scheduleRefresh()
   onScopeRevisionChanged: root.scheduleRefresh()
   onInteractionBusyChanged: if (!interactionBusy) root.scheduleRefresh()
+  Connections {
+    target: root.host && root.host.browserProfileService
+      ? root.host.browserProfileService : null
+    function onRevisionChanged() { root.scheduleRefresh() }
+    function onAvailableChanged() { root.scheduleRefresh() }
+  }
   Component.onCompleted: {
     root.widgetManager = SidebarWidgetModel.createManager(function() { root.widgetsChanged() })
     root.initialized = true

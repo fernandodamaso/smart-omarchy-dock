@@ -14,7 +14,8 @@ class SidebarQmlSyntaxTests(unittest.TestCase):
                      'components/DockSidebar.qml','components/DockSidebarViewport.qml',
                      'components/DockSidebarRow.qml','components/DockSidebarRowInput.qml','components/DockSidebarKeyboard.qml',
                      'components/DockContextMenu.qml','components/DockSidebarWidgetArea.qml',
-                     'components/DockSidebarWidgetView.qml','tests/fixtures/SidebarWidgetFixture.qml',
+                     'components/DockSidebarWidgetView.qml','components/DockSidebarPinnedStrip.qml',
+                     'tests/fixtures/SidebarWidgetFixture.qml',
                      'tests/tst_sidebarwidgets.qml','tests/runtime/sidebar.qml','tests/runtime/sidebar-native.qml']:
             with self.subTest(file=name):
                 result = subprocess.run([FORMATTER, str(ROOT / name)], capture_output=True, text=True, timeout=10)

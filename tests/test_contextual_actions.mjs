@@ -24,9 +24,27 @@ const MenuModel = model('DockMenuModel.js')
 const normal = { fullscreen: 0, fullscreenClient: 0 }
 const keepBars = { fullscreen: 1, fullscreenClient: 0 }
 const hideBars = { fullscreen: 2, fullscreenClient: 2 }
+const clientOnly = { fullscreen: 0, fullscreenClient: 2 }
+const maximizedClientEcho = { fullscreen: 1, fullscreenClient: 1 }
 assert.equal(FullscreenModel.mode(normal), 'normal')
 assert.equal(FullscreenModel.mode(keepBars), 'keep-bars')
 assert.equal(FullscreenModel.mode(hideBars), 'hide-bars')
+assert.equal(FullscreenModel.mode(clientOnly), 'normal',
+  'menu classifier stays exact; client-only F11 is not a managed menu mode')
+assert.equal(FullscreenModel.mode(maximizedClientEcho), 'normal',
+  'menu classifier stays exact for unpaired maximized+client combinations')
+assert.equal(FullscreenModel.isManagedFullscreen(keepBars), true)
+assert.equal(FullscreenModel.isManagedFullscreen(clientOnly), false,
+  'isManagedFullscreen follows mode(); display uses isDisplayFullscreen')
+assert.equal(FullscreenModel.isDisplayFullscreen(normal), false)
+assert.equal(FullscreenModel.isDisplayFullscreen(keepBars), true,
+  'Super+F / maximize keep-bars shows the indicator')
+assert.equal(FullscreenModel.isDisplayFullscreen(hideBars), true,
+  'dock-menu fullscreen hide-bars shows the indicator')
+assert.equal(FullscreenModel.isDisplayFullscreen(clientOnly), true,
+  'Chrome F11 client fullscreen shows the indicator')
+assert.equal(FullscreenModel.isDisplayFullscreen(maximizedClientEcho), true,
+  'unpaired compositor+client states still show the indicator')
 
 const transitions = [
   ['normal', 'keep-bars', 'keep-bars'],

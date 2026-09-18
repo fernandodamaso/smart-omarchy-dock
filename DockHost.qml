@@ -30,8 +30,10 @@ Item {
   // external QML paths, configurable commands, test IDs or additional services.
   readonly property var sidebarWidgetRegistry: ({})
   readonly property var sidebarController: sidebarState
-  readonly property var sidebarPanel: rendererMode === "sidebar" && presentationLoader.item
-    ? presentationLoader.item.panel : null
+  readonly property var sidebarPanels: rendererMode === "sidebar" && presentationLoader.item
+    ? presentationLoader.item.panels : []
+  // Primary surface for harnesses that still expect a single panel reference.
+  readonly property var sidebarPanel: sidebarPanels.length ? sidebarPanels[0] : null
   property bool rendererInitialized: false
   property bool rendererReady: false
   property string rendererMode: "classic"
@@ -42,27 +44,29 @@ Item {
     if (!root.rendererInitialized) return
     var mode = DockModel.normalizeSetting("presentationMode", root.settings.presentationMode)
     var edge = mode === "sidebar" ? DockModel.normalizeSetting("sidebarEdge", root.settings.sidebarEdge) : "left"
-    var screen = mode === "sidebar" ? sidebarState.selectedScreen : null
-    if (mode !== root.rendererMode || edge !== root.rendererEdge || screen !== root.rendererScreen) {
+    // Mode/edge recreate the Loader. Screen membership is owned by Variants over
+    // mappedScreens and must not tear every panel down on hotplug or preference.
+    if (mode !== root.rendererMode || edge !== root.rendererEdge) {
       // Synchronous Loader teardown precedes deferred creation of the new branch.
       // The old Dock/Sidebar owns its popup, drag and badge-scope destruction.
       root.rendererReady = false
       root.rendererMode = mode
       root.rendererEdge = edge
-      root.rendererScreen = screen
     }
+    root.rendererScreen = mode === "sidebar" ? sidebarState.selectedScreen : null
     Qt.callLater(root.activateRenderer)
   }
 
   function activateRenderer() {
     var mode = DockModel.normalizeSetting("presentationMode", root.settings.presentationMode)
     var edge = mode === "sidebar" ? DockModel.normalizeSetting("sidebarEdge", root.settings.sidebarEdge) : "left"
-    var screen = mode === "sidebar" ? sidebarState.selectedScreen : null
-    if (mode !== root.rendererMode || edge !== root.rendererEdge || screen !== root.rendererScreen) {
+    if (mode !== root.rendererMode || edge !== root.rendererEdge) {
       root.syncRenderer()
       return
     }
-    root.rendererReady = mode === "classic" || screen !== null
+    root.rendererScreen = mode === "sidebar" ? sidebarState.selectedScreen : null
+    root.rendererReady = mode === "classic"
+      || (sidebarState.mappedScreens && sidebarState.mappedScreens.length > 0)
   }
 
   onSettingsChanged: if (rendererInitialized) Qt.callLater(root.syncRenderer)
@@ -552,7 +556,8 @@ Item {
       var revision = root.scopeRevision
       return DockWindowModel.focusedWorkspaceIdentity(root.hyprMonitors, Hyprland.focusedWorkspace)
     }
-    onSelectedScreenChanged: root.syncRenderer()
+    onSelectedScreenChanged: root.rendererScreen = selectedScreen
+    onMappedScreensChanged: if (root.rendererInitialized) Qt.callLater(root.activateRenderer)
     onSurfaceInvalidated: {
       if (root.rendererMode === "sidebar") root.rendererReady = false
       Qt.callLater(root.syncRenderer)
@@ -568,12 +573,20 @@ Item {
   Component {
     id: sidebarPresentation
     Item {
-      readonly property var panel: sidebar
-      DockSidebar {
-        id: sidebar
-        screen: root.rendererScreen
-        host: root
-        controller: sidebarState
+      id: sidebarRoot
+      readonly property var panels: sidebarVariants.instances
+      readonly property var panel: panels.length ? panels[0] : null
+      Variants {
+        id: sidebarVariants
+        model: sidebarState.mappedScreens
+        delegate: Component {
+          DockSidebar {
+            required property var modelData
+            screen: modelData
+            host: root
+            controller: sidebarState
+          }
+        }
       }
     }
   }

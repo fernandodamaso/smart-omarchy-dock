@@ -71,15 +71,33 @@ Item {
   function presentationData(requested) {
     var sidebar = DockModel.normalizeSetting("presentationMode", requested.presentationMode) === "sidebar"
     var controller = root.host.sidebarController
-    var screen = SidebarModel.selectScreen(root.host.connectedScreens || [],
-      root.host.hyprMonitors || [], requested.workspaceMonitorOrder || [],
-      DockModel.normalizeSetting("sidebarMonitor", requested.sidebarMonitor),
-      controller ? controller.selectedConnector : "", controller ? controller.interactionBusy : false)
+    var preferred = DockModel.normalizeSetting("sidebarMonitor", requested.sidebarMonitor)
+    var mapped = SidebarModel.selectScreens(root.host.connectedScreens || [],
+      root.host.hyprMonitors || [], requested.workspaceMonitorOrder || [], preferred,
+      controller && controller.mappedScreens ? controller.mappedScreens : [],
+      controller ? controller.interactionBusy : false)
+    var screen = mapped.length ? mapped[0] : null
+    var map = DockModel.normalizeSetting("sidebarCollapsedByMonitor",
+      requested.sidebarCollapsedByMonitor)
+    var defaultCollapsed = requested.sidebarCollapsed === true
+    var collapsedByScreen = ({})
+    if (sidebar) {
+      mapped.forEach(function(entry) {
+        var name = entry && entry.name ? entry.name : ""
+        if (!name) return
+        collapsedByScreen[name] = Object.prototype.hasOwnProperty.call(map, name)
+          ? map[name] === true : defaultCollapsed
+      })
+    }
+    var primaryCollapsed = screen && Object.prototype.hasOwnProperty.call(collapsedByScreen, screen.name)
+      ? collapsedByScreen[screen.name] : defaultCollapsed
     var bounds = SidebarModel.geometry(screen ? screen.width : 0,
-      requested.sidebarExpandedWidth, requested.sidebarCollapsed === true)
+      requested.sidebarExpandedWidth, primaryCollapsed)
     return {
       mode: sidebar ? "sidebar" : "classic",
       screen: sidebar && screen ? screen.name : null,
+      screens: sidebar ? mapped.map(function(entry) { return entry.name }) : [],
+      collapsedByScreen: sidebar ? collapsedByScreen : ({}),
       width: sidebar ? bounds.width : null,
       expandedWidth: sidebar ? bounds.expandedWidth : null,
       mapped: sidebar ? bounds.mapped : null,

@@ -310,7 +310,7 @@ assert.match(dockSource, /windowActions\.activateToplevel/,
 
 const dragSource = read('DockWorkspaceDrag.qml')
 assert.match(dragSource, /workspaceMoveWouldChange\(members, destination\.identity\)/)
-assert.match(dragSource, /moveCapturedToplevels\(members, hoveredIdentity\)/)
+assert.match(dragSource, /moveCapturedToplevels\(members, hoveredIdentity, true\)/)
 
 const actionsSource = read('DockWindowActions.qml')
 assert.doesNotMatch(actionsSource, /settings\.(windowWorkspacePins|workspaceMonitorPins)/,

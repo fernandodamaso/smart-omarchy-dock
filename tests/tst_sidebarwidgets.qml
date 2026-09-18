@@ -19,13 +19,15 @@ TestCase {
   Component { id: windowFactory; QtObject { property string appId: "browser"; property string title: "Actual window" } }
   function build(provider) {
     var screen = {name:"DP-1",width:1920,height:1080}
-    var window = createTemporaryObject(windowFactory, testCase)
+    var window = createTemporaryObject(windowFactory, testCase, {title: "Window A"})
+    var windowB = createTemporaryObject(windowFactory, testCase, {title: "Window B"})
     var c = createTemporaryObject(factory,testCase,{
       widgetRegistry:{"fixture.one":provider.descriptor},
       settings:{presentationMode:"sidebar",sidebarWidgets:["fixture.one"],pinned:[]},
       screens:[screen],monitors:[{id:0,name:"DP-1",activeWorkspace:{id:1}}],
-      workspaces:[{id:1,monitorID:0}],toplevels:[window],
-      hyprToplevels:[{wayland:window,address:"0xa",lastIpcObject:{workspace:{id:1},monitor:0}}]
+      workspaces:[{id:1,monitorID:0}],toplevels:[window, windowB],
+      hyprToplevels:[{wayland:window,address:"0xa",lastIpcObject:{workspace:{id:1},monitor:0}},
+        {wayland:windowB,address:"0xb",lastIpcObject:{workspace:{id:1},monitor:0}}]
     })
     verify(c !== null)
     c.refresh()
@@ -133,7 +135,7 @@ TestCase {
     var view=createTemporaryObject(viewFactory,testCase,{controller:c,widgetId:"fixture.one",width:200,height:150})
     verify(view !== null)
     tryVerify(function() { return c.widgetView("fixture.one").errorCode === "view-error" })
-    compare(c.projection.rows.filter(function(row) { return row.kind === "window" }).length,1)
+    compare(c.projection.rows.filter(function(row) { return row.kind === "window" }).length,2)
     c.widgetRegistry={"fixture.one":p.descriptor}
     p.publish("ready"); tryCompare(view,"hasView",true)
     compare(p.acquisitions,1); compare(p.subscriptions,1); compare(p.releases,0)

@@ -84,9 +84,8 @@ TestCase {
     verify(reply.ok)
     verify(!c.resizeActive)
     compare(writer.writes.length,1)
-    compare(writer.writes[0].key,"sidebarCollapsed")
-    compare(writer.writes[0].value,true)
-    compare(writer.writes[0].expectedValue,false)
+    compare(writer.writes[0].key,"sidebarCollapsedByMonitor")
+    compare(writer.writes[0].value["DP-1"], true)
   }
 
   function test_conflicts_and_surface_changes_cancel_preview() {

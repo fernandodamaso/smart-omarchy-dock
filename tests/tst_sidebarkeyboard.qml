@@ -22,6 +22,7 @@ TestCase {
   QtObject {
     id: viewport
     property var controller: actionController
+    property var visibleRows: actionController.projection.rows
     function focusRow(key) { actionController.focusedRowKey=key; events.push("focus:"+key); return true }
     function activate(target, control, connector, modifiers) {
       events.push({key:target.key,control:control,connector:connector}); return true

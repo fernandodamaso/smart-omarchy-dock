@@ -150,7 +150,8 @@ The adapter uses standard-library Python and bounded argv subprocesses: `qs list
 ## Sidebar candidate boundary
 
 Before a sidebar request, discover `presentationMode`, `sidebarEdge`,
-`sidebarMonitor`, `sidebarExpandedWidth`, `sidebarCollapsed`, and `sidebarWidgets` through the runtime
+`sidebarMonitor`, `sidebarExpandedWidth`, `sidebarCollapsed`,
+`sidebarCollapsedByMonitor`, `sidebarBrowserTabsEnabled`, and `sidebarWidgets` through the runtime
 schema. They may be unavailable in the installed version. Source SB-02 is a Draft
 foundation, not permission to deploy or change the production desktop.
 

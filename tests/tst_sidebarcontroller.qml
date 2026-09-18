@@ -51,16 +51,22 @@ TestCase {
     var app = apps[0]
     c.toggleApplication(app.key); c.refresh()
     compare(c.projection.rows.filter(function(r) {return r.kind === "window"}).length,0)
-    c.settings = Object.assign({},c.settings,{sidebarCollapsed:true}); c.refresh()
-    windows = c.projection.rows.filter(function(r) {return r.kind === "window"})
-    compare(windows.length,2); compare(windows[0].key,first)
+    // Shared projection stays expanded; fold still hides members. Rail chrome is
+    // per-panel via collapsedFor, not a second projection mode.
     verify(c.folds[app.key])
+    compare(c.collapsedFor(screen), false)
+    c.settings = Object.assign({}, c.settings, {
+      sidebarCollapsedByMonitor: { "DP-1": true }
+    })
+    compare(c.collapsedFor(screen), true)
+    compare(c.collapsedFor({name:"HDMI-A-1"}), false)
     writer.writes=[]; writer.busy=false
-    var reply=c.requestCollapse()
+    var reply=c.requestCollapse(screen)
     verify(reply.data.applied)
     compare(writer.writes.length,1)
-    compare(writer.writes[0].key,"sidebarCollapsed")
-    writer.busy=true; c.requestCollapse()
+    compare(writer.writes[0].key,"sidebarCollapsedByMonitor")
+    compare(writer.writes[0].value["DP-1"], false)
+    writer.busy=true; c.requestCollapse(screen)
     compare(writer.writes.length,1)
     c.toplevels=[b]; c.refresh()
     compare(c.registry.entries.length,1)

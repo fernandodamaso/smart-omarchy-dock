@@ -372,7 +372,8 @@ Item {
     return false
   }
 
-  function moveCapturedToplevels(members, workspaceIdentity) {
+  function moveCapturedToplevels(members, workspaceIdentity, follow) {
+    var followMode = follow === true
     var destination = resolveWorkspaceDropTarget(workspaceIdentity)
     var live = workspaceMoveMembers(members)
     if (!destination || !live || live.length === 0) return false
@@ -401,23 +402,149 @@ Item {
     }
     if (confirmed.length === 0) return false
 
-    var changed = false
-    for (var dispatchIndex = 0; dispatchIndex < confirmed.length; ++dispatchIndex) {
-      var current = confirmed[dispatchIndex]
-      if (current.minimized) {
-        changed = setOrigin(current.address, {
-          workspace: destination.target, monitor: destination.monitor
-        }) || changed
-      } else {
-        var request = DockModel.moveWindowRequest(
-          current.address, destination.target, Hyprland.usingLua)
-        if (dispatchRequest(request)) {
-          forgetOrigin(current.address)
-          changed = true
+    if (!followMode) {
+      var changed = false
+      for (var dispatchIndex = 0; dispatchIndex < confirmed.length; ++dispatchIndex) {
+        var current = confirmed[dispatchIndex]
+        if (current.minimized) {
+          changed = setOrigin(current.address, {
+            workspace: destination.target, monitor: destination.monitor
+          }) || changed
+        } else {
+          var request = DockModel.moveWindowRequest(
+            current.address, destination.target, Hyprland.usingLua)
+          if (dispatchRequest(request)) {
+            forgetOrigin(current.address)
+            changed = true
+          }
         }
       }
+      return changed
     }
-    return changed
+
+    var requests = []
+    var moved = []
+    for (var moveIndex = 0; moveIndex < confirmed.length; ++moveIndex) {
+      var followCurrent = confirmed[moveIndex]
+      var moveRequest = followCurrent.minimized
+        ? DockModel.restoreWindowRequest(
+          followCurrent.address, destination.target, Hyprland.usingLua)
+        : DockModel.moveWindowRequest(
+          followCurrent.address, destination.target, Hyprland.usingLua)
+      if (!moveRequest) return false
+      requests.push(moveRequest)
+      moved.push(followCurrent)
+    }
+    if (moved.length === 0) return false
+    var focusMember = moved[0]
+    for (var focusIndex = 0; focusIndex < moved.length; ++focusIndex) {
+      if (moved[focusIndex].toplevel === root.activeToplevel) {
+        focusMember = moved[focusIndex]
+        break
+      }
+    }
+    var focusWorkspaceRequest = DockModel.focusWorkspaceTargetRequest(
+      destination.target, Hyprland.usingLua)
+    var focusWindowRequest = DockModel.focusWindowRequest(
+      focusMember.address, Hyprland.usingLua)
+    if (!focusWorkspaceRequest || !focusWindowRequest) return false
+    requests.push(focusWorkspaceRequest)
+    requests.push(focusWindowRequest)
+    if (!dispatchRequests(requests)) return false
+    for (var forgetIndex = 0; forgetIndex < moved.length; ++forgetIndex)
+      forgetOrigin(moved[forgetIndex].address)
+    return true
+  }
+
+  function numericWorkspaceIdFromValue(value) {
+    var raw = String(value === undefined || value === null ? "" : value).trim()
+    if (/^[1-9][0-9]*$/.test(raw)) return Number(raw)
+    if (/^id:[1-9][0-9]*$/.test(raw)) return Number(raw.slice(3))
+    var identity = DockWindowModel.workspaceIdentity(value)
+    if (/^id:[1-9][0-9]*$/.test(identity)) return Number(identity.slice(3))
+    return 0
+  }
+
+  function occupiedNumericWorkspaceIds() {
+    var occupied = ({})
+    var workspaces = currentWorkspaces()
+    for (var i = 0; i < workspaces.length; ++i) {
+      var descriptor = workspaces[i]
+      if (!descriptor) continue
+      var ipc = descriptor.lastIpcObject || descriptor
+      var id = Number(ipc.id !== undefined ? ipc.id : descriptor.id)
+      if (Number.isInteger(id) && id > 0) occupied[id] = true
+    }
+    var origins = minimizedOrigins || ({})
+    Object.keys(origins).forEach(function(address) {
+      var origin = origins[address] || ({})
+      var retained = numericWorkspaceIdFromValue(origin.workspace)
+      if (retained > 0) occupied[retained] = true
+    })
+    var windowPins = windowWorkspacePins || ({})
+    Object.keys(windowPins).forEach(function(address) {
+      var pin = windowPins[address]
+      var pinned = pin ? numericWorkspaceIdFromValue(pin.workspace) : 0
+      if (pinned > 0) occupied[pinned] = true
+    })
+    var monitorPins = workspaceMonitorPins || ({})
+    Object.keys(monitorPins).forEach(function(identity) {
+      var keyed = numericWorkspaceIdFromValue(identity)
+      if (keyed > 0) occupied[keyed] = true
+      var entry = monitorPins[identity]
+      if (entry) {
+        var entryId = numericWorkspaceIdFromValue(entry.workspace)
+        if (entryId > 0) occupied[entryId] = true
+      }
+    })
+    return occupied
+  }
+
+  function allocateNewWorkspaceId() {
+    var occupied = occupiedNumericWorkspaceIds()
+    var candidate = 1
+    while (occupied[candidate] === true) {
+      candidate += 1
+      if (candidate > 1000000) return 0
+    }
+    return candidate
+  }
+
+  function moveCapturedWindowToNewWorkspace(member, monitorIdentity) {
+    if (!member || !member.toplevel || !member.address) return false
+    var requested = canonicalMonitorIdentity(monitorIdentity)
+    if (!requested) return false
+    var location = workspaceMoveLocation(member.toplevel, member.address)
+    if (!location) return false
+    if (windowWorkspacePin(member.toplevel)) return false
+    var newId = allocateNewWorkspaceId()
+    if (!(newId > 0)) return false
+    var newTarget = String(newId)
+    var newIdentity = "id:" + newTarget
+    var rechecked = workspaceMoveLocation(member.toplevel, member.address)
+    if (!rechecked) return false
+    if (windowWorkspacePin(member.toplevel)) return false
+    var reMonitor = canonicalMonitorIdentity(monitorIdentity)
+    if (!reMonitor || reMonitor !== requested) return false
+    if (occupiedNumericWorkspaceIds()[newId] === true) return false
+    if (!canMoveToplevelToWorkspace(member.toplevel, newIdentity)) return false
+    var moveRequest = rechecked.minimized
+      ? DockModel.restoreWindowRequest(
+        rechecked.address, newTarget, Hyprland.usingLua)
+      : DockModel.moveWindowRequest(
+        rechecked.address, newTarget, Hyprland.usingLua)
+    var relocateRequest = DockModel.moveWorkspaceToMonitorRequest(
+      newTarget, reMonitor, Hyprland.usingLua)
+    var activateRequest = DockModel.focusWorkspaceTargetRequest(
+      newTarget, Hyprland.usingLua)
+    var focusRequest = DockModel.focusWindowRequest(
+      rechecked.address, Hyprland.usingLua)
+    if (!moveRequest || !relocateRequest || !activateRequest || !focusRequest)
+      return false
+    if (!dispatchRequests([moveRequest, relocateRequest, activateRequest, focusRequest]))
+      return false
+    forgetOrigin(rechecked.address)
+    return true
   }
 
   function reliableWorkspaceForToplevel(toplevel) {

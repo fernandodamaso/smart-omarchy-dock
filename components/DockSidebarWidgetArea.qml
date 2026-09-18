@@ -14,7 +14,7 @@ Item {
   required property real availableContentHeight
   required property real windowRowHeight
   readonly property var layout: WidgetModel.footerLayout(availableContentHeight,
-    windowRowHeight, controller.widgetIds.length, controller.collapsed)
+    windowRowHeight, controller.widgetIds.length, panel.panelCollapsed === true)
   readonly property bool overflowNeeded: layout.mode === "overflow"
   readonly property var popupWindow: popup
   readonly property var scrollView: footerScroll

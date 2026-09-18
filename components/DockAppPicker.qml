@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Widgets
 import qs.Commons
 import qs.Ui
+import "DockSidebarInteractionModel.js" as InteractionModel
 
 PopupWindow {
   id: root
@@ -105,10 +106,18 @@ PopupWindow {
       }
 
       var point = root.anchor.window.contentItem.mapFromItem(root.anchorItem, x, y)
-      point.x = Math.max(8, Math.min(point.x, root.anchor.window.width - root.implicitWidth - 8))
-      point.y = Math.max(8, Math.min(point.y, root.anchor.window.height - root.implicitHeight - 8))
-      root.anchor.rect.x = Math.round(point.x)
-      root.anchor.rect.y = Math.round(point.y)
+      // Side left/right panels are ~240–280px; clamping x to window.width-380
+      // forces x=8 over the sidebar. Match DockContextMenu / InteractionModel
+      // clampPopupAnchor: classic clamps x; side clamps y only.
+      var clamped = InteractionModel.clampPopupAnchor(root.position, point, {
+        width: root.anchor.window.width,
+        height: root.anchor.window.height
+      }, {
+        width: root.implicitWidth,
+        height: root.implicitHeight
+      })
+      root.anchor.rect.x = Math.round(clamped.x)
+      root.anchor.rect.y = Math.round(clamped.y)
     }
   }
 

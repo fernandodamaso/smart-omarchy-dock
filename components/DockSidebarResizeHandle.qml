@@ -3,17 +3,24 @@ import QtQuick
 // Eight-logical-pixel inner-edge handle. Pointer motion is converted back to
 // screen-global logical X before it reaches the controller, so a right-anchored
 // panel can move its window origin without feeding that motion back into resize.
+// Keep this file free of qs.* imports so isolated resize QML tests can load it;
+// the parent injects a semantic affordance color from Omarchy tokens.
 Item {
   id: root
   required property var controller
+  property var screen: null
   property real panelWidth: 0
   property real screenX: 0
   property real screenWidth: 0
+  property color affordanceColor: Qt.rgba(1, 1, 1, 0.28)
+  property bool animationsEnabled: true
+  readonly property bool panelCollapsed: controller && screen
+    ? controller.collapsedFor(screen) : !!(controller && controller.collapsed)
   readonly property var pointerTarget: resizeDrag.target
   readonly property bool resizeEnabled: visible && controller
-    && controller.mode === "sidebar" && !controller.collapsed
+    && controller.mode === "sidebar" && !root.panelCollapsed
     && (!controller.interactionBusy || controller.resizeActive)
-  visible: controller && !controller.collapsed
+  visible: controller && !root.panelCollapsed
 
   function screenGlobalX(sceneX) {
     var origin = root.screenX
@@ -27,8 +34,26 @@ Item {
   }
 
   HoverHandler {
+    id: hover
     enabled: root.resizeEnabled
     cursorShape: Qt.SizeHorCursor
+  }
+
+  Rectangle {
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.horizontalCenter: parent.horizontalCenter
+    width: hover.hovered || (root.controller && root.controller.resizeActive) ? 2 : 1
+    color: hover.hovered || (root.controller && root.controller.resizeActive)
+      ? root.affordanceColor : Qt.rgba(0, 0, 0, 0)
+    Behavior on color {
+      enabled: root.animationsEnabled
+      ColorAnimation { duration: 120 }
+    }
+    Behavior on width {
+      enabled: root.animationsEnabled
+      NumberAnimation { duration: 120 }
+    }
   }
 
   DragHandler {
@@ -41,7 +66,7 @@ Item {
     onActiveChanged: {
       if (active) {
         cancelledByGrabLoss = false
-        root.controller.beginResize(root.screenGlobalX(centroid.scenePosition.x))
+        root.controller.beginResize(root.screenGlobalX(centroid.scenePosition.x), root.screen)
       } else if (root.controller && root.controller.resizeActive && !cancelledByGrabLoss) {
         root.controller.finishResize(false)
       }

@@ -97,6 +97,17 @@ function valueError(value, spec) {
       seenIcons[key] = true
     }
   }
+  if (spec.format === "sidebar-collapsed-by-monitor") {
+    var connectors = Object.keys(value)
+    for (var m = 0; m < connectors.length; ++m) {
+      var connector = connectors[m]
+      if (typeof connector !== "string" || !connector
+          || /[\x00-\x1f\x7f-\x9f]/.test(connector))
+        return "Invalid monitor connector: " + connector
+      if (typeof value[connector] !== "boolean")
+        return "Expected a boolean collapse flag for " + connector
+    }
+  }
   return ""
 }
 

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Wayland
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
@@ -126,7 +127,7 @@ PopupWindow {
         root.entranceOffset = 0
       }
     })
-    Qt.callLater(root.resetActiveMenuIndex)
+    Qt.callLater(function() { root.resetActiveMenuIndex() })
     if (menuSurface) menuSurface.forceActiveFocus()
   }
 
@@ -375,7 +376,7 @@ PopupWindow {
     root.page = nextPage
     root.feedbackTitle = ""
     root.feedbackText = ""
-    Qt.callLater(root.resetActiveMenuIndex)
+    Qt.callLater(function() { root.resetActiveMenuIndex() })
   }
 
   function goBack() {
@@ -390,7 +391,7 @@ PopupWindow {
     root.page = previous.page
     root.feedbackTitle = ""
     root.feedbackText = ""
-    Qt.callLater(root.resetActiveMenuIndex)
+    Qt.callLater(function() { root.resetActiveMenuIndex() })
     return true
   }
 
@@ -505,12 +506,16 @@ PopupWindow {
       root.feedbackText = label + " saved."
       root.pendingMutationAction = ""
       root.pendingMutationLabel = ""
+      // Membership changes remove/replace the anchor; close instead of leaving
+      // a stale feedback page on the pin shelf or hierarchy row.
+      root.dismiss()
       return true
     }
     if (presentation.state === "pending") {
       root.feedbackText = label + " applied for this session; saving…"
       root.pendingMutationAction = action
       root.pendingMutationLabel = label
+      root.dismiss()
       return true
     }
     root.feedbackText = presentation.message
@@ -613,16 +618,23 @@ PopupWindow {
   function applicationActionRecords(prefix, targetContext) {
     var controllerAvailable = root.applicationMutationController !== null
       && root.applicationMutationController !== undefined
+    // Pin shelf icons are already dock membership; hide belongs on hierarchy
+    // window/app menus only, not on the pinned strip.
+    var pinStripContext = !!(root.anchorItem && root.anchorItem.pinStripOwned === true)
     var records = [
       DockMenuModel.actionRecord(
         prefix + ":pin", root.pinnedItem ? "Unpin from Dock" : "Pin to Dock",
         root.pinnedItem ? "pin-off" : "pin",
         controllerAvailable && root.desktopId !== "",
-        root.pinnedItem ? "unpin-app" : "pin-app", targetContext),
-      DockMenuModel.actionRecord(
+        root.pinnedItem ? "unpin-app" : "pin-app", targetContext)
+    ]
+    if (!pinStripContext) {
+      records.push(DockMenuModel.actionRecord(
         prefix + ":hide", "Hide App from Dock", "eye-off",
         controllerAvailable && root.desktopId !== "",
-        "hide-app", targetContext),
+        "hide-app", targetContext))
+    }
+    records.push(
       DockMenuModel.actionRecord(
         prefix + ":copy-icon", "Copy Icon Command", "",
         root.desktopId !== "" && contextActions.runtimeMode !== ""
@@ -630,8 +642,7 @@ PopupWindow {
         "copy-icon-command", targetContext, { submenu: true }),
       DockMenuModel.actionRecord(
         prefix + ":open-new", "Open New Window", "plus", true,
-        "open-new", targetContext)
-    ]
+        "open-new", targetContext))
     return records
   }
 
@@ -944,7 +955,7 @@ PopupWindow {
 
   function resetActiveMenuIndex() {
     root.activeMenuIndex = DockMenuModel.firstEnabledIndex(root.pageActions)
-    Qt.callLater(root.ensureActiveVisible)
+    Qt.callLater(function() { root.ensureActiveVisible() })
   }
 
   function moveActiveMenuIndex(delta) {
@@ -955,7 +966,7 @@ PopupWindow {
       return
     }
     root.activeMenuIndex = step.index
-    Qt.callLater(root.ensureActiveVisible)
+    Qt.callLater(function() { root.ensureActiveVisible() })
   }
 
   function ensureActiveVisible() {

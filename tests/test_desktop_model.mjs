@@ -141,7 +141,12 @@ function scopeFor(input, refresh) {
   return { scope, events }
 }
 function output(scope) {
-  return plain({ visibleItems: scope.visibleItems, workspacePresentation: scope.workspacePresentation })
+  // Classic characterization ignores newly attached catalog metadata so the
+  // frozen behavioral baseline stays comparable; sidebar tests cover entry.
+  return JSON.parse(JSON.stringify({
+    visibleItems: scope.visibleItems,
+    workspacePresentation: scope.workspacePresentation
+  }, function(key, value) { return key === 'entry' ? undefined : value }))
 }
 const captures = []
 let count = 0
@@ -159,9 +164,14 @@ function compareCase(name, f) {
   if (DesktopModel) {
     const built = DesktopModel.build(input)
     assert.deepEqual(Object.keys(built).sort(), ['records', 'visibleItems', 'workspacePresentation'])
-    assert.deepEqual(plain(built.visibleItems), plain(reference.scope.visibleItems), `${name}: flat result`)
-    assert.deepEqual(plain(built.workspacePresentation), input.mode === 'classic-grouped'
-      ? plain(reference.scope.workspacePresentation) : null, `${name}: native workspace result`)
+    assert.deepEqual(output({ visibleItems: built.visibleItems, workspacePresentation: null }),
+      output({ visibleItems: reference.scope.visibleItems, workspacePresentation: null }),
+      `${name}: flat result without entry noise`)
+    assert.deepEqual(built.workspacePresentation == null ? null
+      : output({ visibleItems: [], workspacePresentation: built.workspacePresentation }).workspacePresentation,
+      input.mode === 'classic-grouped'
+        ? output(reference.scope).workspacePresentation : null,
+      `${name}: native workspace result without entry noise`)
     const members = input.mode === 'classic-grouped' ? input.toplevels : input.filteredToplevels
     assert.deepEqual(Array.from(built.records, record => record.toplevel), Array.from(members),
       `${name}: records retain original live handles, including pending addresses`)
@@ -169,6 +179,10 @@ function compareCase(name, f) {
       ...DockWindowModel.locationForToplevel(toplevel, input.hyprToplevels, input.minimizedOrigins) }))))
     for (const item of [...built.visibleItems, ...(built.workspacePresentation?.renderedItems || [])]) {
       for (const member of item.toplevels) assert.ok(input.toplevels.includes(member), 'never clone a live handle')
+      if (!item.desktopId) continue
+      const expected = DockModel.entryForAppId(item.desktopId, input.applications) || null
+      assert.equal(item.entry || null, expected,
+        `${name}: catalog entry attachment preserves classic member identity`)
     }
   }
   assert.equal(JSON.stringify(input), before, `${name}: settings/desktop snapshot are not mutated`)

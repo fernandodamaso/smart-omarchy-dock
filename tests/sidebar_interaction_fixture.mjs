@@ -21,16 +21,19 @@ export function interactionFixture() {
   const ToplevelManager = { toplevels:{values:windows},activeToplevel:windows[1] }
   const DockModel = loadModel('DockModel'), WindowModel = loadModel('DockWindowModel')
   const SidebarModel = loadModel('DockSidebarModel')
+  const InteractionModel = loadModel('DockSidebarInteractionModel')
   const actions = qmlMethods('DockWindowActions.qml', { DockModel,DockWindowModel:WindowModel,
     Hyprland,ToplevelManager,Quickshell:{execDetached:r=>batches.push(r)},
     minimizedWorkspace:'special:smartdock-minimized',minimizedOrigins:{},
     windowWorkspacePins:{},workspaceMonitorPins:{},activeToplevel:windows[1] })
   const controller = qmlMethods('DockSidebarController.qml', { DockModel,WindowModel,SidebarModel,
+    InteractionModel,
     DesktopModel:loadModel('DockDesktopModel'),Qt:{callLater(){}},host:{windowActions:actions},
     windowActions:actions,toplevels:windows,hyprToplevels:handles,workspaces,monitors,
     selectedConnector:'DP-1',mode:'sidebar',interactionBusy:false,resizeActive:false,
     initialized:true,collapsed:false,settings:{},folds:{},focusedRowKey:'',
     registry:SidebarModel.reconcileHandles({nextToken:1,entries:[]},windows),
+    mappedScreens:[{name:'DP-1'},{name:'HDMI-A-1'}],
     dragSession:null,dragTarget:null,focusReturnTarget:null,
     dragChanged(){},navigationRequested(){},contextRequested(){},refreshed(){},surfaceInvalidated(){} })
   controller.projection = {rows:windows.map((t,i)=>({kind:'window',key:controller.registry.entries[i].key,

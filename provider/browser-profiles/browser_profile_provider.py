@@ -22,6 +22,7 @@ available=false; per-window profiles are simply absent.
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
@@ -31,11 +32,19 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 from urllib.parse import urlsplit
 
 TITLE_SUFFIXES = (" - Google Chrome", " - Chromium", " - Brave", " - Microsoft Edge")
 MAX_UNREAD_COUNT = 999999
+MAX_TABS_PER_WINDOW = 50
+MAX_TAB_TITLE = 120
+MAX_FAVICON_BYTES = 256 * 1024
+MAX_FAVICON_FETCHES_PER_POLL = 3
+FAVICON_MISS_TTL_SEC = 300
+FAVICON_FETCH_TIMEOUT_SEC = 0.5
 WHATSAPP_TITLE = re.compile(r"^\((\d+)\)\s+WhatsApp$")
 INSTAGRAM_TITLE = re.compile(r"^\((\d+)\)\s+Instagram(?: • [^\r\n]+)?$")
 # Only the supported inbox title is an unread signal. Other mailbox counts
@@ -125,6 +134,309 @@ def reduce_activities(rows):
             selected[key] = dict(row, count=count)
     return sorted(selected.values(), key=lambda row: (
         -int(row["count"]), str(row.get("label", "")), str(row["targetId"])))
+
+
+def tab_for_target(target, window_address, active=False, favicon_path=""):
+    """Publish a sidebar tab row: title + optional local favicon, never URL."""
+    if not isinstance(target, dict) or not valid_target_id(target.get("targetId")):
+        return None
+    url = str(target.get("url") or "")
+    if url.startswith("chrome-extension://") or url.startswith("chrome://version"):
+        return None
+    title = str(target.get("title") or "").strip() or "Tab"
+    if len(title) > MAX_TAB_TITLE:
+        title = title[: MAX_TAB_TITLE - 1] + "…"
+    row = {
+        "targetId": str(target["targetId"]),
+        "title": title,
+        "active": bool(active),
+        "windowAddress": str(window_address or "").strip().lower(),
+    }
+    path = str(favicon_path or "").strip()
+    if path.startswith("/") and os.path.isfile(path):
+        row["faviconPath"] = path
+    return row
+
+
+def favicon_cache_dir():
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
+        os.environ.get("HOME", "/tmp"), ".cache")
+    return os.path.join(base, "smartdock", "tab-favicons")
+
+
+def list_page_favicon_urls(port):
+    """Map target id -> remote favicon URL from Chrome's /json list."""
+    try:
+        with urllib.request.urlopen(
+                "http://127.0.0.1:%d/json" % int(port), timeout=2) as reply:
+            targets = json.loads(reply.read().decode())
+    except (OSError, ValueError, urllib.error.URLError, TypeError):
+        return {}
+    if not isinstance(targets, list):
+        return {}
+    result = {}
+    for target in targets:
+        if not isinstance(target, dict):
+            continue
+        target_id = str(target.get("id") or "")
+        favicon = target.get("faviconUrl")
+        if not target_id or not isinstance(favicon, str) or not favicon.strip():
+            continue
+        result[target_id] = favicon.strip()
+    return result
+
+
+def _favicon_extension(url, content_type):
+    ctype = str(content_type or "").split(";", 1)[0].strip().lower()
+    by_type = {
+        "image/png": ".png",
+        "image/x-icon": ".ico",
+        "image/vnd.microsoft.icon": ".ico",
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+        "image/svg+xml": ".svg",
+    }
+    if ctype in by_type:
+        return by_type[ctype]
+    path = urlsplit(url).path.lower()
+    for ext in (".png", ".ico", ".jpg", ".jpeg", ".webp", ".gif", ".svg"):
+        if path.endswith(ext):
+            return ".jpg" if ext == ".jpeg" else ext
+    return ".ico"
+
+
+def cache_favicon(url, cache_dir=None, fetch_budget=None):
+    """Return a local favicon path. Never returns remote URLs.
+
+    Existing cache hits are free. New downloads consume one unit of fetch_budget
+    (a one-element list) and are capped so a slow icon host cannot stall the
+    provider poll that also publishes activities/tabs titles.
+    """
+    source = str(url or "").strip()
+    if not source:
+        return ""
+    directory = cache_dir or favicon_cache_dir()
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()[:32]
+    miss_path = os.path.join(directory, digest + ".miss")
+    try:
+        os.makedirs(directory, exist_ok=True)
+        for name in os.listdir(directory):
+            if name.startswith(digest + ".") and not name.endswith(".miss") \
+                    and os.path.isfile(os.path.join(directory, name)):
+                return os.path.join(directory, name)
+        if os.path.isfile(miss_path):
+            if time.time() - os.path.getmtime(miss_path) < FAVICON_MISS_TTL_SEC:
+                return ""
+    except OSError:
+        return ""
+
+    if isinstance(fetch_budget, list):
+        if not fetch_budget or fetch_budget[0] <= 0:
+            return ""
+        fetch_budget[0] -= 1
+
+    body = b""
+    content_type = ""
+    if source.startswith("data:image/"):
+        try:
+            header, _, payload = source.partition(",")
+            if ";base64" in header.lower():
+                body = base64.b64decode(payload, validate=False)
+            else:
+                body = urllib.parse.unquote_to_bytes(payload)
+            content_type = header[5:].split(";", 1)[0]
+        except (ValueError, TypeError):
+            try:
+                open(miss_path, "wb").close()
+            except OSError:
+                pass
+            return ""
+    elif source.startswith("http://") or source.startswith("https://"):
+        try:
+            request = urllib.request.Request(
+                source, headers={"User-Agent": "SmartDock-browser-profile-provider"})
+            with urllib.request.urlopen(
+                    request, timeout=FAVICON_FETCH_TIMEOUT_SEC) as reply:
+                content_type = reply.headers.get("Content-Type", "")
+                body = reply.read(MAX_FAVICON_BYTES + 1)
+        except (OSError, ValueError, urllib.error.URLError):
+            try:
+                open(miss_path, "wb").close()
+            except OSError:
+                pass
+            return ""
+    else:
+        return ""
+    if not body or len(body) > MAX_FAVICON_BYTES:
+        try:
+            open(miss_path, "wb").close()
+        except OSError:
+            pass
+        return ""
+    ext = _favicon_extension(source, content_type)
+    path = os.path.join(directory, digest + ext)
+    fd, temp_path = tempfile.mkstemp(dir=directory, prefix=".favicon-")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(body)
+        os.replace(temp_path, path)
+        try:
+            os.unlink(miss_path)
+        except OSError:
+            pass
+        return path
+    except OSError:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        return ""
+
+
+def list_tab_strip_entries(client):
+    """Chrome 150+ tab targets with real tab-strip index (and tabGroupId).
+
+    Page-target order from Target.getTargets is not strip order. Tab targets
+    carry embedderData.tabStripIndex / tabGroupId; use those when present.
+    """
+    try:
+        result = client.call("Target.getTargets", {"filter": [
+            {"type": "tab", "exclude": False},
+            {"exclude": True},
+        ]})
+    except (CdpError, TypeError, ValueError, OSError):
+        return []
+    entries = []
+    for info in result.get("targetInfos", []) if isinstance(result, dict) else []:
+        if not isinstance(info, dict) or info.get("type") != "tab":
+            continue
+        embedder = info.get("embedderData")
+        if not isinstance(embedder, dict):
+            continue
+        index = embedder.get("tabStripIndex")
+        if not isinstance(index, int) or index < 0:
+            continue
+        target_id = str(info.get("targetId") or "")
+        if not valid_target_id(target_id):
+            continue
+        try:
+            window_id = client.call(
+                "Browser.getWindowForTarget",
+                {"targetId": target_id}).get("windowId")
+        except (CdpError, OSError, ValueError, TypeError):
+            window_id = None
+        entries.append({
+            "targetId": target_id,
+            "title": str(info.get("title") or ""),
+            "url": str(info.get("url") or ""),
+            "windowId": window_id,
+            "tabStripIndex": index,
+            "tabActive": embedder.get("tabActive") is True,
+            "tabPinned": embedder.get("tabPinned") is True,
+            "tabGroupId": str(embedder.get("tabGroupId") or ""),
+        })
+    entries.sort(key=lambda row: (
+        row.get("windowId") is None,
+        row.get("windowId") if isinstance(row.get("windowId"), int) else 0,
+        row["tabStripIndex"],
+        row["title"],
+        row["targetId"],
+    ))
+    return entries
+
+
+def build_tabs(matches, pages, os_windows=None, favicon_urls=None, strip_tabs=None):
+    """Group page targets by matched Hyprland window address (cap per window).
+
+    Prefer Chrome 150+ tab-strip order (tabStripIndex) when strip_tabs is
+    provided; otherwise keep Target.getTargets page order. Never promote the
+    active tab or sort by title.
+    """
+    target_windows = matches.get("targetWindows", {}) if isinstance(matches, dict) else {}
+    window_ids = matches.get("windowIds", {}) if isinstance(matches, dict) else {}
+    assignments = _context_map(matches)
+    favicons = favicon_urls if isinstance(favicon_urls, dict) else {}
+    fetch_budget = [MAX_FAVICON_FETCHES_PER_POLL]
+    os_titles = {}
+    for window in os_windows or []:
+        if not isinstance(window, dict):
+            continue
+        address = str(window.get("address", "")).strip().lower()
+        if address:
+            os_titles[address] = strip_browser_suffix(str(window.get("title", "")))
+
+    page_by_id = {}
+    page_by_window_url = {}
+    fallback_order = []
+    for page in pages if isinstance(pages, list) else []:
+        target_id = str(page.get("targetId", ""))
+        cdp_window = target_windows.get(target_id)
+        if cdp_window is None:
+            continue
+        address = next((key for key, value in window_ids.items()
+                        if value == cdp_window), "")
+        if not address or address not in assignments:
+            continue
+        address = str(address).strip().lower()
+        active_title = os_titles.get(address, "")
+        page_title = str(page.get("title") or "")
+        active = bool(active_title) and (
+            page_title == active_title
+            or strip_browser_suffix(page_title) == active_title)
+        page_by_id[target_id] = {
+            "page": page,
+            "address": address,
+            "active": active,
+            "windowId": cdp_window,
+        }
+        url = str(page.get("url") or "").strip()
+        if url:
+            page_by_window_url[(cdp_window, url)] = target_id
+        fallback_order.append(target_id)
+
+    by_address = {}
+    ordered_ids = []
+    strip = strip_tabs if isinstance(strip_tabs, list) else []
+    if strip:
+        for tab in strip:
+            window_id = tab.get("windowId")
+            url = str(tab.get("url") or "").strip()
+            page_id = page_by_window_url.get((window_id, url)) if url else None
+            if not page_id or page_id not in page_by_id:
+                continue
+            info = page_by_id[page_id]
+            # Authoritative strip selection when Chrome reports it.
+            if tab.get("tabActive") is True:
+                info = dict(info, active=True)
+            elif tab.get("tabActive") is False and info["active"]:
+                # Title match can lag; prefer strip metadata when present.
+                info = dict(info, active=False)
+            ordered_ids.append((page_id, info, tab))
+    else:
+        for page_id in fallback_order:
+            ordered_ids.append((page_id, page_by_id[page_id], None))
+
+    seen = set()
+    for page_id, info, tab in ordered_ids:
+        if page_id in seen:
+            continue
+        seen.add(page_id)
+        favicon_path = cache_favicon(favicons.get(page_id, ""),
+                                     fetch_budget=fetch_budget)
+        row = tab_for_target(info["page"], info["address"],
+                             active=info["active"], favicon_path=favicon_path)
+        if not row:
+            continue
+        if tab and tab.get("tabGroupId"):
+            row["tabGroupId"] = str(tab.get("tabGroupId"))
+        if tab and tab.get("tabPinned") is True:
+            row["pinned"] = True
+        by_address.setdefault(info["address"], []).append(row)
+
+    return {address: rows[:MAX_TABS_PER_WINDOW]
+            for address, rows in by_address.items()}
 
 
 class WindowMatches(dict):
@@ -469,7 +781,8 @@ def _context_map(matches):
     return matches.get("contexts", matches) if isinstance(matches, dict) else {}
 
 
-def build_snapshot(matches, context_profiles, pages=None, port=9222, classes=None):
+def build_snapshot(matches, context_profiles, pages=None, port=9222, classes=None,
+                   os_windows=None, strip_tabs=None):
     # Keep the old three-argument call shape used by the installed-provider
     # check while allowing the richer target/window mapping for live activity.
     if isinstance(pages, (int, float)):
@@ -516,6 +829,8 @@ def build_snapshot(matches, context_profiles, pages=None, port=9222, classes=Non
             all_rows.append(row)
     for row in reduce_activities(all_rows):
         activities.setdefault(row["windowAddress"], []).append(row)
+    tabs = build_tabs(matches, pages, os_windows, list_page_favicon_urls(port),
+                      strip_tabs)
     return {
         "schemaVersion": 1,
         "available": True,
@@ -524,13 +839,14 @@ def build_snapshot(matches, context_profiles, pages=None, port=9222, classes=Non
         "profiles": profiles,
         "classes": [str(value).strip() for value in (classes or []) if str(value).strip()],
         "activities": activities,
+        "tabs": tabs,
     }
 
 
 def snapshot_fingerprint(snapshot):
     value = snapshot if isinstance(snapshot, dict) else {}
     return json.dumps({key: value.get(key) for key in (
-        "available", "classes", "port", "windows", "profiles", "activities")},
+        "available", "classes", "port", "windows", "profiles", "activities", "tabs")},
         sort_keys=True, separators=(",", ":"))
 
 
@@ -600,7 +916,8 @@ def run(args):
                 else:
                     context_retry_after[context_id] = time.monotonic() + 30
             snapshot = build_snapshot(assignments, context_profiles, pages,
-                                      args.port, classes)
+                                      args.port, classes, windows,
+                                      list_tab_strip_entries(client))
             available = True
         except (CdpError, OSError, ValueError) as error:
             client.close()
@@ -615,6 +932,7 @@ def run(args):
                 "windows": {},
                 "profiles": {},
                 "activities": {},
+                "tabs": {},
             }
             available = False
         fingerprint = snapshot_fingerprint(snapshot)

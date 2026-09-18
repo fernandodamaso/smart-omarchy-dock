@@ -416,7 +416,9 @@ function settingsDefaults() {
     sidebarMonitor: "",
     sidebarExpandedWidth: 320,
     sidebarCollapsed: false,
+    sidebarCollapsedByMonitor: {},
     sidebarWidgets: [],
+    sidebarBrowserTabsEnabled: true,
     position: "bottom",
     fullLength: false,
     reserveSpace: true,
@@ -537,6 +539,18 @@ function effectiveBorderWidth(enabled, override, themeWidth) {
   return steppedNumber(override, 0, 8, 1, 2, 0)
 }
 
+// Exact connector → boolean. Invalid keys/values dropped; disconnected names kept.
+function normalizeSidebarCollapsedByMonitor(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return ({})
+  var result = ({})
+  Object.keys(value).forEach(function(key) {
+    if (typeof key !== "string" || !key || /[\x00-\x1f\x7f-\x9f]/.test(key)) return
+    if (typeof value[key] !== "boolean") return
+    result[key] = value[key]
+  })
+  return result
+}
+
 function normalizeSetting(key, value) {
   var defaults = settingsDefaults()
   switch (key) {
@@ -552,6 +566,8 @@ function normalizeSetting(key, value) {
     return SidebarWidgetModel.requestedIds(value)
   case "sidebarCollapsed":
     return typeof value === "boolean" ? value : false
+  case "sidebarCollapsedByMonitor":
+    return normalizeSidebarCollapsedByMonitor(value)
   case "iconSize":
     return steppedNumber(value, 24, 96, 1, defaults.iconSize, 0)
   case "magnification":
@@ -574,6 +590,7 @@ function normalizeSetting(key, value) {
   case "borderWidthEnabled":
   case "interfaceAnimationsEnabled":
   case "browserProfileBadgesEnabled":
+  case "sidebarBrowserTabsEnabled":
     return typeof value === "boolean" ? value : defaults[key]
   case "backgroundColor":
   case "borderColor":
@@ -1206,16 +1223,16 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
   var runningByKey = {}
   var nextOriginalIndex = 0
   var mergeWindows = groupWindows !== false
+  var catalog = entries || []
 
   for (var i = 0; i < pinnedIds.length; ++i) {
     var pinnedId = pinnedIds[i]
-    var pinnedItem = {
+    items.push({
       desktopId: pinnedId,
       pinned: true,
       toplevels: [],
       originalIndex: nextOriginalIndex++
-    }
-    items.push(pinnedItem)
+    })
   }
 
   for (var topIndex = 0; topIndex < toplevels.length; ++topIndex) {
@@ -1223,12 +1240,12 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
     var matchedPinned = false
     // Terminal windows running a recognized CLI app (e.g. opencode)
     // group under that app instead of the terminal emulator.
-    var effectiveAppId = toplevelAppId(toplevel, entries)
+    var effectiveAppId = toplevelAppId(toplevel, catalog)
 
     if (mergeWindows) {
       for (var pinnedIndex = 0; pinnedIndex < items.length; ++pinnedIndex) {
         var item = items[pinnedIndex]
-        var pinnedEntry = entryForDesktopId(item.desktopId, entries)
+        var pinnedEntry = entryForDesktopId(item.desktopId, catalog)
         if (!entryMatchesAppId(item.desktopId, pinnedEntry, effectiveAppId))
           continue
 
@@ -1240,7 +1257,7 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
       if (matchedPinned) continue
     }
 
-    var runningEntry = entryForAppId(effectiveAppId, entries)
+    var runningEntry = entryForAppId(effectiveAppId, catalog)
     var desktopId = runningEntry && runningEntry.id
       ? runningEntry.id
       : String(effectiveAppId || "unknown-application")
@@ -1250,7 +1267,7 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
       for (var pinIndex = 0; pinIndex < items.length; ++pinIndex) {
         var pinnedItem = items[pinIndex]
         if (pinnedItem.toplevels.length > 0) continue
-        var pinnedEntry = entryForDesktopId(pinnedItem.desktopId, entries)
+        var pinnedEntry = entryForDesktopId(pinnedItem.desktopId, catalog)
         if (!entryMatchesAppId(pinnedItem.desktopId, pinnedEntry, effectiveAppId))
           continue
         pinnedItem.toplevels.push(toplevel)
@@ -1308,7 +1325,8 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
   var hiddenIds = normalizeApplicationIds(hiddenApplicationIds)
   var visibleItems = []
   for (var itemIndex = 0; itemIndex < items.length; ++itemIndex) {
-    var itemKey = normalizedId(items[itemIndex].desktopId)
+    var visibleItem = items[itemIndex]
+    var itemKey = normalizedId(visibleItem.desktopId)
     var hidden = false
     for (var hiddenIndex = 0; hiddenIndex < hiddenIds.length; ++hiddenIndex) {
       if (normalizedId(hiddenIds[hiddenIndex]) === itemKey) {
@@ -1316,7 +1334,13 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
         break
       }
     }
-    if (!hidden) visibleItems.push(items[itemIndex])
+    if (hidden) continue
+    // Attach once for sidebar/classic consumers of item.entry. Classic DockItem
+    // still resolves DesktopEntries.byId reactively; this is the shared catalog
+    // object when the caller already supplied applications. entryForAppId covers
+    // both desktop id and startupClass in one pass.
+    visibleItem.entry = entryForAppId(visibleItem.desktopId, catalog)
+    visibleItems.push(visibleItem)
   }
 
   return visibleItems

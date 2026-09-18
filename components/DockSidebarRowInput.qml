@@ -6,6 +6,13 @@ Item {
   id: root
   required property var controller
   required property string rowKey
+  // Connector of the PanelWindow that owns this row (mirrored panels).
+  property string panelConnector: ""
+  // Workspace header: whole-card hover via viewport.hoveredWorkspaceKey + grab cursor.
+  property bool workspaceHeader: false
+  property var viewport: null
+  // Key last published to viewport; clear uses this even after kind/key change.
+  property string lastPublishedWorkspaceKey: ""
   property var pressedTarget: null
   property string pressedConnector: ""
   property bool consumed: false
@@ -18,10 +25,31 @@ Item {
   signal dragMoved(var scenePoint)
   signal dragReleased(var scenePoint)
 
+  function clearPublishedWorkspaceHover() {
+    var published = root.lastPublishedWorkspaceKey
+    root.lastPublishedWorkspaceKey = ""
+    if (!root.viewport || published === "") return
+    if (root.viewport.hoveredWorkspaceKey === published)
+      root.viewport.hoveredWorkspaceKey = ""
+  }
+
+  function syncWorkspaceHover(active) {
+    if (!root.viewport) return
+    if (active) {
+      if (!root.workspaceHeader) return
+      var key = root.rowKey
+      if (!key) return
+      root.viewport.hoveredWorkspaceKey = key
+      root.lastPublishedWorkspaceKey = key
+      return
+    }
+    root.clearPublishedWorkspaceHover()
+  }
+
   function capturePress() {
     root.consumed = false
     root.pressedTarget = root.controller.captureTarget(root.rowKey)
-    root.pressedConnector = root.controller.selectedConnector
+    root.pressedConnector = root.panelConnector || root.controller.selectedConnector
     root.controller.rememberNavigationFocus()
     root.focusRequested()
   }
@@ -39,6 +67,24 @@ Item {
     root.pressedTarget = null
     if (root.dragOwned) root.controller.cancelRowDrag(reason)
     root.dragOwned = false
+    // Always clear published hover; do not reassert. Later hover-enter republishes.
+    root.clearPublishedWorkspaceHover()
+  }
+
+  readonly property bool hovered: hover.hovered
+  readonly property bool pressed: plainTap.pressed || controlTap.pressed
+
+  HoverHandler {
+    id: hover
+    enabled: root.inputEnabled
+    onHoveredChanged: root.syncWorkspaceHover(hovered)
+  }
+
+  // Grab cursor only on workspace headers; other rows keep the default arrow.
+  HoverHandler {
+    enabled: root.inputEnabled && root.workspaceHeader
+    cursorShape: root.dragOwned || root.pressed
+      ? Qt.ClosedHandCursor : Qt.OpenHandCursor
   }
 
   TapHandler {
@@ -77,7 +123,7 @@ Item {
     acceptedButtons: Qt.LeftButton
     onActiveChanged: if (active) {
       root.consumed = true
-      root.dragOwned = root.controller.beginRowDrag(root.pressedTarget)
+      root.dragOwned = root.controller.beginRowDrag(root.pressedTarget, root.pressedConnector)
       if (root.dragOwned) root.dragMoved(centroid.scenePosition)
     }
     onTranslationChanged: if (active && root.dragOwned) root.dragMoved(centroid.scenePosition)
@@ -102,5 +148,6 @@ Item {
   }
   onEnabledChanged: if (!enabled) root.cancelGesture("input-disabled")
   onRowKeyChanged: root.cancelGesture("delegate-reassigned")
+  onWorkspaceHeaderChanged: if (!workspaceHeader) root.clearPublishedWorkspaceHover()
   Component.onDestruction: root.cancelGesture("source-destroyed")
 }

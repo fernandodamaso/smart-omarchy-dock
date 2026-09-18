@@ -1,39 +1,283 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Controls as Controls
+import Quickshell
+import Quickshell.Widgets
 import qs.Commons
 import qs.Ui as Ui
+import "DockSidebarInteractionModel.js" as InteractionModel
+import "DockSidebarModel.js" as SidebarModel
+import "DockIconModel.js" as DockIconModel
+import "DockBadgeModel.js" as BadgeModel
+import "DockBrowserActivityModel.js" as ActivityModel
 
-// A domain row, not a second generic UI kit. Native surfaces/buttons own
-// control chrome; SmartDock owns window identity, artwork and badge semantics.
+// Hierarchy row for the approved sidebar direction: Lucide monitor icon +
+// two-line identity, workspace badge-only identity, continuous tree guides,
+// focused accent rail, and modest selection fills. Domain actions stay on
+// DockSidebarRowInput / fold. Section card fills live in DockSidebarViewport.
 Item {
   id: root
   required property var row
   required property var controller
   property var viewport: null
+  property var appearance: null
+  property string panelConnector: ""
   readonly property var input: rowInput
   readonly property string desktopId: String(row.desktopId || "")
-  readonly property var entry: row.item ? row.item.entry : null
+  readonly property var applications: DesktopEntries.applications.values || []
+  readonly property var entry: {
+    var modelRevision = applications.length
+    if (row.item && row.item.entry) return row.item.entry
+    if (!root.desktopId) return null
+    return DesktopEntries.byId(root.desktopId)
+  }
   readonly property var browserProfileService: controller.host ? controller.host.browserProfileService : null
   readonly property string browserProfileKey: profile ? profile.key : ""
-  readonly property bool navigable: ["window", "workspace", "application", "launcher"].indexOf(kind) >= 0
+  readonly property bool navigable: ["window", "workspace", "application", "launcher", "browser-tab"].indexOf(kind) >= 0
   required property bool collapsed
   required property real rowHeight
   readonly property string rowKey: row.key
   readonly property string kind: row.kind
   readonly property bool hasArtwork: kind === "window" || kind === "application" || kind === "launcher"
-  readonly property string liveTitle: kind === "window" && row.toplevel
-    ? String(row.toplevel.title || "Untitled window") : String(row.label || "")
+  readonly property bool nestedWindow: kind === "window" && row.nested === true
+  readonly property bool nestedTab: kind === "browser-tab"
+  readonly property string tabFaviconSource: nestedTab
+    ? DockIconModel.faviconFileUrl(String(row.faviconPath || "")) : ""
+  readonly property bool tabFaviconReady: nestedTab && tabFaviconSource !== ""
+    && tabFavicon.status === Image.Ready
+  readonly property bool soleWindow: kind === "window" && row.soleWindow === true
+  readonly property bool tabsExpandable: kind === "window" && row.tabsExpandable === true
+  readonly property bool appExpandable: kind === "application" && row.expandable === true
+  readonly property int windowCount: kind === "application" ? Number(row.windowCount || row.windows && row.windows.length || 0) : 0
+  readonly property int treeDepth: Number(row.treeDepth || 0)
+  readonly property bool isLastSibling: row.isLastSibling !== false
+  readonly property var ancestorContinues: row.ancestorContinues || []
+  readonly property real workspaceCardInset: viewport && viewport.workspaceCardInset !== undefined
+    ? Number(viewport.workspaceCardInset) : Style.space(5)
+  readonly property var treeLayout: InteractionModel.sidebarTreeGuideLayout(root.workspaceCardInset)
+  readonly property bool insideWorkspaceCard: kind !== "monitor" && kind !== "section"
+    && (kind === "workspace" || !!row.workspaceKey)
+  // Empty workspace cards must not draw a fake header→children stem.
+  readonly property bool workspaceHasChildren: {
+    if (kind !== "workspace") return false
+    var apps = row.target && row.target.applications
+    return !!(apps && apps.length > 0)
+  }
+  readonly property string monitorTitle: kind === "monitor"
+    ? String(row.title || row.label || row.connector || "Monitor") : ""
+  readonly property string monitorConnector: kind === "monitor" ? String(row.connector || "") : ""
+  // Card/projection order may follow workspaceMonitorOrder; miniatures use
+  // physical x/y (monitorMetadata with empty order) and join focus by
+  // connector/identity from projection.monitorSections.
+  readonly property var monitorTopologyStrip: {
+    var screens = controller.screens
+    var monitors = controller.monitors
+    var proj = controller.projection
+    var focusSections = (proj && proj.monitorSections) || []
+    return SidebarModel.physicalMonitorStrip(screens, monitors, focusSections)
+  }
+  readonly property int monitorStripCount: monitorTopologyStrip.length
+  readonly property int monitorSectionIndex: Number(row.sectionIndex || 0)
+  readonly property int focusedMonitorStripIndex: InteractionModel.focusedMonitorStripIndex(
+    root.monitorTopologyStrip)
+  readonly property string monitorStripOrdinal: InteractionModel.focusedMonitorStripOrdinal(
+    root.monitorTopologyStrip)
+  // Browser parents keep a stable desktop-entry label; identity still works when
+  // the tab provider is down (DEFAULT_BROWSER_CLASSES) or tabs are folded.
+  readonly property bool isBrowserWindow: {
+    if (kind !== "window") return false
+    var service = root.browserProfileService
+    var serviceRevision = service ? Number(service.revision || 0) : 0
+    var catalogRevision = applications.length
+    var classes = ActivityModel.effectiveBrowserClasses(service ? service.classes : [])
+    var tracker = controller.host ? controller.host.badgeTracker : null
+    var aliases = tracker ? tracker.identityAliases : ({})
+    return BadgeModel.strictIdentityMatches(root.desktopId, root.entry, classes, aliases)
+  }
+  readonly property string windowTitle: {
+    if (kind === "browser-tab") return String(row.title || "Tab")
+    if (kind === "window" && row.toplevel)
+      return String(row.toplevel.title || "").trim() || "Untitled window"
+    return ""
+  }
+  readonly property string liveTitle: {
+    if (kind === "browser-tab" || kind === "window")
+      return InteractionModel.sidebarWindowDisplayTitle({
+        kind: kind,
+        isBrowser: root.isBrowserWindow,
+        entryName: root.entry ? String(root.entry.name || "") : String(row.label || ""),
+        windowTitle: root.windowTitle,
+        tabTitle: kind === "browser-tab" ? String(row.title || "") : ""
+      })
+    if (kind === "application") return String(row.label || "")
+    if (kind === "monitor") return root.monitorTitle
+    if (kind === "workspace") return root.workspaceBadgeText
+    return String(row.label || "")
+  }
+  // Prefer shared model display label (id:10 → Work); identity is fallback only.
+  readonly property string workspaceBadgeText: kind === "workspace"
+    ? InteractionModel.workspaceBadgeLabel(row.workspaceIdentity || "", row.label || "")
+    : ""
+  // Rail keeps the compact two-code-point token; tooltips/expanded keep full name.
+  readonly property string workspaceRailLabel: {
+    if (kind !== "workspace") return ""
+    var full = root.workspaceBadgeText || String(row.label || root.liveTitle || "")
+    return InteractionModel.compactWorkspaceBadgeLabel(full)
+  }
   readonly property bool focusedWindow: kind === "window" && row.toplevel && row.toplevel.activated === true
-  readonly property string accessibleLabel: liveTitle
-    + (row.workspaceIdentity ? " · Workspace " + row.workspaceIdentity : "")
-    + (row.monitorIdentity ? " · Monitor " + row.monitorIdentity : "")
-    + (row.minimized ? " · Minimized" : "") + (row.sticky ? " · Sticky" : "")
+  readonly property bool activeBrowserTab: nestedTab
+    && row.active === true
+    && !!row.toplevel
+    && row.toplevel.activated === true
+  readonly property bool containsFocusedWindow: {
+    if (kind !== "application" || !row.windows) return false
+    for (var i = 0; i < row.windows.length; ++i) {
+      var member = row.windows[i]
+      if (member && member.toplevel && member.toplevel.activated === true) return true
+    }
+    return false
+  }
+  readonly property string accessibleLabel: {
+    var attention = root.attention
+    var state = root.windowState
+    var alertBits = ""
+    if (attention.countVisible && attention.count > 0)
+      alertBits += " · " + attention.count + " alerts"
+    else if (attention.severity === "urgent")
+      alertBits += " · Urgent"
+    else if (attention.severity === "attention")
+      alertBits += " · Attention"
+    if (kind === "monitor")
+      return root.monitorTitle + (root.monitorConnector ? " · " + root.monitorConnector : "")
+    if (kind === "workspace")
+      return "Workspace " + root.workspaceBadgeText
+        + (row.active ? " · Active" : "")
+        + (row.monitorIdentity ? " · Monitor " + row.monitorIdentity : "")
+    if (kind === "browser-tab")
+      return (row.active === true ? "Active tab: " : "Tab: ") + liveTitle + alertBits
+        + (attention.muted ? " · Alerts excluded from totals" : "")
+    var titleLabel = kind === "window"
+      ? InteractionModel.sidebarWindowTooltipTitle({
+        kind: "window",
+        isBrowser: root.isBrowserWindow,
+        displayTitle: liveTitle,
+        windowTitle: root.windowTitle
+      })
+      : liveTitle
+    return titleLabel
+      + (kind === "application" && windowCount > 1 ? " · " + windowCount : "")
+      + (row.workspaceIdentity ? " · Workspace " + row.workspaceIdentity : "")
+      + (row.monitorIdentity ? " · Monitor " + row.monitorIdentity : "")
+      + (state.fullscreen ? " · Fullscreen" : "")
+      + (state.pinned ? " · Pinned" : "")
+      + (state.minimized ? " · Minimized" : "")
+      + alertBits
+      + (containsFocusedWindow && row.folded ? " · Contains focused window" : "")
+      + (tabsExpandable ? (row.tabsFolded ? " · Tabs folded" : " · Tabs expanded") : "")
+  }
   readonly property var profile: hasArtwork ? controller.profileForRow(row) : null
-  readonly property real padding: Math.min(Style.space(8), width / 8)
+  readonly property var attention: controller.attentionForRow(row)
+  // scopeRevision tracks Hyprland fullscreen events; hyprToplevels carries the
+  // live lastIpcObject used by windowStateForRow.
+  readonly property var windowState: {
+    var revision = controller.scopeRevision
+    var handles = controller.hyprToplevels
+    return controller.windowStateForRow(row)
+  }
+  readonly property bool alertControlFocused: controller.alertControlKey === root.rowKey
+  readonly property bool showAlertControl: !root.collapsed && root.nestedTab
+    && !!root.attention.serviceId
+    && (root.attention.count > 0 || root.attention.muted === true
+      || root.attention.countVisible === true)
+  readonly property real padding: root.collapsed
+    ? Math.min(Style.space(8), Math.max(2, width / 8))
+    : Style.space(8)
+  readonly property real iconSize: {
+    if (!hasArtwork && kind !== "monitor") return 0
+    if (collapsed) {
+      if (kind === "monitor") return 16
+      if (hasArtwork) return 22
+      return 0
+    }
+    if (kind === "monitor") return 24
+    return 18
+  }
+  readonly property real artX: {
+    if (collapsed) return 0
+    if (kind === "workspace") return root.treeLayout.badgeLeft
+    if (nestedTab || hasArtwork)
+      return InteractionModel.sidebarTreeIconX(root.workspaceCardInset, Math.max(1, root.treeDepth))
+    return root.padding
+  }
+  // Shared fill/rail horizontal bounds (tree-indented vs whole-card workspace).
+  readonly property var selectionInsets: InteractionModel.sidebarSelectionInsets({
+    kind: root.kind,
+    collapsed: root.collapsed,
+    insideWorkspaceCard: root.insideWorkspaceCard,
+    workspaceCardInset: root.workspaceCardInset,
+    artX: root.artX
+  })
+  readonly property real selectionLeft: selectionInsets.left
+  readonly property real selectionRight: selectionInsets.right
+  readonly property bool railNumericAlert: InteractionModel.sidebarRowHasNumericAlert(
+    collapsed, root.attention.countVisible)
+  readonly property var rowMetrics: InteractionModel.sidebarRowMetrics(
+    row, collapsed, rowHeight, Style.space, root.railNumericAlert)
+  readonly property bool windowFooterDrag: controller.rowDragActive
+    && controller.dragSession && controller.dragSession.target
+    && controller.dragSession.target.kind === "window"
+  readonly property bool isMonitorFinal: viewport
+    && InteractionModel.isMonitorFinalKey(row.key, viewport.sectionSpans)
+  readonly property bool showNewWorkspaceFooter: root.windowFooterDrag && root.isMonitorFinal
+  readonly property real footerTargetHeight: InteractionModel.newWorkspaceFooterTargetHeight(collapsed)
+  readonly property real footerExtraHeight: InteractionModel.newWorkspaceFooterExtra(collapsed, Style.space)
+  readonly property string footerKey: {
+    if (!root.showNewWorkspaceFooter) return ""
+    if (viewport && typeof viewport.footerKeyForRowKey === "function") {
+      var keyed = viewport.footerKeyForRowKey(row.key)
+      if (keyed) return keyed
+    }
+    var identity = String(row.monitorIdentity || "")
+    if (!identity) return ""
+    return InteractionModel.newWorkspaceFooterKey(identity)
+  }
+  readonly property bool footerDropTarget: root.showNewWorkspaceFooter && root.footerKey !== ""
+    && controller.dragTarget && controller.dragTarget.key === root.footerKey
+  readonly property string footerMonitorName: {
+    var monitorRow = null
+    if (controller && controller.rowsByKey) {
+      var monitorKey = String(row.monitorKey || "")
+      if (row.kind === "monitor") monitorRow = row
+      else if (monitorKey) monitorRow = controller.rowsByKey[monitorKey] || null
+      if (!monitorRow && row.monitorIdentity) {
+        var keys = Object.keys(controller.rowsByKey || {})
+        for (var i = 0; i < keys.length; ++i) {
+          var candidate = controller.rowsByKey[keys[i]]
+          if (candidate && candidate.kind === "monitor"
+              && String(candidate.monitorIdentity || "") === String(row.monitorIdentity || "")) {
+            monitorRow = candidate
+            break
+          }
+        }
+      }
+    }
+    if (monitorRow)
+      return String(monitorRow.title || monitorRow.label || monitorRow.connector || monitorRow.monitorIdentity || "")
+    return String(row.monitorIdentity || "")
+  }
+  readonly property string footerAccessibleLabel: "New workspace on " + root.footerMonitorName
+  readonly property real gapBefore: rowMetrics.gapBefore
+  readonly property real baseGapAfter: rowMetrics.gapAfter
+  readonly property real gapAfter: root.showNewWorkspaceFooter
+    ? rowMetrics.gapAfter + root.footerExtraHeight : rowMetrics.gapAfter
+  readonly property real contentY: rowMetrics.contentY
+  readonly property real sectionGap: gapBefore
+  readonly property real contentHeight: rowMetrics.contentHeight
+  readonly property real computedHeight: rowMetrics.height
+    + (root.showNewWorkspaceFooter ? root.footerExtraHeight : 0)
+  readonly property string monitorOrdinal: String(monitorSectionIndex + 1)
   objectName: "sidebar-row:" + rowKey
-  implicitHeight: rowHeight
-  height: rowHeight
+  implicitHeight: computedHeight
+  height: computedHeight
   clip: true
   Accessible.role: kind === "application" ? Accessible.Button : Accessible.ListItem
   Accessible.name: accessibleLabel
@@ -41,97 +285,871 @@ Item {
   onActiveFocusChanged: if (activeFocus) root.controller.focusedRowKey = root.rowKey
   opacity: root.controller.dragSession && root.controller.dragSession.target.key === root.rowKey ? 0.4 : 1
 
-  Ui.BorderSurface {
-    anchors.fill: parent
-    color: root.focusedWindow || root.row.active || root.row.focused
-      || (root.controller.dragTarget && root.controller.dragTarget.key === root.rowKey)
-      ? Style.selectedFillFor(Color.foreground, Color.accent) : "transparent"
-    borderSpec: root.activeFocus ? Border.controlSpec("focus", Color.foreground, Color.accent) : Border.none()
+  readonly property bool animationsEnabled: root.controller.settings
+    && root.controller.settings.interfaceAnimationsEnabled !== false
+  readonly property bool dropTarget: root.controller.dragTarget
+    && root.controller.dragTarget.key === root.rowKey
+  // Persistent included-alert window-name nudge (label Translate only).
+  property int attentionNudgeX: 0
+  readonly property int attentionDisplayCount: root.attention.countVisible
+    ? root.attention.count : 0
+  readonly property bool persistentSelected: root.focusedWindow || root.activeBrowserTab
+  readonly property bool persistentContext: (root.containsFocusedWindow && root.row.folded)
+    || false
+  readonly property color persistentFill: {
+    if (root.focusedWindow)
+      return Util.alpha(Color.accent, 0.18)
+    if (root.activeBrowserTab)
+      return Util.alpha(Color.foreground, 0.06)
+    if (root.containsFocusedWindow && root.row.folded)
+      return Util.alpha(Color.accent, 0.12)
+    return "transparent"
   }
-  DockAppIcon {
-    id: artwork
-    visible: root.hasArtwork
-    width: Math.min(32, Math.max(0, root.width - root.padding * 2))
-    height: width
-    x: root.collapsed ? (root.width - width) / 2 : root.padding
-    anchors.verticalCenter: parent.verticalCenter
-    desktopId: String(root.row.desktopId || "")
-    desktopIcon: root.row.item && root.row.item.entry ? String(root.row.item.entry.icon || "") : ""
-    iconOverrides: root.controller.settings.iconOverrides || ({})
-    reloadRevision: root.controller.host.iconReloadRevision || 0
-    profileKey: root.profile ? root.profile.key : ""
-    profileName: root.profile && root.profile.entry ? String(root.profile.entry.name || "") : ""
-    profileAvatarPath: root.profile && root.profile.entry ? String(root.profile.entry.avatarPath || "") : ""
-    profileBadgesEnabled: root.controller.settings.browserProfileBadgesEnabled !== false
-    opacity: root.row.minimized ? 0.65 : 1
-  }
-  Text {
-    id: label
-    objectName: "sidebar-label"
-    visible: !root.collapsed || !root.hasArtwork
-    x: root.collapsed ? root.padding : root.hasArtwork ? artwork.x + artwork.width + root.padding : root.padding
-    width: Math.max(0, root.width - x - root.padding - (fold.visible ? fold.width : 0))
-    anchors.verticalCenter: parent.verticalCenter
-    textFormat: Text.PlainText
-    text: root.collapsed && root.kind === "monitor" ? String(root.row.connector || "?")
-      : root.collapsed && root.kind === "section" ? (root.row.key === "section:pinned" ? "Pins" : "?")
-      : root.liveTitle
-    elide: Text.ElideRight
-    horizontalAlignment: root.collapsed ? Text.AlignHCenter : Text.AlignLeft
-    color: root.kind === "monitor" || root.kind === "section" ? Color.muted
-      : root.row.urgent ? Color.urgent : Color.foreground
-    font.family: Style.font.family
-    font.pixelSize: root.kind === "monitor" || root.kind === "section" ? Style.font.caption : Style.font.bodySmall
-    font.bold: root.kind === "workspace" || root.kind === "application"
-  }
-  DockSidebarRowInput {
-    id: rowInput
-    anchors.fill: parent
-    controller: root.controller
-    rowKey: root.rowKey
-    enabled: root.navigable
-    onFocusRequested: root.forceActiveFocus(Qt.MouseFocusReason)
-    onActivated: function(target, control, connector, modifiers) {
-      if (root.viewport) root.viewport.activate(target, control, connector, modifiers)
-    }
-    onContextRequested: target => { if (root.viewport) root.viewport.contextRequested(target, root) }
-    onDragMoved: point => { if (root.viewport) root.viewport.moveDrag(point) }
-    onDragReleased: point => { if (root.viewport) root.viewport.finishDrag(point) }
-  }
-  Ui.Button {
-    id: fold
-    objectName: "sidebar-app-fold"
-    visible: root.kind === "application" && !root.collapsed
+  // Monitor headings stay visually passive: tooltip via passiveHover, active
+  // border + workspace-drag highlight live on the section card in the viewport.
+  readonly property color rowFill: InteractionModel.composeRowFill({
+    dropTarget: root.kind === "monitor" ? false : root.dropTarget,
+    pressed: root.kind === "monitor" ? false : root.input.pressed,
+    activeFocus: root.activeFocus,
+    hovered: root.kind === "monitor" ? false
+      : (root.input.hovered || passiveHover.hovered),
+    navigable: root.navigable,
+    persistentSelected: root.persistentSelected,
+    persistentContext: root.persistentContext,
+    dropFill: Style.pressedFillFor(Color.accent, Color.accent),
+    pressedFill: Style.pressedFillFor(Color.foreground, Color.accent),
+    focusFill: Style.focusFillFor(Color.foreground, Color.accent),
+    selectedHoverFill: root.activeBrowserTab
+      ? Util.alpha(Color.foreground, 0.10)
+      : Util.alpha(Color.accent, Math.min(0.42, Style.selectionFillAlpha + Style.hoverFillAlpha)),
+    contextHoverFill: Util.alpha(Color.accent, Math.min(0.24, 0.12 + Style.hoverFillAlpha)),
+    hoverFill: Util.alpha(Color.foreground, 0.06),
+    persistentFill: root.persistentFill
+  })
+
+  // Fill layer uses selectionLeft/Right (tree-indented vs whole-card). Guides
+  // and fill stay stationary; only the window-name label translates.
+  Item {
+    id: fillLayer
+    anchors.left: parent.left
     anchors.right: parent.right
-    anchors.verticalCenter: parent.verticalCenter
-    width: Math.min(root.rowHeight, root.width / 3)
-    height: root.rowHeight
-    iconText: root.row.folded ? "▸" : "▾"
-    tooltipText: root.row.folded ? "Expand " + root.liveTitle : "Fold " + root.liveTitle
-    focusable: false
-    enabled: !root.controller.interactionBusy
-    onClicked: { root.forceActiveFocus(Qt.MouseFocusReason); root.controller.toggleApplication(root.rowKey) }
+    y: root.contentY
+    height: root.contentHeight
+    z: 0
+
+    Ui.BorderSurface {
+      anchors.fill: parent
+      anchors.leftMargin: root.selectionLeft
+      anchors.rightMargin: root.selectionRight
+      radius: Style.cornerRadius
+      color: root.rowFill
+      borderSpec: root.activeFocus ? Border.controlSpec("focus", Color.foreground, Color.accent) : Border.none()
+      Behavior on color {
+        enabled: root.animationsEnabled
+        ColorAnimation { duration: 120 }
+      }
+    }
+
+    // Focused window: 2px accent rail at the same selection left edge.
+    Rectangle {
+      visible: root.focusedWindow
+      width: 2
+      radius: 1
+      anchors.left: parent.left
+      anchors.leftMargin: root.selectionLeft
+      anchors.top: parent.top
+      anchors.topMargin: Style.space(4)
+      anchors.bottom: parent.bottom
+      anchors.bottomMargin: Style.space(4)
+      color: Color.accent
+    }
   }
-  DockApplicationBadge {
-    anchors.right: artwork.right
-    anchors.top: artwork.top
-    severity: root.hasArtwork ? root.controller.badgeForRow(root.row) : "none"
+
+  // Continuous tree guides (expanded only). Parent of content so they span the
+  // first-child 4px gap; never drawn through inter-workspace/monitor gaps.
+  Item {
+    id: treeGuides
+    anchors.fill: parent
+    z: 1
+    visible: !root.collapsed
+    readonly property color guideColor: Util.alpha(Color.foreground, 0.18)
+    readonly property real guideTop: root.row.layoutGapBefore === "children" ? 0 : root.contentY
+    readonly property real contentMid: root.contentY + root.contentHeight / 2
+    readonly property real contentBottom: root.contentY + root.contentHeight
+
+    // Workspace stem from badge center down to first-child gap bridge.
+    // Suppress on empty workspaces (no visible children / no applications).
+    Rectangle {
+      visible: root.kind === "workspace" && root.workspaceHasChildren
+      x: root.treeLayout.guide0
+      width: 1
+      y: treeGuides.contentMid
+      height: Math.max(0, treeGuides.contentBottom - y)
+      color: treeGuides.guideColor
+    }
+
+    Repeater {
+      model: root.treeDepth >= 1 ? root.ancestorContinues.length : 0
+      Rectangle {
+        required property int index
+        visible: root.ancestorContinues[index] === true
+        x: InteractionModel.sidebarTreeStemX(root.workspaceCardInset, index + 1)
+        width: 1
+        y: treeGuides.guideTop
+        height: Math.max(0, treeGuides.contentBottom - y)
+        color: treeGuides.guideColor
+      }
+    }
+
+    Rectangle {
+      id: ownStem
+      visible: root.treeDepth >= 1
+      x: InteractionModel.sidebarTreeStemX(root.workspaceCardInset, root.treeDepth)
+      width: 1
+      y: treeGuides.guideTop
+      height: Math.max(0, (root.isLastSibling ? treeGuides.contentMid : treeGuides.contentBottom) - y)
+      color: treeGuides.guideColor
+    }
+
+    Rectangle {
+      visible: root.treeDepth >= 1 && (root.hasArtwork || root.nestedTab)
+      x: ownStem.x
+      y: treeGuides.contentMid
+      width: Math.max(0, root.artX - x - 2)
+      height: 1
+      color: treeGuides.guideColor
+    }
   }
-  // Text-only hover help; never a thumbnail, automatic preview or activation.
-  HoverHandler { id: hover }
-  Controls.ToolTip {
-    visible: hover.hovered && !root.controller.rowDragActive && (root.collapsed || label.truncated)
-    delay: 400
-    contentItem: Text {
-      text: root.accessibleLabel
+
+  // Inter-monitor gap is owned by section cards; no duplicate hairline.
+
+  Item {
+    id: content
+    anchors.left: parent.left
+    anchors.right: parent.right
+    y: root.contentY
+    height: root.contentHeight
+    z: 2
+    clip: true
+
+    // Official Lucide monitor SVG (expanded). Rail uses compact icon+ordinal.
+    DockLucideIcon {
+      id: monitorGlyph
+      visible: root.kind === "monitor" && !root.collapsed
+      x: root.padding
+      anchors.verticalCenter: parent.verticalCenter
+      width: root.iconSize
+      height: root.iconSize
+      iconName: "monitor"
+      iconSize: root.iconSize
+      tint: Color.foreground
+      opacity: 0.85
+    }
+
+    Rectangle {
+      id: workspaceBadge
+      visible: root.kind === "workspace" && !root.collapsed
+      x: root.treeLayout.badgeLeft
+      anchors.verticalCenter: parent.verticalCenter
+      width: {
+        var natural = badgeLabel.implicitWidth + Style.space(8)
+        var available = Math.max(24, content.width - x - root.padding)
+        return Math.min(available, Math.max(24, natural))
+      }
+      height: Style.space(20)
+      radius: Style.space(4)
+      color: Util.alpha(Color.foreground, 0.08)
+      border.width: 1
+      border.color: root.row.active
+        ? Util.alpha(Color.accent, 0.50)
+        : Util.alpha(Color.foreground, 0.14)
+      Text {
+        id: badgeLabel
+        anchors.centerIn: parent
+        width: Math.max(0, parent.width - Style.space(8))
+        text: root.workspaceBadgeText
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        horizontalAlignment: Text.AlignHCenter
+        color: root.row.active ? Color.accent : Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        renderType: Text.NativeRendering
+      }
+    }
+
+    DockAppIcon {
+      id: artwork
+      visible: root.hasArtwork
+      width: root.iconSize
+      height: root.iconSize
+      x: root.collapsed ? (content.width - width) / 2 : root.artX
+      y: root.collapsed ? Style.space(10) : Math.round((content.height - height) / 2)
+      desktopId: String(root.row.desktopId || "")
+      desktopIcon: root.entry ? String(root.entry.icon || "") : ""
+      iconOverrides: root.controller.settings.iconOverrides || ({})
+      reloadRevision: root.controller.host.iconReloadRevision || 0
+      profileKey: root.profile ? root.profile.key : ""
+      profileName: root.profile && root.profile.entry ? String(root.profile.entry.name || "") : ""
+      profileAvatarPath: root.profile && root.profile.entry ? String(root.profile.entry.avatarPath || "") : ""
+      profileBadgesEnabled: root.controller.settings.browserProfileBadgesEnabled !== false
+      opacity: root.row.minimized ? 0.65 : 1
+    }
+
+    // Rail alert count under the 22px icon (16px line; metrics add 5px bottom).
+    // Compact badge keeps the same 36/58 shared height contract.
+    Rectangle {
+      id: railAlertCount
+      objectName: "sidebar-rail-alert-count"
+      visible: root.collapsed && root.hasArtwork && root.attention.countVisible
+        && root.attention.text !== ""
+      anchors.horizontalCenter: parent.horizontalCenter
+      y: Style.space(10) + 22 + Style.space(5)
+      height: Style.space(16)
+      width: {
+        var natural = railAlertLabel.implicitWidth + Style.space(4) * 2
+        var available = Math.max(0, content.width - 4)
+        return Math.min(available, Math.max(Style.space(16), natural))
+      }
+      radius: Style.space(3)
+      color: Util.alpha(Color.accent, Math.min(0.14, Style.selectedFillAlpha))
+      border.width: Style.space(1)
+      border.color: Util.alpha(Color.accent, Math.min(0.40, Style.hoverBorderAlpha + 0.15))
+      Text {
+        id: railAlertLabel
+        anchors.centerIn: parent
+        width: Math.max(0, parent.width - Style.space(8))
+        height: parent.height
+        text: root.attention.text
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        color: root.attention.severity === "urgent" ? Color.urgent : Color.accent
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        renderType: Text.NativeRendering
+      }
+    }
+
+    Image {
+      id: tabFavicon
+      visible: root.nestedTab && !root.collapsed && root.tabFaviconReady
+      width: 14
+      height: 14
+      x: root.artX
+      anchors.verticalCenter: parent.verticalCenter
+      asynchronous: true
+      fillMode: Image.PreserveAspectFit
+      source: root.tabFaviconSource
+      sourceSize: Qt.size(32, 32)
+      opacity: root.activeBrowserTab ? 1 : 0.85
+    }
+
+    // Lucide earth icon when the tab has no site favicon (Chrome-style default).
+    DockLucideIcon {
+      id: tabFaviconFallback
+      visible: root.nestedTab && !root.collapsed && !root.tabFaviconReady
+      width: 14
+      height: 14
+      x: root.artX
+      anchors.verticalCenter: parent.verticalCenter
+      iconName: "earth"
+      iconSize: 14
+      tint: root.activeBrowserTab
+        ? Color.foreground
+        : Util.alpha(Color.foreground, 0.75)
+    }
+
+    // Two-line monitor identity — separate Text nodes, shown only after width is
+    // stable, so layershell settle cannot double-paint a growing elided string.
+    Column {
+      id: monitorLabels
+      visible: root.kind === "monitor" && !root.collapsed && content.width >= 140
+      x: monitorGlyph.x + monitorGlyph.width + Style.space(8)
+      width: Math.max(0, content.width - x - root.padding
+        - (displayStrip.visible ? displayStrip.width + Style.space(8) : 0))
+      y: Math.round((content.height - implicitHeight) / 2)
+      spacing: Style.space(2)
+      Text {
+        objectName: "sidebar-label"
+        width: parent.width
+        height: Math.ceil(font.pixelSize * 1.25)
+        text: root.monitorTitle
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        wrapMode: Text.NoWrap
+        maximumLineCount: 1
+        color: Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.title
+        font.bold: true
+        renderType: Text.NativeRendering
+        verticalAlignment: Text.AlignVCenter
+      }
+      Text {
+        objectName: "sidebar-label-connector"
+        width: parent.width
+        height: visible ? Math.ceil(font.pixelSize * 1.2) : 0
+        visible: root.monitorConnector !== "" && root.monitorConnector !== root.monitorTitle
+        text: root.monitorConnector
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        wrapMode: Text.NoWrap
+        maximumLineCount: 1
+        color: Color.muted
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        renderType: Text.NativeRendering
+        verticalAlignment: Text.AlignVCenter
+      }
+    }
+
+    // Tiny connected-display strip: physical x/y miniature order; every header
+    // highlights the same focused monitor. >4 → shared focused ordinal N/M.
+    // Rail omits the strip (uses focused tint on railMonitor instead).
+    Item {
+      id: displayStrip
+      visible: root.kind === "monitor" && !root.collapsed && root.monitorStripCount > 0
+      anchors.right: parent.right
+      anchors.rightMargin: root.padding
+      anchors.verticalCenter: parent.verticalCenter
+      width: root.monitorStripCount > 4 ? ordinalLabel.implicitWidth : displayStripBody.width
+      height: Math.max(displayStripBody.height, ordinalLabel.height, Style.space(12))
+
+      Row {
+        id: displayStripBody
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 3
+        visible: root.monitorStripCount <= 4
+        Repeater {
+          model: root.monitorStripCount <= 4 ? root.monitorStripCount : 0
+          Item {
+            required property int index
+            readonly property bool focusedMonitor: index === root.focusedMonitorStripIndex
+            width: 13
+            height: 9
+            Rectangle {
+              anchors.centerIn: parent
+              width: 13
+              height: 9
+              radius: 2
+              color: parent.focusedMonitor
+                ? Util.alpha(Color.accent, 0.14)
+                : "transparent"
+              border.width: 1
+              border.color: parent.focusedMonitor
+                ? Util.alpha(Color.accent, 0.70)
+                : Util.alpha(Color.foreground, 0.28)
+            }
+          }
+        }
+      }
+      Text {
+        id: ordinalLabel
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: parent.right
+        visible: root.monitorStripCount > 4
+        text: root.monitorStripOrdinal
+        textFormat: Text.PlainText
+        color: root.row.focused ? Color.accent : Color.muted
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        renderType: Text.NativeRendering
+      }
+    }
+
+    Text {
+      id: label
+      objectName: "sidebar-label"
+      visible: !root.collapsed && root.kind !== "monitor" && root.kind !== "workspace"
+      x: {
+        if (root.nestedTab)
+          return root.artX + 14 + Style.space(8)
+        if (root.hasArtwork) return artwork.x + artwork.width + Style.space(8)
+        return root.padding
+      }
+      width: {
+        // Reserve left-flowing chrome (state / window-count / alert badge /
+        // severity) plus right-anchored mute/folds so the badge rectangle
+        // cannot overlap them.
+        var afterLabel = 0
+        if (stateStrip.visible)
+          afterLabel += Style.space(6) + stateStrip.width
+        if (countBadge.visible)
+          afterLabel += Style.space(6) + countBadge.width
+        if (alertCount.visible)
+          afterLabel += Style.space(4) + alertCount.reservedWidth
+        if (severityDot.visible)
+          afterLabel += Style.space(4) + severityDot.width
+        var rightAnchored = root.padding
+          + (root.insideWorkspaceCard ? root.workspaceCardInset : 0)
+          + (fold.visible ? fold.width : 0)
+          + (tabsFold.visible ? tabsFold.width : 0)
+          + (root.showAlertControl ? Style.space(22) + Style.space(4) : 0)
+        return Math.max(0, content.width - x - afterLabel - rightAnchored)
+      }
+      anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
-      color: Color.tooltip.text
+      text: root.liveTitle
+      elide: Text.ElideRight
+      wrapMode: Text.NoWrap
+      maximumLineCount: 1
+      horizontalAlignment: Text.AlignLeft
+      color: root.kind === "section" ? Color.muted
+        : root.row.urgent ? Color.urgent
+        : root.focusedWindow ? Color.accent
+        : Color.foreground
+      font.family: Style.font.family
+      font.pixelSize: root.kind === "section" ? Style.font.caption
+        : Style.font.bodySmall
+      font.bold: root.focusedWindow
+      renderType: Text.NativeRendering
+      verticalAlignment: Text.AlignVCenter
+      transform: Translate { x: root.attentionNudgeX }
+    }
+
+    // Expanded window state: fullscreen / pinned / minimized (informational).
+    Row {
+      id: stateStrip
+      visible: !root.collapsed && root.kind === "window"
+        && (root.windowState.fullscreen || root.windowState.pinned || root.windowState.minimized)
+      spacing: Style.space(4)
+      anchors.verticalCenter: parent.verticalCenter
+      x: label.x + Math.min(label.implicitWidth, label.width) + Style.space(6)
+      height: Style.space(14)
+      DockLucideIcon {
+        visible: root.windowState.fullscreen
+        width: 12
+        height: 12
+        anchors.verticalCenter: parent.verticalCenter
+        iconName: "maximize-2"
+        iconSize: 12
+        tint: Color.muted
+      }
+      DockLucideIcon {
+        visible: root.windowState.pinned
+        width: 12
+        height: 12
+        anchors.verticalCenter: parent.verticalCenter
+        iconName: "pin"
+        iconSize: 12
+        tint: Color.muted
+      }
+      DockLucideIcon {
+        visible: root.windowState.minimized
+        width: 12
+        height: 12
+        anchors.verticalCenter: parent.verticalCenter
+        iconName: "minus"
+        iconSize: 12
+        tint: Color.muted
+      }
+    }
+
+    // Alert count compact badge — after state icons (windows) or immediately
+    // after title (tabs); before mute eye / fold chevron. Exact count stays in
+    // Accessible.name; displayed text is "2" / "99+" (no parentheses).
+    Rectangle {
+      id: alertCount
+      objectName: "sidebar-alert-count"
+      readonly property int reservedWidth: visible ? width : 0
+      visible: !root.collapsed && root.attention.countVisible
+        && root.attention.text !== ""
+        && (root.kind === "window" || root.kind === "application"
+          || root.kind === "browser-tab" || root.kind === "launcher")
+      height: Math.max(Style.space(16), alertCountLabel.implicitHeight + Style.space(2))
+      width: alertCountLabel.implicitWidth + Style.space(4) * 2
+      radius: Style.space(3)
+      color: Util.alpha(Color.accent, Math.min(0.14, Style.selectedFillAlpha))
+      border.width: Style.space(1)
+      border.color: Util.alpha(Color.accent, Math.min(0.40, Style.hoverBorderAlpha + 0.15))
+      anchors.verticalCenter: parent.verticalCenter
+      x: {
+        if (root.nestedTab)
+          return label.x + Math.min(label.implicitWidth, label.width) + Style.space(4)
+        if (stateStrip.visible)
+          return stateStrip.x + stateStrip.width + Style.space(4)
+        if (countBadge.visible)
+          return countBadge.x + countBadge.width + Style.space(4)
+        return label.x + Math.min(label.implicitWidth, label.width) + Style.space(4)
+      }
+      Text {
+        id: alertCountLabel
+        anchors.centerIn: parent
+        text: root.attention.text
+        textFormat: Text.PlainText
+        color: root.attention.severity === "urgent" ? Color.urgent : Color.accent
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+        renderType: Text.NativeRendering
+      }
+    }
+
+    // Severity-only urgent/attention (no manufactured numeric count).
+    Rectangle {
+      id: severityDot
+      visible: !root.collapsed && !root.attention.countVisible
+        && (root.attention.severity === "urgent" || root.attention.severity === "attention")
+        && (root.kind === "window" || root.kind === "application"
+          || root.kind === "browser-tab" || root.kind === "launcher")
+      width: 8
+      height: 8
+      radius: 4
+      color: root.attention.severity === "urgent" ? Color.urgent : Color.accent
+      anchors.verticalCenter: parent.verticalCenter
+      x: {
+        if (alertCount.visible) return alertCount.x + alertCount.reservedWidth + Style.space(4)
+        if (stateStrip.visible) return stateStrip.x + stateStrip.width + Style.space(4)
+        if (countBadge.visible) return countBadge.x + countBadge.width + Style.space(4)
+        return label.x + Math.min(label.implicitWidth, label.width) + Style.space(4)
+      }
+    }
+
+    // Collapsed rail workspace badge (canonical id:/name: token; elide if needed).
+    Rectangle {
+      id: railWorkspaceBadge
+      visible: root.collapsed && root.kind === "workspace"
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.verticalCenter: parent.verticalCenter
+      width: {
+        var natural = railBadgeLabel.implicitWidth + Style.space(8)
+        var available = Math.max(24, content.width - 4)
+        return Math.min(available, Math.max(24, natural))
+      }
+      height: Style.space(22)
+      radius: Style.space(4)
+      color: Util.alpha(Color.foreground, 0.08)
+      border.width: 1
+      border.color: root.row.active
+        ? Util.alpha(Color.accent, 0.50)
+        : Util.alpha(Color.foreground, 0.14)
+      Text {
+        id: railBadgeLabel
+        anchors.centerIn: parent
+        width: Math.max(0, parent.width - Style.space(8))
+        text: root.workspaceRailLabel
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        horizontalAlignment: Text.AlignHCenter
+        color: root.row.active ? Color.accent : Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        renderType: Text.NativeRendering
+      }
+    }
+
+    // Rail monitor: centered 16px Lucide + ordinal; focused uses accent tint.
+    Row {
+      id: railMonitor
+      visible: root.collapsed && root.kind === "monitor"
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(5)
+      DockLucideIcon {
+        width: 16
+        height: 16
+        anchors.verticalCenter: parent.verticalCenter
+        iconName: "monitor"
+        iconSize: 16
+        tint: root.row.focused ? Color.accent : Color.foreground
+        opacity: 0.85
+      }
+      Text {
+        objectName: "sidebar-label"
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.monitorOrdinal
+        textFormat: Text.PlainText
+        color: root.row.focused ? Color.accent : Color.muted
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        renderType: Text.NativeRendering
+      }
+    }
+
+    Rectangle {
+      id: countBadge
+      visible: root.kind === "application" && root.windowCount > 1 && !root.collapsed
+      anchors.verticalCenter: parent.verticalCenter
+      x: label.x + Math.min(label.implicitWidth, label.width) + Style.space(6)
+      width: Math.max(Style.space(16), countLabel.implicitWidth + Style.space(8))
+      height: Style.space(16)
+      radius: Style.space(4)
+      color: Util.alpha(Color.foreground, 0.10)
+      Text {
+        id: countLabel
+        anchors.centerIn: parent
+        text: String(root.windowCount)
+        textFormat: Text.PlainText
+        color: Color.muted
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+      }
+    }
+
+    HoverHandler { id: passiveHover; enabled: true }
+    DockSidebarRowInput {
+      id: rowInput
+      // Cover content only (excludes gapBefore/gapAfter); inset away from monitor gutter.
+      anchors.fill: parent
+      anchors.leftMargin: root.insideWorkspaceCard ? root.workspaceCardInset : 0
+      anchors.rightMargin: root.insideWorkspaceCard ? root.workspaceCardInset : 0
+      controller: root.controller
+      rowKey: root.rowKey
+      panelConnector: root.panelConnector
+      workspaceHeader: root.kind === "workspace"
+      viewport: root.viewport
+      enabled: root.navigable
+      onFocusRequested: root.forceActiveFocus(Qt.MouseFocusReason)
+      onActivated: function(target, control, connector, modifiers) {
+        if (root.viewport) root.viewport.activate(target, control, connector, modifiers)
+      }
+      onContextRequested: target => { if (root.viewport) root.viewport.contextRequested(target, root) }
+      onDragMoved: point => { if (root.viewport) root.viewport.moveDrag(point) }
+      onDragReleased: point => { if (root.viewport) root.viewport.finishDrag(point) }
+    }
+
+    Ui.Button {
+      id: fold
+      objectName: "sidebar-app-fold"
+      visible: root.appExpandable && !root.collapsed
+      anchors.right: parent.right
+      anchors.rightMargin: root.insideWorkspaceCard ? root.workspaceCardInset : 0
+      anchors.verticalCenter: parent.verticalCenter
+      width: Math.min(content.height, 28)
+      height: content.height
+      iconText: ""
+      tooltipText: root.row.folded ? "Expand " + root.liveTitle : "Fold " + root.liveTitle
+      focusable: false
+      enabled: !root.controller.interactionBusy
+      onClicked: { root.forceActiveFocus(Qt.MouseFocusReason); root.controller.toggleApplication(root.rowKey) }
+      Item {
+        anchors.centerIn: parent
+        width: 14
+        height: 14
+        rotation: root.row.folded ? 0 : 90
+        DockLucideIcon {
+          anchors.fill: parent
+          iconName: "chevron-right"
+          iconSize: 14
+          tint: root.containsFocusedWindow && root.row.folded ? Color.accent : Color.foreground
+        }
+      }
+    }
+
+    Ui.Button {
+      id: tabsFold
+      objectName: "sidebar-tabs-fold"
+      visible: root.tabsExpandable && !root.collapsed
+      anchors.right: parent.right
+      anchors.rightMargin: root.insideWorkspaceCard ? root.workspaceCardInset : 0
+      anchors.verticalCenter: parent.verticalCenter
+      width: Math.min(content.height, 28)
+      height: content.height
+      iconText: ""
+      tooltipText: root.row.tabsFolded
+        ? "Show tabs for " + root.liveTitle
+        : "Hide tabs for " + root.liveTitle
+      focusable: false
+      enabled: !root.controller.interactionBusy
+      onClicked: {
+        root.forceActiveFocus(Qt.MouseFocusReason)
+        root.controller.toggleWindowTabs(root.rowKey)
+      }
+      Item {
+        anchors.centerIn: parent
+        width: 14
+        height: 14
+        rotation: root.row.tabsFolded ? 0 : 90
+        DockLucideIcon {
+          anchors.fill: parent
+          iconName: "chevron-right"
+          iconSize: 14
+          tint: root.focusedWindow && root.row.tabsFolded ? Color.accent : Color.foreground
+        }
+      }
+    }
+
+    // Service-wide mute for alert-bearing tabs. Does not activate the tab or drag.
+    Item {
+      id: alertMute
+      objectName: "sidebar-alert-mute"
+      visible: root.showAlertControl
+        && (root.attention.muted || root.input.hovered || passiveHover.hovered
+          || root.alertControlFocused || root.activeFocus)
+      width: Style.space(22)
+      height: Style.space(22)
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.right: parent.right
+      anchors.rightMargin: (root.insideWorkspaceCard ? root.workspaceCardInset : 0)
+        + (tabsFold.visible ? tabsFold.width : 0)
+        + (fold.visible ? fold.width : 0)
+      z: 3
+      opacity: root.attention.muted || root.alertControlFocused ? 1 : 0.9
+
+      Accessible.role: Accessible.Button
+      Accessible.name: root.attention.muted
+        ? "Include " + (root.attention.serviceLabel || "service")
+          + " alerts in totals across all tabs"
+        : "Exclude " + (root.attention.serviceLabel || "service")
+          + " alerts from totals across all tabs"
+      Accessible.onPressAction: root.controller.toggleRowActivityMute(root.rowKey)
+
+      HoverHandler {
+        id: muteHover
+        cursorShape: Qt.PointingHandCursor
+      }
+      TapHandler {
+        acceptedButtons: Qt.LeftButton
+        gesturePolicy: TapHandler.WithinBounds
+        onTapped: {
+          root.controller.alertControlKey = root.rowKey
+          root.controller.toggleRowActivityMute(root.rowKey)
+        }
+      }
+
+      DockLucideIcon {
+        anchors.centerIn: parent
+        width: Style.space(14)
+        height: Style.space(14)
+        iconName: root.attention.muted ? "eye-off" : "eye"
+        tint: root.alertControlFocused || muteHover.hovered
+          ? Color.accent : Color.muted
+      }
+
+      DockToolTip {
+        anchorItem: alertMute
+        position: root.controller.edge
+        requestedVisible: muteHover.hovered
+        text: root.attention.muted
+          ? "Include " + (root.attention.serviceLabel || "service")
+            + " alerts in totals across all tabs"
+          : "Exclude " + (root.attention.serviceLabel || "service")
+            + " alerts from totals across all tabs"
+        fontFamily: Style.font.family
+        fontSize: Style.font.bodySmall
+      }
+    }
+  }
+
+  // Drag-only monitor footer: temporary new-workspace drop target on each
+  // monitor's final visible row. Keys stay stable; no synthetic workspace rows.
+  Item {
+    id: newWorkspaceFooter
+    visible: root.showNewWorkspaceFooter
+    x: root.workspaceCardInset
+    y: root.computedHeight - root.footerTargetHeight
+    width: Math.max(0, root.width - root.workspaceCardInset * 2)
+    height: root.footerTargetHeight
+    z: 3
+    Accessible.role: Accessible.Button
+    Accessible.name: root.footerAccessibleLabel
+    Ui.BorderSurface {
+      anchors.fill: parent
+      radius: root.viewport && root.viewport.cardRadius !== undefined
+        ? root.viewport.cardRadius : Style.cornerRadius
+      color: root.footerDropTarget
+        ? Style.pressedFillFor(Color.accent, Color.accent)
+        : Util.alpha(Color.foreground, 0.06)
+      borderSpec: Border.none()
+    }
+    DockLucideIcon {
+      id: footerPlus
+      width: 14
+      height: 14
+      anchors.verticalCenter: parent.verticalCenter
+      x: root.collapsed ? Math.round((parent.width - width) / 2) : Style.space(11)
+      iconName: "plus"
+      iconSize: 14
+      tint: root.footerDropTarget ? Color.accent : Util.alpha(Color.foreground, 0.75)
+    }
+    Text {
+      visible: !root.collapsed
+      anchors.verticalCenter: parent.verticalCenter
+      x: footerPlus.x + footerPlus.width + Style.space(8)
+      width: Math.max(0, parent.width - x - Style.space(8))
+      text: "New workspace"
+      textFormat: Text.PlainText
+      elide: Text.ElideRight
+      color: root.footerDropTarget ? Color.accent : Color.foreground
       font.family: Style.font.family
       font.pixelSize: Style.font.bodySmall
+      renderType: Text.NativeRendering
+      verticalAlignment: Text.AlignVCenter
     }
-    background: Ui.BorderSurface {
-      color: Color.tooltip.background
-      borderSpec: Border.surfaceSpec("tooltip", "border", Color.tooltip.border, Style.normalBorderWidth)
+  }
+
+  SequentialAnimation {
+    id: attentionMotion
+    loops: Animation.Infinite
+    NumberAnimation {
+      target: root
+      property: "attentionNudgeX"
+      to: 3
+      duration: 350
+      easing.type: Easing.InOutQuad
     }
+    NumberAnimation {
+      target: root
+      property: "attentionNudgeX"
+      to: 0
+      duration: 350
+      easing.type: Easing.InOutQuad
+    }
+    PauseAnimation { duration: 2300 }
+  }
+
+  // Start once while eligible; stop/reset immediately when not. Does not
+  // restart an already-running loop on unrelated row/model refreshes.
+  function syncAttentionNameMotion() {
+    var eligible = InteractionModel.attentionNameMotionEligible(
+      root.kind, root.collapsed, root.attention.countVisible, root.attention.count,
+      root.animationsEnabled, root.controller.rowDragActive)
+    if (!eligible) {
+      attentionMotion.stop()
+      root.attentionNudgeX = 0
+      return
+    }
+    if (!attentionMotion.running)
+      attentionMotion.start()
+  }
+
+  onAnimationsEnabledChanged: root.syncAttentionNameMotion()
+  onCollapsedChanged: root.syncAttentionNameMotion()
+  onKindChanged: root.syncAttentionNameMotion()
+  Connections {
+    target: root.controller
+    function onRowDragActiveChanged() { root.syncAttentionNameMotion() }
+  }
+
+  onRowChanged: root.syncAttentionNameMotion()
+  onAttentionDisplayCountChanged: root.syncAttentionNameMotion()
+  Component.onCompleted: root.syncAttentionNameMotion()
+  Component.onDestruction: {
+    attentionMotion.stop()
+    root.attentionNudgeX = 0
+    if (root.controller.alertControlKey === root.rowKey)
+      root.controller.clearAlertControl()
+  }
+
+  DockToolTip {
+    anchorItem: root
+    position: root.controller.edge
+    requestedVisible: passiveHover.hovered && !root.controller.rowDragActive
+      && !muteHover.hovered
+      && (root.kind === "monitor" || root.kind === "workspace"
+        || root.collapsed || (label.visible && label.truncated)
+        || (monitorLabels.visible && monitorLabels.children[0] && monitorLabels.children[0].truncated)
+        || (workspaceBadge.visible && badgeLabel.truncated)
+        || (railWorkspaceBadge.visible && railBadgeLabel.truncated))
+    text: root.accessibleLabel
+    fontFamily: Style.font.family
+    fontSize: Style.font.bodySmall
   }
 }

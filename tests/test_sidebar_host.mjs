@@ -11,9 +11,12 @@ assert.equal(dry.ok,true)
 assert.equal(dry.data.presentation.mode,'sidebar')
 assert.equal(h.host.settings.presentationMode,'classic')
 for (const [key, value] of Object.entries({presentationMode:'classic', sidebarEdge:'left',
-  sidebarMonitor:'', sidebarExpandedWidth:320, sidebarCollapsed:false})) {
-  assert.equal(h.defaults[key], value, 'sidebar defaults are bundled, not a second writer')
-  assert.equal(h.request('config.schema',{key}).data.settings[key].default, value)
+  sidebarMonitor:'', sidebarExpandedWidth:320, sidebarCollapsed:false,
+  sidebarCollapsedByMonitor:{}})) {
+  assert.equal(h.defaults[key] === value || JSON.stringify(h.defaults[key]) === JSON.stringify(value), true,
+    'sidebar defaults are bundled, not a second writer: ' + key)
+  assert.equal(JSON.stringify(h.request('config.schema',{key}).data.settings[key].default),
+    JSON.stringify(value))
 }
 for (const patch of [{presentationMode:'other'}, {sidebarEdge:'top'}, {sidebarCollapsed:'true'},
     {sidebarExpandedWidth:239}, {sidebarExpandedWidth:481}, {sidebarExpandedWidth:320.5},
@@ -45,7 +48,7 @@ assert.equal(h.host.settings.sidebarMonitor,'NOT-CONNECTED')
 reply = h.host.saveSetting('sidebarCollapsed',true)
 assert.equal(reply.ok,true)
 assert.deepEqual(Array.from(reply.data.changedKeys),['sidebarCollapsed'])
-assert.equal(h.request('status').data.presentation.width,56)
+assert.equal(h.request('status').data.presentation.width,72)
 assert.equal(h.host.settings.sidebarExpandedWidth,320)
 const writes = h.writes.length
 h.fault.defer = true
@@ -75,7 +78,8 @@ h.host.rendererReady = true
 h.host.rendererMode = 'classic'
 h.host.rendererEdge = 'left'
 h.host.rendererScreen = null
-h.host.sidebarState = {selectedScreen:h.host.connectedScreens[0]}
+h.host.sidebarState = {selectedScreen:h.host.connectedScreens[0],
+  mappedScreens:[h.host.connectedScreens[0]]}
 h.host.settings = {...h.host.settings, sidebarEdge:'right'}
 h.host.syncRenderer()
 assert.equal(h.host.rendererReady,true,'inactive sidebar edge must not recreate classic docks')
@@ -86,6 +90,9 @@ assert.equal(h.host.rendererMode,'sidebar')
 h.host.activateRenderer()
 assert.equal(h.host.rendererReady,true)
 h.host.sidebarState.selectedScreen=null
+h.host.sidebarState.mappedScreens=[]
 h.host.syncRenderer(); h.host.activateRenderer()
 assert.equal(h.host.rendererReady,false,'zero screens creates no sidebar branch')
+assert.match(host,/model: sidebarState\.mappedScreens/)
+assert.match(host,/readonly property var sidebarPanels:/)
 console.log('SB-02 typed configuration, requested/effective diagnostics and sole writer: PASS')

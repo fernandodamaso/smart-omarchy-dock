@@ -1,7 +1,8 @@
 # SB-02/SB-03/SB-04/SB-05 — Global sidebar source contract
 
 **FDM-964 + FDM-965 + FDM-966 + FDM-967, unreleased integrated source candidate.**
-SB-02 implements shared construction, projection, one global panel, app folding/rail,
+SB-02 implements shared construction, projection, mirrored panels on connected
+outputs, app folding/rail,
 typed preferences and initial reservation. SB-03 adds live resize, cancellation and
 conflict-safe preference commits. SB-04 adds exact-window actions, menus, keyboard
 navigation and single-sidebar drag adapters. SB-05 adds host-owned widget leases and
@@ -33,9 +34,11 @@ retarget or new commit.
   native desktop, screen/monitor snapshots, pins, registry, folds and collapsed
   flag. It returns `monitorSections`, `launchers`, `unassignedWindows`, `rows` and
   `badgeItems`. Row keys are domain identities, not list indices or addresses.
-- `selectScreen(screens, monitors, order, preferred, currentConnector, busy)` retains
-  a connected fallback, honors a preferred connector at idle, and cancels retention
-  on removal. Focus or unrelated screen addition never relocates the panel.
+- `selectScreens(screens, monitors, order, preferred, previousMapped, busy)` maps
+  every connected screen when `preferred` is empty or disconnected, and a single
+  connector when that preference is connected. While busy, removed outputs drop
+  immediately but newly added outputs wait until idle. `selectScreen(...)` returns
+  the primary (first mapped) output for dockMonitor / CLI back-compat.
 - `screenGeometry(screen, requestedWidth, collapsed)` uses the full logical screen
   width, not scale-adjusted pixels or a workarea already reduced by the panel's own
   reservation. `resizeWidth(...)` clamps one captured screen-global pointer delta;
@@ -49,12 +52,21 @@ provider or settings writer. SB-05 adds host-owned widget leases with no product
   keys, captured menu/input targets and temporary resize/drag state. It emits
   `aboutToRefresh`, `refreshed` and `surfaceInvalidated`. `interactionBusy` freezes
   preferred reconnects during an active interaction or open widget popup; current-screen
-  removal and explicit mode/edge/host changes cancel immediately.
+  removal and explicit mode/edge/host changes cancel immediately. Shared expanded
+  width, collapse and edge preferences drive every mirrored panel; each panel clamps
+  geometry to its own screen.
 - `DockHost` owns one mutually exclusive presentation Loader: classic Variants or
-  one `DockSidebar`. Destruction precedes deferred creation. The existing action,
-  monitor-drag, badge and config services remain singletons. `saveSettingIntent`
-  is only an acceptance/staleness adapter around the existing sole FileView writer;
-  it is not a second write path.
+  sidebar Variants over `mappedScreens`. Destruction precedes deferred creation on
+  mode/edge changes. Hotplug and `sidebarMonitor` remapping adopt panels without
+  tearing the Loader down. The existing action, monitor-drag, badge and config
+  services remain singletons. `saveSettingIntent` is only an acceptance/staleness
+  adapter around the existing sole FileView writer; it is not a second write path.
+  Each `DockSidebar` uses `badgeScopeOwner: "smartdock-sidebar:<connector>"` and
+  keeps `WlrLayershell.namespace: "smartdock-sidebar"`. Host desktop RMB → launcher
+  binds (for example Omarchy background `mouse:273`) must exempt `smartdock` and
+  `smartdock-sidebar`, or any `smartdock*` namespace—the same exemption classic dock
+  already needs—so right-clicks reach the sidebar context menu instead of opening
+  the launcher.
 - `DockSidebarViewport` uses Quickshell `ScriptModel.objectProp: "key"` and actual
   `DockSidebarRow` delegates. Before model reconciliation it guards the scroll
   anchor; background data/focus refreshes are not scroll commands. Rows bind live
@@ -65,11 +77,20 @@ provider or settings writer. SB-05 adds host-owned widget leases with no product
 
 Visual order comes from native monitor/workspace hierarchy, not `renderedItems`.
 Applications group only within a workspace, pinned apps lead in pin order, and
-members retain first-seen handle order. Empty/named/unknown-owner workspaces stay
+members retain first-seen handle order. Multi-window application groups emit an
+expandable header with a window count; single-window apps emit only the window
+row so titles stay primary. Empty/named/unknown-owner workspaces stay
 represented. Sticky/minimized membership follows native resolution. Unsupported
 locations appear once under Unassigned windows; closed pins appear once under
-Pinned; hidden apps are excluded. Unknown application handles have distinct app
+Pinned (the Pinned section remains reachable for add-pin even when every pin is
+running); hidden apps are excluded. Unknown application handles have distinct app
 identities. A connected empty monitor gets a header, never an invented workspace.
+
+`DockModel.buildVisibleItems` attaches the matching desktop-entry object as
+`item.entry` so sidebar projection, artwork, context menus and launcher execute
+share the same catalog metadata classic `DockItem` resolves through
+`DesktopEntries.byId`. Icon overrides and browser-profile artwork remain separate
+`DockAppIcon` paths on top of that entry icon.
 
 Only application groups fold, with session-only state. Workspaces and monitors do
 not collapse or display window-total counters. Rail mode removes application and
@@ -80,26 +101,33 @@ records, not an invented per-window share of an app total.
 
 The classic control command, application pin picker and optional Open Trash remain
 available as utilities using existing host actions. They are not widget providers.
-The application picker closes before surface destruction; only the sidebar's badge
-scope is removed. A sidebar never registers as an invisible classic monitor dock.
+The application picker closes before surface destruction; only each sidebar panel's
+badge scope is removed. A sidebar never registers as an invisible classic monitor dock.
 
 ## Settings, geometry and resize
 
-The six keys are typed through bundled defaults/schema, runtime normalization,
+The sidebar keys are typed through bundled defaults/schema, runtime normalization,
 the existing strict host validator, Python CLI parsing and the sole FileView writer:
-`presentationMode`, `sidebarEdge`, `sidebarMonitor`, `sidebarExpandedWidth`, and
-`sidebarCollapsed`, plus SB-05 `sidebarWidgets`. See `CONFIGURATION.md` for their
-inventory and `SIDEBAR_RESIZE.md` for gesture/persistence semantics.
+`presentationMode`, `sidebarEdge`, `sidebarMonitor`, `sidebarExpandedWidth`,
+`sidebarCollapsed`, `sidebarCollapsedByMonitor`, `sidebarBrowserTabsEnabled`,
+plus SB-05 `sidebarWidgets`. See
+`CONFIGURATION.md` for their inventory and `SIDEBAR_RESIZE.md` for gesture/persistence
+semantics. Chrome open-tab nesting (titles only) is documented in
+[`browser-tabs.md`](browser-tabs.md).
 
 Requested classic settings, unknown extension keys, pins, artwork, hidden apps and
-provider preferences are preserved. `data.presentation` describes effective screen,
+provider preferences are preserved. `data.presentation` describes the primary
+screen, full `screens` list for mirrored panels, per-screen `collapsedByScreen`,
 width, mapping eligibility and inactive classic fields. A dry-run reports the
 proposed projection without writing. Classic action policies are `null` in sidebar
 effective output, not falsely active. Theme values are not claimed as decoded
 rendering evidence.
 
-Explicit collapse sends only `sidebarCollapsed`, preserves expanded width, and
-distinguishes preflight rejection from accepted-but-saving. Resize pointer motion
+Explicit per-panel collapse sends only `sidebarCollapsedByMonitor` for that
+connector, preserves expanded width, and distinguishes preflight rejection from
+accepted-but-saving. Empty map entries follow `sidebarCollapsed`. Shared projection
+stays expanded so every panel shares row keys; each panel applies its own rail
+chrome from `collapsedFor(screen)`. Resize pointer motion
 writes nothing; a changed successful release sends only `sidebarExpandedWidth`.
 No-op release, Escape/grab loss and invalidation write nothing. `E_STALE` rejects a
 field whose host value changed after capture. An accepted live intent remains
@@ -107,15 +135,17 @@ accepted if FileView persistence is temporarily `E_BUSY` or later fails; retry u
 the latest host snapshot and never replays the drag-start snapshot. The UI surfaces
 the host's persistence state and does not claim early durability.
 
-For unreserved logical screen width W, rail = min(56, W); expanded maximum =
-min(W, max(56, min(480, floor(0.40 × W)))); minimum = min(240, maximum).
+For unreserved logical screen width W, rail = min(72, W); expanded maximum =
+min(W, max(72, min(480, floor(0.40 × W)))); minimum = min(240, maximum).
 Clamp the requested expanded width to those runtime bounds, never back into the
 saved preference. No scale division or workarea feedback loop. Zero width does not
-map. The panel anchors top/bottom plus left or right, uses normal Top layer, and
-reserves the effective persistent width exactly once. The active resize handle is
+map. The panel anchors top/bottom plus left or right on each mapped output, uses
+normal Top layer, and reserves the effective persistent width exactly once per
+output. The active resize handle is
 8 logical pixels **inside** expanded width on the desktop-facing edge and is absent
 from rail interaction. It uses targetless pointer handling and screen-global logical
-coordinates. Rows are at least 44 logical pixels and icons cap at 32. The stock
+coordinates for **that panel's** screen. Shared resize/collapse commits update every
+mirrored panel. Rows are at least 44 logical pixels and icons cap at 32. The stock
 topbar is neither disabled nor assigned guessed pixel dimensions.
 
 ## Native composition inspection

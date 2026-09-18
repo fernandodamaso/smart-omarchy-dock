@@ -155,7 +155,7 @@ ShellRoot {
           root.appKey = controller.rowsByKey[root.firstKey].applicationKey
           a.title = "<literal title, not markup>"
           a.activated = true
-          root.probe(1,0)
+          root.probe(Quickshell.screens.length, 0)
         } else if (root.step === 2) {
           require(root.delegateFor(root.firstKey) === root.firstDelegate, "title update recreated the delegate")
           require(root.firstDelegate.liveTitle === a.title, "live title binding did not update")
@@ -173,7 +173,7 @@ ShellRoot {
           widgetOne.publish("ready")
           controller.requestCollapse()
         } else if (root.step === 4) {
-          require(controller.collapsed, "collapse not accepted by the sole writer")
+          require(controller.collapsedFor(controller.selectedScreen), "collapse not accepted by the sole writer")
           require(widgetOne.subscriptions === 1 && widgetTwo.subscriptions === 1, "collapse restarted providers")
           require(h.sidebarPanel.widgetArea.slots.itemAt(0).view.presentation === "compact", "rail did not load compact factory")
           widgetOne.notify("once"); widgetOne.notify("once")
@@ -184,11 +184,21 @@ ShellRoot {
             require(row !== null && row.collapsed, "actual rail delegate missing")
           })
           require(controller.folds[root.appKey] === true, "rail erased expanded fold state")
-          require(h.sidebarPanel.exclusiveZone === Math.min(56,h.sidebarPanel.screen.width), "rail reservation")
+          require(h.sidebarPanel.exclusiveZone === Math.min(72,h.sidebarPanel.screen.width), "rail reservation")
+          var collapseBtn = h.sidebarPanel.collapseControl
+          require(collapseBtn !== null, "collapse control missing")
+          var railHeaderW = collapseBtn.parent.width
+          require(Math.abs(collapseBtn.x - (railHeaderW - collapseBtn.width) / 2) < 1.5,
+            "rail collapse control not centered: x=" + collapseBtn.x + " headerW=" + railHeaderW)
           controller.requestCollapse()
         } else if (root.step === 5) {
-          require(!controller.collapsed && root.windows().length === 1, "expanded fold state not restored")
+          require(!controller.collapsedFor(controller.selectedScreen) && root.windows().length === 1, "expanded fold state not restored")
           require(h.settings.sidebarExpandedWidth === 320, "collapse changed requested width")
+          var expandBtn = h.sidebarPanel.collapseControl
+          require(expandBtn !== null, "collapse control missing after expand")
+          var expandHeaderW = expandBtn.parent.width
+          require(Math.abs(expandBtn.x - (expandHeaderW - expandBtn.width)) < 1.5,
+            "expanded collapse control not at right edge: x=" + expandBtn.x + " headerW=" + expandHeaderW)
           root.firstPanel = h.sidebarPanel
           h.saveSetting("presentationMode","classic")
         } else if (root.step === 6) {
@@ -199,13 +209,15 @@ ShellRoot {
           require(root.firstPanel === null || !Qt.isQtObject(root.firstPanel), "old panel object not destroyed")
           require(h.workspaceMonitorDrag.docks.length === Quickshell.screens.length, "classic registration mismatch")
           require(Object.keys(h.badgeTracker.urgentStates).every(function(key) {
-            return key.indexOf('workspace:["smartdock-sidebar",') !== 0
+            return key.indexOf('workspace:["smartdock-sidebar') !== 0
           }), "sidebar badge scopes leaked")
+          require(h.sidebarPanels.length === 0, "classic retained sidebar panels")
           root.probe(0,Quickshell.screens.length)
         } else if (root.step === 7) {
           h.saveSetting("presentationMode","sidebar")
         } else if (root.step === 8) {
           require(h.sidebarPanel !== null && h.workspaceMonitorDrag.docks.length === 0, "renderer branches overlap")
+          require(h.sidebarPanels.length === Quickshell.screens.length, "mirrored sidebar panel count")
           require(widgetOne.acquisitions === 1 && widgetOne.subscriptions === 2, "resume reacquired or duplicated subscriptions")
           h.saveSetting("sidebarEdge","right")
         } else if (root.step === 9) {
@@ -261,7 +273,7 @@ ShellRoot {
           require(h.settingsRevision === root.mutationRevision + 1, "conflict produced stale resize replay")
           require(h.sidebarPanel.implicitWidth === controller.geometry.width, "panel did not follow latest host width")
           require(widgetOne.subscriptions === 2, "conflict resize restarted widget providers")
-          root.probe(1,0)
+          root.probe(Quickshell.screens.length, 0)
         } else if (root.step === 14) {
           controller.screens = [] // Simulated topology, real surface teardown.
         } else if (root.step === 15) {

@@ -14,8 +14,8 @@ because a screen is smaller, disconnected, rotated or scaled.
 For the selected screen's **unreserved logical width** `W`:
 
 ```text
-railWidth      = min(56, W)
-expandedMax    = min(W, max(56, min(480, floor(0.40 * W))))
+railWidth      = min(72, W)
+expandedMax    = min(W, max(72, min(480, floor(0.40 * W))))
 expandedMin    = min(240, expandedMax)
 effectiveWidth = clamp(sidebarExpandedWidth, expandedMin, expandedMax)
 ```
