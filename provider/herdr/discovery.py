@@ -196,23 +196,38 @@ class Discovery:
         return os.path.join(root, ".config/herdr")
 
     def fingerprint(self) -> tuple[object, ...]:
-        """Cheap filesystem signal; no Herdr command is run here."""
+        """Cheap recursive socket signal; no Herdr command is run here."""
+        def signature(path: str) -> tuple[int, int] | None:
+            try:
+                stat = os.stat(path, follow_symlinks=False)
+                return (stat.st_mtime_ns, stat.st_ino)
+            except OSError:
+                return None
+
+        default = _default_socket(self.home)
+        named_root = os.path.join(self.session_dir, "sessions")
+        names: list[tuple[str, object, object]] = []
         try:
-            stat = os.stat(self.session_dir)
-            names = []
-            with os.scandir(self.session_dir) as entries:
+            with os.scandir(named_root) as entries:
                 for entry in entries:
                     if len(names) >= 128:
                         break
-                    if entry.name.endswith(".sock"):
-                        try:
-                            names.append((entry.name, entry.stat(follow_symlinks=False).st_mtime_ns))
-                        except OSError:
-                            names.append((entry.name, 0))
-            names.sort()
-            return (stat.st_mtime_ns, tuple(names))
+                    if not entry.is_dir(follow_symlinks=False) or not valid_session(entry.name):
+                        continue
+                    names.append((
+                        entry.name,
+                        signature(entry.path),
+                        signature(os.path.join(entry.path, "herdr.sock")),
+                    ))
         except OSError:
-            return (None, ())
+            pass
+        names.sort()
+        return (
+            signature(self.session_dir),
+            signature(default),
+            signature(named_root),
+            tuple(names),
+        )
 
     def changed(self) -> bool:
         current = self.fingerprint()
