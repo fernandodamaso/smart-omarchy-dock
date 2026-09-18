@@ -53,15 +53,17 @@ Item {
         if (lease.released) return
         active = active === true
         if (active) {
+          var wasActive = lease.active
           lease.publish = typeof publish === "function" ? publish : null
-          lease.revision = 0
-          if (!lease.active) {
+          if (!wasActive) {
+            lease.revision = 0
             lease.active = true
             root.activeCount++
+            root.publishLease(lease, "loading", null)
+            if (root.activeCount === 1) root.startProvider()
           }
-          root.publishLease(lease, "loading", null)
-          if (root.activeCount === 1) root.startProvider()
-          else if (root.latestSnapshot) root.publishLease(lease, "ready", root.latestSnapshot)
+          if (root.latestSnapshot)
+            root.publishLease(lease, "ready", root.latestSnapshot)
         } else {
           lease.publish = null
           if (lease.active) {
@@ -90,9 +92,11 @@ Item {
   }
 
   function startProvider() {
-    if (root.activeCount <= 0 || providerProcess.running) return
-    restartTimer.stop()
+    if (root.activeCount <= 0) return
     root.stoppingForIdle = false
+    shutdownTimer.stop()
+    if (providerProcess.running) return
+    restartTimer.stop()
     root.latestSnapshot = null
     root.sourceEpoch = ""
     root.sourceRevision = -1
@@ -112,7 +116,7 @@ Item {
     root.restartDelay = 1000
     if (providerProcess.running) {
       providerProcess.write("quit\n")
-      providerProcess.running = false
+      shutdownTimer.restart()
     }
   }
 
@@ -150,6 +154,7 @@ Item {
 
   function providerStopped(exitCode) {
     startupTimer.stop()
+    shutdownTimer.stop()
     if (root.stoppingForIdle || root.activeCount <= 0) return
     root.latestSnapshot = null
     root.sourceEpoch = ""
@@ -193,6 +198,16 @@ Item {
     interval: 1000
     repeat: false
     onTriggered: root.startProvider()
+  }
+
+  Timer {
+    id: shutdownTimer
+    interval: 750
+    repeat: false
+    onTriggered: {
+      if (root.activeCount === 0 && providerProcess.running)
+        providerProcess.running = false
+    }
   }
 
   Component.onDestruction: {
