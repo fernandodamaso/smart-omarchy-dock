@@ -230,3 +230,57 @@ test('visible windows can still move to a not-yet-created numeric workspace', ()
   assert.equal(f.actions.moveToplevelToWorkspace(f.A, '0xa1', 9), true)
   assert.deepEqual(f.requests, [DockModel.moveWindowRequest('0xa1', 9, false)])
 })
+
+test('pin-strip menus keep Unpin enabled path and omit Hide App from Dock', () => {
+  const f = fixture()
+  f.menu.pinnedItem = true
+  f.menu.anchorItem = { desktopId: 'editor', pinStripOwned: true }
+  const strip = f.menu.applicationActionRecords('app', null)
+  const unpin = strip.find(record => record.command === 'unpin-app')
+  assert.ok(unpin, 'pin-strip menu must expose Unpin from Dock')
+  assert.notEqual(unpin.enabled, false, 'Unpin must be enabled when desktopId is set')
+  assert.ok(!strip.some(record => record.command === 'hide-app'),
+    'pin-strip menu must not expose Hide App from Dock')
+
+  f.menu.anchorItem = { desktopId: 'editor' }
+  const hierarchy = f.menu.applicationActionRecords('app', null)
+  assert.ok(hierarchy.some(record => record.command === 'hide-app'),
+    'hierarchy app menus still expose Hide App from Dock')
+})
+
+test('successful unpin dismisses the context menu', () => {
+  const f = fixture()
+  f.menu.visible = true
+  f.menu.pinnedItem = true
+  f.menu.anchorItem = { desktopId: 'editor', pinStripOwned: true }
+  f.menu.applicationMutationController.unpinApplication = () => ({
+    ok: true,
+    data: { applied: true, persisted: true, writeState: 'saved' }
+  })
+  assert.equal(f.menu.dispatchAction({
+    kind: 'action', command: 'unpin-app', enabled: true, targetContext: null
+  }, 0), true)
+  assert.equal(f.menu.visible, false, 'menu must close after successful Unpin')
+})
+
+test('pin-strip shortcut menu omits window choose/minimize even if app would be running', () => {
+  const f = fixture()
+  f.menu.sidebarMode = true
+  f.menu.pinnedItem = true
+  f.menu.anchorItem = { desktopId: 'editor', pinStripOwned: true }
+  // openContext clears members for pinStripOwned; menu must not grow window actions.
+  f.menu.runningToplevels = []
+  f.menu.open()
+  const commands = f.menu.pageActions
+    .filter(record => record.kind === 'action')
+    .map(record => record.command)
+  assert.ok(commands.includes('unpin-app'))
+  assert.ok(commands.includes('open-new'))
+  assert.ok(commands.includes('copy-icon-command'))
+  assert.ok(!commands.includes('open-chooser-page'))
+  assert.ok(!commands.includes('minimize-visible'))
+  assert.ok(!commands.includes('close-represented'))
+  assert.ok(!commands.includes('hide-app'))
+  assert.ok(f.menu.pageActions.some(record =>
+    record.kind === 'header' && String(record.subtitle || '').includes('No open windows')))
+})

@@ -49,7 +49,7 @@ grep -q '"unpin-window-workspace"' "$MENU" \
 
 grep -q 'workspaceMoveWouldChange(members, destination.identity)' "$DRAG" \
   || fail 'drag hover must use the central movement guard'
-grep -q 'moveCapturedToplevels(members, hoveredIdentity)' "$DRAG" \
+grep -q 'moveCapturedToplevels(members, hoveredIdentity, true)' "$DRAG" \
   || fail 'drag drop must use the central movement guard'
 
 grep -q 'session-only movement pins' "$DOC" \

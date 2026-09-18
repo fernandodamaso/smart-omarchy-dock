@@ -324,6 +324,76 @@ function applicationBadgeToken(enabled, mode, countState, severity) {
   return presentation.severity
 }
 
+// Shared token decode for sidebar attention (and DockApplicationBadge parity).
+function decodeApplicationBadgeToken(token) {
+  var raw = String(token === undefined || token === null ? "" : token)
+  var parts = raw.split(":")
+  var numeric = parts.length >= 2 && parts[0] === "count"
+    && isFinite(Number(parts[1])) && Number(parts[1]) > 0
+  if (numeric) {
+    var count = Math.floor(Number(parts[1]))
+    var severity = parts.length >= 3 && severityRank(parts[2]) > 0
+      ? parts[2] : BADGE_NONE
+    return {
+      kind: "count",
+      count: count,
+      countVisible: true,
+      severity: severity,
+      text: count > 99 ? "99+" : String(count)
+    }
+  }
+  if (severityRank(raw) > 0) {
+    return {
+      kind: "dot",
+      count: 0,
+      countVisible: false,
+      severity: raw,
+      text: ""
+    }
+  }
+  return {
+    kind: "none",
+    count: 0,
+    countVisible: false,
+    severity: BADGE_NONE,
+    text: ""
+  }
+}
+
+function emptyAttention() {
+  return {
+    count: 0,
+    countVisible: false,
+    text: "",
+    severity: BADGE_NONE,
+    serviceId: "",
+    serviceLabel: "",
+    muted: false
+  }
+}
+
+function attentionFromPresentation(presentation, extras) {
+  var p = presentation || ({})
+  var extra = extras || ({})
+  var count = normalizeLauncherCount(p.count)
+  if (count === null) count = 0
+  return {
+    count: count,
+    countVisible: p.countVisible === true,
+    text: p.text ? String(p.text)
+      : (p.countVisible === true
+        ? (count > 99 ? "99+" : String(count)) : ""),
+    severity: severityRank(p.severity) > 0 ? p.severity : BADGE_NONE,
+    serviceId: String(extra.serviceId || "").trim().toLowerCase(),
+    serviceLabel: String(extra.serviceLabel || "").trim(),
+    muted: extra.muted === true
+  }
+}
+
+function attentionFromBadgeToken(token, extras) {
+  return attentionFromPresentation(decodeApplicationBadgeToken(token), extras)
+}
+
 function shouldClearFocused(focusedSince, now, dwellMs) {
   var started = Number(focusedSince)
   var current = Number(now)

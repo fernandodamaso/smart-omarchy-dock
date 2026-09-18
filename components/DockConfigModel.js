@@ -1,4 +1,5 @@
 .pragma library
+.import "DockSidebarWidgetModel.js" as SidebarWidgetModel
 .import "DockIconModel.js" as DockIconModel
 .import "DockWorkspaceGroupModel.js" as DockWorkspaceGroupModel
 
@@ -29,6 +30,8 @@ function valueError(value, spec) {
     if (spec.minimum !== undefined && value < spec.minimum) return "Value is below " + spec.minimum
     if (spec.maximum !== undefined && value > spec.maximum) return "Value is above " + spec.maximum
   }
+  if (spec.format === "monitor-connector" && /[\x00-\x1f\x7f-\x9f]/.test(value))
+    return "Monitor connector must not contain control characters"
   if (spec.enum && spec.enum.indexOf(value) < 0) return "Expected one of: " + spec.enum.join(", ")
   if (spec.format === "color" && value !== ""
       && !/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(value)
@@ -36,6 +39,8 @@ function valueError(value, spec) {
     return "Expected empty, #RRGGBB, Qt #AARRGGBB or @theme.token"
   if (spec.type === "array") {
     if (!Array.isArray(value)) return "Expected an array"
+    if (spec.format === "sidebar-widget-ids")
+      return SidebarWidgetModel.idsError(value, spec.registeredIds)
     if (spec.format === "workspace-groups")
       return DockWorkspaceGroupModel.workspaceGroupsError(value)
     if (spec.format === "application-ids") {
@@ -90,6 +95,17 @@ function valueError(value, spec) {
       if (!key || own(seenIcons, key)) return "Invalid or duplicate icon application ID: " + keys[k]
       if (!DockIconModel.normalizeSource(value[keys[k]])) return "Expected a local PNG or SVG source: " + keys[k]
       seenIcons[key] = true
+    }
+  }
+  if (spec.format === "sidebar-collapsed-by-monitor") {
+    var connectors = Object.keys(value)
+    for (var m = 0; m < connectors.length; ++m) {
+      var connector = connectors[m]
+      if (typeof connector !== "string" || !connector
+          || /[\x00-\x1f\x7f-\x9f]/.test(connector))
+        return "Invalid monitor connector: " + connector
+      if (typeof value[connector] !== "boolean")
+        return "Expected a boolean collapse flag for " + connector
     }
   }
   return ""

@@ -16,6 +16,7 @@ Item {
   property var windows: ({})
   property var profiles: ({})
   property var activities: ({})
+  property var tabs: ({})
   property var classes: []
   property int port: 0
   property bool providerExecutable: false
@@ -54,11 +55,13 @@ Item {
     if (!available && Object.keys(windows || ({})).length === 0
         && Object.keys(profiles || ({})).length === 0
         && Object.keys(activities || ({})).length === 0
+        && Object.keys(tabs || ({})).length === 0
         && classes.length === 0 && port === 0) return
     available = false
     windows = ({})
     profiles = ({})
     activities = ({})
+    tabs = ({})
     classes = []
     port = 0
     revision++
@@ -72,6 +75,15 @@ Item {
   function allActivityRows() {
     return ActivityModel.rowsForAddresses(
       activities, Object.keys(activities || ({})))
+  }
+
+  function tabsForAddress(address) {
+    var stateRevision = revision
+    return ActivityModel.tabsForAddresses(tabs, [address])
+  }
+
+  function allTabRows() {
+    return ActivityModel.tabsForAddresses(tabs, Object.keys(tabs || ({})))
   }
 
   function activateTarget(targetId) {
@@ -122,6 +134,17 @@ Item {
       })
     }
     activities = nextActivities
+    // Classic-safe: old snapshots without tabs keep an empty map.
+    var nextTabs = ({})
+    if (parsed.tabs && typeof parsed.tabs === "object"
+        && !Array.isArray(parsed.tabs)) {
+      Object.keys(parsed.tabs).forEach(function(address) {
+        if (!Array.isArray(parsed.tabs[address])) return
+        var rows = ActivityModel.presentationTabs(parsed.tabs[address])
+        if (rows.length > 0) nextTabs[String(address).trim().toLowerCase()] = rows
+      })
+    }
+    tabs = nextTabs
     classes = ActivityModel.normalizeClasses(parsed.classes)
     port = ActivityModel.normalizePort(parsed.port)
     available = true

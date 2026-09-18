@@ -83,7 +83,7 @@ Item {
     try {
       updatePointer(scenePoint)
       if (!active || !hoveredIdentity) return false
-      return windowActions.moveCapturedToplevels(members, hoveredIdentity)
+      return windowActions.moveCapturedToplevels(members, hoveredIdentity, true)
     } finally {
       endSession()
       finishing = false

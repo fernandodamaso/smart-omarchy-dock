@@ -65,4 +65,44 @@ grep -Fq 'omarchy-clipboard-paste-text' "$menu" \
 grep -Fq -- '--copy-only' "$menu" \
   || fail 'clipboard helper must copy without synthesizing paste input'
 
+strip="$repo_root/components/DockSidebarPinnedStrip.qml"
+grep -Eq 'readonly property string desktopId' "$strip" \
+  || fail 'pin-strip cells must expose desktopId for Unpin'
+grep -Fq 'pinStripOwned' "$strip" \
+  || fail 'pin-strip cells must mark pinStripOwned for menu gating'
+grep -Fq 'pinStripOwned' "$menu" \
+  || fail 'context menu must gate Hide App using pinStripOwned'
+grep -Fq 'contextMenuMembers' "$repo_root/components/DockSidebar.qml" \
+  || fail 'sidebar openContext must use contextMenuMembers for pin-strip shortcuts'
+grep -Fq 'function contextMenuMembers' \
+  "$repo_root/components/DockSidebarInteractionModel.js" \
+  || fail 'InteractionModel must own pin-strip vs hierarchy menu member selection'
+if grep -Fq 'DockApplicationBadge' "$strip"; then
+  fail 'pin-strip must show plain application artwork without DockApplicationBadge'
+fi
+grep -Fq 'profileBadgesEnabled: false' "$strip" \
+  || fail 'pin-strip DockAppIcon must explicitly disable profile badges'
+if grep -Eq 'profileKey:|profileName:|profileAvatarPath:' "$strip"; then
+  fail 'pin-strip must not pass profileKey/profileName/profileAvatarPath'
+fi
+
+sidebar="$repo_root/components/DockSidebar.qml"
+grep -Fq 'panel-left-close' "$sidebar" \
+  || fail 'expanded collapse control must use panel-left-close'
+grep -Fq 'panel-left-open' "$sidebar" \
+  || fail 'collapsed collapse control must use panel-left-open'
+test -s "$repo_root/assets/lucide/panel-left-close.svg" \
+  || fail 'missing bundled Lucide panel-left-close.svg'
+test -s "$repo_root/assets/lucide/panel-left-open.svg" \
+  || fail 'missing bundled Lucide panel-left-open.svg'
+
+# Match the current 13x9 miniature geometry and topologyStripWidth contract.
+row="$repo_root/components/DockSidebarRow.qml"
+grep -Fq 'width: 13' "$row" \
+  || fail 'monitor topology miniatures must be 13px wide'
+grep -Fq 'height: 9' "$row" \
+  || fail 'monitor topology miniatures must be 9px tall'
+grep -Fq 'radius: 2' "$row" \
+  || fail 'monitor topology miniatures must use radius 2'
+
 exit "$status"

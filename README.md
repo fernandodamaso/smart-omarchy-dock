@@ -220,7 +220,9 @@ and ordinary attention dots continue and Chrome may use an aggregate activity
 badge only when no authoritative LauncherEntry count is present (including an
 explicit zero or hidden state). See
 [`docs/browser-activity.md`](docs/browser-activity.md) for the provider
-contract and validation boundary.
+contract and validation boundary. Sidebar nesting of open Chrome tabs (titles
+only) is documented in [`docs/browser-tabs.md`](docs/browser-tabs.md) and gated
+by `sidebarBrowserTabsEnabled`.
 
 ### Terminal-agent launchers
 
@@ -394,6 +396,7 @@ apply. Read the running host's schema/defaults and preserve the user's values:
   "urgentWindowAnimationEnabled": true,
   "launcherBadgeMode": "automatic",
   "browserActivityMutedServices": [],
+  "sidebarBrowserTabsEnabled": true,
   "hiddenApplications": [],
   "pinned": [
     "org.gnome.Nautilus",
@@ -448,6 +451,7 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 | `urgentWindowAnimationEnabled` | When `true`, active SNI, critical local-notification, or Hyprland urgent attention may nudge the owning application icon, no more than once every 3000 ms while attention remains. A launcher count alone never animates; a count with attention still does. Motion is effective only while `attentionBadgesEnabled` is also enabled; disabling it leaves the static badge intact. |
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
 | `browserActivityMutedServices` | Service IDs muted from Chrome activity header and badge totals (`gmail`, `whatsapp`, …); rows stay visible/dimmed and openable; retained by preference reset |
+| `sidebarBrowserTabsEnabled` | When true and the browser-profile provider is available, sidebar Chrome windows can expand to list open page tabs (titles only, no URLs) |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
@@ -843,3 +847,21 @@ and live destination; lost grabs, invalid releases or incompatible layout change
 clear the feedback without moving windows. See the
 [implementation plan and remote/local handoff](docs/superpowers/plans/2026-09-09-smartdock-workspace-drag.md)
 for test coverage and the separate real-pointer Omarchy qualification gate.
+
+### Global sidebar source foundation (FDM-964 / SB-02)
+
+The unreleased sidebar candidate adds `presentationMode` (default `classic`),
+`sidebarEdge` (`left`), `sidebarMonitor` (empty = all connected monitors), `sidebarExpandedWidth` (320),
+`sidebarCollapsed` (false), `sidebarCollapsedByMonitor` (`{}`),
+`sidebarBrowserTabsEnabled` (true), and `sidebarWidgets` (empty). It shows
+monitor/workspace/application/window hierarchy or every individual window icon
+in a rail; app groups fold, and Chrome windows can expand open tabs when the
+provider is available (see [`docs/browser-tabs.md`](docs/browser-tabs.md)).
+Classic preferences remain unchanged. This source slice is Draft, not a deployed
+or fully interactive sidebar release. [Implementation and qualification](docs/SIDEBAR.md).
+
+The SB-05 [internal widget foundation](docs/SIDEBAR_WIDGETS.md) adds bounded footer
+slots, host-owned leases and one inward popup. The production registry is empty: no
+clock/calendar, Herdr, Todoist or universal external plugin integration is claimed.
+Empty configuration adds no gap/work; unknown imported IDs are unavailable, never
+executed. Test providers exist only in fixtures. Full runtime acceptance is SB-06.

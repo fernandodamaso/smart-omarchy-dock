@@ -60,6 +60,11 @@ function localFileUrl(value) {
   }
 }
 
+function faviconFileUrl(value) {
+  var url = localFileUrl(value)
+  return /\.(png|svg|ico|jpe?g|webp|gif)$/i.test(url) ? url : ""
+}
+
 function normalizeSource(value) {
   var url = localFileUrl(value)
   return /\.(png|svg)$/i.test(url) ? url : ""

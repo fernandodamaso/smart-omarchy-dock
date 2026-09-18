@@ -50,3 +50,13 @@ function request(address, targetModeValue, usingLua) {
 function isManagedFullscreen(info) {
   return mode(info) !== "normal"
 }
+
+// Sidebar/display indicator only. True for compositor maximized (Super+F /
+// keep-bars), managed hide-bars fullscreen, and client fullscreen (e.g. F11)
+// even when the pair does not match an exact menu mode. Do not use this to
+// classify or toggle menu fullscreen commands — keep mode() for that.
+function isDisplayFullscreen(info) {
+  var value = info || ({})
+  return Number(value.fullscreen || 0) !== 0
+    || Number(value.fullscreenClient || 0) !== 0
+}

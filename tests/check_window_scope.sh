@@ -65,15 +65,15 @@ assert_contains components/Dock.qml 'readonly property var filteredToplevels' \
 assert_contains components/Dock.qml \
   'DockWindowModel.filterToplevelsByScope(' \
   'Dock must use the pure scope filter'
-assert_contains components/Dock.qml \
-  'pinned, filteredToplevels, applications' \
+assert_contains components/DockDesktopModel.js \
+  'settings.pinned, input.filteredToplevels, input.applications' \
   'visible-item composition must consume filtered windows'
 assert_contains components/Dock.qml 'property var visibleItems: []' \
   'PR #18 imperative visible-item snapshot must remain intact'
 assert_contains components/Dock.qml 'function refreshVisibleItems()' \
   'PR #18 visible-item refresh helper must remain intact'
 assert_contains components/Dock.qml \
-  'pinned, filteredToplevels, applications, hyprToplevels' \
+  'filteredToplevels: filteredToplevels' \
   'deferred visible-item refresh must use filtered windows'
 
 scope_handler="$(sed -n '/onScopeRevisionChanged:/,/^  }/p' components/Dock.qml)"

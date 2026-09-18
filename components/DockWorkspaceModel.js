@@ -39,6 +39,25 @@ function lexicalCompare(left, right) {
   return left < right ? -1 : left > right ? 1 : 0
 }
 
+function monitorMetadataCompare(left, right, monitorOrder) {
+  var leftConfigured = monitorOrder.indexOf(left.connector)
+  var rightConfigured = monitorOrder.indexOf(right.connector)
+  if (leftConfigured >= 0 || rightConfigured >= 0) {
+    if (leftConfigured < 0) return 1
+    if (rightConfigured < 0) return -1
+    if (leftConfigured !== rightConfigured) return leftConfigured - rightConfigured
+  }
+  var leftPositioned = left.x !== null && left.y !== null
+  var rightPositioned = right.x !== null && right.y !== null
+  if (leftPositioned !== rightPositioned) return leftPositioned ? -1 : 1
+  if (leftPositioned && rightPositioned) {
+    if (left.x !== right.x) return left.x - right.x
+    if (left.y !== right.y) return left.y - right.y
+  }
+  var connectorOrder = lexicalCompare(left.connector, right.connector)
+  return connectorOrder || monitorCompare(left.identity, right.identity)
+}
+
 function ownerEvidence(map, workspace) {
   if (!map[workspace]) map[workspace] = { seen: false, unresolved: false, owners: Object.create(null) }
   return map[workspace]
@@ -261,28 +280,10 @@ function buildWorkspacePresentation(appItems, records, workspaces, context) {
 
   function monitorOrderCompare(leftIdentity, rightIdentity) {
     if (leftIdentity === rightIdentity) return 0
-    var left = monitorMetadata[leftIdentity] || ({
-      identity: leftIdentity, connector: "", x: null, y: null
-    })
-    var right = monitorMetadata[rightIdentity] || ({
-      identity: rightIdentity, connector: "", x: null, y: null
-    })
-    var leftConfigured = monitorOrder.indexOf(left.connector)
-    var rightConfigured = monitorOrder.indexOf(right.connector)
-    if (leftConfigured >= 0 || rightConfigured >= 0) {
-      if (leftConfigured < 0) return 1
-      if (rightConfigured < 0) return -1
-      if (leftConfigured !== rightConfigured) return leftConfigured - rightConfigured
-    }
-    var leftPositioned = left.x !== null && left.y !== null
-    var rightPositioned = right.x !== null && right.y !== null
-    if (leftPositioned !== rightPositioned) return leftPositioned ? -1 : 1
-    if (leftPositioned && rightPositioned) {
-      if (left.x !== right.x) return left.x - right.x
-      if (left.y !== right.y) return left.y - right.y
-    }
-    var connectorOrder = lexicalCompare(left.connector, right.connector)
-    return connectorOrder || monitorCompare(leftIdentity, rightIdentity)
+    return monitorMetadataCompare(
+      monitorMetadata[leftIdentity] || { identity: leftIdentity, connector: "", x: null, y: null },
+      monitorMetadata[rightIdentity] || { identity: rightIdentity, connector: "", x: null, y: null },
+      monitorOrder)
   }
 
   var monitors = context.monitors || []
