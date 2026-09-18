@@ -78,7 +78,7 @@ Item {
   // Shared expanded-width preference, clamped per output so each panel fits its screen.
   function geometryFor(screen) {
     if (root.resizeActive)
-      return SidebarModel.screenGeometry(screen, root.resizePreviewWidth, false)
+      return SidebarModel.screenGeometry(screen, root.resizePreviewWidth, root.collapsedFor(screen))
     return SidebarModel.screenGeometry(screen, root.settings.sidebarExpandedWidth,
       root.collapsedFor(screen))
   }
@@ -179,7 +179,10 @@ Item {
   }
   onWidgetPopupAnchorChanged: if (!root.widgetPopupAnchor) root.closeWidgetPopup()
   onWidgetRegistryChanged: root.syncWidgets()
-  onWidgetWorkActiveChanged: root.syncWidgets()
+  onWidgetWorkActiveChanged: {
+    if (!root.widgetWorkActive) root.closeWidgetPopup()
+    root.syncWidgets()
+  }
   onSurfaceInvalidated: root.closeWidgetPopup()
 
   function scheduleRefresh() {

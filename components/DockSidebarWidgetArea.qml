@@ -23,7 +23,7 @@ Item {
   property bool fromOverflow: false
   readonly property var popupGeometry: {
     var revision = root.anchorRevision
-    var anchor = controller.widgetPopupAnchor
+    var anchor = root.ownsPopupAnchor() ? controller.widgetPopupAnchor : null
     var point = anchor && panel.contentItem ? panel.contentItem.mapFromItem(anchor, 0, anchor.height / 2) : {y:0}
     // Panel height excludes other reserved surfaces (e.g. the untouched topbar).
     // Clamping within that height is stricter than screen-only vertical bounds.
@@ -35,6 +35,19 @@ Item {
   height: implicitHeight
   clip: true
 
+  // The shared session has one anchor. Only the panel containing that anchor
+  // may map, reposition or dismiss its popup, including during owner transfer.
+  function ownsPopupAnchor() {
+    var content = root.panel ? root.panel.contentItem : null
+    if (!content) return false
+    for (var item = root.controller.widgetPopupAnchor; item; item = item.parent) {
+      if (item === content) return true
+    }
+    return false
+  }
+  function closePopup() {
+    if (root.ownsPopupAnchor()) root.controller.closeWidgetPopup()
+  }
   function statusText(view) {
     if (!view) return "Unavailable"
     return view.status === "ready" ? "Ready" : view.status === "loading" ? "Loading"
@@ -45,24 +58,24 @@ Item {
   }
   function openWidget(id, anchor) {
     root.fromOverflow = false
-    if (root.controller.widgetPopupId === id) root.controller.closeWidgetPopup()
+    if (root.ownsPopupAnchor() && root.controller.widgetPopupId === id) root.closePopup()
     else root.controller.openWidgetPopup(id, anchor)
   }
   function openOverflow(anchor) {
     root.fromOverflow = true
-    if (root.controller.widgetPopupId === "*") root.controller.closeWidgetPopup()
+    if (root.ownsPopupAnchor() && root.controller.widgetPopupId === "*") root.closePopup()
     else root.controller.openWidgetPopup("*", anchor)
   }
   function updatePopupAnchor() {
-    if (!root.controller.widgetPopupId) return
+    if (!root.controller.widgetPopupId || !root.ownsPopupAnchor()) return
     var anchor = root.controller.widgetPopupAnchor
-    if (!anchor || !anchor.visible || !root.panel.visible) { root.controller.closeWidgetPopup(); return }
+    if (!anchor || !anchor.visible || !root.panel.visible) { root.closePopup(); return }
     var ancestor = anchor
     while (ancestor && ancestor !== root) ancestor = ancestor.parent
     if (ancestor === root) {
       var point = root.mapFromItem(anchor, 0, 0)
       if (root.height <= 0 || point.y + anchor.height <= 0 || point.y >= root.height) {
-        root.controller.closeWidgetPopup()
+        root.closePopup()
         return
       }
     }
@@ -121,17 +134,17 @@ Item {
             enabled: !slot.compact
           }
           Component.onDestruction: {
-            if (root.controller.widgetPopupAnchor === openButton) root.controller.closeWidgetPopup()
+            if (root.controller.widgetPopupAnchor === openButton) root.closePopup()
           }
         }
       }
     }
   }
 
-  // Exactly one popup, reused for expanded/compact slots and header overflow.
+  // One visible popup across mirrored panels, reused for slots and overflow.
   PopupWindow {
     id: popup
-    visible: root.controller.widgetPopupId !== "" && root.controller.widgetPopupAnchor !== null && root.panel.visible
+    visible: root.ownsPopupAnchor() && root.controller.widgetPopupId !== "" && root.panel.visible
     color: "transparent"
     grabFocus: false
     implicitWidth: root.popupGeometry.width
@@ -149,7 +162,7 @@ Item {
       }
     }
     onVisibleChanged: {
-      if (!visible) root.controller.closeWidgetPopup()
+      if (!visible) root.closePopup()
       else Qt.callLater(root.updatePopupAnchor)
     }
     Ui.BorderSurface {
@@ -181,7 +194,7 @@ Item {
           focusable: false
           Accessible.role: Accessible.Button
           Accessible.name: "Close widget popup"
-          onClicked: root.controller.closeWidgetPopup()
+          onClicked: root.closePopup()
         }
       }
       Flickable {
@@ -244,15 +257,15 @@ Item {
   Connections {
     target: root.controller
     function onWidgetAnchorChanged() { Qt.callLater(root.updatePopupAnchor) }
-    function onSurfaceInvalidated() { root.controller.closeWidgetPopup() }
+    function onSurfaceInvalidated() { root.closePopup() }
   }
   Connections {
     target: root.panel
     function onWidthChanged() { Qt.callLater(root.updatePopupAnchor) }
     function onHeightChanged() { Qt.callLater(root.updatePopupAnchor) }
-    function onVisibleChanged() { if (!root.panel.visible) root.controller.closeWidgetPopup() }
+    function onVisibleChanged() { if (!root.panel.visible) root.closePopup() }
   }
   onHeightChanged: Qt.callLater(root.updatePopupAnchor)
-  onLayoutChanged: root.controller.closeWidgetPopup()
-  Component.onDestruction: root.controller.closeWidgetPopup()
+  onLayoutChanged: root.closePopup()
+  Component.onDestruction: root.closePopup()
 }

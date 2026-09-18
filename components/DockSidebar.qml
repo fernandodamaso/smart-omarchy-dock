@@ -77,8 +77,9 @@ PanelWindow {
     picker.visible = false
     sidebarViewport.cancelInputs("surface-close")
     root.controller.cancelResize("surface-close")
-    root.controller.closeWidgetPopup()
-    root.controller.interactionBusy = false
+    widgets.closePopup()
+    // A disappearing mirror must not release another panel's widget session.
+    root.controller.interactionBusy = root.controller.widgetPopupId !== ""
     if (root.host && root.host.badgeTracker) root.host.badgeTracker.syncWorkspaceScopes(root.badgeScopeOwner, [])
   }
 
@@ -510,7 +511,7 @@ PanelWindow {
       if (root.menuEntry && typeof root.menuEntry.execute === "function") root.menuEntry.execute()
     }
     onVisibleChanged: root.controller.interactionBusy = visible || picker.visible
-      || root.controller.resizeActive || root.controller.rowDragActive
+      || root.controller.resizeActive || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
     onKeyboardDismissed: root.controller.releaseNavigationFocus()
   }
   Connections {
@@ -527,7 +528,8 @@ PanelWindow {
     iconReloadRevision: root.host.iconReloadRevision
     onApplicationSelected: desktopId => root.host.pinApplication(desktopId)
     onVisibleChanged: {
-      root.controller.interactionBusy = visible || sidebarContext.visible || root.controller.resizeActive || root.controller.rowDragActive
+      root.controller.interactionBusy = visible || sidebarContext.visible || root.controller.resizeActive
+        || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
       if (visible) root.controller.closeWidgetPopup()
       if (!visible) root.pickerAnchorItem = null
     }

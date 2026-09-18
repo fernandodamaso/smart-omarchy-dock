@@ -114,6 +114,17 @@ Item {
       displayed[addKey] = true
     }
 
+    // Reconcile order as well as membership. Move existing model rows instead
+    // of resetting them; pending exits remain alive after the ordered live pins.
+    for (var targetIndex = 0; targetIndex < list.length; ++targetIndex) {
+      var targetKey = String(list[targetIndex].key || "")
+      for (var currentIndex = targetIndex; currentIndex < displayModel.count; ++currentIndex) {
+        if (String(displayModel.get(currentIndex).key) !== targetKey) continue
+        if (currentIndex !== targetIndex) displayModel.move(currentIndex, targetIndex, 1)
+        break
+      }
+    }
+
     var cleaned = root.copyStash(root.exitStash)
     var changed = false
     var stashKeys = Object.keys(cleaned)

@@ -13,8 +13,17 @@ TestCase {
     id: actionController
     property bool interactionBusy: false
     property string focusedRowKey: "ws"
+    property string alertControlKey: ""
     property var projection: ({rows:[{key:"monitor",kind:"monitor"}, {key:"ws",kind:"workspace"},
       {key:"app",kind:"application"}, {key:"window",kind:"window"}, {key:"footer",kind:"section"}]})
+    readonly property var rowsByKey: {
+      var result = ({})
+      projection.rows.forEach(function(row) { result[row.key] = row })
+      return result
+    }
+    function clearAlertControl() { alertControlKey = "" }
+    function rowHasAlertControl(row) { return !!row && row.kind === "browser-tab" }
+    function toggleRowActivityMute(key) { events.push("mute:"+key); return true }
     function captureTarget(key) { return {key:key,kind:"window"} }
     function toggleApplication(key) { if (key !== "app") return false; events.push("fold"); return true }
     function releaseNavigationFocus() { events.push("return-focus") }
@@ -38,6 +47,9 @@ TestCase {
     keyboard=factory.createObject(test,{viewport:viewport})
     verify(keyboard !== null)
     actionController.interactionBusy=false; actionController.focusedRowKey="ws"; events=[]
+    actionController.alertControlKey=""
+    actionController.projection={rows:[{key:"monitor",kind:"monitor"}, {key:"ws",kind:"workspace"},
+      {key:"app",kind:"application"}, {key:"window",kind:"window"}, {key:"footer",kind:"section"}]}
     keyboard.forceActiveFocus(); verify(keyboard.activeFocus)
   }
   function cleanup() { if(keyboard) keyboard.destroy(); keyboard=null }
@@ -63,5 +75,20 @@ TestCase {
     keyClick(Qt.Key_Down); compare(events.length,1)
     keyClick(Qt.Key_Escape)
     compare(events.slice(1).join(","),"cancel:escape,dismiss,return-focus")
+  }
+  function test_tab_alert_control_navigation_and_escape() {
+    actionController.projection={rows:[{key:"tab",kind:"browser-tab"}, {key:"window",kind:"window"}]}
+    actionController.focusedRowKey="tab"
+    keyClick(Qt.Key_Tab)
+    compare(actionController.focusedRowKey,"tab"); compare(actionController.alertControlKey,"tab")
+    keyClick(Qt.Key_Return); compare(events[events.length-1],"mute:tab")
+    keyClick(Qt.Key_Tab)
+    compare(actionController.focusedRowKey,"window"); compare(actionController.alertControlKey,"")
+    keyClick(Qt.Key_Backtab)
+    compare(actionController.focusedRowKey,"tab"); compare(actionController.alertControlKey,"tab")
+    keyClick(Qt.Key_Backtab); compare(actionController.alertControlKey,"")
+    keyClick(Qt.Key_Tab); compare(actionController.alertControlKey,"tab")
+    keyClick(Qt.Key_Escape)
+    compare(actionController.alertControlKey,""); compare(events[events.length-1],"return-focus")
   }
 }
