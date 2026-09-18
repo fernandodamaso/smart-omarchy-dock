@@ -133,8 +133,13 @@ install -d "$app_dir" "$config_dir" "$bin_home" "$desktop_dir"
 if [[ "$source_dir" != "$app_dir" ]]; then
   rm -rf -- "$app_dir/components"
   rm -rf -- "$app_dir/assets"
+  rm -rf -- "$app_dir/provider/herdr"
+  install -d "$app_dir/provider"
   cp -R -- "$source_dir/components" "$app_dir/components"
   cp -R -- "$source_dir/assets" "$app_dir/assets"
+  cp -R -- "$source_dir/provider/herdr" "$app_dir/provider/herdr"
+  chmod 0755 "$app_dir/provider/herdr/bin/smartdock-herdr-helper" \
+    "$app_dir/provider/herdr/bin/smartdock-herdr-provider"
   install -m 0644 "$source_dir/shell.qml" "$app_dir/shell.qml"
   install -m 0644 "$source_dir/DockHost.qml" "$app_dir/DockHost.qml"
   install -m 0644 "$source_dir/LICENSE" "$app_dir/LICENSE"
