@@ -83,7 +83,7 @@ install_client_bundle() {
     install -m 0644 "$source_dir/config/settings-schema.json" "$destination/config/settings-schema.json"
     install -m 0644 "$source_dir/config/dock.json" "$destination/config/dock.json"
     local document
-    for document in AGENT_CONFIGURATION.md CLI_REFERENCE.md CONFIGURATION.md CLI_RUNTIME_CHECKS.md DEV_SWITCH.md; do
+    for document in AGENT_CONFIGURATION.md CLI_REFERENCE.md CONFIGURATION.md CLI_RUNTIME_CHECKS.md DEV_SWITCH.md HERDR_DATA_ACCESS.md; do
       install -m 0644 "$source_dir/docs/$document" "$destination/docs/$document"
     done
     install -m 0755 "$source_dir/uninstall.sh" "$destination/uninstall.sh"
@@ -133,8 +133,13 @@ install -d "$app_dir" "$config_dir" "$bin_home" "$desktop_dir"
 if [[ "$source_dir" != "$app_dir" ]]; then
   rm -rf -- "$app_dir/components"
   rm -rf -- "$app_dir/assets"
+  rm -rf -- "$app_dir/provider/herdr"
+  install -d "$app_dir/provider"
   cp -R -- "$source_dir/components" "$app_dir/components"
   cp -R -- "$source_dir/assets" "$app_dir/assets"
+  cp -R -- "$source_dir/provider/herdr" "$app_dir/provider/herdr"
+  chmod 0755 "$app_dir/provider/herdr/bin/smartdock-herdr-helper" \
+    "$app_dir/provider/herdr/bin/smartdock-herdr-provider"
   install -m 0644 "$source_dir/shell.qml" "$app_dir/shell.qml"
   install -m 0644 "$source_dir/DockHost.qml" "$app_dir/DockHost.qml"
   install -m 0644 "$source_dir/LICENSE" "$app_dir/LICENSE"

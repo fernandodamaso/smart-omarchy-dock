@@ -1,0 +1,428 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Demand-driven SmartDock-owned local Herdr provider.
+
+The process is started only while a SmartDock consumer is active. It resolves
+local Herdr sessions, supervises one read-only helper per unique socket and emits
+versioned normalized JSON lines. It never imports or controls omaherdr.
+"""
+from __future__ import annotations
+
+from collections import deque
+import argparse
+import json
+import os
+from pathlib import Path
+import queue
+import select
+import signal
+import subprocess
+import sys
+import threading
+import time
+import uuid
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+sys.path.insert(0, str(ROOT))
+
+from discovery import Discovery  # noqa: E402
+from model import ServerState, normalized_snapshot  # noqa: E402
+
+MAX_HELPER_FRAME = 1024 * 1024
+MAX_QUEUE_BYTES = 2 * 1024 * 1024
+MAX_OUTPUT_FRAME = 1024 * 1024
+DISCOVERY_CHECK_EVERY = 10.0
+SAFETY_SNAPSHOT_EVERY = 60.0
+OUTPUT_TIMEOUT = 2.0
+
+
+class BoundedQueue:
+    def __init__(self, max_bytes: int = MAX_QUEUE_BYTES) -> None:
+        self.max_bytes = max_bytes
+        self.bytes = 0
+        self.items: deque[tuple[object, int]] = deque()
+        self.cv = threading.Condition()
+
+    def put(self, value: object, size: int) -> bool:
+        if size < 0 or size > self.max_bytes:
+            return False
+        with self.cv:
+            if self.bytes + size > self.max_bytes:
+                return False
+            self.items.append((value, size))
+            self.bytes += size
+            self.cv.notify()
+            return True
+
+    def get(self, timeout: float | None = None) -> object:
+        deadline = None if timeout is None else time.monotonic() + timeout
+        with self.cv:
+            while not self.items:
+                if deadline is None:
+                    self.cv.wait()
+                else:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise queue.Empty
+                    self.cv.wait(remaining)
+            value, size = self.items.popleft()
+            self.bytes -= size
+            return value
+
+    def get_nowait(self) -> object:
+        return self.get(0)
+
+
+class HelperProcess:
+    def __init__(
+        self,
+        server_id: str,
+        socket_path: str,
+        token: int,
+        events: BoundedQueue,
+        helper_path: Path,
+    ) -> None:
+        self.server_id = server_id
+        self.socket_path = socket_path
+        self.token = token
+        self.events = events
+        self.helper_path = helper_path
+        self.process: subprocess.Popen[bytes] | None = None
+        self.overflowed = False
+        self.thread: threading.Thread | None = None
+
+    def start(self) -> bool:
+        try:
+            self.process = subprocess.Popen(
+                [sys.executable, "-B", str(self.helper_path), self.socket_path],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError:
+            self.process = None
+            return False
+        self.thread = threading.Thread(target=self._pump, args=(self.process,), daemon=True)
+        self.thread.start()
+        return True
+
+    def _pump(self, process: subprocess.Popen[bytes]) -> None:
+        assert process.stdout is not None
+        while True:
+            line = process.stdout.readline(MAX_HELPER_FRAME + 2)
+            if not line:
+                break
+            if len(line) > MAX_HELPER_FRAME + 1 or not line.endswith(b"\n"):
+                self.overflowed = True
+                self._terminate(process)
+                break
+            try:
+                message = json.loads(line)
+            except (ValueError, UnicodeError):
+                continue
+            if not isinstance(message, dict):
+                continue
+            event = ("helper", self.server_id, self.token, message)
+            if not self.events.put(event, len(line) + 128):
+                self.overflowed = True
+                self._terminate(process)
+                break
+        code = process.wait()
+        self.events.put(("exit", self.server_id, self.token, code, self.overflowed), 128)
+
+    def send(self, command: str) -> bool:
+        process = self.process
+        if not process or process.poll() is not None or process.stdin is None:
+            return False
+        try:
+            process.stdin.write(command.encode("ascii") + b"\n")
+            process.stdin.flush()
+            return True
+        except (OSError, ValueError, BrokenPipeError):
+            return False
+
+    @staticmethod
+    def _terminate(process: subprocess.Popen[bytes]) -> None:
+        if process.poll() is not None:
+            return
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            try:
+                process.terminate()
+            except OSError:
+                pass
+
+    def stop(self) -> None:
+        process = self.process
+        if not process:
+            return
+        if process.poll() is None:
+            self.send("quit")
+            try:
+                process.wait(timeout=0.8)
+            except subprocess.TimeoutExpired:
+                self._terminate(process)
+                try:
+                    process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except OSError:
+                        process.kill()
+                    process.wait(timeout=0.5)
+        if self.thread and self.thread is not threading.current_thread():
+            self.thread.join(timeout=1)
+
+
+class Provider:
+    def __init__(self, helper_path: Path, discovery: Discovery | None = None) -> None:
+        self.helper_path = helper_path
+        self.discovery = discovery or Discovery()
+        self.events = BoundedQueue()
+        self.states: dict[str, ServerState] = {}
+        self.helpers: dict[str, HelperProcess] = {}
+        self.helper_tokens: dict[str, int] = {}
+        self.restart_at: dict[str, float] = {}
+        self.backoff: dict[str, float] = {}
+        self.last_safety: dict[str, float] = {}
+        self.discovery_error = ""
+        self.epoch = uuid.uuid4().hex
+        self.revision = 0
+        self.stopping = False
+        self.dirty = True
+        self.next_discovery_check = time.monotonic() + DISCOVERY_CHECK_EVERY
+        self.stdin_thread: threading.Thread | None = None
+
+    def _stdin(self) -> None:
+        for raw in sys.stdin.buffer:
+            command = raw.strip()
+            if len(command) > 4096:
+                continue
+            if command in (b"refresh", b"quit"):
+                self.events.put(("command", command.decode("ascii")), len(command) + 64)
+                if command == b"quit":
+                    return
+        self.events.put(("command", "quit"), 64)
+
+    def scan(self) -> None:
+        infos, error = self.discovery.scan()
+        self.discovery_error = error
+        incoming = {str(info["id"]): info for info in infos}
+
+        for server_id in list(self.states):
+            if server_id in incoming:
+                self.states[server_id].info = incoming[server_id]
+                continue
+            helper = self.helpers.pop(server_id, None)
+            if helper:
+                helper.stop()
+            self.states.pop(server_id, None)
+            self.restart_at.pop(server_id, None)
+            self.backoff.pop(server_id, None)
+            self.last_safety.pop(server_id, None)
+
+        for server_id, info in incoming.items():
+            if server_id not in self.states:
+                self.states[server_id] = ServerState(info)
+                self.backoff[server_id] = 1.0
+                self.start_helper(server_id, replace=False)
+        self.dirty = True
+
+    def start_helper(self, server_id: str, replace: bool = True) -> None:
+        state = self.states.get(server_id)
+        if not state:
+            return
+        previous = self.helpers.pop(server_id, None)
+        if previous:
+            previous.stop()
+        if replace:
+            state.replace_connection()
+        token = self.helper_tokens.get(server_id, 0) + 1
+        self.helper_tokens[server_id] = token
+        helper = HelperProcess(
+            server_id,
+            str(state.info["socket"]),
+            token,
+            self.events,
+            self.helper_path,
+        )
+        self.helpers[server_id] = helper
+        self.last_safety[server_id] = time.monotonic()
+        if helper.start():
+            self.restart_at.pop(server_id, None)
+        else:
+            state.connected = False
+            state.snapshot = None
+            state.error = "helper_unavailable"
+            delay = self.backoff.get(server_id, 1.0)
+            self.restart_at[server_id] = time.monotonic() + delay
+            self.backoff[server_id] = min(30.0, delay * 2)
+        self.dirty = True
+
+    def process_event(self, event: object) -> None:
+        if not isinstance(event, tuple) or not event:
+            return
+        kind = event[0]
+        if kind == "command":
+            command = event[1]
+            if command == "quit":
+                self.stopping = True
+            elif command == "refresh":
+                self.scan()
+            return
+        if kind not in ("helper", "exit"):
+            return
+
+        server_id, token = str(event[1]), int(event[2])
+        if self.helper_tokens.get(server_id) != token:
+            return
+        state = self.states.get(server_id)
+        if not state:
+            return
+
+        if kind == "exit":
+            overflowed = bool(event[4])
+            state.invalidate_connection("helper_overflow" if overflowed else "helper_exited")
+            delay = self.backoff.get(server_id, 1.0)
+            self.restart_at[server_id] = time.monotonic() + delay
+            self.backoff[server_id] = min(30.0, delay * 2)
+            self.dirty = True
+            return
+
+        message = event[3]
+        now = time.monotonic()
+        message_kind = message.get("kind")
+        if message_kind == "snapshot":
+            state.apply_snapshot(message, now)
+        elif message_kind == "status":
+            state.apply_status(message)
+            if state.connected:
+                self.backoff[server_id] = 1.0
+        elif message_kind == "event":
+            state.apply_event(message, now)
+        else:
+            return
+        self.dirty = True
+
+    def maintenance(self) -> None:
+        now = time.monotonic()
+        if now >= self.next_discovery_check:
+            self.next_discovery_check = now + DISCOVERY_CHECK_EVERY
+            if self.discovery.changed():
+                self.scan()
+
+        for server_id, state in list(self.states.items()):
+            helper = self.helpers.get(server_id)
+            restart_at = self.restart_at.get(server_id)
+            if restart_at is not None and now >= restart_at:
+                # The exit/failure path already advanced connection generation.
+                self.start_helper(server_id, replace=False)
+                continue
+
+            if state.snapshot_due is not None and now >= state.snapshot_due:
+                state.snapshot_due = None
+                if helper and helper.send("snapshot"):
+                    self.last_safety[server_id] = now
+
+            if now - self.last_safety.get(server_id, now) >= SAFETY_SNAPSHOT_EVERY:
+                if helper and helper.send("snapshot"):
+                    self.last_safety[server_id] = now
+
+    def emit(self) -> None:
+        self.revision += 1
+        payload = normalized_snapshot(
+            self.epoch,
+            self.revision,
+            [self.states[key] for key in sorted(self.states)],
+            self.discovery_error,
+        )
+        frame = (
+            json.dumps(payload, separators=(",", ":"), ensure_ascii=False, allow_nan=False) + "\n"
+        ).encode("utf-8")
+
+        if len(frame) > MAX_OUTPUT_FRAME:
+            payload["agents"] = []
+            payload["attention"] = []
+            payload["liveCounts"] = None
+            payload["completeness"] = {
+                "state": "partial",
+                "truncated": True,
+                "serverTruncated": payload["completeness"].get("serverTruncated", False),
+                "agentTruncated": True,
+            }
+            payload["sourceErrorCode"] = "normalized_output_too_large"
+            frame = (
+                json.dumps(payload, separators=(",", ":"), ensure_ascii=False) + "\n"
+            ).encode("utf-8")
+        if len(frame) > MAX_OUTPUT_FRAME:
+            raise RuntimeError("normalized output exceeds hard limit")
+
+        view = memoryview(frame)
+        deadline = time.monotonic() + OUTPUT_TIMEOUT
+        while view:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([], [sys.stdout], [], remaining)[1]:
+                raise BrokenPipeError("provider output unavailable")
+            written = os.write(sys.stdout.fileno(), view[:65536])
+            if written <= 0:
+                raise BrokenPipeError("provider output unavailable")
+            view = view[written:]
+        self.dirty = False
+
+    def shutdown(self) -> None:
+        self.stopping = True
+        helpers = list(self.helpers.values())
+        self.helpers.clear()
+        for helper in helpers:
+            helper.stop()
+
+    def run(self) -> None:
+        self.stdin_thread = threading.Thread(target=self._stdin, daemon=True)
+        self.stdin_thread.start()
+        self.scan()
+        try:
+            while not self.stopping:
+                if self.dirty:
+                    self.emit()
+                try:
+                    event = self.events.get(timeout=0.1)
+                except queue.Empty:
+                    event = None
+                if event is not None:
+                    self.process_event(event)
+                    while True:
+                        try:
+                            self.process_event(self.events.get_nowait())
+                        except queue.Empty:
+                            break
+                self.maintenance()
+        finally:
+            self.shutdown()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--helper",
+        default=str(HERE / "smartdock-herdr-helper"),
+        help=argparse.SUPPRESS,
+    )
+    args = parser.parse_args()
+    provider = Provider(Path(args.helper))
+
+    def stop(_signum: int, _frame: object) -> None:
+        provider.stopping = True
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    try:
+        provider.run()
+    except (BrokenPipeError, KeyboardInterrupt):
+        provider.shutdown()
+
+
+if __name__ == "__main__":
+    main()

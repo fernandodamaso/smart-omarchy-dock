@@ -3,29 +3,71 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 fail() { printf 'check_herdr_data_access: %s\n' "$*" >&2; exit 1; }
+
 helper=provider/herdr/bin/smartdock-herdr-helper
-for file in "$helper" provider/herdr/UPSTREAM.md provider/herdr/LICENSE.omaherdr \
-  provider/herdr/tests/test_events.py provider/herdr/tests/test_protocol.py \
-  docs/HERDR_DATA_ACCESS.md; do
+provider=provider/herdr/bin/smartdock-herdr-provider
+required=(
+  "$helper"
+  "$provider"
+  provider/herdr/discovery.py
+  provider/herdr/model.py
+  provider/herdr/UPSTREAM.md
+  provider/herdr/LICENSE.omaherdr
+  provider/herdr/tests/test_events.py
+  provider/herdr/tests/test_protocol.py
+  provider/herdr/tests/test_discovery.py
+  provider/herdr/tests/test_model.py
+  provider/herdr/tests/test_provider.py
+  components/DockHerdrService.qml
+  components/DockHerdrAgentsView.qml
+  docs/HERDR_DATA_ACCESS.md
+)
+for file in "${required[@]}"; do
   [[ -f "$file" ]] || fail "missing $file"
 done
-[[ -x "$helper" ]] || fail 'helper must be executable'
-[[ "$(git hash-object provider/herdr/LICENSE.omaherdr)" == d645695673349e3947e8e5ae42332d0ac3164cd7 ]] \
-  || fail 'upstream license text changed'
-grep -Fq 'c20d9b0db3a65b5a7590876c56026bc906306e04' provider/herdr/UPSTREAM.md \
-  || fail 'pinned provenance missing'
-grep -Fq 'SPDX-License-Identifier: Apache-2.0' "$helper" || fail 'derived-code notice missing'
-grep -Fq "discover -s provider/herdr/tests" .github/workflows/ci.yml \
-  || fail 'nested transport suite is missing from CI'
-if grep -Eq 'subprocess|execDetached|org\.omarchy\.Omaherdr|omaherdr-notify' "$helper"; then
-  fail 'transport must not acquire an omaherdr or subprocess dependency'
-fi
-# Step-1 boundary: source extraction must not activate a provider on import.
-# Replace this guard with tested demand-driven ownership when step 3 wires it.
-for file in Service.qml Overlay.qml DockHost.qml shell.qml; do
-  [[ -f "$file" ]] || continue
-  if grep -Eq 'smartdock-herdr-helper|DockHerdrService[[:space:]]*\{' "$file"; then
-    fail 'step-1 scaffold must not add runtime activation'
-  fi
+
+[[ -x "$helper" ]] || fail 'private helper must remain executable'
+[[ "$(git hash-object provider/herdr/LICENSE.omaherdr)" == d645695673349e3947e8e5ae42332d0ac3164cd7 ]]   || fail 'upstream license text changed'
+
+grep -Fq 'c20d9b0db3a65b5a7590876c56026bc906306e04' provider/herdr/UPSTREAM.md   || fail 'pinned provenance missing'
+for file in "$helper" "$provider" provider/herdr/discovery.py provider/herdr/model.py; do
+  grep -Fq 'SPDX-License-Identifier: Apache-2.0' "$file"     || fail "derived-code notice missing: $file"
 done
+
+grep -Fq "discover -s provider/herdr/tests" .github/workflows/ci.yml   || fail 'provider suite is missing from CI'
+grep -Fq "discover -s tests -p 'test_herdr_*.py'" .github/workflows/ci.yml   || fail 'Herdr lifecycle suite is missing from CI'
+
+grep -Fq '"herdr.agents"' DockHost.qml   || fail 'production source registry is missing herdr.agents'
+grep -Fq '"registeredIds": ["herdr.agents"]' config/settings-schema.json   || fail 'typed schema is missing herdr.agents'
+grep -Fq 'DockHerdrService {' Service.qml   || fail 'plugin singleton is missing shared Herdr service'
+grep -Fq 'herdrService: pluginService ? pluginService.herdrService : null' Overlay.qml   || fail 'plugin overlay does not consume the shared service'
+grep -Fq 'DockHerdrService {' shell.qml   || fail 'standalone host is missing its shared Herdr service'
+
+grep -Fq '"$source_dir/provider/herdr"' install.sh   || fail 'standalone installer does not copy provider/herdr'
+grep -Fq 'smartdock-herdr-provider' install.sh   || fail 'standalone installer does not retain provider entry point'
+
+grep -Fq 'MAX_QUEUE_BYTES = 2 * 1024 * 1024' "$provider"   || fail 'provider queue bound changed unexpectedly'
+grep -Fq 'DISCOVERY_CHECK_EVERY = 10.0' "$provider"   || fail 'discovery check cadence changed unexpectedly'
+grep -Fq 'SAFETY_SNAPSHOT_EVERY = 60.0' "$provider"   || fail 'safety snapshot cadence changed unexpectedly'
+grep -Fq 'MAX_SERVERS = 64' provider/herdr/model.py   || fail 'server cap missing'
+grep -Fq 'MAX_AGENTS = 256' provider/herdr/model.py   || fail 'agent cap missing'
+grep -Fq '"remote": False' provider/herdr/model.py   || fail 'local-only capability must be explicit'
+
+# The helper is socket-only; discovery/provider may supervise fixed local
+# subprocesses but neither path may regain omaherdr coupling or agent-list polling.
+if grep -Eq 'subprocess|execDetached|org\.omarchy\.Omaherdr|omaherdr-notify' "$helper"; then
+  fail 'private helper acquired a forbidden dependency'
+fi
+active_paths=(
+  Service.qml Overlay.qml DockHost.qml shell.qml
+  components/DockHerdrService.qml components/DockHerdrAgentsView.qml
+  provider/herdr/discovery.py provider/herdr/model.py "$provider"
+)
+if grep -Eiq 'herdr[[:space:]]+agent[[:space:]]+list|org\.omarchy\.Omaherdr|omaherdr-notify' "${active_paths[@]}"; then
+  fail 'working integration contains legacy polling/omaherdr coupling'
+fi
+if grep -Eiq '(^|[^[:alnum:]_])ssh([^[:alnum:]_]|$)' provider/herdr/discovery.py "$provider"; then
+  fail 'local-only milestone must not launch SSH'
+fi
+
 printf 'check_herdr_data_access: PASS\n'
