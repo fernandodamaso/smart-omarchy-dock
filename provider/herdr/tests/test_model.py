@@ -82,6 +82,30 @@ class ModelTests(unittest.TestCase):
         server.apply_status({"connected": False})
         self.assertIsNone(normalized_snapshot("e", 2, [server], now=13)["liveCounts"])
 
+    def test_underscore_status_event_updates_counts_attention_and_schedules_reconciliation(self):
+        server = state()
+        connect(server, [{"pane_id": "p1", "agent_status": "working"}], now=10)
+        server.apply_event({
+            "event": "pane_agent_status_changed",
+            "data": {"pane_id": "p1", "agent_status": "blocked"},
+        }, 11)
+        snap = normalized_snapshot("e", 1, [server], now=11)
+        self.assertEqual(snap["liveCounts"]["working"], 0)
+        self.assertEqual(snap["liveCounts"]["blocked"], 1)
+        self.assertEqual(snap["attention"][0]["status"], "blocked")
+        self.assertAlmostEqual(server.snapshot_due, 11.25)
+
+    def test_underscore_structural_events_schedule_reconciliation(self):
+        for event in (
+            "workspace_metadata_updated",
+            "tab_created",
+            "pane_updated",
+            "layout_updated",
+        ):
+            server = state()
+            server.apply_event({"event": event, "data": {}}, 11)
+            self.assertAlmostEqual(server.snapshot_due, 11.25, msg=event)
+
     def test_disconnect_scopes_reused_pane_to_new_connection_generation(self):
         server = state()
         connect(server, [{"pane_id": "p1", "agent_status": "done"}], now=10)

@@ -137,6 +137,9 @@ class ServerState:
         data = message.get("data")
         if not isinstance(event, str) or not isinstance(data, dict):
             return
+        family, separator, suffix = event.partition("_")
+        if separator and f"{family}." in STRUCTURAL_PREFIXES:
+            event = f"{family}.{suffix}"
         if event == "pane.agent_status_changed" and self.snapshot is not None:
             pane = _identity(data.get("pane_id"))
             status = _status(data.get("agent_status"))
