@@ -16,6 +16,9 @@ Item {
 
   readonly property bool sectionVisible: !panel.panelCollapsed && controller.widgetIds.length > 0
   readonly property var registeredRows: WidgetModel.registeredRows(controller.widgetRegistry)
+  readonly property int availableTypeCount: registeredRows.filter(function(row) {
+    return row.available
+  }).length
   readonly property var popupWindow: popup
   readonly property var managerWindow: managerPopup
   readonly property var cards: cardRepeater
@@ -395,9 +398,11 @@ Item {
           spacing: Style.space(4)
 
           Text {
-            visible: root.registeredRows.length === 0
+            visible: root.availableTypeCount === 0
             width: parent.width
-            text: "No Widgets are available in this build."
+            text: root.registeredRows.length === 0
+              ? "No Widgets are available in this build."
+              : "No registered Widgets are currently available."
             textFormat: Text.PlainText
             color: Util.alpha(Color.foreground, 0.68)
             font.family: Style.font.family
