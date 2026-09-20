@@ -21,6 +21,10 @@ FocusScope {
   readonly property var visibleRows: viewProjection.rows
   readonly property var sectionSpans: viewProjection.sectionSpans || []
   readonly property var listView: list
+  property Component contentTail: null
+  readonly property var contentTailItem: contentTailLoader.item
+  property var contentTailDragPoint: null
+  signal contentTailAutoScrolled()
   readonly property int rowCount: visibleRows.length
   readonly property real rowHeight: Math.max(34, Math.ceil(metrics.height + Style.space(12)))
   readonly property real workspaceCardInset: Style.space(5)
@@ -115,6 +119,18 @@ FocusScope {
   function refreshDragTarget() {
     if (!root.controller.rowDragActive || root.dragPoint === null) return
     root.controller.updateRowDrag(root.dropKey())
+  }
+
+  function beginContentTailDrag(sceneX, sceneY) {
+    root.contentTailDragPoint = root.mapFromItem(null, sceneX, sceneY)
+  }
+
+  function updateContentTailDrag(sceneX, sceneY) {
+    root.contentTailDragPoint = root.mapFromItem(null, sceneX, sceneY)
+  }
+
+  function endContentTailDrag() {
+    root.contentTailDragPoint = null
   }
 
   function heightMap() {
@@ -478,15 +494,18 @@ FocusScope {
   Timer {
     interval: 16
     repeat: true
-    running: root.controller.rowDragActive && root.dragPoint !== null
+    running: (root.controller.rowDragActive && root.dragPoint !== null)
+      || root.contentTailDragPoint !== null
     onTriggered: {
-      var delta = root.dragPoint.x >= 0 && root.dragPoint.x < root.width
-        ? InteractionModel.autoScrollStep(root.dragPoint.y, root.height) : 0
+      var point = root.controller.rowDragActive ? root.dragPoint : root.contentTailDragPoint
+      var delta = point && point.x >= 0 && point.x < root.width
+        ? InteractionModel.autoScrollStep(point.y, root.height) : 0
       if (!delta) return
       list.contentY = Math.max(list.originY, Math.min(
         Math.max(list.originY, list.contentHeight - list.height + list.originY), list.contentY + delta))
       list.forceLayout()
-      root.controller.updateRowDrag(root.dropKey())
+      if (root.controller.rowDragActive) root.controller.updateRowDrag(root.dropKey())
+      else root.contentTailAutoScrolled()
     }
   }
 
@@ -517,6 +536,27 @@ FocusScope {
       collapsed: root.panelCollapsed
       rowHeight: root.rowHeight
       width: list.width
+    }
+    footer: Item {
+      id: contentTailHost
+      width: list.width
+      height: root.panelCollapsed || !contentTailLoader.item
+        ? 0 : Math.max(0, contentTailLoader.item.implicitHeight)
+      Loader {
+        id: contentTailLoader
+        anchors.fill: parent
+        active: root.contentTail !== null
+        sourceComponent: root.contentTail
+        onLoaded: Qt.callLater(root.requestRestore)
+      }
+      onHeightChanged: {
+        root.bumpSectionChrome()
+        root.refreshDragTarget()
+        if (!root.restoring && !root.pendingRestore) {
+          root.pendingRestore = true
+          root.requestRestore()
+        }
+      }
     }
     onMovementEnded: root.captureAnchor()
     onContentYChanged: {
@@ -694,5 +734,9 @@ FocusScope {
       font.pixelSize: Style.font.bodySmall
     }
   }
-  Component.onDestruction: { root.cancelInputs("viewport-destroyed"); root.captureAnchor() }
+  Component.onDestruction: {
+    root.endContentTailDrag()
+    root.cancelInputs("viewport-destroyed")
+    root.captureAnchor()
+  }
 }
