@@ -64,6 +64,7 @@ Item {
   }
 
   function openWidget(id, anchor) {
+    root.closeManager()
     if (root.ownsPopupAnchor() && root.controller.widgetPopupId === id)
       root.closePopup()
     else
@@ -72,6 +73,7 @@ Item {
 
   function openManager(anchor) {
     if (root.panel.panelCollapsed || !anchor || !anchor.visible) return false
+    root.closePopup()
     root.managerAnchor = anchor
     root.managerOpen = true
     Qt.callLater(root.updateManagerAnchor)
@@ -121,6 +123,7 @@ Item {
   }
 
   function beginDrag(id, sceneX, sceneY) {
+    root.closeManager()
     if (!root.controller.beginWidgetReorder(id)) return false
     root.dragWidgetId = id
     root.dragSceneX = sceneX
@@ -499,7 +502,8 @@ Item {
   }
 
   Component.onDestruction: {
-    root.viewport.endContentTailDrag()
+    if (root.dragWidgetId) root.finishDrag(0, 0, true)
+    else root.viewport.endContentTailDrag()
     root.closePopup()
     root.closeManager()
   }
