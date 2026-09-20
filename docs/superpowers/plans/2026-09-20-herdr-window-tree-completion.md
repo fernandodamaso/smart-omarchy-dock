@@ -186,3 +186,10 @@ The compositor supplies a PID, but not the `startTime` required by the current a
 ## Finish line
 
 The feature is complete when real agents appear beneath the right Herdr window with correct counts and folds; clicking or pressing Enter opens the exact pane; keyboard/window/browser interactions still work; empty/disconnected/unmatched states are truthful; and the final verified version is visible on the user's desktop. Backend-only progress does not satisfy this finish line.
+
+## Checkpoint log
+
+### Checkpoint B — `dcc8f8b` (2026-09-20)
+- Checks: herdr sidebar model association+projection PASS; controller QML 7 PASS; widgets QML 8 PASS; Codex re-review Approved (0/0/0).
+- Live: `smartdock dev use` + `reload` on local checkout; Hypruse crop `.superpowers/sdd/checkpoints/checkpoint-b-sidebar.png`.
+- Visible: parent row labeled `Herdr` with nested agents `codex`, `cursor`, `fdm970-c` and status dots beneath the actual Herdr window. Agent activation not enabled yet.
