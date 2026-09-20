@@ -15,8 +15,6 @@ Controls.ComboBox {
   font.pixelSize: Style.font.bodySmall
 
   contentItem: Text {
-    leftPadding: 0
-    rightPadding: 0
     text: root.displayText
     textFormat: Text.PlainText
     color: Color.foreground
