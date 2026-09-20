@@ -20,7 +20,7 @@ Item {
     : root.kind === "error" ? "circle-alert"
     : root.kind === "unavailable" ? "cloud-off"
     : root.kind === "stale" ? "clock-3" : "inbox"
-  readonly property string semantic: root.kind === "error" ? "danger"
+  readonly property string fallbackText: root.kind === "loading" ? "…"\n    : root.kind === "error" ? "!"\n    : root.kind === "unavailable" ? "×"\n    : root.kind === "stale" ? "↻" : "–"\n  readonly property string semantic: root.kind === "error" ? "danger"
     : root.kind === "stale" ? "warning" : root.kind === "loading" ? "info" : "neutral"
 
   implicitHeight: content.implicitHeight + Style.space(root.compact ? 8 : 16)
@@ -53,7 +53,7 @@ Item {
       containerVariant: root.compact ? "plain" : "soft"
       tint: root.semantic === "danger" ? "#ff6b7a"
         : root.semantic === "warning" ? "#f5bd36" : Color.accent
-      accessibleName: root.defaultTitle
+      accessibleName: root.defaultTitle\n      fallbackText: root.fallbackText
     }
 
     WidgetText {
