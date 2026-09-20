@@ -177,6 +177,7 @@ Item {
     Ui.Button {
       id: collapseButton
       anchors.right: parent.right
+      anchors.rightMargin: Style.space(3)
       anchors.verticalCenter: parent.verticalCenter
       width: Style.space(24)
       height: Style.space(24)
