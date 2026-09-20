@@ -1,4 +1,5 @@
 .pragma library
+.import "DockHerdrModel.js" as HerdrModel
 
 // Geometry is supplied by the actual clipped ListView delegates. Indices are
 // never action identities, and offscreen/utility/footer rectangles are not hits.
@@ -428,4 +429,47 @@ function sidebarWindowTooltipTitle(input) {
       && display && windowTitle && display !== windowTitle)
     return display + " · " + windowTitle
   return display || windowTitle
+}
+
+// Familiar agent-kind capitalization for compact rows (Codex / Claude / Cursor).
+function herdrAgentKindLabel(input) {
+  var source = input || ({})
+  var kind = source.agentKind !== undefined ? source.agentKind : source.kind
+  return HerdrModel.displayAgentKind(kind)
+}
+
+function herdrStatusAccessibleText(status) {
+  return HerdrModel.statusLabel(status)
+}
+
+// Reserve kind / counters / fold control width first; name receives the remainder.
+function herdrCompactLabelWidths(input) {
+  var o = input || ({})
+  var available = Math.max(0, Number(o.availableWidth) || 0)
+  var kindWidth = Math.max(0, Number(o.kindWidth) || 0)
+  var countersWidth = Math.max(0, Number(o.countersWidth) || 0)
+  var controlsWidth = Math.max(0, Number(o.controlsWidth) || 0)
+  var gap = Math.max(0, Number(o.gap) || 0)
+  var trailing = 0
+  var gaps = 0
+  if (kindWidth > 0) {
+    trailing += kindWidth
+    gaps += 1
+  }
+  if (countersWidth > 0) {
+    trailing += countersWidth
+    gaps += 1
+  }
+  if (controlsWidth > 0) {
+    trailing += controlsWidth
+    gaps += 1
+  }
+  var reserved = trailing + gap * gaps
+  return {
+    nameWidth: Math.max(0, available - reserved),
+    kindWidth: kindWidth,
+    countersWidth: countersWidth,
+    controlsWidth: controlsWidth,
+    reserved: reserved
+  }
 }

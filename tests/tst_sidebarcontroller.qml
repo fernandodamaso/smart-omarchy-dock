@@ -523,4 +523,139 @@ TestCase {
     compare(c.herdrAssociations.byWindowKey[key], "local-a")
     compare(JSON.stringify(c.herdrAssociations.unmatchedServerIds), "[]")
   }
+
+  function test_herdr_fold_toggle_persists_and_prunes_with_window() {
+    var service = createTemporaryObject(herdrServiceFactory, this)
+    verify(service !== null)
+    var term = createTemporaryObject(toplevelFactory, this, { title: "Herdr" })
+    var other = createTemporaryObject(toplevelFactory, this, { title: "Other" })
+    var screen = { name: "DP-1", width: 1920, height: 1080 }
+    var c = createTemporaryObject(factory, this, {
+      widgetRegistry: {
+        "herdr.agents": {
+          id: "herdr.agents",
+          available: true,
+          acquire: function(owner) { return service.acquire(owner) }
+        }
+      },
+      settings: {
+        presentationMode: "sidebar",
+        pinned: [],
+        workspaceGroups: [],
+        sidebarCollapsed: false,
+        sidebarWidgets: ["herdr.agents"]
+      },
+      screens: [screen],
+      monitors: [{ id: 0, name: "DP-1", activeWorkspace: { id: 1 } }],
+      workspaces: [{ id: 1, monitorID: 0 }],
+      toplevels: [term, other],
+      hyprToplevels: [{
+        wayland: term, address: "0xh",
+        lastIpcObject: { workspace: { id: 1 }, monitor: 0, pid: 40 }
+      }, {
+        wayland: other, address: "0xo",
+        lastIpcObject: { workspace: { id: 1 }, monitor: 0, pid: 50 }
+      }]
+    })
+    verify(c !== null)
+    c.refresh()
+    var windowKey = c.registry.entries[0].key
+    var foldKey = "herdr:" + windowKey
+    service.publishSnapshot({
+      schemaVersion: 1,
+      providerEpoch: "epoch-fold",
+      revision: 1,
+      servers: [{
+        id: "local-a",
+        health: "live",
+        clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
+      }],
+      agents: [{
+        id: "local-a:1:pane-a",
+        serverId: "local-a",
+        connectionGeneration: 1,
+        paneId: "pane-a",
+        name: "Codex",
+        agent: "codex",
+        status: "working"
+      }],
+      liveCounts: { agents: 1, working: 1, idle: 0, done: 0, blocked: 0, unknown: 0, complete: true },
+      completeness: { state: "complete" },
+      windowProcesses: { revision: 1, identities: [{ pid: 40, startTime: 40 }] }
+    })
+    wait(0)
+    compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
+    c.refresh()
+    var parent = c.projection.rows.filter(function(row) { return row.key === windowKey })[0]
+    verify(parent)
+    compare(parent.herdrFoldKey, foldKey)
+    compare(parent.herdrFolded, false)
+    verify(c.projection.rows.some(function(row) {
+      return row.kind === "herdr-agent" && row.windowKey === windowKey
+    }))
+    verify(c.toggleHerdrAgents(windowKey))
+    c.refresh()
+    verify(c.folds[foldKey])
+    parent = c.projection.rows.filter(function(row) { return row.key === windowKey })[0]
+    compare(parent.herdrFolded, true)
+    compare(parent.herdrStatusCounters.length, 1)
+    compare(parent.herdrStatusCounters[0].status, "working")
+    verify(!c.projection.rows.some(function(row) {
+      return row.kind === "herdr-agent" && row.windowKey === windowKey
+    }))
+    // Fold memory survives another refresh.
+    c.refresh()
+    verify(c.folds[foldKey])
+    // Actual rail mode must not erase Herdr fold memory or restart the lease.
+    var leaseBeforeRail = service.activeCount
+    c.settings = Object.assign({}, c.settings, {
+      sidebarCollapsedByMonitor: { "DP-1": true }
+    })
+    compare(c.collapsedFor(screen), true)
+    c.refresh()
+    verify(c.folds[foldKey])
+    compare(service.activeCount, leaseBeforeRail)
+    verify(!c.railProjection.rows.some(function(row) {
+      return row.kind === "herdr-agent" && row.windowKey === windowKey
+    }))
+    c.settings = Object.assign({}, c.settings, {
+      sidebarCollapsedByMonitor: { "DP-1": false }
+    })
+    compare(c.collapsedFor(screen), false)
+    c.refresh()
+    verify(c.folds[foldKey])
+    parent = c.projection.rows.filter(function(row) { return row.key === windowKey })[0]
+    verify(parent)
+    compare(parent.herdrFolded, true)
+    // Hide must not prune Herdr fold while the window handle remains live.
+    var desktopId = String(parent.desktopId || term.appId || "browser")
+    c.settings = Object.assign({}, c.settings, {
+      hiddenApplications: [desktopId]
+    })
+    c.refresh()
+    verify(c.folds[foldKey])
+    verify(c.registry.entries.some(function(entry) { return entry.key === windowKey }))
+    verify(!c.projection.rows.some(function(row) { return row.key === windowKey }))
+    c.settings = Object.assign({}, c.settings, {
+      hiddenApplications: []
+    })
+    c.refresh()
+    verify(c.folds[foldKey])
+    parent = c.projection.rows.filter(function(row) { return row.key === windowKey })[0]
+    verify(parent)
+    compare(parent.herdrFolded, true)
+    // Unrelated window removal must not prune the herdr fold.
+    c.toplevels = [term]
+    c.hyprToplevels = [{
+      wayland: term, address: "0xh",
+      lastIpcObject: { workspace: { id: 1 }, monitor: 0, pid: 40 }
+    }]
+    c.refresh()
+    verify(c.folds[foldKey])
+    // Window disappearance prunes the herdr fold key.
+    c.toplevels = []
+    c.hyprToplevels = []
+    c.refresh()
+    verify(!c.folds[foldKey])
+  }
 }

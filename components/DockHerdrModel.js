@@ -200,3 +200,105 @@ function resolveAssociations(request, snapshot) {
   var windows = buildAssociationWindows(request.targets, windowProcesses.identities)
   return associateWindows(snapshot.servers, windows)
 }
+
+// Compact appearance: shared status normalization, unique-ID counts, color roles.
+var STATUS_ORDER = ["working", "idle", "done", "blocked", "unknown"]
+
+function normalizeStatus(value) {
+  if (typeof value !== "string") return "unknown"
+  var status = value.replace(/^\s+|\s+$/g, "").toLowerCase()
+  if (status === "working" || status === "idle" || status === "done"
+      || status === "blocked" || status === "unknown")
+    return status
+  return "unknown"
+}
+
+function emptyStatusCounts() {
+  return {
+    working: 0,
+    idle: 0,
+    done: 0,
+    blocked: 0,
+    unknown: 0,
+    agents: 0
+  }
+}
+
+// Count unique live agent IDs. Duplicate IDs contribute once (first wins).
+function countAgentStatuses(agents) {
+  var counts = emptyStatusCounts()
+  var seen = Object.create(null)
+  var list = Array.isArray(agents) ? agents : []
+  for (var i = 0; i < list.length; i++) {
+    var agent = list[i]
+    if (!agent || typeof agent !== "object") continue
+    var id = typeof agent.id === "string" ? agent.id : String(agent.id || "")
+    if (!id || seen[id]) continue
+    seen[id] = true
+    var status = normalizeStatus(agent.status)
+    counts[status] += 1
+    counts.agents += 1
+  }
+  return counts
+}
+
+function statusCounters(counts) {
+  var source = counts && typeof counts === "object" ? counts : emptyStatusCounts()
+  var out = []
+  for (var i = 0; i < STATUS_ORDER.length; i++) {
+    var status = STATUS_ORDER[i]
+    var count = Number(source[status] || 0)
+    if (!isFinite(count) || count <= 0) continue
+    out.push({ status: status, count: count })
+  }
+  return out
+}
+
+// One status→paint role map. QML resolves roles to Omarchy Color tokens:
+// accent (working), muted (idle), done/blocked via flatColor theme fallbacks,
+// hollow/muted outline (unknown). "done" is Herdr state, not proven success.
+function statusColorRole(status) {
+  switch (normalizeStatus(status)) {
+  case "working":
+    return "accent"
+  case "idle":
+    return "muted"
+  case "done":
+    return "done"
+  case "blocked":
+    return "blocked"
+  default:
+    return "hollow"
+  }
+}
+
+function statusLabel(status) {
+  switch (normalizeStatus(status)) {
+  case "working":
+    return "Working"
+  case "idle":
+    return "Idle"
+  case "done":
+    return "Done"
+  case "blocked":
+    return "Blocked"
+  default:
+    return "Unknown"
+  }
+}
+
+function displayAgentKind(kind) {
+  if (typeof kind !== "string") return ""
+  var raw = kind.replace(/^\s+|\s+$/g, "")
+  if (!raw) return ""
+  var lower = raw.toLowerCase()
+  if (lower === "codex") return "Codex"
+  if (lower === "claude") return "Claude"
+  if (lower === "cursor") return "Cursor"
+  return raw.charAt(0).toUpperCase() + raw.slice(1)
+}
+
+function herdrFoldKeyForWindow(windowKey) {
+  if (typeof windowKey !== "string" || !windowKey) return ""
+  return "herdr:" + windowKey
+}

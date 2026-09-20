@@ -2,6 +2,7 @@
 .import "DockModel.js" as DockModel
 .import "DockWindowModel.js" as WindowModel
 .import "DockWorkspaceModel.js" as WorkspaceModel
+.import "DockHerdrModel.js" as HerdrModel
 
 // Pure, host-session identity. Never identify a window by title, index or address.
 function reconcileHandles(previous, toplevels) {
@@ -633,13 +634,30 @@ function project(input) {
   }
   function attachHerdr(window) {
     var serverId = herdrByWindow[window.key]
+    var emptyCounts = HerdrModel.emptyStatusCounts()
     if (typeof serverId !== "string" || !serverId) {
       window.herdrAssociated = false
       window.herdrServerId = ""
+      window.herdrFoldKey = ""
+      window.herdrExpandable = false
+      window.herdrFolded = false
+      window.herdrStatusCounts = emptyCounts
+      window.herdrStatusCounters = []
       return window
     }
     window.herdrAssociated = true
     window.herdrServerId = serverId
+    window.herdrFoldKey = HerdrModel.herdrFoldKeyForWindow(window.key)
+    // Missing fold key => expanded. folds[herdrFoldKey] === true => folded.
+    window.herdrFolded = !!window.herdrFoldKey && folds[window.herdrFoldKey] === true
+    var agents = []
+    if (herdrAssociationsVerified && herdrSnapshot)
+      agents = herdrAgentsForServer(herdrSnapshot, serverId)
+    var counts = HerdrModel.countAgentStatuses(agents)
+    window.herdrStatusCounts = counts
+    window.herdrStatusCounters = HerdrModel.statusCounters(counts)
+    // Foldable whenever associated; empty/unavailable state children also fold.
+    window.herdrExpandable = true
     return window
   }
   function emitHerdrState(window, serverId, server, epoch, title, status) {
@@ -662,6 +680,8 @@ function project(input) {
   }
   function emitHerdrChildren(window) {
     if (input.collapsed || !window.herdrAssociated) return
+    // Collapsed parents keep counts on the window row; hide nested children.
+    if (window.herdrFolded) return
     var serverId = window.herdrServerId
     var server = herdrServerById(herdrSnapshot, serverId)
     var agents = herdrSnapshot ? herdrAgentsForServer(herdrSnapshot, serverId) : []
@@ -676,9 +696,11 @@ function project(input) {
     }
     // Actionable agents require verified association + a live ready snapshot.
     if (herdrSnapshot && agents.length > 0) {
+      var seenAgents = Object.create(null)
       agents.forEach(function(agent) {
         var agentId = String(agent.id || "")
-        if (!agentId) return
+        if (!agentId || seenAgents[agentId]) return
+        seenAgents[agentId] = true
         row({
           kind: "herdr-agent",
           key: JSON.stringify(["herdr-agent", window.key, agentId]),
@@ -709,7 +731,7 @@ function project(input) {
   }
   function emitWindow(window) {
     attachTabs(window)
-    attachHerdr(window)
+    // herdr metadata already applied to every live window before emission.
     row(window)
     emitHerdrChildren(window)
     if (input.collapsed || !window.tabsExpandable || window.tabsFolded) return
@@ -850,6 +872,11 @@ function project(input) {
     })
   })
   result.unassignedWindows.sort(function(a, b) { return a.order - b.order })
+  // Attach Herdr fold/count metadata to every live window before emission so
+  // folded application members still retain session fold keys for pruning.
+  Object.keys(windowsByHandleKey).forEach(function(key) {
+    attachHerdr(windowsByHandleKey[key])
+  })
   // Pin shelf follows settings.pinned order and includes running apps (focus-or-launch).
   // Strip owns these rows; they never appear in the hierarchy ListView (expanded or rail).
   var windowsByDesktop = Object.create(null)

@@ -410,7 +410,9 @@ Item {
     // Scroll anchors are per connector×mode; viewports capture/restore via scrollStates.
     if (root.focusedRowKey) root.focusedRowKey = SidebarModel.recoverAnchor(
       {key:root.focusedRowKey,offset:0}, previous, nextRows).key
-    // Prune vanished application and browser-tab folds; session-only.
+    // Prune vanished application and browser-tab folds from the filtered
+    // projection. Herdr folds follow live registry window keys so hiding an
+    // application cannot erase fold memory for a still-live window.
     var liveFolds = Object.create(null)
     projected.monitorSections.forEach(function(m) {
       m.workspaces.forEach(function(w) {
@@ -427,6 +429,13 @@ Item {
       var tabsKey = window.tabsKey || ("tabs:" + window.key)
       if (root.folds[tabsKey]) liveFolds[tabsKey] = true
     })
+    var entries = (root.registry && root.registry.entries) ? root.registry.entries : []
+    for (var ei = 0; ei < entries.length; ei++) {
+      var entry = entries[ei]
+      if (!entry || typeof entry.key !== "string" || !entry.key) continue
+      var herdrKey = "herdr:" + entry.key
+      if (root.folds[herdrKey]) liveFolds[herdrKey] = true
+    }
     root.folds = liveFolds
     root.projection = projected
     root.railProjection = railProjected
@@ -850,6 +859,23 @@ Item {
     var next = Object.assign({}, root.folds)
     if (next[tabsKey]) delete next[tabsKey]
     else next[tabsKey] = true
+    root.folds = next
+    root.scheduleRefresh()
+    return true
+  }
+
+  // Fold nested Herdr agents under a window. Missing key => expanded;
+  // folds["herdr:"+windowKey] === true => folded. Counts stay on the parent.
+  function toggleHerdrAgents(key) {
+    if (root.interactionBusy) return false
+    var row = root.rowsByKey[key]
+    if (!row || row.kind !== "window" || row.herdrAssociated !== true) return false
+    if (row.herdrExpandable !== true) return false
+    var foldKey = row.herdrFoldKey || ("herdr:" + row.key)
+    if (!foldKey) return false
+    var next = Object.assign({}, root.folds)
+    if (next[foldKey]) delete next[foldKey]
+    else next[foldKey] = true
     root.folds = next
     root.scheduleRefresh()
     return true

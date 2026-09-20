@@ -600,3 +600,264 @@ console.log('herdr sidebar model association: PASS')
 }
 
 console.log('herdr sidebar model projection: PASS')
+
+// --- Phase C: compact appearance, status counters, folding (combined layout) ---
+
+{
+  // Shared status normalization / unique-ID counting / ordered counters.
+  assert.equal(Model.normalizeStatus('Working'), 'working')
+  assert.equal(Model.normalizeStatus('DONE'), 'done')
+  assert.equal(Model.normalizeStatus('future-state'), 'unknown')
+  assert.equal(Model.normalizeStatus(null), 'unknown')
+  assert.equal(Model.statusColorRole('working'), 'accent')
+  assert.equal(Model.statusColorRole('idle'), 'muted')
+  assert.equal(Model.statusColorRole('done'), 'done')
+  assert.equal(Model.statusColorRole('blocked'), 'blocked')
+  assert.equal(Model.statusColorRole('weird'), 'hollow')
+  assert.equal(Model.statusLabel('done'), 'Done')
+  assert.ok(Model.statusLabel('done').indexOf('success') < 0,
+    'done is Herdr state, not proven task success')
+
+  assert.equal(Model.displayAgentKind('codex'), 'Codex')
+  assert.equal(Model.displayAgentKind('claude'), 'Claude')
+  assert.equal(Model.displayAgentKind('cursor'), 'Cursor')
+  assert.equal(Model.displayAgentKind(''), '')
+  assert.equal(Model.displayAgentKind(null), '')
+  assert.equal(Model.displayAgentKind('opencode'), 'Opencode')
+
+  // Combined layout fixture: long/markup-like names, missing kinds, all statuses,
+  // multi-digit counts, narrow width, fold persistence (no new subscription).
+  const f = sidebarFixture()
+  const desktop = desktopModel.build(f.input)
+  const registry = Sidebar.reconcileHandles({ nextToken: 1, entries: [] }, f.toplevels)
+  const termEntry = registry.entries.find((_, i) => f.toplevels[i].id === 'terminal')
+  assert.ok(termEntry)
+  const windowKey = termEntry.key
+  const herdrFoldKey = 'herdr:' + windowKey
+
+  const manyAgents = []
+  // 12 working + 3 idle + 1 done + 10 blocked + 2 unknown = 28 unique IDs
+  for (let i = 0; i < 12; i++)
+    manyAgents.push({
+      id: 'local-matched:1:work-' + i,
+      serverId: 'local-matched',
+      connectionGeneration: 1,
+      paneId: 'work-' + i,
+      name: i === 0
+        ? '<b>Long markup-like agent name that must stay plain text</b>'
+        : 'Worker ' + i,
+      agent: i === 0 ? 'codex' : (i === 1 ? '' : 'claude'),
+      status: 'working',
+    })
+  for (let i = 0; i < 3; i++)
+    manyAgents.push({
+      id: 'local-matched:1:idle-' + i,
+      serverId: 'local-matched',
+      connectionGeneration: 1,
+      paneId: 'idle-' + i,
+      name: 'Idle ' + i,
+      agent: 'cursor',
+      status: 'idle',
+    })
+  manyAgents.push({
+    id: 'local-matched:1:done-0',
+    serverId: 'local-matched',
+    connectionGeneration: 1,
+    paneId: 'done-0',
+    name: 'Done agent',
+    agent: 'codex',
+    status: 'done',
+  })
+  for (let i = 0; i < 10; i++)
+    manyAgents.push({
+      id: 'local-matched:1:block-' + i,
+      serverId: 'local-matched',
+      connectionGeneration: 1,
+      paneId: 'block-' + i,
+      name: 'Blocked ' + i,
+      agent: 'claude',
+      status: 'blocked',
+    })
+  manyAgents.push({
+    id: 'local-matched:1:unk-0',
+    serverId: 'local-matched',
+    connectionGeneration: 1,
+    paneId: 'unk-0',
+    name: 'Unknown A',
+    agent: '',
+    status: 'future',
+  })
+  manyAgents.push({
+    id: 'local-matched:1:unk-1',
+    serverId: 'local-matched',
+    connectionGeneration: 1,
+    paneId: 'unk-1',
+    name: 'Unknown B',
+    agent: 'codex',
+    status: null,
+  })
+  // Duplicate ID must not double-count (status totals only; projection uses unique IDs).
+  const withDuplicate = manyAgents.concat([{
+    id: 'local-matched:1:work-0',
+    serverId: 'local-matched',
+    connectionGeneration: 1,
+    paneId: 'work-0-dup',
+    name: 'Dup',
+    agent: 'codex',
+    status: 'idle',
+  }])
+
+  const counts = plain(Model.countAgentStatuses(withDuplicate))
+  assert.equal(counts.working, 12)
+  assert.equal(counts.idle, 3)
+  assert.equal(counts.done, 1)
+  assert.equal(counts.blocked, 10)
+  assert.equal(counts.unknown, 2)
+  assert.equal(counts.agents, 28)
+  assert.equal(
+    counts.working + counts.idle + counts.done + counts.blocked + counts.unknown,
+    counts.agents,
+  )
+  const counters = plain(Model.statusCounters(counts))
+  assert.deepEqual(counters.map(c => c.status),
+    ['working', 'idle', 'done', 'blocked', 'unknown'])
+  assert.deepEqual(counters.map(c => c.count), [12, 3, 1, 10, 2])
+  // Zero omission:
+  assert.deepEqual(
+    plain(Model.statusCounters({
+      working: 2, idle: 0, done: 0, blocked: 1, unknown: 0, agents: 3,
+    })).map(c => c.status),
+    ['working', 'blocked'],
+  )
+
+  const Interaction = loadModel('DockSidebarInteractionModel')
+  // Narrow width: reserve kind + counters + chevron first; name gets the remainder.
+  const layout = plain(Interaction.herdrCompactLabelWidths({
+    availableWidth: 160,
+    kindWidth: 48,
+    countersWidth: 72,
+    controlsWidth: 28,
+    gap: 6,
+  }))
+  // Narrow width: reserved chrome exceeds the row; name elides to zero.
+  assert.equal(layout.reserved, 48 + 72 + 28 + 6 * 3)
+  assert.equal(layout.nameWidth, 0)
+  assert.equal(layout.kindWidth, 48)
+  const roomy = plain(Interaction.herdrCompactLabelWidths({
+    availableWidth: 320,
+    kindWidth: 48,
+    countersWidth: 72,
+    controlsWidth: 28,
+    gap: 6,
+  }))
+  assert.equal(roomy.nameWidth, 320 - roomy.reserved)
+  assert.ok(roomy.nameWidth > 0)
+  // Markup-like name stays literal plain text for display helpers.
+  const displayName = Interaction.sidebarWindowDisplayTitle({
+    kind: 'herdr-agent',
+    title: '<b>Long markup-like agent name that must stay plain text</b>',
+  })
+  assert.equal(displayName, '<b>Long markup-like agent name that must stay plain text</b>')
+  assert.equal(
+    Interaction.herdrAgentKindLabel({ agentKind: 'codex' }),
+    'Codex',
+  )
+  assert.equal(
+    Interaction.herdrAgentKindLabel({ agentKind: '' }),
+    '',
+  )
+  assert.ok(
+    Interaction.herdrStatusAccessibleText('done').toLowerCase().includes('done'),
+  )
+
+  const snapshot = {
+    providerEpoch: 'epoch-c',
+    revision: 1,
+    servers: [{ id: 'local-matched', health: 'live', label: 'Matched' }],
+    agents: manyAgents,
+    liveCounts: {
+      agents: 28, working: 12, idle: 3, done: 1, blocked: 10, unknown: 2, complete: true,
+    },
+    completeness: { state: 'complete' },
+  }
+  const associations = {
+    byWindowKey: { [windowKey]: 'local-matched' },
+    unmatchedServerIds: [],
+  }
+
+  // Expanded (missing fold key): agents visible; parent carries counts + fold key.
+  const expanded = plain(Sidebar.project({
+    desktop,
+    screens: f.screens,
+    monitors: f.monitors,
+    monitorOrder: [],
+    pinned: f.settings.pinned,
+    hiddenApplications: f.settings.hiddenApplications,
+    registry,
+    folds: ({}),
+    collapsed: false,
+    herdrSnapshot: snapshot,
+    herdrAssociations: associations,
+    herdrAssociationsVerified: true,
+  }))
+  const parent = expanded.rows.find(row => row.key === windowKey)
+  assert.ok(parent)
+  assert.equal(parent.herdrFoldKey, herdrFoldKey)
+  assert.equal(parent.herdrFolded, false)
+  assert.equal(parent.herdrExpandable, true)
+  assert.deepEqual(plain(parent.herdrStatusCounts), counts)
+  assert.deepEqual(plain(parent.herdrStatusCounters).map(c => c.count), [12, 3, 1, 10, 2])
+  const agentRows = expanded.rows.filter(row =>
+    row.kind === 'herdr-agent' && row.windowKey === windowKey)
+  assert.equal(agentRows.length, 28)
+  assert.equal(agentRows[0].title,
+    '<b>Long markup-like agent name that must stay plain text</b>')
+  assert.equal(agentRows[0].agentKind, 'codex')
+  assert.equal(agentRows[1].agentKind, '')
+
+  // Folded: children hidden; counts remain on parent. No new subscription field.
+  const folded = plain(Sidebar.project({
+    desktop,
+    screens: f.screens,
+    monitors: f.monitors,
+    monitorOrder: [],
+    pinned: f.settings.pinned,
+    hiddenApplications: f.settings.hiddenApplications,
+    registry,
+    folds: { [herdrFoldKey]: true },
+    collapsed: false,
+    herdrSnapshot: snapshot,
+    herdrAssociations: associations,
+    herdrAssociationsVerified: true,
+  }))
+  const foldedParent = folded.rows.find(row => row.key === windowKey)
+  assert.equal(foldedParent.herdrFolded, true)
+  assert.deepEqual(plain(foldedParent.herdrStatusCounts), counts)
+  assert.ok(!folded.rows.some(row =>
+    row.kind === 'herdr-agent' && row.windowKey === windowKey))
+  assert.ok(!folded.rows.some(row =>
+    row.kind === 'herdr-state' && row.windowKey === windowKey))
+
+  // Production layout / chevron / rail / accessible Unknown are covered by
+  // tests/tst_herdr_sidebar_appearance.qml and the controller fold harness.
+  assert.ok(typeof Interaction.herdrCompactLabelWidths === 'function')
+  // Production Row must right-anchor full-width counters (no clip) and use the
+  // shared name-width helper. Host qmltestrunner cannot load DockSidebarRow
+  // (Quickshell.Widgets plugin quickshell-widgetsplugin missing).
+  const rowQml = read('components/DockSidebarRow.qml')
+  assert.ok(rowQml.includes('herdrCompactLabelWidths'),
+    'production row uses herdrCompactLabelWidths')
+  assert.ok(rowQml.includes('anchors.right: herdrFold.visible ? herdrFold.left'),
+    'production counters right-anchor to the fold')
+  const countersBlock = rowQml.slice(rowQml.indexOf('id: herdrCounters'),
+    rowQml.indexOf('id: herdrCounters') + 700)
+  assert.ok(!countersBlock.includes('clip: true'),
+    'herdr counters must not clip nonzero buckets')
+  assert.ok(rowQml.includes('herdrStateStripFits'),
+    'state icons yield when counters need the space')
+  assert.ok(rowQml.includes('objectName: "sidebar-herdr-fold"'))
+  assert.ok(rowQml.includes('herdrStatusAccessibleText(row.status)'),
+    'agent accessible label always includes normalized status')
+}
+
+console.log('herdr sidebar model appearance: PASS')
