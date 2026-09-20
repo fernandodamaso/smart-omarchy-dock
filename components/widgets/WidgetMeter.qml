@@ -16,5 +16,5 @@ Column {
     WidgetText { id: meterValue; text: root.valueText; role: "caption"; allowWrap: false }
   }
 
-  WidgetProgressBar { width: parent.width; value: root.value; semantic: root.semantic }
+  WidgetProgressBar { width: parent.width; height: 3; value: root.value; semantic: root.semantic }
 }
