@@ -90,8 +90,8 @@ TestCase {
     compare(c.widgetPopupId,"","hiding an open popup anchor closes the session")
     anchor.visible=true
     verify(c.openWidgetPopup("fixture.one",anchor))
-    verify(c.openWidgetPopup("*",anchor)); compare(c.widgetPopupId,"*")
-    verify(!c.openWidgetPopup("not.enabled",anchor)); compare(c.widgetPopupId,"*")
+    verify(!c.openWidgetPopup("*",anchor)); compare(c.widgetPopupId,"fixture.one")
+    verify(!c.openWidgetPopup("not.enabled",anchor)); compare(c.widgetPopupId,"fixture.one")
     c.closeWidgetPopup(); compare(c.widgetPopupId,"")
     verify(c.openWidgetPopup("fixture.one",anchor))
     anchor.destroy(); wait(0); compare(c.widgetPopupId,"")
