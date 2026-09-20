@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls as Controls
 import qs.Commons
 import qs.Ui as Ui
+import "widgets"
 
 Item {
   id: root
@@ -29,7 +30,7 @@ Item {
 
   Ui.BorderSurface {
     anchors.fill: parent
-    radius: Math.min(3, Style.cornerRadius)
+    radius: Math.min(4, Style.cornerRadius)
     color: root.activeFocus || cardHover.hovered || cardContext.pressed
       ? Qt.tint(Color.background, Util.alpha(Color.foreground, 0.09))
       : Qt.darker(Color.background, 1.04)
@@ -67,24 +68,26 @@ Item {
   Item {
     id: header
     width: parent.width
-    height: Style.space(40)
+    height: Style.space(34)
 
     Item {
       id: dragHandle
-      anchors.left: parent.left
+      anchors.right: collapseButton.left
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.space(28)
+      width: Style.space(22)
       height: parent.height
       Accessible.role: Accessible.Button
       Accessible.name: "Drag " + root.title + " to reorder"
 
-      DockLucideIcon {
+      WidgetIcon {
         anchors.centerIn: parent
-        width: 14
-        height: 14
+        width: 13
+        height: 13
         iconName: "move"
-        iconSize: 14
+        sizeToken: "xs"
+        containerVariant: "plain"
         tint: Util.alpha(Color.foreground, 0.55)
+        accessibleName: "Drag affordance"
       }
 
       MouseArea {
@@ -117,21 +120,24 @@ Item {
       }
     }
 
-    DockLucideIcon {
+    WidgetIcon {
       id: widgetIcon
-      anchors.left: dragHandle.right
+      anchors.left: parent.left
+      anchors.leftMargin: Style.space(9)
       anchors.verticalCenter: parent.verticalCenter
       width: 18
       height: 18
       iconName: root.iconName
-      iconSize: 18
+      sizeToken: "md"
+      containerVariant: "plain"
       tint: Color.foreground
+      accessibleName: root.title
     }
 
     Text {
       anchors.left: widgetIcon.right
-      anchors.leftMargin: Style.space(8)
-      anchors.right: badge.visible ? badge.left : collapseButton.left
+      anchors.leftMargin: Style.space(7)
+      anchors.right: badge.visible ? badge.left : dragHandle.left
       anchors.rightMargin: Style.space(6)
       anchors.verticalCenter: parent.verticalCenter
       text: root.title
@@ -146,12 +152,12 @@ Item {
     Rectangle {
       id: badge
       visible: root.badgeCount > 0
-      anchors.right: collapseButton.left
-      anchors.rightMargin: Style.space(6)
+      anchors.right: dragHandle.left
+      anchors.rightMargin: Style.space(4)
       anchors.verticalCenter: parent.verticalCenter
-      width: Math.max(18, badgeText.implicitWidth + 8)
-      height: 18
-      radius: 9
+      width: Math.max(17, badgeText.implicitWidth + 8)
+      height: 17
+      radius: 8.5
       color: Color.accent
       Accessible.role: Accessible.StaticText
       Accessible.name: root.badgeCount + " notifications"
@@ -171,9 +177,10 @@ Item {
     Ui.Button {
       id: collapseButton
       anchors.right: parent.right
+      anchors.rightMargin: Style.space(3)
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.space(28)
-      height: Style.space(28)
+      width: Style.space(24)
+      height: Style.space(24)
       iconText: ""
       tooltipText: (root.collapsed ? "Expand " : "Collapse ") + root.title
       Accessible.role: Accessible.Button
@@ -181,12 +188,14 @@ Item {
       focusable: true
       onClicked: root.toggleRequested()
 
-      DockLucideIcon {
+      WidgetIcon {
         anchors.centerIn: parent
         width: 13
         height: 13
         iconName: "chevron-right"
-        iconSize: 13
+        sizeToken: "xs"
+        containerVariant: "plain"
+        accessibleName: collapseButton.tooltipText
         rotation: root.collapsed ? 0 : 90
         tint: Color.foreground
       }
@@ -197,9 +206,22 @@ Item {
     id: body
     anchors.top: header.bottom
     width: parent.width
-    implicitHeight: widgetView.hasView ? widgetView.implicitHeight + Style.space(12) : Style.space(34)
+    implicitHeight: widgetView.hasView ? widgetView.implicitHeight + Style.space(16) : Style.space(56)
     height: root.collapsed ? 0 : implicitHeight
     clip: true
+
+    Rectangle {
+      anchors.fill: parent
+      color: Qt.tint(Color.background, Util.alpha(Color.foreground, 0.025))
+    }
+
+    Rectangle {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: parent.top
+      height: 1
+      color: Util.alpha(Color.foreground, 0.10)
+    }
 
     DockSidebarWidgetView {
       id: widgetView
@@ -208,22 +230,26 @@ Item {
       presentation: "expanded"
       popupAnchor: header
       viewEnabled: !root.collapsed
-      x: Style.space(8)
-      y: Style.space(6)
-      width: Math.max(0, parent.width - Style.space(16))
+      x: Style.space(9)
+      y: Style.space(7)
+      width: Math.max(0, parent.width - Style.space(18))
       height: Math.min(240, implicitHeight)
     }
 
-    Text {
+    WidgetState {
+      id: frameworkState
       visible: !widgetView.hasView
-      anchors.centerIn: parent
-      text: !root.snapshot ? "Unavailable" : String(root.snapshot.status || "Unavailable")
-      textFormat: Text.PlainText
-      color: Util.alpha(Color.foreground, 0.68)
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      Accessible.role: Accessible.StaticText
-      Accessible.name: root.title + ": " + text
+      anchors.fill: parent
+      anchors.margins: Style.space(6)
+      compact: true
+      kind: !root.snapshot ? "unavailable"
+        : root.snapshot.status === "loading" ? "loading"
+        : root.snapshot.status === "error" ? "error"
+        : root.snapshot.status === "stale" ? "stale" : "unavailable"
+      title: root.title
+      message: kind === "loading" ? "Loading"
+        : kind === "error" ? "Widget content failed"
+        : kind === "stale" ? "Widget data may be stale" : "Widget content is unavailable"
     }
   }
 

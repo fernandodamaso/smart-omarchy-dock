@@ -207,3 +207,58 @@ SB-06 must also observe actual pointer/keyboard focus, both real monitor edges a
 bottoms, hotplug, fractional scaling/real large-font settings, full-shell topbar
 coexistence and integrated SB-03/SB-04 interactions on one final exact candidate.
 No model/rectangle test, synthetic state or pure-Qt result substitutes for that.
+
+
+## Reusable Widget UI kit and gallery (FDM-975)
+
+FDM-975 adds a presentation-only UI kit under `components/widgets/`. It does
+not add a registry, provider manager, provider process, settings writer or service
+integration. Widget bodies continue to receive the existing FDM-967/FDM-973
+`widgetContext`; the kit only standardizes how those bodies render and interact.
+
+The approved visual contract is preserved verbatim in the repository at
+[`docs/widget-gallery/reference/approved-widget-mockup.html`](widget-gallery/reference/approved-widget-mockup.html).
+That HTML remains the design reference. The executable coding-agent boilerplate is
+[`tests/widget-gallery/WidgetGallery.qml`](../tests/widget-gallery/WidgetGallery.qml)
+and uses synthetic data only.
+
+The canonical body primitives are:
+
+- display: `WidgetText`, `WidgetBadge`, `WidgetStatus`, `WidgetDivider`,
+  `WidgetSection`, `WidgetList`, `WidgetListItem`, `WidgetChecklist`,
+  `WidgetKeyValue`, `WidgetStat`, `WidgetStatGrid`, `WidgetProgressBar`,
+  `WidgetMeter`, `WidgetActivity`, `WidgetSparkline`, `WidgetIconText`;
+- icons: one `WidgetIcon` for Lucide names or arbitrary SVG/raster sources,
+  theme tint versus brand-preserved rendering, shared size tokens,
+  `plain | soft | outlined | tile` containers and bounded fallback;
+- forms: `WidgetFormField`, `WidgetTextInput`, `WidgetSearchInput`,
+  `WidgetTextArea`, `WidgetNumberInput`, `WidgetSelect`, `WidgetCheckbox`,
+  `WidgetToggle`, `WidgetRadioGroup`, `WidgetSegmentedControl`;
+- actions: `WidgetButton`, `WidgetIconButton`, `WidgetButtonGroup`;
+- framework states: `WidgetState` with `loading | empty | unavailable | error | stale`.
+
+Use semantic values such as `success`, `warning`, `danger`, `urgent` and
+`overdue` rather than service-provided colors. Widget bodies can pass
+`reducedMotion: true` to `WidgetState` and attention rows; nonessential loading
+or nudge animation then stops while the semantic state remains visible.
+
+`DockWidgetCard.qml` remains the single card shell from FDM-973. Its header now
+uses the same `WidgetIcon` primitive as bodies/actions/states, and its no-view
+surface uses `WidgetState`; provider acquisition, collapse/reorder persistence,
+Add/Manage ownership and shared-scroll ownership are unchanged.
+
+For a new Widget body, copy a composition from the gallery instead of creating
+parallel typography, icon, form, action or state controls. Keep the root as an
+`Item` with non-required `property var widgetContext: ({})`, consume snapshot
+data as plain text, and leave provider/settings ownership in the existing host.
+
+Focused source checks:
+
+```sh
+node tests/test_widgetkit_structure.mjs
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+python3 -m unittest tests.test_sidebar_qml_syntax
+```
+
+Real compositor/pointer/theme/font qualification remains FDM-974 after this
+source slice is accepted.
