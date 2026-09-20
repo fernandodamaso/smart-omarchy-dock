@@ -76,6 +76,7 @@ PanelWindow {
     picker.visible = false
     sidebarViewport.cancelInputs("surface-close")
     root.controller.cancelResize("surface-close")
+    root.controller.cancelWidgetReorder()
     if (root.widgetArea) {
       root.widgetArea.closeManager()
       root.widgetArea.closePopup()
