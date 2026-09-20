@@ -277,7 +277,8 @@ Item {
   function saveSettings(patch, dryRun) {
     var blocked = mutationBlocked()
     if (blocked) return blocked
-    return commitSettings(ConfigModel.applyPatch(settings, patch, dockControl.metadata), dryRun)
+    return commitSettings(ConfigModel.applyPatch(settings, patch,
+      dockControl.validationMetadata()), dryRun)
   }
 
   // Only validated config/app/icon model results reach this common live commit.
