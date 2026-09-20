@@ -233,7 +233,7 @@ Item {
     root.widgetRevision = (root.widgetRevision + 1) % 1000000000
     if (!root.widgetPopupId) return
     var view = root.widgetManager.view(root.widgetPopupId)
-    if (!ids.length || root.widgetPopupId !== "*" && (!view || !view.registered || !view.available))
+    if (!ids.length || !view || !view.registered || !view.available)
       root.closeWidgetPopup()
   }
 
@@ -248,9 +248,8 @@ Item {
     if (!root.widgetWorkActive || !anchor || !anchor.visible || !root.widgetIds.length) return false
     if (root.interactionBusy && !root.widgetPopupId) return false
     var view = root.widgetView(id)
-    // Unknown imported IDs may display their unavailable status in overflow, but
-    // they cannot execute a factory or open a provider popup.
-    if (id !== "*" && (!view || !view.registered || !view.available)) return false
+    // Unknown imported IDs never execute a factory or open a provider popup.
+    if (!view || !view.registered || !view.available) return false
     root.widgetPopupAnchor = anchor
     root.widgetPopupId = id
     root.interactionBusy = true
