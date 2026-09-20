@@ -11,12 +11,12 @@ Item {
   property string sizeToken: "md"
   property string containerVariant: "plain"
   property color tint: Color.foreground
-  property string accessibleName: ""
+  property string accessibleName: ""\n  property string fallbackText: "?"
 
   readonly property int glyphSize: root.sizeToken === "xs" ? 12
     : root.sizeToken === "sm" ? 14
     : root.sizeToken === "lg" ? 22
-    : root.sizeToken === "xl" ? 28 : 18
+    : root.sizeToken === "xl" ? 28 : 16
   readonly property int containerSize: root.containerVariant === "plain"
     ? root.glyphSize : root.glyphSize + (root.sizeToken === "lg" || root.sizeToken === "xl" ? 12 : 10)
   readonly property bool usesLucide: root.iconName !== "" && String(root.source).length === 0
@@ -64,7 +64,7 @@ Item {
   Text {
     anchors.centerIn: parent
     visible: root.failed
-    text: "?"
+    text: root.fallbackText
     textFormat: Text.PlainText
     color: Util.alpha(Color.foreground, 0.72)
     font.family: Style.font.family
