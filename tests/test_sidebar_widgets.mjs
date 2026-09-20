@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { loadModel, plain, hostHarness, read } from './host_harness.mjs';
+import { qmlMethods } from './sidebar_interaction_fixture.mjs';
 assert.ok(fs.existsSync(new URL('../components/DockSidebarWidgetModel.js', import.meta.url)),
   'SB-05 must provide the production widget model');
 const Model = loadModel('DockSidebarWidgetModel');
@@ -171,6 +172,61 @@ assert.deepEqual(plain(Model.registeredRows(registry).map(row => ({
 ]);
 assert.equal(typeof Model.footerLayout, 'undefined',
   'the retired bounded footer layout must not survive the shared-scroll migration');
+
+// Shared-scroll structure: hierarchy ListView remains the only normal scroll owner.
+const viewportSource = read('components/DockSidebarViewport.qml');
+const sidebarSource = read('components/DockSidebar.qml');
+const areaSource = read('components/DockSidebarWidgetArea.qml');
+const cardSource = read('components/DockWidgetCard.qml');
+assert.match(viewportSource, /property Component contentTail/);
+assert.match(viewportSource, /footer: Item\s*\{/);
+assert.match(sidebarSource, /contentTail: Component/);
+assert.match(sidebarSource, /anchors\.bottom: pinnedStrip\.top/);
+assert.doesNotMatch(sidebarSource, /widgetOverflowButton|id:\s*widgetOverflow/);
+assert.doesNotMatch(areaSource, /footerLayout|openOverflow|overflowNeeded/);
+const normalArea = areaSource.slice(0, areaSource.indexOf('  PopupWindow {'));
+assert.doesNotMatch(normalArea, /\bFlickable\b|\bListView\b/,
+  'normal Widget section must use the hierarchy ListView scroll owner');
+assert.match(areaSource, /sectionVisible: !panel\.panelCollapsed && controller\.widgetIds\.length > 0/);
+assert.match(areaSource, /implicitHeight: root\.sectionVisible \?/);
+assert.match(cardSource, /Remove from Widgets/);
+assert.match(cardSource, /presentation: "expanded"/);
+assert.doesNotMatch(cardSource, /presentation: "compact"/);
+assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"/);
+
+// Production controller mutations write only through the existing host intent.
+{
+  const intents = [];
+  const c = qmlMethods('DockSidebarController.qml', {
+    SidebarWidgetModel: Model,
+    host: { saveSettingIntent(key,value,expected) {
+      intents.push({key,value:plain(value),expected:plain(expected)});
+      return {accepted:true,pending:false,reply:{ok:true,data:{applied:true},warnings:[]}};
+    }},
+    settings:{sidebarWidgets:['fixture.one','fixture.two'],sidebarWidgetCollapsed:{}},
+    widgetRegistry:registry, widgetIds:['fixture.one','fixture.two'],
+    widgetCollapsed:{}, widgetPopupId:'', widgetPopupAnchor:null,
+    widgetDragId:'', interactionBusy:false, resizeActive:false, rowDragActive:false,
+    mutationFeedback:''
+  });
+  assert.equal(c.reorderWidget('fixture.one',2).noop,true,
+    'dropping immediately after the source is a no-op');
+  const moved=c.reorderWidget('fixture.one',3);
+  assert.equal(moved.accepted,true);
+  assert.deepEqual(intents.at(-1),{
+    key:'sidebarWidgets',value:['fixture.two','fixture.one'],
+    expected:['fixture.one','fixture.two']
+  });
+  c.setWidgetCollapsed('fixture.one',true);
+  assert.equal(intents.at(-1).key,'sidebarWidgetCollapsed');
+  assert.deepEqual(intents.at(-1).value,{'fixture.one':true});
+  c.settings={sidebarWidgets:['fixture.one','fixture.two'],sidebarWidgetCollapsed:{'fixture.one':true}};
+  c.widgetCollapsed={'fixture.one':true};
+  c.setWidgetEnabled('fixture.one',false);
+  assert.deepEqual(intents.at(-1).value,['fixture.two']);
+  assert.equal(c.widgetCollapsedFor('fixture.one'),true,
+    'removal does not clear the saved collapse preference');
+}
 
 // A deferred view error from an old instance/revision cannot poison recovery.
 {
