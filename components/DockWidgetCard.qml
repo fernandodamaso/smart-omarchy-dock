@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls as Controls
 import qs.Commons
 import qs.Ui as Ui
+import "widgets"
 
 Item {
   id: root
@@ -78,13 +79,15 @@ Item {
       Accessible.role: Accessible.Button
       Accessible.name: "Drag " + root.title + " to reorder"
 
-      DockLucideIcon {
+      WidgetIcon {
         anchors.centerIn: parent
         width: 14
         height: 14
         iconName: "move"
-        iconSize: 14
+        sizeToken: "sm"
+        containerVariant: "plain"
         tint: Util.alpha(Color.foreground, 0.55)
+        accessibleName: "Drag affordance"
       }
 
       MouseArea {
@@ -117,15 +120,17 @@ Item {
       }
     }
 
-    DockLucideIcon {
+    WidgetIcon {
       id: widgetIcon
       anchors.left: dragHandle.right
       anchors.verticalCenter: parent.verticalCenter
       width: 18
       height: 18
       iconName: root.iconName
-      iconSize: 18
+      sizeToken: "md"
+      containerVariant: "plain"
       tint: Color.foreground
+      accessibleName: root.title
     }
 
     Text {
@@ -181,12 +186,14 @@ Item {
       focusable: true
       onClicked: root.toggleRequested()
 
-      DockLucideIcon {
+      WidgetIcon {
         anchors.centerIn: parent
-        width: 13
-        height: 13
+        width: 14
+        height: 14
         iconName: "chevron-right"
-        iconSize: 13
+        sizeToken: "sm"
+        containerVariant: "plain"
+        accessibleName: collapseButton.tooltipText
         rotation: root.collapsed ? 0 : 90
         tint: Color.foreground
       }
@@ -197,7 +204,7 @@ Item {
     id: body
     anchors.top: header.bottom
     width: parent.width
-    implicitHeight: widgetView.hasView ? widgetView.implicitHeight + Style.space(12) : Style.space(34)
+    implicitHeight: widgetView.hasView ? widgetView.implicitHeight + Style.space(12) : Style.space(56)
     height: root.collapsed ? 0 : implicitHeight
     clip: true
 
@@ -214,16 +221,20 @@ Item {
       height: Math.min(240, implicitHeight)
     }
 
-    Text {
+    WidgetState {
+      id: frameworkState
       visible: !widgetView.hasView
-      anchors.centerIn: parent
-      text: !root.snapshot ? "Unavailable" : String(root.snapshot.status || "Unavailable")
-      textFormat: Text.PlainText
-      color: Util.alpha(Color.foreground, 0.68)
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      Accessible.role: Accessible.StaticText
-      Accessible.name: root.title + ": " + text
+      anchors.fill: parent
+      anchors.margins: Style.space(6)
+      compact: true
+      kind: !root.snapshot ? "unavailable"
+        : root.snapshot.status === "loading" ? "loading"
+        : root.snapshot.status === "error" ? "error"
+        : root.snapshot.status === "stale" ? "stale" : "unavailable"
+      title: root.title
+      message: kind === "loading" ? "Loading"
+        : kind === "error" ? "Widget content failed"
+        : kind === "stale" ? "Widget data may be stale" : "Widget content is unavailable"
     }
   }
 
