@@ -37,7 +37,8 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows 
 | `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
 | `sidebarCollapsed` | `false` | Default icon rail for monitors without a `sidebarCollapsedByMonitor` override. Expanded width and session app folds are retained. |
 | `sidebarCollapsedByMonitor` | `{}` | Object map of exact connector → boolean. Missing connectors follow `sidebarCollapsed`. Disconnected names retained; control characters and non-booleans rejected. |
-| `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. Production registry initially empty; unknown imports retained requested and unavailable effective. Explicit invalid writes fail; readiness/auth is not validation. Preference reset clears. |
+| `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. The array is both enabled state and card order. Runtime schema advertises source-registered IDs; unknown imports remain requested/unavailable. Add/remove/reorder use the host writer. |
+| `sidebarWidgetCollapsed` | `{}` | Valid internal widget ID → boolean card-body state. Missing means expanded. Removing a widget keeps its collapse preference so re-adding restores it. Preference reset clears the map. |
 | `sidebarBrowserTabsEnabled` | `true` | When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of `browserActivityMutedServices`. See the [online browser-tabs guide](https://github.com/fernandodamaso/smart-omarchy-dock/blob/370585ccfaed98f1d04954d8598a868aef80a087/docs/browser-tabs.md); it is not part of the offline CLI documentation bundle. |
 | `position` | `"bottom"` | String: top, bottom, left, right. Vertical edges render workspaceLayout as flat. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
@@ -157,12 +158,16 @@ exact geometry, cancellation, writer-count and deferred runtime contracts.
 
 This is an **unreleased Draft foundation**, not integrated sidebar acceptance.
 SB-03 owns resize gestures, SB-04 owns full navigation/menus/keyboard/drag,
-SB-05 adds internal bounded widget slots (not live provider integrations), and
-SB-06 owns live qualification. See the source-only `docs/SIDEBAR.md` contract.
+SB-05 owns the internal provider lifecycle and FDM-973 moves Widget cards into the
+hierarchy's shared scroll. Local compositor qualification follows in FDM-974 after
+the reusable UI-kit slice. See the source-only `docs/SIDEBAR.md` contract.
 
-`sidebarWidgets` uses the internal source registry, currently empty. The CLI schema's
-`registeredIds` is authoritative for new writes. Unknown imports are never executed;
-requested readback retains them and `data.presentation.widgets` reports unavailable
-state. `config get --effective` lists only registered IDs. Empty configuration
-reserves no footer gap and starts no provider. These controls do not change stock
-topbar services. Source adapter/view/lifecycle API: `docs/SIDEBAR_WIDGETS.md`.
+`sidebarWidgets` uses the internal source registry, currently empty in production.
+Runtime schema `registeredIds` is authoritative for new writes. Unknown imports are
+never executed; requested readback retains them and `data.presentation.widgets`
+reports unavailable state. `config get --effective` lists only registered IDs.
+The normal Widget section has no independent footer cap/scrollbar and consumes zero
+height when no Widgets are enabled; Add/Manage remains available in expanded mode.
+`sidebarWidgetCollapsed` stores body state without enabling providers. These
+controls do not change stock topbar services. Source contract:
+`docs/SIDEBAR_WIDGETS.md`.
