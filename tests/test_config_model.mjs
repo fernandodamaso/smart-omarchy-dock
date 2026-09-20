@@ -63,12 +63,17 @@ for (const patch of [{ hoverGlowOpacity: .72 }, { margin: 1000000 },
   { backgroundColor: '@menu.background' }, { backgroundColor: '' },
   { pinned: ['Code.desktop', 'Unavailable App'] },
   { controlCommand: 'literal $(not-executed); command' },
-  { browserActivityMutedServices: ['gmail', 'whatsapp'] }])
+  { browserActivityMutedServices: ['gmail', 'whatsapp'] },
+  { sidebarWidgetCollapsed: {'future.clock': true, 'fixture.one': false} }])
   assert.equal(model.validatePatch(patch, schema).ok, true, JSON.stringify(patch));
 for (const patch of [{ browserActivityMutedServices: ['Gmail'] },
   { browserActivityMutedServices: [1] },
   { browserActivityMutedServices: ['gmail', 'gmail'] },
-  { browserActivityMutedServices: ['bad id'] }])
+  { browserActivityMutedServices: ['bad id'] },
+  { sidebarWidgetCollapsed: [] },
+  { sidebarWidgetCollapsed: {'../bad': true} },
+  { sidebarWidgetCollapsed: {constructor: true} },
+  { sidebarWidgetCollapsed: {'fixture.one': 'yes'} }])
   assert.equal(model.validatePatch(patch, schema).ok, false, JSON.stringify(patch));
 
 const preferences = model.preferenceResetPatch(defaults, schema);
@@ -148,6 +153,22 @@ assert.equal(result.data.persisted, true);
 assert.equal(result.data.writeState, 'saved');
 assert.equal(writes, 1);
 assert.equal(JSON.parse(disk).iconSize, 48);
+
+// Runtime source registration, not transient readiness, authorizes sidebarWidgets writes.
+host.sidebarWidgetRegistry = {
+  'fixture.one': { id:'fixture.one', label:'Fixture', available:true,
+    acquire() { return { setActive() {}, release() {} } } }
+};
+result = request('config.schema', { key:'sidebarWidgets' });
+assert.deepEqual(result.data.settings.sidebarWidgets.registeredIds, ['fixture.one']);
+assert.equal(apply({ sidebarWidgets:['fixture.one'] }).ok, true);
+assert.deepEqual(plain(host.settings.sidebarWidgets), ['fixture.one']);
+assert.equal(apply({ sidebarWidgetCollapsed:{'fixture.one':true} }).ok, true);
+assert.equal(host.settings.sidebarWidgetCollapsed['fixture.one'], true);
+assert.equal(apply({ sidebarWidgets:[] }).ok, true,
+  'removal keeps collapse preference but clears enabled order');
+assert.equal(host.settings.sidebarWidgetCollapsed['fixture.one'], true);
+host.sidebarWidgetRegistry = {};
 
 // Preservation and dry-run behavior against the actual writer boundary.
 disk = JSON.stringify({ ...current, hoverGlowOpacity: .4 });
