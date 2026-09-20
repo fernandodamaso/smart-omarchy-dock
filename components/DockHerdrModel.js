@@ -202,7 +202,10 @@ function resolveAssociations(request, snapshot) {
 }
 
 // Compact appearance: shared status normalization, unique-ID counts, color roles.
-var STATUS_ORDER = ["working", "idle", "done", "blocked", "unknown"]
+// Display order for nonzero status counters and agent lists:
+// blocked → working → done → idle → unknown.
+var STATUS_ORDER = ["blocked", "working", "done", "idle", "unknown"]
+var AGENT_STATUS_SORT = STATUS_ORDER
 
 function normalizeStatus(value) {
   if (typeof value !== "string") return "unknown"
@@ -255,14 +258,15 @@ function statusCounters(counts) {
 }
 
 // One status→paint role map. QML resolves roles to Omarchy Color tokens:
-// accent (working), muted (idle), done/blocked via flatColor theme fallbacks,
-// hollow/muted outline (unknown). "done" is Herdr state, not proven success.
+// accent (working), idle (brighter than muted for counter contrast), done/blocked
+// via flatColor theme fallbacks, hollow/muted outline (unknown). "done" is Herdr
+// state, not proven success.
 function statusColorRole(status) {
   switch (normalizeStatus(status)) {
   case "working":
     return "accent"
   case "idle":
-    return "muted"
+    return "idle"
   case "done":
     return "done"
   case "blocked":
@@ -295,7 +299,118 @@ function displayAgentKind(kind) {
   if (lower === "codex") return "Codex"
   if (lower === "claude") return "Claude"
   if (lower === "cursor") return "Cursor"
+  if (lower === "opencode") return "OpenCode"
   return raw.charAt(0).toUpperCase() + raw.slice(1)
+}
+
+// Primary agent line: Herdr pane/panel title, then name / label / tab title.
+function displayAgentTitle(agent) {
+  if (!agent || typeof agent !== "object") return "Coding agent"
+  var candidates = [agent.title, agent.name, agent.label, agent.tabTitle]
+  for (var i = 0; i < candidates.length; i++) {
+    if (typeof candidates[i] !== "string") continue
+    var text = candidates[i].replace(/^\s+|\s+$/g, "")
+    if (text) return text
+  }
+  return "Coding agent"
+}
+
+// Secondary line: "workspace - Kind" with missing parts omitted cleanly.
+function displayAgentSecondary(agent) {
+  if (!agent || typeof agent !== "object") return ""
+  var workspace = typeof agent.workspaceLabel === "string"
+    ? agent.workspaceLabel.replace(/^\s+|\s+$/g, "") : ""
+  var kind = displayAgentKind(agent.agent || agent.agentKind || "")
+  if (workspace && kind) return workspace + " - " + kind
+  if (workspace) return workspace
+  if (kind) return kind
+  return ""
+}
+
+// Display sort: blocked → working → done → idle → unknown (stable within rank).
+function agentStatusSortRank(status) {
+  var normalized = normalizeStatus(status)
+  for (var i = 0; i < AGENT_STATUS_SORT.length; i++) {
+    if (AGENT_STATUS_SORT[i] === normalized) return i
+  }
+  return AGENT_STATUS_SORT.length
+}
+
+function compareAgentsForDisplay(a, b) {
+  var rankA = agentStatusSortRank(a && a.status)
+  var rankB = agentStatusSortRank(b && b.status)
+  if (rankA !== rankB) return rankA - rankB
+  return 0
+}
+
+function sortAgentsForDisplay(agents) {
+  var list = Array.isArray(agents) ? agents.slice() : []
+  list.sort(compareAgentsForDisplay)
+  return list
+}
+
+// Stable workspace → tab buckets from a status-sorted agent list.
+// Missing ids fall back to label:… or "unknown"; labels fall back to Workspace/Tab.
+function herdrGroupId(rawId, rawLabel, fallback) {
+  if (typeof rawId === "string") {
+    var id = rawId.replace(/^\s+|\s+$/g, "")
+    if (id) return id
+  }
+  if (typeof rawLabel === "string") {
+    var label = rawLabel.replace(/^\s+|\s+$/g, "")
+    if (label) return "label:" + label
+  }
+  return fallback
+}
+
+function herdrGroupLabel(rawLabel, fallback) {
+  if (typeof rawLabel === "string") {
+    var label = rawLabel.replace(/^\s+|\s+$/g, "")
+    if (label) return label
+  }
+  return fallback
+}
+
+function groupAgentsForTree(agents) {
+  var ordered = sortAgentsForDisplay(agents)
+  var workspaces = []
+  var wsIndex = Object.create(null)
+  var tabIndex = Object.create(null)
+  var seenAgents = Object.create(null)
+  for (var i = 0; i < ordered.length; i++) {
+    var agent = ordered[i]
+    if (!agent || typeof agent !== "object") continue
+    var agentId = typeof agent.id === "string" ? agent.id : String(agent.id || "")
+    if (!agentId || seenAgents[agentId]) continue
+    seenAgents[agentId] = true
+    var workspaceId = herdrGroupId(agent.workspaceId, agent.workspaceLabel, "unknown")
+    var tabId = herdrGroupId(agent.tabId, agent.tabTitle, "unknown")
+    var ws = wsIndex[workspaceId]
+    if (!ws) {
+      ws = {
+        id: workspaceId,
+        label: herdrGroupLabel(agent.workspaceLabel, "Workspace"),
+        tabs: []
+      }
+      wsIndex[workspaceId] = ws
+      workspaces.push(ws)
+    }
+    var tabKey = workspaceId + "\0" + tabId
+    var tab = tabIndex[tabKey]
+    if (!tab) {
+      tab = {
+        id: tabId,
+        title: herdrGroupLabel(agent.tabTitle, ""),
+        agents: []
+      }
+      tabIndex[tabKey] = tab
+      ws.tabs.push(tab)
+    } else if (!tab.title) {
+      tab.title = herdrGroupLabel(agent.tabTitle, "")
+    }
+    tab.agents.push(agent)
+  }
+  return workspaces
 }
 
 function herdrFoldKeyForWindow(windowKey) {

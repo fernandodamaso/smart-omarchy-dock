@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import "DockSidebarModel.js" as SidebarModel
+import "DockHerdrModel.js" as HerdrModel
 
 // Snapshot-only presentation. It never acquires a provider, starts a process,
 // subscribes to Herdr or emits desktop notifications. Matched sessions (live or
@@ -76,13 +77,14 @@ Item {
         detail: String(server.health || "unavailable"),
         status: String(server.health || "unavailable")
       })
-      var items = byServer[id] || []
+      var items = HerdrModel.sortAgentsForDisplay(byServer[id] || [])
       items.forEach(function(agent) {
+        var secondary = HerdrModel.displayAgentSecondary(agent)
         output.push({
           kind: "agent",
           key: String(agent.id || id + ":agent"),
-          title: String(agent.name || agent.label || agent.agent || "Coding agent"),
-          detail: String(agent.agent || "agent") + " · " + String(agent.status || "unknown"),
+          title: HerdrModel.displayAgentTitle(agent),
+          detail: secondary || (String(agent.agent || "agent") + " · " + String(agent.status || "unknown")),
           status: String(agent.status || "unknown")
         })
       })

@@ -288,7 +288,12 @@ console.log('herdr sidebar model association: PASS')
         connectionGeneration: 1,
         paneId: 'pane-a',
         terminalId: 'term-a',
-        name: 'Codex Review',
+        name: 'named-a',
+        workspaceId: 'w1',
+        tabId: 'w1:t-shared',
+        tabTitle: 'Shared multi tab',
+        title: 'Codex Review',
+        workspaceLabel: 'smart-omarchy-dock',
         agent: 'codex',
         status: 'working',
       },
@@ -298,8 +303,25 @@ console.log('herdr sidebar model association: PASS')
         connectionGeneration: 1,
         paneId: 'pane-b',
         name: 'Claude Fix',
+        workspaceId: 'w1',
+        tabId: 'w1:t-shared',
+        tabTitle: 'Shared multi tab',
+        workspaceLabel: 'smart-omarchy-dock',
         agent: 'claude',
         status: 'idle',
+      },
+      {
+        id: 'local-matched:1:pane-c',
+        serverId: 'local-matched',
+        connectionGeneration: 1,
+        paneId: 'pane-c',
+        workspaceId: 'w1',
+        tabId: 'w1:t-blocked',
+        tabTitle: 'Shared blocked tab',
+        title: 'Needs input',
+        workspaceLabel: 'smart-omarchy-dock',
+        agent: 'opencode',
+        status: 'blocked',
       },
       {
         id: 'local-free:1:pane-z',
@@ -311,7 +333,7 @@ console.log('herdr sidebar model association: PASS')
         status: 'blocked',
       },
     ],
-    liveCounts: { agents: 3, working: 1, idle: 1, blocked: 1, done: 0, unknown: 0, complete: true },
+    liveCounts: { agents: 4, working: 1, idle: 1, blocked: 2, done: 0, unknown: 0, complete: true },
     completeness: { state: 'complete' },
   }
   const associations = {
@@ -336,27 +358,82 @@ console.log('herdr sidebar model association: PASS')
   assert.ok(parent)
   assert.equal(parent.herdrAssociated, true)
   assert.equal(parent.herdrServerId, 'local-matched')
-  const agentRows = projected.rows.filter(row => row.kind === 'herdr-agent')
+  const nested = projected.rows.filter(row =>
+    row.windowKey === windowKey
+    && (row.kind === 'herdr-tab' || row.kind === 'herdr-agent'))
+  // Sorted agents: blocked (c), working (a), idle (b)
+  // → single-panel blocked tab, multi-panel tab header, two agents.
+  assert.deepEqual(nested.map(row => row.kind), [
+    'herdr-tab', 'herdr-tab', 'herdr-agent', 'herdr-agent',
+  ])
+  assert.ok(!projected.rows.some(row => row.kind === 'herdr-workspace'))
+
+  const singleTab = nested[0]
+  assert.equal(singleTab.title, 'Shared blocked tab')
+  assert.equal(singleTab.actionable, true)
+  assert.equal(singleTab.status, 'blocked')
+  assert.equal(singleTab.paneId, 'pane-c')
+  assert.equal(singleTab.subtitle, 'smart-omarchy-dock - OpenCode')
+  assert.equal(singleTab.parentKey, windowKey)
+  assert.ok(singleTab.treeDepth > parent.treeDepth)
+  assert.ok(!nested.some(row =>
+    row.kind === 'herdr-agent' && row.agentId === 'local-matched:1:pane-c'),
+    'single-panel tabs must not emit a nested agent row')
+
+  const multiTab = nested[1]
+  assert.equal(multiTab.title, 'Shared multi tab')
+  assert.equal(multiTab.actionable, false)
+  assert.equal(multiTab.parentKey, windowKey)
+
+  const agentRows = nested.filter(row => row.kind === 'herdr-agent')
   assert.equal(agentRows.length, 2)
+  assert.deepEqual(agentRows.map(row => row.status), ['working', 'idle'])
   assert.equal(agentRows[0].title, 'Codex Review')
+  assert.equal(agentRows[0].subtitle, 'smart-omarchy-dock - Codex')
   assert.equal(agentRows[1].title, 'Claude Fix')
+  assert.equal(agentRows[1].subtitle, 'smart-omarchy-dock - Claude')
   assert.equal(agentRows[0].key, JSON.stringify(['herdr-agent', windowKey, 'local-matched:1:pane-a']))
   assert.equal(agentRows[0].windowKey, windowKey)
   assert.equal(agentRows[0].providerEpoch, 'epoch-b')
   assert.equal(agentRows[0].serverId, 'local-matched')
   assert.equal(agentRows[0].paneId, 'pane-a')
   assert.equal(agentRows[0].terminalId, 'term-a')
-  // Immediately after the associated window.
-  const parentIndex = projected.rows.findIndex(row => row.key === windowKey)
-  assert.equal(projected.rows[parentIndex + 1].kind, 'herdr-agent')
-  assert.equal(projected.rows[parentIndex + 2].kind, 'herdr-agent')
-  assert.ok(!projected.rows.some(row => row.title === 'Unmatched Agent'),
-    'unmatched agents stay out of the window tree')
-  // Tree annotations / compact child metrics.
-  assert.equal(agentRows[0].parentKey, windowKey)
-  assert.ok(agentRows[0].treeDepth > parent.treeDepth)
+  assert.equal(agentRows[0].parentKey, multiTab.key)
+  assert.ok(agentRows[0].treeDepth > multiTab.treeDepth)
   assert.equal(typeof agentRows[0].isLastSibling, 'boolean')
   assert.ok(Array.isArray(agentRows[0].ancestorContinues))
+
+  assert.ok(!projected.rows.some(row => row.title === 'Unmatched Agent'),
+    'unmatched agents stay out of the window tree')
+
+  // Pure helpers: title fallback + sort ranks + tree grouping.
+  assert.equal(Model.displayAgentTitle({ name: 'n', title: 'pane', tabTitle: 'tab' }), 'pane')
+  assert.equal(Model.displayAgentTitle({ name: 'n', tabTitle: 'tab' }), 'n')
+  assert.equal(Model.displayAgentTitle({ tabTitle: 'tab' }), 'tab')
+  assert.equal(Model.displayAgentSecondary({ workspaceLabel: 'ws', agent: 'cursor' }),
+    'ws - Cursor')
+  assert.equal(Model.displayAgentSecondary({ agent: 'codex' }), 'Codex')
+  assert.deepEqual(
+    Model.sortAgentsForDisplay([
+      { id: '1', status: 'idle' },
+      { id: '2', status: 'blocked' },
+      { id: '3', status: 'done' },
+      { id: '4', status: 'working' },
+      { id: '5', status: 'unknown' },
+    ]).map(a => a.status),
+    ['blocked', 'working', 'done', 'idle', 'unknown'],
+  )
+  const grouped = plain(Model.groupAgentsForTree([
+    { id: 'a', workspaceId: 'w1', workspaceLabel: 'Dock', tabId: 't1', tabTitle: 'One', status: 'idle' },
+    { id: 'b', workspaceId: 'w1', workspaceLabel: 'Dock', tabId: 't1', tabTitle: 'One', status: 'working' },
+    { id: 'c', workspaceId: 'w2', workspaceLabel: 'Other', tabId: 't9', tabTitle: 'Solo', status: 'blocked' },
+  ]))
+  assert.equal(grouped.length, 2)
+  assert.equal(grouped[0].id, 'w2')
+  assert.equal(grouped[0].tabs.length, 1)
+  assert.equal(grouped[0].tabs[0].agents.length, 1)
+  assert.equal(grouped[1].id, 'w1')
+  assert.equal(grouped[1].tabs[0].agents.length, 2)
 
   // Unmatched fallback filter helpers: matched ids excluded.
   const matched = Sidebar.matchedHerdrServerIds(associations)
@@ -386,10 +463,17 @@ console.log('herdr sidebar model association: PASS')
     },
     herdrAssociationsVerified: true,
   }))
-  const flipped = statusFlip.rows.filter(row => row.kind === 'herdr-agent')
-  assert.equal(flipped[0].key, agentRows[0].key)
-  assert.equal(flipped[0].status, 'done')
-  assert.equal(flipped[1].key, agentRows[1].key)
+  const flippedAgents = statusFlip.rows.filter(row => row.kind === 'herdr-agent')
+  const flippedTabs = statusFlip.rows.filter(row =>
+    row.kind === 'herdr-tab' && row.windowKey === windowKey)
+  // After flip: blocked tab stays, multi-tab agents become done + idle.
+  assert.equal(flippedTabs.filter(row => row.actionable).length, 1)
+  assert.equal(flippedTabs.find(row => row.actionable).status, 'blocked')
+  assert.equal(flippedAgents.length, 2)
+  assert.equal(flippedAgents[0].status, 'done')
+  assert.equal(flippedAgents[0].key, JSON.stringify(['herdr-agent', windowKey, 'local-matched:1:pane-a']))
+  assert.equal(flippedAgents[1].status, 'idle')
+  assert.equal(flippedAgents[1].key, JSON.stringify(['herdr-agent', windowKey, 'local-matched:1:pane-b']))
 
   // Empty healthy inventory vs unavailable / reconnecting / partial.
   assert.equal(Sidebar.herdrStateTitle({ health: 'live' }, {
@@ -508,9 +592,15 @@ console.log('herdr sidebar model association: PASS')
   }))
   const partialAgents = partialProjected.rows.filter(row =>
     row.kind === 'herdr-agent' && row.windowKey === windowKey)
+  const partialTabs = partialProjected.rows.filter(row =>
+    row.kind === 'herdr-tab' && row.windowKey === windowKey)
   const partialStates = partialProjected.rows.filter(row =>
     row.kind === 'herdr-state' && row.windowKey === windowKey)
-  assert.equal(partialAgents.length, 1)
+  // Single remaining agent collapses to an actionable tab (no agent child).
+  assert.equal(partialAgents.length, 0)
+  assert.equal(partialTabs.length, 1)
+  assert.equal(partialTabs[0].actionable, true)
+  assert.equal(partialTabs[0].paneId, 'pane-a')
   assert.equal(partialStates.length, 1)
   assert.equal(partialStates[0].title, 'Partial inventory')
   assert.equal(partialStates[0].actionable, false)
@@ -558,7 +648,9 @@ console.log('herdr sidebar model association: PASS')
     herdrAssociations: associations,
     herdrAssociationsVerified: true,
   }))
-  assert.ok(!rail.rows.some(row => row.kind === 'herdr-agent' || row.kind === 'herdr-state'))
+  assert.ok(!rail.rows.some(row =>
+    row.kind === 'herdr-agent' || row.kind === 'herdr-tab'
+    || row.kind === 'herdr-state'))
 
   // Browser rows still project beside herdr children when both apply.
   const chromeEntry = registry.entries.find((_, i) => f.toplevels[i].id === 'c')
@@ -610,7 +702,7 @@ console.log('herdr sidebar model projection: PASS')
   assert.equal(Model.normalizeStatus('future-state'), 'unknown')
   assert.equal(Model.normalizeStatus(null), 'unknown')
   assert.equal(Model.statusColorRole('working'), 'accent')
-  assert.equal(Model.statusColorRole('idle'), 'muted')
+  assert.equal(Model.statusColorRole('idle'), 'idle')
   assert.equal(Model.statusColorRole('done'), 'done')
   assert.equal(Model.statusColorRole('blocked'), 'blocked')
   assert.equal(Model.statusColorRole('weird'), 'hollow')
@@ -623,7 +715,7 @@ console.log('herdr sidebar model projection: PASS')
   assert.equal(Model.displayAgentKind('cursor'), 'Cursor')
   assert.equal(Model.displayAgentKind(''), '')
   assert.equal(Model.displayAgentKind(null), '')
-  assert.equal(Model.displayAgentKind('opencode'), 'Opencode')
+  assert.equal(Model.displayAgentKind('opencode'), 'OpenCode')
 
   // Combined layout fixture: long/markup-like names, missing kinds, all statuses,
   // multi-digit counts, narrow width, fold persistence (no new subscription).
@@ -719,15 +811,16 @@ console.log('herdr sidebar model projection: PASS')
     counts.agents,
   )
   const counters = plain(Model.statusCounters(counts))
+  // Same order as agent list: blocked → working → done → idle → unknown
   assert.deepEqual(counters.map(c => c.status),
-    ['working', 'idle', 'done', 'blocked', 'unknown'])
-  assert.deepEqual(counters.map(c => c.count), [12, 3, 1, 10, 2])
+    ['blocked', 'working', 'done', 'idle', 'unknown'])
+  assert.deepEqual(counters.map(c => c.count), [10, 12, 1, 3, 2])
   // Zero omission:
   assert.deepEqual(
     plain(Model.statusCounters({
       working: 2, idle: 0, done: 0, blocked: 1, unknown: 0, agents: 3,
     })).map(c => c.status),
-    ['working', 'blocked'],
+    ['blocked', 'working'],
   )
 
   const Interaction = loadModel('DockSidebarInteractionModel')
@@ -806,14 +899,26 @@ console.log('herdr sidebar model projection: PASS')
   assert.equal(parent.herdrFolded, false)
   assert.equal(parent.herdrExpandable, true)
   assert.deepEqual(plain(parent.herdrStatusCounts), counts)
-  assert.deepEqual(plain(parent.herdrStatusCounters).map(c => c.count), [12, 3, 1, 10, 2])
+  assert.deepEqual(plain(parent.herdrStatusCounters).map(c => c.status),
+    ['blocked', 'working', 'done', 'idle', 'unknown'])
+  assert.deepEqual(plain(parent.herdrStatusCounters).map(c => c.count), [10, 12, 1, 3, 2])
   const agentRows = expanded.rows.filter(row =>
     row.kind === 'herdr-agent' && row.windowKey === windowKey)
   assert.equal(agentRows.length, 28)
-  assert.equal(agentRows[0].title,
-    '<b>Long markup-like agent name that must stay plain text</b>')
-  assert.equal(agentRows[0].agentKind, 'codex')
-  assert.equal(agentRows[1].agentKind, '')
+  // Sort: blocked → working → done → idle → unknown
+  assert.equal(agentRows[0].status, 'blocked')
+  assert.equal(agentRows[10].status, 'working')
+  assert.equal(agentRows[22].status, 'done')
+  assert.equal(agentRows[23].status, 'idle')
+  assert.equal(agentRows[26].status, 'unknown')
+  const markup = agentRows.find(row =>
+    row.title === '<b>Long markup-like agent name that must stay plain text</b>')
+  assert.ok(markup)
+  assert.equal(markup.agentKind, 'codex')
+  assert.equal(markup.status, 'working')
+  const missingKind = agentRows.find(row => row.agentId && String(row.agentId).endsWith('work-1'))
+  assert.ok(missingKind)
+  assert.equal(missingKind.agentKind, '')
 
   // Folded: children hidden; counts remain on parent. No new subscription field.
   const folded = plain(Sidebar.project({
@@ -834,9 +939,9 @@ console.log('herdr sidebar model projection: PASS')
   assert.equal(foldedParent.herdrFolded, true)
   assert.deepEqual(plain(foldedParent.herdrStatusCounts), counts)
   assert.ok(!folded.rows.some(row =>
-    row.kind === 'herdr-agent' && row.windowKey === windowKey))
-  assert.ok(!folded.rows.some(row =>
-    row.kind === 'herdr-state' && row.windowKey === windowKey))
+    (row.kind === 'herdr-agent' || row.kind === 'herdr-tab'
+      || row.kind === 'herdr-state')
+    && row.windowKey === windowKey))
 
   // Production layout / chevron / rail / accessible Unknown are covered by
   // tests/tst_herdr_sidebar_appearance.qml and the controller fold harness.

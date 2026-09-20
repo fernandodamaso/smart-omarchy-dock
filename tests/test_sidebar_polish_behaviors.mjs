@@ -49,6 +49,24 @@ assert.equal(Interaction.composeRowFill({
   persistentFill: 'persist'
 }), 'persist', 'monitor hover fill stays persistent; tooltip uses passive HoverHandler')
 
+// Coding agents show hover fill without becoming activation-navigable yet.
+assert.equal(Interaction.rowHoverFillEligible('herdr-agent'), true)
+assert.equal(Interaction.rowHoverFillEligible('herdr-tab', true), true)
+assert.equal(Interaction.rowHoverFillEligible('herdr-tab', false), false)
+assert.equal(Interaction.rowHoverFillEligible('herdr-state'), false)
+assert.equal(Interaction.rowHoverFillEligible('monitor'), false)
+assert.equal(Interaction.rowHoverFillEligible('browser-tab'), true)
+assert.equal(Interaction.composeRowFill({
+  dropTarget: false, pressed: false, hovered: true,
+  navigable: Interaction.rowHoverFillEligible('herdr-agent'),
+  hoverFill: 'hover', persistentFill: 'persist'
+}), 'hover', 'herdr-agent hover paints fill')
+assert.match(rowQml, /navigable:\s*InteractionModel\.rowHoverFillEligible\(root\.kind/,
+  'rowFill gates hover via rowHoverFillEligible')
+assert.match(rowQml,
+  /navigable:\s*\[["']window["'],\s*["']workspace["'],\s*["']application["'],\s*["']launcher["'],\s*["']browser-tab["']\]/,
+  'herdr-agent stays out of activation navigable until focus task')
+
 // Variable-height scroll restore uses heightMap; shared sidebarRowMetrics baselines
 const monitor0 = { kind: 'monitor', sectionIndex: 0, layoutGapBefore: '' }
 const monitor1 = { kind: 'monitor', sectionIndex: 1, layoutGapBefore: 'monitor' }
@@ -111,6 +129,11 @@ assert.equal(Interaction.sidebarRowMetrics(windowRow, false, 40, id).contentHeig
   'rowHeight 40 → font floor 28; expanded window stays 28')
 assert.equal(Interaction.sidebarRowMetrics(windowRow, false, 50, id).contentHeight, 38,
   'larger configured font floor can grow content above baseline')
+assert.equal(
+  Interaction.sidebarRowMetrics({ kind: 'herdr-agent' }, false, 34, id).contentHeight,
+  36,
+  'herdr-agent two-line rows stay compact at 36',
+)
 
 assert.equal(Interaction.shouldRestoreScroll({
   keys: ['a', 'b'], rowHeight: 40, collapsed: false, contentHeight: 200, heightMap: '28,34'

@@ -169,7 +169,8 @@ function sidebarSelectionInsets(input) {
   if (o.kind === "workspace")
     return { left: inset, right: right }
   if (o.kind === "window" || o.kind === "application" || o.kind === "browser-tab"
-      || o.kind === "herdr-agent" || o.kind === "herdr-state") {
+      || o.kind === "herdr-agent" || o.kind === "herdr-tab"
+      || o.kind === "herdr-state") {
     var artX = Number(o.artX)
     if (!isFinite(artX)) artX = inset
     return { left: artX - 3, right: right }
@@ -190,6 +191,14 @@ function composeRowFill(state) {
     return s.hoverFill
   }
   return s.persistentFill
+}
+
+// Hover fill for navigable rows plus actionable Herdr agents/tabs.
+// Workspace headers and multi-panel tab headers stay passive.
+function rowHoverFillEligible(kind, actionable) {
+  if (kind === "herdr-tab") return actionable === true
+  return ["window", "workspace", "application", "launcher", "browser-tab",
+    "herdr-agent"].indexOf(kind) >= 0
 }
 
 // Numeric attention tokens are `count:<n>[:severity]` (see DockApplicationBadge).
@@ -273,7 +282,7 @@ function sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert) {
     else if (kind === "workspace") baseline = sp(30)
     else if (kind === "section") baseline = sp(22)
     else if (kind === "browser-tab" || kind === "herdr-agent"
-        || kind === "herdr-state") baseline = sp(28)
+        || kind === "herdr-tab" || kind === "herdr-state") baseline = sp(28)
     else baseline = alert ? sp(58) : sp(36)
   } else if (kind === "monitor") {
     baseline = sp(48)
@@ -281,6 +290,11 @@ function sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert) {
     baseline = sp(22)
   } else if (kind === "workspace") {
     baseline = sp(30)
+  } else if (kind === "herdr-tab" && row && row.actionable === true) {
+    baseline = sp(36)
+  } else if (kind === "herdr-agent") {
+    // Two-line title + workspace/kind secondary; keep compact vs window rows.
+    baseline = sp(36)
   } else {
     baseline = sp(28)
   }
@@ -408,6 +422,8 @@ function sidebarWindowDisplayTitle(input) {
   var kind = String(source.kind || "")
   if (kind === "browser-tab")
     return String(source.tabTitle || "").trim() || "Tab"
+  if (kind === "herdr-tab")
+    return String(source.title || "").trim() || "Tab"
   if (kind === "herdr-agent" || kind === "herdr-state")
     return String(source.title || "").trim() || (kind === "herdr-state" ? "Herdr" : "Coding agent")
   var windowTitle = String(source.windowTitle || "").trim() || "Untitled window"

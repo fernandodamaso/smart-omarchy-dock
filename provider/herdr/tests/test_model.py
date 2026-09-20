@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from pathlib import Path
+import json
 import sys
 import unittest
 
@@ -149,6 +150,43 @@ class ModelTests(unittest.TestCase):
         snap = normalized_snapshot("e", 1, [server], now=11)
         self.assertIsNone(snap["liveCounts"])
         self.assertEqual(snap["completeness"]["state"], "partial")
+
+    def test_live_agents_join_tab_title_and_workspace_label(self):
+        server = state()
+        server.apply_status({"connected": True})
+        server.apply_snapshot({
+            "ok": True,
+            "snapshot": {
+                "panes": [],
+                "workspaces": [
+                    {"workspace_id": "w1", "label": "smart-omarchy-dock", "cwd": "/secret"},
+                ],
+                "tabs": [
+                    {"tab_id": "w1:t2", "label": "Herdr Window Tree", "cwd": "/secret"},
+                ],
+                "agents": [{
+                    "pane_id": "w1:p1",
+                    "tab_id": "w1:t2",
+                    "workspace_id": "w1",
+                    "agent": "cursor",
+                    "agent_status": "working",
+                    "title": "Child pane title",
+                    "name": "t1-impl",
+                    "cwd": "/secret",
+                    "terminal_title": "secret title",
+                }],
+            },
+        }, 10)
+        server.apply_status({"connected": True})
+        snap = normalized_snapshot("e", 1, [server], now=11)
+        agent = snap["agents"][0]
+        self.assertEqual(agent["tabTitle"], "Herdr Window Tree")
+        self.assertEqual(agent["workspaceLabel"], "smart-omarchy-dock")
+        self.assertEqual(agent["title"], "Child pane title")
+        self.assertEqual(agent["agent"], "cursor")
+        self.assertNotIn("cwd", agent)
+        self.assertNotIn("terminal_title", agent)
+        self.assertNotIn("/secret", json.dumps(snap))
 
 
 if __name__ == "__main__":

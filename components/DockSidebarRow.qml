@@ -41,8 +41,14 @@ Item {
   readonly property bool hasArtwork: kind === "window" || kind === "application" || kind === "launcher"
   readonly property bool nestedWindow: kind === "window" && row.nested === true
   readonly property bool nestedTab: kind === "browser-tab"
-  readonly property bool nestedHerdr: kind === "herdr-agent" || kind === "herdr-state"
+  readonly property bool nestedHerdr: kind === "herdr-agent" || kind === "herdr-tab"
+    || kind === "herdr-state"
   readonly property bool nestedChild: nestedTab || nestedHerdr
+  readonly property bool herdrActionable: (kind === "herdr-agent"
+    || kind === "herdr-tab") && row.actionable === true
+  readonly property bool herdrStatusDotVisible: !root.collapsed
+    && (kind === "herdr-agent" || (kind === "herdr-tab" && root.herdrActionable)
+      || kind === "herdr-state")
   readonly property string tabFaviconSource: nestedTab
     ? DockIconModel.faviconFileUrl(String(row.faviconPath || "")) : ""
   readonly property bool tabFaviconReady: nestedTab && tabFaviconSource !== ""
@@ -60,11 +66,19 @@ Item {
   }
   readonly property bool herdrCountersVisible: !root.collapsed && herdrAssociated
     && herdrStatusCounters.length > 0
-  readonly property string herdrKindLabel: kind === "herdr-agent"
+  readonly property string herdrKindLabel: kind === "herdr-agent" || kind === "herdr-tab"
     ? InteractionModel.herdrAgentKindLabel({ agentKind: row.agentKind || "" })
     : ""
-  readonly property bool herdrKindVisible: kind === "herdr-agent" && !root.collapsed
-    && herdrKindLabel !== ""
+  // Kind moves onto the two-line secondary row; do not reserve side kind width.
+  readonly property bool herdrKindVisible: false
+  readonly property string herdrAgentSubtitle: (kind === "herdr-agent"
+      || (kind === "herdr-tab" && root.herdrActionable))
+    ? String(row.subtitle || "")
+    : ""
+  readonly property bool herdrTwoLineLabels: !root.collapsed
+    && (kind === "herdr-agent" || (kind === "herdr-tab" && root.herdrActionable))
+  readonly property bool herdrGroupLabel: !root.collapsed
+    && kind === "herdr-tab" && !root.herdrActionable
   readonly property int windowCount: kind === "application" ? Number(row.windowCount || row.windows && row.windows.length || 0) : 0
   readonly property int treeDepth: Number(row.treeDepth || 0)
   readonly property bool isLastSibling: row.isLastSibling !== false
@@ -112,14 +126,17 @@ Item {
     return BadgeModel.strictIdentityMatches(root.desktopId, root.entry, classes, aliases)
   }
   readonly property string windowTitle: {
-    if (kind === "browser-tab" || kind === "herdr-agent" || kind === "herdr-state")
-      return String(row.title || (kind === "herdr-state" ? "Herdr" : kind === "herdr-agent" ? "Coding agent" : "Tab"))
+    if (kind === "browser-tab" || kind === "herdr-agent" || kind === "herdr-tab"
+        || kind === "herdr-state")
+      return String(row.title || (kind === "herdr-state" ? "Herdr"
+        : kind === "herdr-tab" ? "Tab"
+        : kind === "herdr-agent" ? "Coding agent" : "Tab"))
     if (kind === "window" && row.toplevel)
       return String(row.toplevel.title || "").trim() || "Untitled window"
     return ""
   }
   readonly property string liveTitle: {
-    if (kind === "herdr-agent" || kind === "herdr-state")
+    if (kind === "herdr-agent" || kind === "herdr-tab" || kind === "herdr-state")
       return InteractionModel.sidebarWindowDisplayTitle({
         kind: kind,
         title: String(row.title || "")
@@ -180,10 +197,12 @@ Item {
     if (kind === "browser-tab")
       return (row.active === true ? "Active tab: " : "Tab: ") + liveTitle + alertBits
         + (attention.muted ? " · Alerts excluded from totals" : "")
-    if (kind === "herdr-agent")
+    if (kind === "herdr-agent" || (kind === "herdr-tab" && row.actionable === true))
       return "Herdr agent: " + liveTitle
-        + (root.herdrKindLabel ? " · " + root.herdrKindLabel : "")
+        + (root.herdrAgentSubtitle ? " · " + root.herdrAgentSubtitle : "")
         + " · " + InteractionModel.herdrStatusAccessibleText(row.status)
+    if (kind === "herdr-tab")
+      return "Herdr tab: " + liveTitle
     if (kind === "herdr-state")
       return "Herdr: " + liveTitle
     var titleLabel = kind === "window"
@@ -364,12 +383,14 @@ Item {
     return labelRight + gap + stripW + gap <= countersLeft
   }
 
-  // Resolve Herdr status roles to Omarchy Color tokens. done/blocked prefer
-  // theme green/yellow hex tokens via flatColor; hollow is outline-only.
+  // Resolve Herdr status roles to Omarchy Color tokens. Idle uses brighter
+  // foreground alpha than Color.muted for counter readability. done/blocked
+  // prefer theme green/yellow hex tokens via flatColor; hollow is outline-only.
   // "done" is Herdr state, not proven task success.
   function herdrStatusColor(status) {
     var role = HerdrModel.statusColorRole(status)
     if (role === "accent") return Color.accent
+    if (role === "idle") return Util.alpha(Color.foreground, 0.78)
     if (role === "muted") return Color.muted
     if (role === "done") return Color.flatColor("#9ece6a", Color.accent)
     if (role === "blocked") return Color.flatColor("#e0af68", Color.urgent)
@@ -408,7 +429,7 @@ Item {
     activeFocus: root.activeFocus,
     hovered: root.kind === "monitor" ? false
       : (root.input.hovered || passiveHover.hovered),
-    navigable: root.navigable,
+    navigable: InteractionModel.rowHoverFillEligible(root.kind, root.row.actionable === true),
     persistentSelected: root.persistentSelected,
     persistentContext: root.persistentContext,
     dropFill: Style.pressedFillFor(Color.accent, Color.accent),
@@ -658,9 +679,9 @@ Item {
         : Util.alpha(Color.foreground, 0.75)
     }
 
-    // Nested Herdr agent/state marker — status-colored dot, no provider lease.
+    // Nested Herdr marker — status-colored dot for agents / actionable tabs / state.
     Rectangle {
-      visible: root.nestedHerdr && !root.collapsed
+      visible: root.herdrStatusDotVisible
       width: 8
       height: 8
       radius: 4
@@ -671,10 +692,10 @@ Item {
         : root.herdrStatusColor(row.status)
       border.width: root.herdrStatusHollow(row.status) ? 1 : 0
       border.color: Color.muted
-      opacity: root.kind === "herdr-agent"
+      opacity: root.herdrActionable
         && (HerdrModel.normalizeStatus(row.status) === "working"
           || HerdrModel.normalizeStatus(row.status) === "blocked") ? 1.0
-        : root.kind === "herdr-agent"
+        : root.herdrActionable
           && HerdrModel.normalizeStatus(row.status) === "done" ? 0.9
         : 0.75
     }
@@ -782,6 +803,7 @@ Item {
       id: label
       objectName: "sidebar-label"
       visible: !root.collapsed && root.kind !== "monitor" && root.kind !== "workspace"
+        && root.kind !== "herdr-agent" && root.kind !== "herdr-tab"
       x: {
         if (root.nestedChild)
           return root.artX + 14 + Style.space(8)
@@ -836,6 +858,76 @@ Item {
       renderType: Text.NativeRendering
       verticalAlignment: Text.AlignVCenter
       transform: Translate { x: root.attentionNudgeX }
+    }
+
+    // Two-line Herdr agent / actionable single-panel tab identity.
+    Column {
+      id: herdrAgentLabels
+      objectName: "sidebar-herdr-agent-labels"
+      visible: root.herdrTwoLineLabels
+      x: root.artX + 14 + Style.space(8)
+      width: {
+        var available = Math.max(0, content.width - x - root.herdrRightChromeWidth)
+        return InteractionModel.herdrCompactLabelWidths({
+          availableWidth: available,
+          kindWidth: 0,
+          countersWidth: herdrCounters.visible ? herdrCounters.implicitWidth : 0,
+          controlsWidth: 0,
+          gap: Style.space(6)
+        }).nameWidth
+      }
+      y: Math.round((content.height - implicitHeight) / 2)
+      spacing: 1
+      Text {
+        objectName: "sidebar-label"
+        width: parent.width
+        height: Math.ceil(font.pixelSize * 1.15)
+        text: root.liveTitle
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        wrapMode: Text.NoWrap
+        maximumLineCount: 1
+        color: Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        renderType: Text.NativeRendering
+        verticalAlignment: Text.AlignVCenter
+      }
+      Text {
+        objectName: "sidebar-herdr-agent-subtitle"
+        visible: root.herdrAgentSubtitle.length > 0
+        width: parent.width
+        height: Math.ceil(font.pixelSize * 1.1)
+        text: root.herdrAgentSubtitle
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        wrapMode: Text.NoWrap
+        maximumLineCount: 1
+        color: Color.muted
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        renderType: Text.NativeRendering
+        verticalAlignment: Text.AlignVCenter
+      }
+    }
+
+    // Multi-panel tab group headers.
+    Text {
+      objectName: "sidebar-herdr-group-label"
+      visible: root.herdrGroupLabel
+      x: root.artX + Style.space(8)
+      width: Math.max(0, content.width - x - root.herdrRightChromeWidth)
+      anchors.verticalCenter: parent.verticalCenter
+      text: root.liveTitle
+      textFormat: Text.PlainText
+      elide: Text.ElideRight
+      wrapMode: Text.NoWrap
+      maximumLineCount: 1
+      color: Util.alpha(Color.foreground, 0.72)
+      font.family: Style.font.family
+      font.pixelSize: Style.font.bodySmall
+      renderType: Text.NativeRendering
+      verticalAlignment: Text.AlignVCenter
     }
 
     // Agent kind (Codex / Claude / Cursor) — after name; parents use counters instead.
@@ -901,7 +993,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
               text: String(counterItem.modelData.count)
-              color: Color.muted
+              color: root.herdrStatusColor(counterItem.modelData.status)
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
               renderType: Text.NativeRendering

@@ -72,7 +72,9 @@ def project_record(row):
     if not isinstance(row, dict):
         raise ProtocolError("invalid_snapshot")
     out = {key: row[key] for key in IDENTITIES if identifier(row.get(key))}
-    for key in ("label", "name", "agent"):
+    # title is intentional UI text (pane/tab display). cwd and terminal_title*
+    # remain private and are never copied.
+    for key in ("label", "name", "agent", "title"):
         value = row.get(key)
         if isinstance(value, str):
             out[key] = "".join(char for char in value[:256]

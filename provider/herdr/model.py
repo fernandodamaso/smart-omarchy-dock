@@ -214,6 +214,8 @@ class ServerState:
         if not self.inventory_known:
             return None
         assert self.snapshot is not None
+        tab_titles = _label_index(self.snapshot.get("tabs"), "tab_id")
+        workspace_labels = _label_index(self.snapshot.get("workspaces"), "workspace_id")
         output: list[dict[str, Any]] = []
         for source in self.snapshot.get("agents", []):
             if not isinstance(source, dict):
@@ -238,10 +240,25 @@ class ServerState:
                 value = _identity(source.get(source_key))
                 if value:
                     row[public_key] = value
-            for source_key, public_key in (("name", "name"), ("agent", "agent"), ("label", "label")):
+            for source_key, public_key in (
+                ("name", "name"),
+                ("agent", "agent"),
+                ("label", "label"),
+                ("title", "title"),
+            ):
                 value = _text(source.get(source_key), 128)
                 if value:
                     row[public_key] = value
+            tab_id = row.get("tabId")
+            if isinstance(tab_id, str):
+                tab_title = tab_titles.get(tab_id)
+                if tab_title:
+                    row["tabTitle"] = tab_title
+            workspace_id = row.get("workspaceId")
+            if isinstance(workspace_id, str):
+                workspace_label = workspace_labels.get(workspace_id)
+                if workspace_label:
+                    row["workspaceLabel"] = workspace_label
             sequence = _sequence(source.get("state_change_seq"))
             if sequence is not None:
                 row["stateChangeSeq"] = sequence
@@ -249,6 +266,23 @@ class ServerState:
             row["observedAgeMs"] = None if since is None else max(0, int((now - since) * 1000))
             output.append(row)
         return output
+
+
+def _label_index(rows: object, identity_key: str) -> dict[str, str]:
+    """Map collection identity -> sanitized label for agent joins."""
+    index: dict[str, str] = {}
+    if not isinstance(rows, list):
+        return index
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        identity = _identity(row.get(identity_key))
+        if not identity or identity in index:
+            continue
+        label = _text(row.get("label"), 128)
+        if label:
+            index[identity] = label
+    return index
 
 
 def _public_window_processes(value: object) -> dict[str, Any]:
