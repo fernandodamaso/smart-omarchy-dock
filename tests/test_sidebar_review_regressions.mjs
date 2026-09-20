@@ -92,8 +92,12 @@ test('pin reorder preserves pending exits and cancels a reinserted exit', () => 
 function popups() {
   const panelA = { contentItem: { parent: null }, visible: true }
   const panelB = { contentItem: { parent: null }, visible: true }
-  const anchorA = { visible: true, parent: panelA.contentItem }
-  const anchorB = { visible: true, parent: panelB.contentItem }
+  const viewportA = { parent:panelA.contentItem, height:800, anchorY:0,
+    mapFromItem(){ return {y:this.anchorY} }, listView:{} }
+  const viewportB = { parent:panelB.contentItem, height:800, anchorY:0,
+    mapFromItem(){ return {y:this.anchorY} }, listView:{} }
+  const anchorA = { visible: true, height:44, parent: viewportA }
+  const anchorB = { visible: true, height:44, parent: viewportB }
   const controller = {
     widgetPopupId: '', widgetPopupAnchor: null, interactionBusy: false,
     resizeActive: false, rowDragActive: false,
@@ -104,13 +108,17 @@ function popups() {
       return true
     },
   }
-  function area(panel) {
-    return qmlMethods('DockSidebarWidgetArea.qml', {
-      controller, panel, viewport: { mapFromItem(){ return {y:0} }, height:800 },
+  function area(panel, viewport) {
+    const result = qmlMethods('DockSidebarWidgetArea.qml', {
+      controller, panel, viewport,
       popup: { anchor: { updateAnchor() {} } },
+      managerPopup: { anchor: { updateAnchor() {} } },
+      managerOpen:false, managerAnchor:null, anchorRevision:0, managerAnchorRevision:0,
     })
+    result.testViewport = viewport
+    return result
   }
-  const a = area(panelA), b = area(panelB)
+  const a = area(panelA,viewportA), b = area(panelB,viewportB)
   function shell(widgets) {
     return qmlMethods('DockSidebar.qml', {
       controller, widgetArea: widgets, host: null, sidebarContext: { dismiss() {} },
@@ -118,7 +126,7 @@ function popups() {
     })
   }
   const visible = area => vm.runInContext(popupVisible, area)
-  return { a, b, anchorA, anchorB, controller, visible, shell }
+  return { a, b, anchorA, anchorB, controller, visible, shell, viewportA, viewportB }
 }
 
 for (const id of ['fixture.one']) {
@@ -143,6 +151,14 @@ test('non-owning panel teardown preserves the widget session and busy state', ()
   p.shell(p.a).closeSurfaces()
   assert.equal(p.controller.widgetPopupId, '')
   assert.equal(p.controller.interactionBusy, false)
+})
+
+test('scrolling the shared viewport closes a popup whose card leaves view', () => {
+  const p = popups()
+  p.controller.openWidgetPopup('fixture.one', p.anchorA)
+  p.viewportA.anchorY = 900
+  p.a.updatePopupAnchor()
+  assert.equal(p.controller.widgetPopupId, '')
 })
 
 test('same-widget click on another panel transfers instead of closing', () => {
