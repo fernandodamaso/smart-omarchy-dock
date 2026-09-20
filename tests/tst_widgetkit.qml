@@ -43,6 +43,7 @@ TestCase {
   function test_icon_lucide_svg_raster_brand_and_fallback_paths() {
     var icon = make("WidgetIcon", {iconName: "move", width: 30, height: 30})
     compare(icon.usesLucide, true)
+    compare(icon.themeTinted, true)
     tryVerify(function() { return icon.ready }, 2000)
 
     icon.iconName = ""
@@ -73,6 +74,16 @@ TestCase {
     compare(toggle.checked, true)
   }
 
+  function test_checkbox_pointer_and_keyboard_contract() {
+    var checkbox = make("WidgetCheckbox", {x: 180, y: 16, width: 150, height: 30, text: "Complete", checked: false})
+    mouseClick(checkbox, 10, 10, Qt.LeftButton)
+    compare(checkbox.checked, true)
+    checkbox.forceActiveFocus()
+    verify(checkbox.activeFocus)
+    keyClick(Qt.Key_Space)
+    compare(checkbox.checked, false)
+  }
+
   function test_required_segmented_control_always_has_one_value() {
     var segmented = make("WidgetSegmentedControl", {
       width: 220,
@@ -100,7 +111,10 @@ TestCase {
     mousePress(button, 10, 10, Qt.LeftButton)
     compare(button.visualState, "pressed")
     mouseRelease(button, 10, 10, Qt.LeftButton)
-    verify(button.visualState === "focus" || button.visualState === "hover" || button.visualState === "idle")
+    testCase.forceActiveFocus()
+    mouseMove(button, 10, 10)
+    tryCompare(button, "hovered", true)
+    compare(button.visualState, "hover")
   }
 
   function test_states_and_attention_disable_nonessential_motion() {
@@ -115,6 +129,8 @@ TestCase {
       title: "Urgent item",
       reducedMotion: false
     })
+    compare(row.motionActive, true)
+    row.attention = "overdue"
     compare(row.motionActive, true)
     row.reducedMotion = true
     compare(row.motionActive, false)
