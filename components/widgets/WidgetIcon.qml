@@ -11,7 +11,8 @@ Item {
   property string sizeToken: "md"
   property string containerVariant: "plain"
   property color tint: Color.foreground
-  property string accessibleName: ""\n  property string fallbackText: "?"
+  property string accessibleName: ""
+  property string fallbackText: "?"
 
   readonly property int glyphSize: root.sizeToken === "xs" ? 12
     : root.sizeToken === "sm" ? 14
