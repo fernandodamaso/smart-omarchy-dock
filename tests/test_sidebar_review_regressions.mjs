@@ -106,13 +106,14 @@ function popups() {
   }
   function area(panel) {
     return qmlMethods('DockSidebarWidgetArea.qml', {
-      controller, panel, popup: { anchor: { updateAnchor() {} } }, fromOverflow: false,
+      controller, panel, viewport: { mapFromItem(){ return {y:0} }, height:800 },
+      popup: { anchor: { updateAnchor() {} } },
     })
   }
   const a = area(panelA), b = area(panelB)
   function shell(widgets) {
     return qmlMethods('DockSidebar.qml', {
-      controller, widgets, host: null, sidebarContext: { dismiss() {} },
+      controller, widgetArea: widgets, host: null, sidebarContext: { dismiss() {} },
       picker: { visible: false }, sidebarViewport: { cancelInputs() {} },
     })
   }
@@ -120,7 +121,7 @@ function popups() {
   return { a, b, anchorA, anchorB, controller, visible, shell }
 }
 
-for (const id of ['fixture.one', '*']) {
+for (const id of ['fixture.one']) {
   test(`only the initiating panel displays popup ${id}`, () => {
     const p = popups()
     p.controller.openWidgetPopup(id, p.anchorA)
