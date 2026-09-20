@@ -1,6 +1,6 @@
-# SB-05 — Internal sidebar widget contract
+# SmartDock sidebar Widget contract
 
-**FDM-967: unreleased source foundation, not a live provider or universal plugin ABI.**
+**FDM-967 owns provider lifecycle; FDM-973 owns the shared-scroll Widget area and management foundation.**
 Classic remains the default. `sidebarWidgets` defaults to `[]`; that starts no
 provider, loads no widget view and reserves zero footer height. The production
 registry is deliberately empty. Clock/calendar (FDM-969), Herdr (FDM-970) and
@@ -114,41 +114,61 @@ exact provider-instance token, activation generation and snapshot revision. An o
 view therefore cannot poison a removed/re-enabled or already recovered widget.
 Failure unloads that view, not the window list or other providers.
 
-## Geometry, routing and diagnostics
+## Shared-scroll layout, management and persistence
 
-The widget area is **outside** `DockSidebarViewport`, above the ordinary application
-and Trash utilities, with its own Flickable. For available content height A and
-actual font-aware window-row height R, the cap is:
+The normal Widget section is a content tail of the existing
+`DockSidebarViewport` hierarchy `ListView`. It does not own a second normal
+Flickable, scrollbar, height cap, compact-footer mode or overflow mode. Hierarchy
+rows remain Monitor/Workspace/Window domain rows; Widget cards are not injected
+into `visibleRows` or section-span keys.
 
-```text
-min(240, floor(0.30 * A), max(0, A - 2 * R))
+The expanded content order is hierarchy first, then the Widgets section. Pinned
+and Applications stay fixed below that shared viewport. Rail mode gives the
+Widget tail zero height. With zero enabled Widgets the section itself also has
+zero height; the expanded SmartDock header still exposes Add/Manage so an empty
+configuration is discoverable.
+
+`sidebarWidgets` remains the canonical ordered list for both enabled state and
+Widget order. Add/remove/reorder always go through the existing host settings
+mutation path. Runtime schema readback injects IDs from the trusted source
+registry; transient provider readiness does not decide whether an ID is writable.
+Unknown imported IDs remain requested/unavailable according to the FDM-967 rules.
+
+Per-card body state is stored independently:
+
+```json
+"sidebarWidgetCollapsed": {
+  "example.internal": true
+}
 ```
 
-Its actual height is at most that cap/content height. A cap under two rows uses
-compact slots; under one row uses the existing header's overflow button and zero
-footer height. That button shares the collapse row rather than adding a header
-row and creating a geometry feedback loop. Empty configuration has neither gap
-nor overflow. Widget error/data changes do not disable workspace/window controls.
+Keys use the same internal Widget-ID syntax and values are booleans. Missing keys
+mean expanded. Removing a Widget intentionally leaves its collapse preference in
+place, so re-adding the same ID restores it. A collapse map never enables or
+executes a provider by itself.
 
-The controller owns `{widgetPopupId, widgetPopupAnchor}`. `"*"` is an internal
-overflow sentinel, never a valid configured ID. The one `PopupWindow` is reused
-for direct and overflow selections; overflow selection retains its original
-header anchor rather than anchoring a popup to itself. It opens inward on either
-edge, clamps its size/position in logical pixels and uses native slide adjustment.
-Vertical bounds use the panel's available height, respecting other reserved
-surfaces without guessed topbar dimensions. `grabFocus` is false and no view open
-calls `forceActiveFocus`. Close/Back controls provide non-grabbing dismissal.
+`DockWidgetCard.qml` owns the common card header/chrome: icon, title, optional
+count badge, drag affordance, collapse control, body clipping/status placement,
+keyboard focus and the **Remove from Widgets** context action. The normal body
+uses the existing descriptor `expandedView`. `compactView` remains in the
+provider ABI for compatibility but is not used by the expanded sidebar area;
+`popupView` remains available through the single host-owned Widget popup.
 
-Removal, destroyed/hidden/scrolled-out anchors, collapse/layout changes, host/edge
-changes, unplug and teardown close safely. Width/anchor movement reanchors; resize
-may safely close if its footer layout changes. No open widget freezes window-model
-refresh or creates another writer/input surface for the window list.
+Drag starts from the card drag affordance, computes insertion boundaries only
+among Widget cards and uses the hierarchy viewport's edge auto-scroll. It cannot
+drop into Monitor/Workspace/Window rows or reorder with Pinned/Applications.
+Reorder and collapse are presentation/settings changes only: the host-owned
+provider manager keeps the same leases/subscriptions.
 
-`widgetManager.diagnostics()` and CLI `data.presentation.widgets` expose counts
-and at most 32 rows: ID, registered/available/status, revision, active and a fixed
-error code; `total`/`truncated` cover longer lists. Counters saturate at 1 billion.
-They omit provider objects, snapshot payloads, task/window text, raw exceptions,
-credentials and tokens. No widget data is logged by the foundation.
+The controller still owns `{widgetPopupId, widgetPopupAnchor}` for
+Widget-specific popup content. There is no normal-card overflow sentinel.
+Destroyed/hidden/scrolled-out anchors, removal, collapse, host invalidation and
+surface teardown close safely. The Add/Manage picker is a separate non-grabbing
+popup that lists trusted source descriptors and routes add/remove back through
+the controller.
+
+`widgetManager.diagnostics()` and CLI `data.presentation.widgets` retain the
+bounded, payload-free lifecycle diagnostics from FDM-967.
 
 ## Verification and SB-06 handoff
 
@@ -175,7 +195,7 @@ bottom placement, independent scrolling, compact/expanded factories, tiny/large-
 bounds, failure recovery, one popup, provider/anchor removal and teardown. Its
 snapshots and provider are test fixtures, not live-data evidence.
 
-**Runtime execution is deferred to FDM-968 / SB-06, not counted as a remote pass.**
+**Real compositor/pointer qualification remains a local follow-up (FDM-974), not a remote source pass.**
 Use an isolated actual Omarchy/Quickshell session (see `DEV_SESSIONS.md`), stop that
 guest's normal dock, and run:
 

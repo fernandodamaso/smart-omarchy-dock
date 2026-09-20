@@ -64,7 +64,11 @@ Item {
   property int widgetRevision: 0
   property string widgetPopupId: ""
   property Item widgetPopupAnchor: null
+  property string widgetDragId: ""
+  readonly property bool widgetReorderActive: widgetDragId !== ""
   readonly property bool widgetWorkActive: mode === "sidebar" && mappedScreens.length > 0
+  readonly property var widgetCollapsed: SidebarWidgetModel.collapsedMap(
+    settings.sidebarWidgetCollapsed)
 
   // Map override when present; otherwise the global sidebarCollapsed default.
   function collapsedFor(screen) {
@@ -121,6 +125,106 @@ Item {
     return root.widgetManager ? root.widgetManager.view(id) : null
   }
 
+  function widgetCollapsedFor(id) {
+    return root.widgetCollapsed && root.widgetCollapsed[id] === true
+  }
+
+  function widgetMutationFailure(code, message) {
+    root.mutationFeedback = message
+    return {accepted:false,pending:false,
+      reply:{ok:false,error:{code:code,message:message},data:{applied:false}}}
+  }
+
+  function setWidgetEnabled(id, enabled) {
+    var ids = SidebarWidgetModel.requestedIds(root.settings.sidebarWidgets)
+    var index = ids.indexOf(id)
+    if (enabled === true) {
+      if (index >= 0) return {accepted:true,pending:false,noop:true,
+        reply:{ok:true,data:{applied:false,changedKeys:[]},warnings:[]}}
+      if (SidebarWidgetModel.descriptorFor(root.widgetRegistry, id) === null)
+        return root.widgetMutationFailure("E_VALIDATION", "Widget is not source-registered: " + id)
+      ids.push(id)
+    } else {
+      if (index < 0) return {accepted:true,pending:false,noop:true,
+        reply:{ok:true,data:{applied:false,changedKeys:[]},warnings:[]}}
+      ids.splice(index, 1)
+      if (root.widgetPopupId === id) root.closeWidgetPopup()
+    }
+    var result = root.hostIntent("sidebarWidgets", ids, root.settings.sidebarWidgets)
+    root.mutationFeedback = result.accepted ? ""
+      : String(result.reply && result.reply.error && result.reply.error.message
+        || "Widget preference was not accepted.")
+    return result
+  }
+
+  // targetSlot is an insertion boundary in the original ordered list [0..length].
+  function reorderWidget(id, targetSlot) {
+    var ids = SidebarWidgetModel.requestedIds(root.settings.sidebarWidgets)
+    var from = ids.indexOf(id)
+    if (from < 0) return root.widgetMutationFailure("E_STATE", "Widget is no longer enabled.")
+    var numeric = Number(targetSlot)
+    var slot = isFinite(numeric) ? Math.max(0, Math.min(ids.length, Math.floor(numeric))) : from
+    // Dropping on either side of the source's own occupied slot is a no-op.
+    if (slot === from || slot === from + 1)
+      return {accepted:true,pending:false,noop:true,
+        reply:{ok:true,data:{applied:false,changedKeys:[]},warnings:[]}}
+    ids.splice(from, 1)
+    if (slot > from) slot--
+    slot = Math.max(0, Math.min(ids.length, slot))
+    ids.splice(slot, 0, id)
+    var result = root.hostIntent("sidebarWidgets", ids, root.settings.sidebarWidgets)
+    root.mutationFeedback = result.accepted ? ""
+      : String(result.reply && result.reply.error && result.reply.error.message
+        || "Widget order was not accepted.")
+    return result
+  }
+
+  function setWidgetCollapsed(id, collapsed) {
+    if (!SidebarWidgetModel.validId(id) || typeof collapsed !== "boolean")
+      return root.widgetMutationFailure("E_VALIDATION", "Invalid widget collapse preference.")
+    var expected = root.settings.sidebarWidgetCollapsed
+    var next = Object.assign({}, root.widgetCollapsed)
+    if (next[id] === collapsed)
+      return {accepted:true,pending:false,noop:true,
+        reply:{ok:true,data:{applied:false,changedKeys:[]},warnings:[]}}
+    next[id] = collapsed
+    var result = root.hostIntent("sidebarWidgetCollapsed", next, expected)
+    root.mutationFeedback = result.accepted ? ""
+      : String(result.reply && result.reply.error && result.reply.error.message
+        || "Widget collapse preference was not accepted.")
+    return result
+  }
+
+  function toggleWidgetCollapsed(id) {
+    return root.setWidgetCollapsed(id, !root.widgetCollapsedFor(id))
+  }
+
+  function beginWidgetReorder(id) {
+    if (root.interactionBusy || root.widgetIds.indexOf(id) < 0) return false
+    root.closeWidgetPopup()
+    root.widgetDragId = id
+    root.interactionBusy = true
+    return true
+  }
+
+  function finishWidgetReorder(targetSlot, cancelled) {
+    var id = root.widgetDragId
+    root.widgetDragId = ""
+    if (!root.resizeActive && !root.rowDragActive && !root.widgetPopupId)
+      root.interactionBusy = false
+    if (!id || cancelled === true)
+      return {accepted:true,pending:false,noop:true,
+        reply:{ok:true,data:{applied:false,changedKeys:[]},warnings:[]}}
+    return root.reorderWidget(id, targetSlot)
+  }
+
+  function cancelWidgetReorder() {
+    if (!root.widgetDragId) return
+    root.widgetDragId = ""
+    if (!root.resizeActive && !root.rowDragActive && !root.widgetPopupId)
+      root.interactionBusy = false
+  }
+
   function widgetsChanged() {
     if (!root.initialized || !root.widgetManager) return
     var ids = root.widgetManager.ids()
@@ -129,7 +233,7 @@ Item {
     root.widgetRevision = (root.widgetRevision + 1) % 1000000000
     if (!root.widgetPopupId) return
     var view = root.widgetManager.view(root.widgetPopupId)
-    if (!ids.length || root.widgetPopupId !== "*" && (!view || !view.registered || !view.available))
+    if (!ids.length || !view || !view.registered || !view.available)
       root.closeWidgetPopup()
   }
 
@@ -144,9 +248,8 @@ Item {
     if (!root.widgetWorkActive || !anchor || !anchor.visible || !root.widgetIds.length) return false
     if (root.interactionBusy && !root.widgetPopupId) return false
     var view = root.widgetView(id)
-    // Unknown imported IDs may display their unavailable status in overflow, but
-    // they cannot execute a factory or open a provider popup.
-    if (id !== "*" && (!view || !view.registered || !view.available)) return false
+    // Unknown imported IDs never execute a factory or open a provider popup.
+    if (!view || !view.registered || !view.available) return false
     root.widgetPopupAnchor = anchor
     root.widgetPopupId = id
     root.interactionBusy = true
@@ -183,7 +286,10 @@ Item {
     if (!root.widgetWorkActive) root.closeWidgetPopup()
     root.syncWidgets()
   }
-  onSurfaceInvalidated: root.closeWidgetPopup()
+  onSurfaceInvalidated: {
+    root.closeWidgetPopup()
+    root.cancelWidgetReorder()
+  }
 
   function scheduleRefresh() {
     if (initialized) Qt.callLater(root.refresh)
@@ -866,6 +972,7 @@ Item {
   // Per-panel collapse updates geometry bindings; do not tear the Loader down.
   onCollapsedChanged: {
     root.closeWidgetPopup()
+    root.cancelWidgetReorder()
     root.scheduleRefresh()
   }
   onCollapsedByMonitorChanged: {

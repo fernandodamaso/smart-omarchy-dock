@@ -54,14 +54,23 @@ Item {
     }
   }
 
+  function validationMetadata() {
+    var result = JSON.parse(JSON.stringify(root.metadata))
+    if (result.settings && result.settings.sidebarWidgets)
+      result.settings.sidebarWidgets.registeredIds = SidebarWidgetModel.registeredIds(
+        root.host.sidebarWidgetRegistry || {})
+    return result
+  }
+
   function schemaSettings(key) {
     var result = Object.create(null)
-    var keys = key === undefined ? Object.keys(root.metadata.settings) : [key]
+    var metadata = root.validationMetadata()
+    var keys = key === undefined ? Object.keys(metadata.settings) : [key]
     for (var i = 0; i < keys.length; ++i) {
       var name = keys[i]
-      if (!Object.prototype.hasOwnProperty.call(root.metadata.settings, name))
+      if (!Object.prototype.hasOwnProperty.call(metadata.settings, name))
         throw new Error("Unknown setting: " + name)
-      result[name] = Object.assign({}, root.metadata.settings[name], { default: root.defaults[name] })
+      result[name] = Object.assign({}, metadata.settings[name], { default: root.defaults[name] })
     }
     return result
   }
@@ -112,7 +121,7 @@ Item {
       widgets: SidebarWidgetModel.describe(requested.sidebarWidgets, root.host.sidebarWidgetRegistry || {},
         controller && controller.widgetManager ? controller.widgetManager.diagnostics() : null),
       // Source slices remain unreleased until the integrated SB-06 runtime gate.
-      sidebarStage: "foundation with internal widget slots; integrated qualification pending"
+      sidebarStage: "shared-scroll widget foundation; integrated qualification pending"
     }
   }
 

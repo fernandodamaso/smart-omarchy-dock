@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { loadModel, plain, hostHarness, read } from './host_harness.mjs';
+import { qmlMethods } from './sidebar_interaction_fixture.mjs';
 assert.ok(fs.existsSync(new URL('../components/DockSidebarWidgetModel.js', import.meta.url)),
   'SB-05 must provide the production widget model');
 const Model = loadModel('DockSidebarWidgetModel');
@@ -69,7 +70,7 @@ const baseline = {...a.counts};
 for (let i=0;i<40;i++) {
   // Reconcile the same enabled set as resize/collapse and host refresh would.
   manager.reconcile(['future.clock','fixture.two','fixture.one'], registry, true, owner);
-  Model.footerLayout(300+i*9, 44+i%3, 3, i%2===0);
+  Model.collapsedMap(i % 2 === 0 ? {'fixture.one':true} : {'fixture.one':false});
 }
 assert.deepEqual(a.counts,baseline,'presentation reflow must not restart providers');
 const reordered = {'fixture.one':{...a.descriptor,revision:2},'fixture.two':b.descriptor};
@@ -156,33 +157,79 @@ assert.ok(many.diagnostics().rows.length<=32);
 assert.equal(many.diagnostics().total,100);
 many.dispose();
 
-// Exact parent formula, large type, low heights and no disabled footer gap.
-for (const h of [0,20,80,120,180,240,360,720,1080,4096]) {
-  for (const row of [44,60,96,160]) for (const collapsed of [false,true]) {
-    const f=Model.footerLayout(h,row,3,collapsed);
-    const cap=Math.min(240,Math.floor(.3*h),Math.max(0,h-2*row));
-    assert.equal(f.cap,cap);
-    assert.ok(f.height>=0 && f.height<=cap);
-    if (cap<row) { assert.equal(f.mode,'overflow'); assert.equal(f.height,0); }
-    else assert.equal(f.mode,collapsed || cap<2*row ? 'compact':'expanded');
-    assert.equal(Model.footerLayout(h,row,0,collapsed).height,0);
-    assert.equal(Model.footerLayout(h,row,0,collapsed).mode,'none');
-  }
+// Widget management helpers are presentation-only and never touch provider leases.
+assert.deepEqual(plain(Model.collapsedMap({'fixture.one':true,'fixture.two':false,'../bad':true})),
+  {'fixture.one':true,'fixture.two':false});
+assert.equal(Model.collapsedError({'fixture.one':true,'future.clock':false}), '');
+for (const value of [null, [], {'../bad':true}, {'constructor':true}, {'fixture.one':'yes'}])
+  assert.notEqual(Model.collapsedError(value), '', JSON.stringify(value));
+assert.deepEqual(plain(Model.registeredIds(registry)), ['fixture.one','fixture.two']);
+assert.deepEqual(plain(Model.registeredRows(registry).map(row => ({
+  id:row.id,label:row.label,available:row.available
+}))), [
+  {id:'fixture.one',label:'fixture.one',available:true},
+  {id:'fixture.two',label:'fixture.two',available:true}
+]);
+assert.equal(typeof Model.footerLayout, 'undefined',
+  'the retired bounded footer layout must not survive the shared-scroll migration');
+
+// Shared-scroll structure: hierarchy ListView remains the only normal scroll owner.
+const viewportSource = read('components/DockSidebarViewport.qml');
+const sidebarSource = read('components/DockSidebar.qml');
+const areaSource = read('components/DockSidebarWidgetArea.qml');
+const cardSource = read('components/DockWidgetCard.qml');
+assert.match(viewportSource, /property Component contentTail/);
+assert.match(viewportSource, /footer: Item\s*\{/);
+assert.match(sidebarSource, /contentTail: Component/);
+assert.match(sidebarSource, /anchors\.bottom: pinnedStrip\.top/);
+assert.doesNotMatch(sidebarSource, /widgetOverflowButton|id:\s*widgetOverflow/);
+assert.doesNotMatch(areaSource, /footerLayout|openOverflow|overflowNeeded/);
+const normalArea = areaSource.slice(0, areaSource.indexOf('  PopupWindow {'));
+assert.doesNotMatch(normalArea, /\bFlickable\b|\bListView\b/,
+  'normal Widget section must use the hierarchy ListView scroll owner');
+assert.match(areaSource, /sectionVisible: !panel\.panelCollapsed && controller\.widgetIds\.length > 0/);
+assert.match(areaSource, /implicitHeight: root\.sectionVisible \?/);
+assert.match(areaSource, /target: root\.viewport\.listView/);
+assert.match(areaSource, /anchorOutsideViewport/);
+assert.match(cardSource, /Remove from Widgets/);
+assert.match(cardSource, /presentation: "expanded"/);
+assert.doesNotMatch(cardSource, /presentation: "compact"/);
+assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"/);
+
+// Production controller mutations write only through the existing host intent.
+{
+  const intents = [];
+  const c = qmlMethods('DockSidebarController.qml', {
+    SidebarWidgetModel: Model,
+    host: { saveSettingIntent(key,value,expected) {
+      intents.push({key,value:plain(value),expected:plain(expected)});
+      return {accepted:true,pending:false,reply:{ok:true,data:{applied:true},warnings:[]}};
+    }},
+    settings:{sidebarWidgets:['fixture.one','fixture.two'],sidebarWidgetCollapsed:{}},
+    widgetRegistry:registry, widgetIds:['fixture.one','fixture.two'],
+    widgetCollapsed:{}, widgetPopupId:'', widgetPopupAnchor:null,
+    widgetDragId:'', interactionBusy:false, resizeActive:false, rowDragActive:false,
+    mutationFeedback:''
+  });
+  assert.equal(c.reorderWidget('fixture.one',1).noop,true,
+    'dropping immediately after the source is a no-op');
+  const moved=c.reorderWidget('fixture.one',2);
+  assert.equal(moved.accepted,true);
+  assert.deepEqual(intents.at(-1),{
+    key:'sidebarWidgets',value:['fixture.two','fixture.one'],
+    expected:['fixture.one','fixture.two']
+  });
+  c.setWidgetCollapsed('fixture.one',true);
+  assert.equal(intents.at(-1).key,'sidebarWidgetCollapsed');
+  assert.deepEqual(intents.at(-1).value,{'fixture.one':true});
+  c.settings={sidebarWidgets:['fixture.one','fixture.two'],sidebarWidgetCollapsed:{'fixture.one':true}};
+  c.widgetCollapsed={'fixture.one':true};
+  c.setWidgetEnabled('fixture.one',false);
+  assert.deepEqual(intents.at(-1).value,['fixture.two']);
+  assert.equal(c.widgetCollapsedFor('fixture.one'),true,
+    'removal does not clear the saved collapse preference');
 }
-assert.equal(Model.footerLayout(1080,44,2,false).height,240);
-for (const edge of ['left','right']) for (const screenW of [48,120,720,1920]) {
-  for (const screenH of [80,300,1080]) for (const panelW of [56,320]) {
-    const panel=Math.min(panelW,screenW);
-    const g=Model.popupGeometry(screenW,screenH,panel,edge,screenH-5,320,400);
-    assert.ok(g.width>0 && g.height>0);
-    assert.ok(g.screenX>=0 && g.screenX+g.width<=screenW);
-    assert.ok(g.y>=0 && g.y+g.height<=screenH);
-    if (screenW>panel+8) {
-      if (edge==='left') assert.ok(g.x>=panel);
-      else assert.ok(g.x+g.width<=0);
-    }
-  }
-}
+
 // A deferred view error from an old instance/revision cannot poison recovery.
 {
   const fixture=adapter("fixture.one");
@@ -206,4 +253,4 @@ const controllerSource=read('components/DockSidebarController.qml');
 assert.match(controllerSource,/SidebarWidgetModel\.createManager/,'the actual host-owned controller must create the manager');
 assert.match(controllerSource,/widgetManager\.dispose\(/,'the host must clean up leases');
 assert.match(read('DockHost.qml'),/widgetRegistry: root\.sidebarWidgetRegistry/,'production registry supplied by host, not settings');
-console.log('SB-05 registry, leases/generations, errors, bounded geometry and host config: PASS');
+console.log('Widget registry lifecycle, shared-scroll management helpers and host config: PASS');
