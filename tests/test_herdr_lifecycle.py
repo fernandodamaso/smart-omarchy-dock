@@ -12,6 +12,7 @@ class HerdrLifecycleContractTests(unittest.TestCase):
     def test_shared_service_is_demand_driven_in_both_runtime_modes(self):
         service = self.read("components/DockHerdrService.qml")
         self.assertIn("function acquire(owner)", service)
+        self.assertIn("function setWindowProcesses(revision, pids)", service)
         self.assertIn("property int activeCount: 0", service)
         self.assertIn("if (root.activeCount === 1) root.startProvider()", service)
         self.assertIn("if (root.activeCount === 0) root.stopProvider()", service)

@@ -33,6 +33,36 @@ def _identity(value: object) -> str | None:
     return value
 
 
+def _public_clients(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    output: list[dict[str, Any]] = []
+    for client in value[:16]:
+        if not isinstance(client, dict):
+            continue
+        pid = client.get("pid")
+        start = client.get("startTime")
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+            continue
+        if not isinstance(start, int) or isinstance(start, bool) or start < 0:
+            continue
+        ancestors: list[dict[str, Any]] = []
+        raw_ancestors = client.get("ancestors")
+        if isinstance(raw_ancestors, list):
+            for ancestor in raw_ancestors[:8]:
+                if not isinstance(ancestor, dict):
+                    continue
+                apid = ancestor.get("pid")
+                astart = ancestor.get("startTime")
+                if not isinstance(apid, int) or isinstance(apid, bool) or apid <= 0:
+                    continue
+                if not isinstance(astart, int) or isinstance(astart, bool) or astart < 0:
+                    continue
+                ancestors.append({"pid": apid, "startTime": astart})
+        output.append({"pid": pid, "startTime": start, "ancestors": ancestors})
+    return output
+
+
 def _sequence(value: object) -> str | None:
     if isinstance(value, str) and value.isdecimal():
         try:
@@ -58,6 +88,7 @@ class ServerState:
     observed_status: dict[str, str] = field(default_factory=dict)
     observed_since: dict[str, float] = field(default_factory=dict)
     snapshot_due: float | None = None
+    clients: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def id(self) -> str:
@@ -173,6 +204,7 @@ class ServerState:
             "connected": self.connected,
             "lastSnapshotObservedMs": None if self.last_snapshot_at is None else
                 max(0, int((now - self.last_snapshot_at) * 1000)),
+            "clients": _public_clients(self.clients),
         }
         if self.error:
             row["errorCode"] = _text(self.error, 64) or "unavailable"
@@ -219,12 +251,39 @@ class ServerState:
         return output
 
 
+def _public_window_processes(value: object) -> dict[str, Any]:
+    revision = 0
+    identities: list[dict[str, int]] = []
+    if isinstance(value, dict):
+        raw_revision = value.get("revision")
+        if isinstance(raw_revision, int) and not isinstance(raw_revision, bool) and raw_revision >= 0:
+            revision = raw_revision
+        raw_identities = value.get("identities")
+        if isinstance(raw_identities, list):
+            seen: set[int] = set()
+            for row in raw_identities[:256]:
+                if not isinstance(row, dict):
+                    continue
+                pid = row.get("pid")
+                start = row.get("startTime")
+                if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+                    continue
+                if not isinstance(start, int) or isinstance(start, bool) or start < 0:
+                    continue
+                if pid in seen:
+                    continue
+                seen.add(pid)
+                identities.append({"pid": pid, "startTime": start})
+    return {"revision": revision, "identities": identities}
+
+
 def normalized_snapshot(
     epoch: str,
     revision: int,
     servers: list[ServerState],
     discovery_error: str = "",
     now: float | None = None,
+    window_processes: object | None = None,
 ) -> dict[str, Any]:
     now = time.monotonic() if now is None else now
     server_truncated = len(servers) > MAX_SERVERS
@@ -294,6 +353,7 @@ def normalized_snapshot(
             "serverTruncated": server_truncated,
             "agentTruncated": agent_truncated,
         },
+        "windowProcesses": _public_window_processes(window_processes),
     }
     if discovery_error:
         result["sourceErrorCode"] = _text(discovery_error, 64) or "metadata_unavailable"

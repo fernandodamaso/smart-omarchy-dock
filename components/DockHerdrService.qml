@@ -125,6 +125,33 @@ Item {
       providerProcess.write("refresh\n")
   }
 
+  function setWindowProcesses(revision, pids) {
+    if (root.activeCount <= 0 || !providerProcess.running) return false
+    if (typeof revision !== "number" || !isFinite(revision)
+        || Math.floor(revision) !== revision || revision < 0) return false
+    if (!Array.isArray(pids)) return false
+    var normalized = []
+    var seen = Object.create(null)
+    for (var i = 0; i < pids.length; i++) {
+      var pid = pids[i]
+      if (typeof pid !== "number" || !isFinite(pid)
+          || Math.floor(pid) !== pid || pid <= 0) return false
+      var key = String(pid)
+      if (seen[key]) continue
+      if (normalized.length >= 256) return false
+      seen[key] = true
+      normalized.push(pid)
+    }
+    var payload = JSON.stringify({
+      kind: "window-processes",
+      revision: revision,
+      pids: normalized
+    })
+    if (payload.length > 4096) return false
+    providerProcess.write(payload + "\n")
+    return true
+  }
+
   function acceptLine(line) {
     if (root.activeCount <= 0 || !line || line.length > 1048576) return
     var value

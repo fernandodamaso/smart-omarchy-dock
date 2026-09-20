@@ -28,6 +28,11 @@ sys.path.insert(0, str(ROOT))
 
 from discovery import Discovery  # noqa: E402
 from model import ServerState, normalized_snapshot  # noqa: E402
+from attachments import (  # noqa: E402
+    discover_attachments,
+    parse_window_processes_command,
+    resolve_window_identities,
+)
 
 MAX_HELPER_FRAME = 1024 * 1024
 MAX_QUEUE_BYTES = 2 * 1024 * 1024
@@ -195,6 +200,9 @@ class Provider:
         self.dirty = True
         self.next_discovery_check = time.monotonic() + DISCOVERY_CHECK_EVERY
         self.stdin_thread: threading.Thread | None = None
+        self.window_process_revision = 0
+        self.window_process_pids: list[int] = []
+        self.window_process_identities: list[dict[str, int]] = []
 
     def _stdin(self) -> None:
         for raw in sys.stdin.buffer:
@@ -205,6 +213,10 @@ class Provider:
                 self.events.put(("command", command.decode("ascii")), len(command) + 64)
                 if command == b"quit":
                     return
+                continue
+            parsed = parse_window_processes_command(command)
+            if parsed is not None:
+                self.events.put(("window-processes", parsed), len(command) + 64)
         self.events.put(("command", "quit"), 64)
 
     def scan(self) -> None:
@@ -229,6 +241,50 @@ class Provider:
                 self.states[server_id] = ServerState(info)
                 self.backoff[server_id] = 1.0
                 self.start_helper(server_id, replace=False)
+        self.refresh_attachments(infos)
+        self.dirty = True
+
+    def refresh_attachments(self, infos: list[dict[str, object]] | None = None) -> None:
+        """Refresh TUI client identity on the bounded discovery cadence.
+
+        Socket fingerprints may be unchanged; process attach/detach still moves.
+        Topology-triggered scan() coalesces into the same path.
+        """
+        inventory = infos
+        if inventory is None:
+            inventory = [state.info for state in self.states.values()]
+        attachments = discover_attachments(inventory)
+        changed = False
+        for server_id, state in self.states.items():
+            clients = attachments.get(server_id, [])
+            if state.clients != clients:
+                state.clients = clients
+                changed = True
+        # Drop attachment metadata for servers that disappeared from inventory
+        # is already handled by scan()'s state removal.
+        if self.refresh_window_processes():
+            changed = True
+        if changed:
+            self.dirty = True
+
+    def refresh_window_processes(self) -> bool:
+        """Re-resolve requested window PIDs through the opened proc reader."""
+        identities = resolve_window_identities(self.window_process_pids)
+        if identities == self.window_process_identities:
+            return False
+        self.window_process_identities = identities
+        return True
+
+    def apply_window_processes(self, request: dict[str, object]) -> None:
+        revision = request.get("revision")
+        pids = request.get("pids")
+        if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
+            return
+        if not isinstance(pids, list):
+            return
+        self.window_process_revision = revision
+        self.window_process_pids = [int(pid) for pid in pids if isinstance(pid, int)]
+        self.refresh_window_processes()
         self.dirty = True
 
     def start_helper(self, server_id: str, replace: bool = True) -> None:
@@ -273,6 +329,11 @@ class Provider:
             elif command == "refresh":
                 self.scan()
             return
+        if kind == "window-processes":
+            request = event[1]
+            if isinstance(request, dict):
+                self.apply_window_processes(request)
+            return
         if kind not in ("helper", "exit"):
             return
 
@@ -313,6 +374,9 @@ class Provider:
             self.next_discovery_check = now + DISCOVERY_CHECK_EVERY
             if self.discovery.changed():
                 self.scan()
+            else:
+                # Attachments track live TUI processes, not socket mtime alone.
+                self.refresh_attachments()
 
         for server_id, state in list(self.states.items()):
             helper = self.helpers.get(server_id)
@@ -338,6 +402,10 @@ class Provider:
             self.revision,
             [self.states[key] for key in sorted(self.states)],
             self.discovery_error,
+            window_processes={
+                "revision": self.window_process_revision,
+                "identities": list(self.window_process_identities),
+            },
         )
         frame = (
             json.dumps(payload, separators=(",", ":"), ensure_ascii=False, allow_nan=False) + "\n"

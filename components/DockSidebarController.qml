@@ -8,6 +8,7 @@ import "DockSidebarWidgetModel.js" as SidebarWidgetModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockBrowserActivityModel.js" as ActivityModel
 import "DockFullscreenModel.js" as FullscreenModel
+import "DockHerdrModel.js" as HerdrModel
 
 // Host-owned session/view state. All compositor data and action/writer services
 // are injected. Widget leases belong to this host session, never to a view.
@@ -65,6 +66,14 @@ Item {
   property string widgetPopupId: ""
   property Item widgetPopupAnchor: null
   readonly property bool widgetWorkActive: mode === "sidebar" && mappedScreens.length > 0
+  // Herdr window↔session association bridge (process identity only).
+  property int windowProcessRevision: 0
+  property string windowProcessFingerprint: ""
+  property string windowProcessSentEpoch: ""
+  property string herdrAssociationEpoch: ""
+  property bool windowProcessBootstrapped: false
+  property var windowProcessTargets: []
+  property var herdrAssociations: ({ byWindowKey: ({}), unmatchedServerIds: [] })
 
   // Map override when present; otherwise the global sidebarCollapsed default.
   function collapsedFor(screen) {
@@ -127,6 +136,7 @@ Item {
     // Snapshot updates must not reset the delegate model or popup anchor.
     if (JSON.stringify(ids) !== JSON.stringify(root.widgetIds)) root.widgetIds = ids
     root.widgetRevision = (root.widgetRevision + 1) % 1000000000
+    root.syncHerdrWindowProcesses()
     if (!root.widgetPopupId) return
     var view = root.widgetManager.view(root.widgetPopupId)
     if (!ids.length || root.widgetPopupId !== "*" && (!view || !view.registered || !view.available))
@@ -315,6 +325,7 @@ Item {
     root.syncWidgets()
     if (root.interactionBusy && nextMapped.length) {
       root.refreshPending = true
+      root.syncHerdrWindowProcesses()
       return
     }
     root.refreshPending = false
@@ -324,6 +335,7 @@ Item {
     if (root.mode !== "sidebar" || !nextPrimary) {
       root.projection = SidebarModel.emptyProjection()
       root.railProjection = SidebarModel.emptyProjection()
+      root.syncHerdrWindowProcesses()
       root.refreshed()
       return
     }
@@ -383,9 +395,97 @@ Item {
     root.folds = liveFolds
     root.projection = projected
     root.railProjection = railProjected
+    root.syncHerdrWindowProcesses()
     root.refreshed()
   }
 
+  function collectWindowProcessTargets() {
+    var targets = []
+    var entries = (root.registry && root.registry.entries) ? root.registry.entries : []
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i]
+      if (!entry || !entry.toplevel) continue
+      var handle = WindowModel.handleForToplevel(entry.toplevel, root.hyprToplevels)
+      if (!handle) continue
+      var ipc = handle.lastIpcObject || ({})
+      var pid = ipc.pid
+      if (typeof pid !== "number" || !isFinite(pid) || Math.floor(pid) !== pid || pid <= 0)
+        continue
+      var key = typeof entry.key === "string" ? entry.key : ""
+      if (!key) continue
+      targets.push({ key: key, pid: pid })
+    }
+    return targets
+  }
+
+  function emptyHerdrAssociations() {
+    return ({ byWindowKey: ({}), unmatchedServerIds: [] })
+  }
+
+  function clearHerdrAssociations() {
+    root.herdrAssociations = root.emptyHerdrAssociations()
+    root.herdrAssociationEpoch = ""
+  }
+
+  function syncHerdrWindowProcesses() {
+    if (!root.initialized) return
+    var targets = root.collectWindowProcessTargets()
+    var fingerprint = HerdrModel.windowProcessFingerprint(targets)
+    var fingerprintChanged = fingerprint !== root.windowProcessFingerprint
+    // Empty initial targets are still a real request so unmatched sessions fall back.
+    var bootstrapping = !root.windowProcessBootstrapped
+    if (fingerprintChanged || bootstrapping) {
+      root.windowProcessBootstrapped = true
+      root.windowProcessFingerprint = fingerprint
+      root.windowProcessTargets = targets
+      root.windowProcessRevision = root.windowProcessRevision + 1
+      root.clearHerdrAssociations()
+      root.windowProcessSentEpoch = ""
+    }
+
+    var view = root.widgetView("herdr.agents")
+    var provider = view && view.provider ? view.provider : null
+    var leaseActive = !!(provider && typeof provider.setWindowProcesses === "function"
+        && provider.running !== false && view && view.active)
+    if (!leaseActive) {
+      root.windowProcessSentEpoch = ""
+      root.clearHerdrAssociations()
+      return
+    }
+
+    var epoch = typeof provider.sourceEpoch === "string" ? provider.sourceEpoch : ""
+    if (root.herdrAssociationEpoch && root.herdrAssociationEpoch !== epoch)
+      root.clearHerdrAssociations()
+
+    var needsSend = fingerprintChanged || bootstrapping
+        || root.windowProcessSentEpoch !== epoch
+    if (needsSend && root.windowProcessRevision > 0) {
+      var pids = HerdrModel.normalizeWindowProcessPids(
+        targets.map(function(row) { return row.pid }))
+      if (provider.setWindowProcesses(root.windowProcessRevision, pids)) {
+        root.windowProcessSentEpoch = epoch
+        // Reissue after epoch change withholds until a matching current-epoch reply.
+        if (!fingerprintChanged && !bootstrapping)
+          root.clearHerdrAssociations()
+      }
+    }
+
+    if (view.status !== "ready" || !view.data) {
+      root.clearHerdrAssociations()
+      return
+    }
+    var resolved = HerdrModel.resolveAssociations({
+      revision: root.windowProcessRevision,
+      epoch: root.windowProcessSentEpoch,
+      targets: root.windowProcessTargets
+    }, view.data)
+    if (!resolved) {
+      root.clearHerdrAssociations()
+      return
+    }
+    root.herdrAssociations = resolved
+    root.herdrAssociationEpoch = view.data.providerEpoch || epoch
+  }
 
   // Captured on pointer press/menu open, not looked up by title/index on release.
   function captureTarget(key) {
