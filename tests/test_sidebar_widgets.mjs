@@ -209,9 +209,9 @@ assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"
     widgetDragId:'', interactionBusy:false, resizeActive:false, rowDragActive:false,
     mutationFeedback:''
   });
-  assert.equal(c.reorderWidget('fixture.one',2).noop,true,
+  assert.equal(c.reorderWidget('fixture.one',1).noop,true,
     'dropping immediately after the source is a no-op');
-  const moved=c.reorderWidget('fixture.one',3);
+  const moved=c.reorderWidget('fixture.one',2);
   assert.equal(moved.accepted,true);
   assert.deepEqual(intents.at(-1),{
     key:'sidebarWidgets',value:['fixture.two','fixture.one'],
