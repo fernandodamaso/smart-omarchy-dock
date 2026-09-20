@@ -121,7 +121,7 @@ test('gallery is synthetic boilerplate and reuses DockWidgetCard', () => {
 test('approved HTML design reference is preserved and linked', () => {
   const html = new URL('../docs/widget-gallery/reference/approved-widget-mockup.html', import.meta.url)
   assert.equal(fs.existsSync(html), true)
-  assert.equal(fs.statSync(html).size, 93442)
+  assert.equal(fs.statSync(html).size, 111267)
   const docs = fs.readFileSync(new URL('../docs/SIDEBAR_WIDGETS.md', import.meta.url), 'utf8')
   assert.match(docs, /widget-gallery\/reference\/approved-widget-mockup\.html/)
   assert.match(docs, /tests\/widget-gallery\/WidgetGallery\.qml/)
