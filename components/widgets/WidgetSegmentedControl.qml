@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
 
-Row {
+Item {
   id: root
   property var model: []
   property var selectedValue: ""
@@ -10,7 +10,7 @@ Row {
   property string accessibleName: "View"
   property int gap: Style.space(3)
   signal selectionChanged(var value)
-  spacing: root.gap
+
   implicitWidth: 220
   implicitHeight: 32
 
@@ -46,16 +46,21 @@ Row {
   onModelChanged: normalizeSelection()
   onSelectedValueChanged: if (root.requiredSingleSelect && root.model.length) normalizeSelection()
 
-  Repeater {
-    model: root.model
-    delegate: WidgetButton {
-      required property var modelData
-      width: Math.max(0, (root.width - root.gap * Math.max(0, root.model.length - 1))
-        / Math.max(1, root.model.length))
-      height: root.height
-      text: root.labelOf(modelData)
-      variant: root.selectedValue === root.valueOf(modelData) ? "primary" : "secondary"
-      onClicked: root.selectValue(root.valueOf(modelData))
+  Row {
+    anchors.fill: parent
+    spacing: root.gap
+
+    Repeater {
+      model: root.model
+      delegate: WidgetButton {
+        required property var modelData
+        width: Math.max(0, (root.width - root.gap * Math.max(0, root.model.length - 1))
+          / Math.max(1, root.model.length))
+        height: root.height
+        text: root.labelOf(modelData)
+        variant: root.selectedValue === root.valueOf(modelData) ? "primary" : "secondary"
+        onClicked: root.selectValue(root.valueOf(modelData))
+      }
     }
   }
 
