@@ -12,11 +12,18 @@ TestCase {
   width: 640
   height: 900
 
+  Component {
+    id: boundedHostFactory
+    Item { width: 136; height: 500 }
+  }
+
   function make(name, properties) {
     var component = Qt.createComponent(Qt.resolvedUrl("../components/widgets/" + name + ".qml"))
     compare(component.status, Component.Ready, component.errorString())
-    var props = Object.assign({width: 140}, properties || {})
-    var item = createTemporaryObject(component, testCase, props)
+    var host = createTemporaryObject(boundedHostFactory, testCase)
+    verify(host !== null, "bounded host should create")
+    var props = Object.assign({width: 136}, properties || {})
+    var item = createTemporaryObject(component, host, props)
     verify(item !== null, name + " should create")
     verify(isFinite(item.width), name + " width must stay finite")
     verify(isFinite(item.implicitHeight), name + " implicit height must stay finite")
