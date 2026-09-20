@@ -30,7 +30,8 @@ Item {
   Ui.BorderSurface {
     anchors.fill: parent
     radius: Math.min(3, Style.cornerRadius)
-    color: root.activeFocus ? Qt.tint(Color.background, Util.alpha(Color.foreground, 0.09))
+    color: root.activeFocus || cardHover.hovered || cardContext.pressed
+      ? Qt.tint(Color.background, Util.alpha(Color.foreground, 0.09))
       : Qt.darker(Color.background, 1.04)
     borderSpec: root.activeFocus
       ? Border.controlSpec("focus", Color.foreground, Color.accent)
@@ -38,16 +39,27 @@ Item {
   }
 
   Rectangle {
-    visible: root.dropBefore || root.dropAfter
+    visible: root.dropBefore
     anchors.left: parent.left
     anchors.right: parent.right
-    anchors.top: root.dropBefore ? parent.top : undefined
-    anchors.bottom: root.dropAfter ? parent.bottom : undefined
+    anchors.top: parent.top
     height: 2
     color: Color.accent
   }
 
+  Rectangle {
+    visible: root.dropAfter
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    height: 2
+    color: Color.accent
+  }
+
+  HoverHandler { id: cardHover }
+
   TapHandler {
+    id: cardContext
     acceptedButtons: Qt.RightButton
     onTapped: cardMenu.popup()
   }
