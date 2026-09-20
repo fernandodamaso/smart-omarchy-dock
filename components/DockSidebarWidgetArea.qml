@@ -43,6 +43,19 @@ Item {
     return false
   }
 
+  function anchorInsideViewport(anchor) {
+    for (var item = anchor; item; item = item.parent) {
+      if (item === root.viewport) return true
+    }
+    return false
+  }
+
+  function anchorOutsideViewport(anchor) {
+    if (!root.anchorInsideViewport(anchor)) return false
+    var point = root.viewport.mapFromItem(anchor, 0, 0)
+    return point.y + anchor.height <= 0 || point.y >= root.viewport.height
+  }
+
   function popupGeometryFor(anchor, wantedWidth, wantedHeight) {
     var point = anchor && panel.contentItem
       ? panel.contentItem.mapFromItem(anchor, 0, anchor.height / 2) : {y:0}
@@ -95,8 +108,7 @@ Item {
       root.closePopup()
       return
     }
-    var point = root.viewport.mapFromItem(anchor, 0, 0)
-    if (point.y + anchor.height <= 0 || point.y >= root.viewport.height) {
+    if (root.anchorOutsideViewport(anchor)) {
       root.closePopup()
       return
     }
@@ -107,7 +119,8 @@ Item {
   function updateManagerAnchor() {
     if (!root.managerOpen) return
     var anchor = root.managerAnchor
-    if (!anchor || !anchor.visible || !root.panel.visible || root.panel.panelCollapsed) {
+    if (!anchor || !anchor.visible || !root.panel.visible || root.panel.panelCollapsed
+        || root.anchorOutsideViewport(anchor)) {
       root.closeManager()
       return
     }
@@ -473,6 +486,14 @@ Item {
   }
 
   Connections {
+    target: root.viewport.listView
+    function onContentYChanged() {
+      Qt.callLater(root.updatePopupAnchor)
+      Qt.callLater(root.updateManagerAnchor)
+    }
+  }
+
+  Connections {
     target: root.controller
     function onWidgetAnchorChanged() { Qt.callLater(root.updatePopupAnchor) }
     function onSurfaceInvalidated() {
@@ -504,6 +525,11 @@ Item {
         if (root.dragWidgetId) root.finishDrag(0, 0, true)
       }
     }
+  }
+
+  onImplicitHeightChanged: {
+    Qt.callLater(root.updatePopupAnchor)
+    Qt.callLater(root.updateManagerAnchor)
   }
 
   Component.onDestruction: {
