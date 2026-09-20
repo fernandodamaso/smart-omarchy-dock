@@ -40,6 +40,8 @@ Item {
   readonly property bool hasArtwork: kind === "window" || kind === "application" || kind === "launcher"
   readonly property bool nestedWindow: kind === "window" && row.nested === true
   readonly property bool nestedTab: kind === "browser-tab"
+  readonly property bool nestedHerdr: kind === "herdr-agent" || kind === "herdr-state"
+  readonly property bool nestedChild: nestedTab || nestedHerdr
   readonly property string tabFaviconSource: nestedTab
     ? DockIconModel.faviconFileUrl(String(row.faviconPath || "")) : ""
   readonly property bool tabFaviconReady: nestedTab && tabFaviconSource !== ""
@@ -47,6 +49,7 @@ Item {
   readonly property bool soleWindow: kind === "window" && row.soleWindow === true
   readonly property bool tabsExpandable: kind === "window" && row.tabsExpandable === true
   readonly property bool appExpandable: kind === "application" && row.expandable === true
+  readonly property bool herdrAssociated: kind === "window" && row.herdrAssociated === true
   readonly property int windowCount: kind === "application" ? Number(row.windowCount || row.windows && row.windows.length || 0) : 0
   readonly property int treeDepth: Number(row.treeDepth || 0)
   readonly property bool isLastSibling: row.isLastSibling !== false
@@ -94,16 +97,23 @@ Item {
     return BadgeModel.strictIdentityMatches(root.desktopId, root.entry, classes, aliases)
   }
   readonly property string windowTitle: {
-    if (kind === "browser-tab") return String(row.title || "Tab")
+    if (kind === "browser-tab" || kind === "herdr-agent" || kind === "herdr-state")
+      return String(row.title || (kind === "herdr-state" ? "Herdr" : kind === "herdr-agent" ? "Coding agent" : "Tab"))
     if (kind === "window" && row.toplevel)
       return String(row.toplevel.title || "").trim() || "Untitled window"
     return ""
   }
   readonly property string liveTitle: {
+    if (kind === "herdr-agent" || kind === "herdr-state")
+      return InteractionModel.sidebarWindowDisplayTitle({
+        kind: kind,
+        title: String(row.title || "")
+      })
     if (kind === "browser-tab" || kind === "window")
       return InteractionModel.sidebarWindowDisplayTitle({
         kind: kind,
         isBrowser: root.isBrowserWindow,
+        isHerdr: root.herdrAssociated,
         entryName: root.entry ? String(root.entry.name || "") : String(row.label || ""),
         windowTitle: root.windowTitle,
         tabTitle: kind === "browser-tab" ? String(row.title || "") : ""
@@ -155,10 +165,17 @@ Item {
     if (kind === "browser-tab")
       return (row.active === true ? "Active tab: " : "Tab: ") + liveTitle + alertBits
         + (attention.muted ? " · Alerts excluded from totals" : "")
+    if (kind === "herdr-agent")
+      return "Herdr agent: " + liveTitle
+        + (row.agentKind ? " · " + row.agentKind : "")
+        + (row.status ? " · " + row.status : "")
+    if (kind === "herdr-state")
+      return "Herdr: " + liveTitle
     var titleLabel = kind === "window"
       ? InteractionModel.sidebarWindowTooltipTitle({
         kind: "window",
         isBrowser: root.isBrowserWindow,
+        isHerdr: root.herdrAssociated,
         displayTitle: liveTitle,
         windowTitle: root.windowTitle
       })
@@ -204,7 +221,7 @@ Item {
   readonly property real artX: {
     if (collapsed) return 0
     if (kind === "workspace") return root.treeLayout.badgeLeft
-    if (nestedTab || hasArtwork)
+    if (nestedChild || hasArtwork)
       return InteractionModel.sidebarTreeIconX(root.workspaceCardInset, Math.max(1, root.treeDepth))
     return root.padding
   }
@@ -412,7 +429,7 @@ Item {
     }
 
     Rectangle {
-      visible: root.treeDepth >= 1 && (root.hasArtwork || root.nestedTab)
+      visible: root.treeDepth >= 1 && (root.hasArtwork || root.nestedChild)
       x: ownStem.x
       y: treeGuides.contentMid
       width: Math.max(0, root.artX - x - 2)
@@ -563,6 +580,21 @@ Item {
         : Util.alpha(Color.foreground, 0.75)
     }
 
+    // Nested Herdr agent/state marker — plain status dot, no provider lease.
+    Rectangle {
+      visible: root.nestedHerdr && !root.collapsed
+      width: 8
+      height: 8
+      radius: 4
+      x: root.artX + 3
+      anchors.verticalCenter: parent.verticalCenter
+      color: Color.foreground
+      opacity: root.kind === "herdr-agent"
+        && (row.status === "working" || row.status === "blocked") ? 1.0
+        : root.kind === "herdr-agent" && row.status === "done" ? 0.75
+        : 0.45
+    }
+
     // Two-line monitor identity — separate Text nodes, shown only after width is
     // stable, so layershell settle cannot double-paint a growing elided string.
     Column {
@@ -667,7 +699,7 @@ Item {
       objectName: "sidebar-label"
       visible: !root.collapsed && root.kind !== "monitor" && root.kind !== "workspace"
       x: {
-        if (root.nestedTab)
+        if (root.nestedChild)
           return root.artX + 14 + Style.space(8)
         if (root.hasArtwork) return artwork.x + artwork.width + Style.space(8)
         return root.padding
@@ -699,7 +731,7 @@ Item {
       wrapMode: Text.NoWrap
       maximumLineCount: 1
       horizontalAlignment: Text.AlignLeft
-      color: root.kind === "section" ? Color.muted
+      color: root.kind === "section" || root.kind === "herdr-state" ? Color.muted
         : root.row.urgent ? Color.urgent
         : root.focusedWindow ? Color.accent
         : Color.foreground

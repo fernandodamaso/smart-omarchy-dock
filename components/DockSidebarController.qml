@@ -74,6 +74,10 @@ Item {
   property bool windowProcessBootstrapped: false
   property var windowProcessTargets: []
   property var herdrAssociations: ({ byWindowKey: ({}), unmatchedServerIds: [] })
+  // Last verified window→server parents. Survives provider loss only while the
+  // exact live handle key and PID remain unchanged. Never stores agents/counts.
+  property var herdrVerifiedParents: ({})
+  property bool projecting: false
 
   // Map override when present; otherwise the global sidebarCollapsed default.
   function collapsedFor(screen) {
@@ -137,6 +141,9 @@ Item {
     if (JSON.stringify(ids) !== JSON.stringify(root.widgetIds)) root.widgetIds = ids
     root.widgetRevision = (root.widgetRevision + 1) % 1000000000
     root.syncHerdrWindowProcesses()
+    // Herdr snapshot/association changes feed nested tree rows.
+    if (!root.projecting)
+      root.scheduleRefresh()
     if (!root.widgetPopupId) return
     var view = root.widgetManager.view(root.widgetPopupId)
     if (!ids.length || root.widgetPopupId !== "*" && (!view || !view.registered || !view.available))
@@ -301,6 +308,22 @@ Item {
 
   function refresh() {
     if (!root.initialized) return
+    if (root.projecting) {
+      root.refreshPending = true
+      return
+    }
+    if (root.dragSession && !root.rowDragIsCurrent()) root.cancelRowDrag("source-or-topology-changed")
+    root.projecting = true
+    try {
+      root.refreshBody()
+    } finally {
+      root.projecting = false
+      if (root.refreshPending && !root.interactionBusy)
+        Qt.callLater(root.refresh)
+    }
+  }
+
+  function refreshBody() {
     if (root.dragSession && !root.rowDragIsCurrent()) root.cancelRowDrag("source-or-topology-changed")
     root.registry = SidebarModel.reconcileHandles(root.registry, root.toplevels)
     var nextMapped = root.mode === "sidebar" ? SidebarModel.selectScreens(root.screens, root.monitors,
@@ -357,6 +380,15 @@ Item {
       if (!service || !service.available) return ({})
       return service.tabs || ({})
     })()
+    // Associations must be current before projection so nested agent rows appear.
+    root.syncHerdrWindowProcesses()
+    var herdrView = root.widgetView("herdr.agents")
+    var herdrSnapshot = herdrView && herdrView.status === "ready" && herdrView.data
+      ? herdrView.data : null
+    var herdrVerified = root.herdrAssociationEpoch !== ""
+      && !!herdrSnapshot
+      && typeof herdrSnapshot.providerEpoch === "string"
+      && herdrSnapshot.providerEpoch === root.herdrAssociationEpoch
     var projectInput = {
       desktop: desktop, screens: root.screens,
       monitors: root.monitors, monitorOrder: root.settings.workspaceMonitorOrder || [],
@@ -367,7 +399,10 @@ Item {
       folds: root.folds,
       sidebarBrowserTabsEnabled: DockModel.normalizeSetting(
         "sidebarBrowserTabsEnabled", root.settings.sidebarBrowserTabsEnabled),
-      browserTabs: browserTabs
+      browserTabs: browserTabs,
+      herdrSnapshot: herdrSnapshot,
+      herdrAssociations: root.herdrAssociations,
+      herdrAssociationsVerified: herdrVerified
     }
     var projected = SidebarModel.project(Object.assign({}, projectInput, { collapsed: false }))
     var railProjected = SidebarModel.project(Object.assign({}, projectInput, { collapsed: true }))
@@ -395,7 +430,6 @@ Item {
     root.folds = liveFolds
     root.projection = projected
     root.railProjection = railProjected
-    root.syncHerdrWindowProcesses()
     root.refreshed()
   }
 
@@ -422,8 +456,57 @@ Item {
     return ({ byWindowKey: ({}), unmatchedServerIds: [] })
   }
 
-  function clearHerdrAssociations() {
-    root.herdrAssociations = root.emptyHerdrAssociations()
+  function rememberHerdrVerifiedParents(associations, targets) {
+    var pidByKey = Object.create(null)
+    ;(targets || []).forEach(function(target) {
+      if (!target || typeof target.key !== "string" || !target.key) return
+      if (typeof target.pid !== "number") return
+      pidByKey[target.key] = target.pid
+    })
+    var next = Object.create(null)
+    var byWindow = associations && associations.byWindowKey
+      ? associations.byWindowKey : ({})
+    Object.keys(byWindow).forEach(function(windowKey) {
+      var serverId = byWindow[windowKey]
+      var pid = pidByKey[windowKey]
+      if (typeof serverId !== "string" || !serverId) return
+      if (typeof pid !== "number") return
+      next[windowKey] = { serverId: serverId, pid: pid }
+    })
+    root.herdrVerifiedParents = next
+  }
+
+  // Parent labels only: drop entries whose exact handle key/PID no longer match.
+  function preservedHerdrAssociations(targets) {
+    var pidByKey = Object.create(null)
+    ;(targets || []).forEach(function(target) {
+      if (!target || typeof target.key !== "string" || !target.key) return
+      if (typeof target.pid !== "number") return
+      pidByKey[target.key] = target.pid
+    })
+    var byWindowKey = ({})
+    var verified = root.herdrVerifiedParents || ({})
+    var retained = Object.create(null)
+    Object.keys(verified).forEach(function(windowKey) {
+      var entry = verified[windowKey]
+      if (!entry || typeof entry !== "object") return
+      if (pidByKey[windowKey] !== entry.pid) return
+      if (typeof entry.serverId !== "string" || !entry.serverId) return
+      byWindowKey[windowKey] = entry.serverId
+      retained[windowKey] = { serverId: entry.serverId, pid: entry.pid }
+    })
+    root.herdrVerifiedParents = retained
+    return ({ byWindowKey: byWindowKey, unmatchedServerIds: [] })
+  }
+
+  function clearHerdrAssociations(options) {
+    var preserveParents = !!(options && options.preserveParents === true)
+    if (preserveParents) {
+      root.herdrAssociations = root.preservedHerdrAssociations(root.windowProcessTargets)
+    } else {
+      root.herdrAssociations = root.emptyHerdrAssociations()
+      root.herdrVerifiedParents = ({})
+    }
     root.herdrAssociationEpoch = ""
   }
 
@@ -439,8 +522,12 @@ Item {
       root.windowProcessFingerprint = fingerprint
       root.windowProcessTargets = targets
       root.windowProcessRevision = root.windowProcessRevision + 1
-      root.clearHerdrAssociations()
+      // Prune retained parents against the new handle/PID set; do not wipe
+      // unchanged verified parents when an unrelated window appears or leaves.
+      root.clearHerdrAssociations({ preserveParents: true })
       root.windowProcessSentEpoch = ""
+    } else {
+      root.windowProcessTargets = targets
     }
 
     var view = root.widgetView("herdr.agents")
@@ -449,13 +536,13 @@ Item {
         && provider.running !== false && view && view.active)
     if (!leaseActive) {
       root.windowProcessSentEpoch = ""
-      root.clearHerdrAssociations()
+      root.clearHerdrAssociations({ preserveParents: true })
       return
     }
 
     var epoch = typeof provider.sourceEpoch === "string" ? provider.sourceEpoch : ""
     if (root.herdrAssociationEpoch && root.herdrAssociationEpoch !== epoch)
-      root.clearHerdrAssociations()
+      root.clearHerdrAssociations({ preserveParents: true })
 
     var needsSend = fingerprintChanged || bootstrapping
         || root.windowProcessSentEpoch !== epoch
@@ -466,12 +553,12 @@ Item {
         root.windowProcessSentEpoch = epoch
         // Reissue after epoch change withholds until a matching current-epoch reply.
         if (!fingerprintChanged && !bootstrapping)
-          root.clearHerdrAssociations()
+          root.clearHerdrAssociations({ preserveParents: true })
       }
     }
 
     if (view.status !== "ready" || !view.data) {
-      root.clearHerdrAssociations()
+      root.clearHerdrAssociations({ preserveParents: true })
       return
     }
     var resolved = HerdrModel.resolveAssociations({
@@ -480,11 +567,12 @@ Item {
       targets: root.windowProcessTargets
     }, view.data)
     if (!resolved) {
-      root.clearHerdrAssociations()
+      root.clearHerdrAssociations({ preserveParents: true })
       return
     }
     root.herdrAssociations = resolved
     root.herdrAssociationEpoch = view.data.providerEpoch || epoch
+    root.rememberHerdrVerifiedParents(resolved, root.windowProcessTargets)
   }
 
   // Captured on pointer press/menu open, not looked up by title/index on release.

@@ -288,22 +288,48 @@ TestCase {
     wait(0)
     compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
 
-    // Provider exit without handle change must withhold the previous map.
+    // Provider exit without handle change preserves the verified parent label
+    // only; unmatched inventory and the association epoch are cleared.
     service.simulateRestart()
     wait(0)
-    compare(JSON.stringify(c.herdrAssociations.byWindowKey), "{}")
+    compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
     compare(JSON.stringify(c.herdrAssociations.unmatchedServerIds), "[]")
+    compare(c.herdrAssociationEpoch, "")
+    // No actionable agent rows while the provider is down.
+    verify(!c.projection.rows.some(function(row) { return row.kind === "herdr-agent" }))
 
-    // New epoch with unmatched metadata revision still withholds.
+    // New epoch with agents before a matching process reply must not emit
+    // actionable agent rows under the preserved parent label.
     service.publishSnapshot({
       schemaVersion: 1,
       providerEpoch: "epoch-2",
       revision: 1,
-      servers: [],
+      servers: [{
+        id: "local-a",
+        health: "live",
+        clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
+      }],
+      agents: [{
+        id: "local-a:2:pane-1",
+        serverId: "local-a",
+        connectionGeneration: 2,
+        paneId: "pane-1",
+        name: "Premature Agent",
+        agent: "codex",
+        status: "working"
+      }],
+      liveCounts: { agents: 1, working: 1, complete: true },
+      completeness: { state: "complete" },
       windowProcesses: { revision: 0, identities: [] }
     })
     wait(0)
-    compare(JSON.stringify(c.herdrAssociations.byWindowKey), "{}")
+    compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
+    compare(c.herdrAssociationEpoch, "")
+    verify(!c.projection.rows.some(function(row) { return row.kind === "herdr-agent" }))
+    verify(c.projection.rows.some(function(row) {
+      return row.kind === "herdr-state" && row.windowKey === windowKey
+        && row.title === "Herdr unavailable"
+    }))
 
     // Restored only after a matching current-epoch reply.
     var requestRevision = c.windowProcessRevision
@@ -313,8 +339,20 @@ TestCase {
       revision: 2,
       servers: [{
         id: "local-a",
+        health: "live",
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
+      agents: [{
+        id: "local-a:2:pane-1",
+        serverId: "local-a",
+        connectionGeneration: 2,
+        paneId: "pane-1",
+        name: "Verified Agent",
+        agent: "codex",
+        status: "working"
+      }],
+      liveCounts: { agents: 1, working: 1, complete: true },
+      completeness: { state: "complete" },
       windowProcesses: {
         revision: requestRevision,
         identities: [{ pid: 40, startTime: 40 }]
@@ -322,6 +360,95 @@ TestCase {
     })
     wait(0)
     compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
+    compare(c.herdrAssociationEpoch, "epoch-2")
+    verify(c.projection.rows.some(function(row) {
+      return row.kind === "herdr-agent" && row.windowKey === windowKey
+        && row.title === "Verified Agent"
+    }))
+  }
+
+  function test_herdr_preserved_parents_prune_on_unrelated_vs_replaced() {
+    var service = createTemporaryObject(herdrServiceFactory, this)
+    verify(service !== null)
+    var a = createTemporaryObject(toplevelFactory, this, { title: "A" })
+    var b = createTemporaryObject(toplevelFactory, this, { title: "B" })
+    var screen = { name: "DP-1", width: 1920, height: 1080 }
+    var c = createTemporaryObject(factory, this, {
+      widgetRegistry: {
+        "herdr.agents": {
+          id: "herdr.agents",
+          available: true,
+          acquire: function(owner) { return service.acquire(owner) }
+        }
+      },
+      settings: {
+        presentationMode: "sidebar",
+        pinned: [],
+        workspaceGroups: [],
+        sidebarCollapsed: false,
+        sidebarWidgets: ["herdr.agents"]
+      },
+      screens: [screen],
+      monitors: [{ id: 0, name: "DP-1", activeWorkspace: { id: 1 } }],
+      workspaces: [{ id: 1, monitorID: 0 }],
+      toplevels: [a],
+      hyprToplevels: [{
+        wayland: a, address: "0xa",
+        lastIpcObject: { workspace: { id: 1 }, monitor: 0, pid: 40 }
+      }]
+    })
+    verify(c !== null)
+    c.refresh()
+    var windowKey = c.registry.entries[0].key
+    service.publishSnapshot({
+      schemaVersion: 1,
+      providerEpoch: "epoch-1",
+      revision: 5,
+      servers: [{
+        id: "local-a",
+        clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
+      }],
+      windowProcesses: { revision: 1, identities: [{ pid: 40, startTime: 40 }] }
+    })
+    wait(0)
+    compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
+
+    // Provider loss retains the verified parent.
+    service.simulateRestart()
+    wait(0)
+    compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
+
+    // Unrelated window create/remove must not wipe the unchanged parent.
+    c.toplevels = [a, b]
+    c.hyprToplevels = [{
+      wayland: a, address: "0xa",
+      lastIpcObject: { workspace: { id: 1 }, monitor: 0, pid: 40 }
+    }, {
+      wayland: b, address: "0xb",
+      lastIpcObject: { workspace: { id: 1 }, monitor: 0, pid: 50 }
+    }]
+    c.refresh()
+    compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
+    compare(c.herdrAssociationEpoch, "")
+
+    c.toplevels = [a]
+    c.hyprToplevels = [{
+      wayland: a, address: "0xa",
+      lastIpcObject: { workspace: { id: 1 }, monitor: 0, pid: 40 }
+    }]
+    c.refresh()
+    compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
+
+    // Replaced handle (new key, same PID) drops the preserved parent.
+    c.toplevels = [b]
+    c.hyprToplevels = [{
+      wayland: b, address: "0xb",
+      lastIpcObject: { workspace: { id: 1 }, monitor: 0, pid: 40 }
+    }]
+    c.refresh()
+    var replacedKey = c.registry.entries[0].key
+    verify(replacedKey !== windowKey)
+    compare(JSON.stringify(c.herdrAssociations.byWindowKey), "{}")
   }
 
   function test_herdr_empty_targets_unresolved_fallback_then_resolve() {

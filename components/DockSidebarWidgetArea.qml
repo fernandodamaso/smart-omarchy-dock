@@ -4,6 +4,7 @@ import Quickshell
 import qs.Commons
 import qs.Ui as Ui
 import "DockSidebarWidgetModel.js" as WidgetModel
+import "DockSidebarModel.js" as SidebarModel
 
 // Sidebar-only composition. All snapshot/subscriptions survive in the host-owned
 // controller. The footer and its popup never instantiate services or writers.
@@ -13,8 +14,23 @@ Item {
   required property var panel
   required property real availableContentHeight
   required property real windowRowHeight
+  // Presentation IDs hide an empty Herdr fallback from layout/overflow counts
+  // without releasing the host lease (controller.widgetIds stays intact).
+  readonly property var presentationWidgetIds: {
+    var revision = root.controller.widgetRevision
+    var ids = root.controller.widgetIds || []
+    var view = root.controller.widgetView("herdr.agents")
+    var snap = view && view.status === "ready" && view.data ? view.data : null
+    var showHerdr = SidebarModel.herdrFallbackVisible(snap, root.controller.herdrAssociations)
+    var out = []
+    for (var i = 0; i < ids.length; ++i) {
+      if (ids[i] === "herdr.agents" && !showHerdr) continue
+      out.push(ids[i])
+    }
+    return out
+  }
   readonly property var layout: WidgetModel.footerLayout(availableContentHeight,
-    windowRowHeight, controller.widgetIds.length, panel.panelCollapsed === true)
+    windowRowHeight, presentationWidgetIds.length, panel.panelCollapsed === true)
   readonly property bool overflowNeeded: layout.mode === "overflow"
   readonly property var popupWindow: popup
   readonly property var scrollView: footerScroll
@@ -97,7 +113,7 @@ Item {
       width: footerScroll.width
       Repeater {
         id: slotRepeater
-        model: root.controller.widgetIds
+        model: root.presentationWidgetIds
         delegate: Item {
           id: slot
           required property string modelData
@@ -214,7 +230,7 @@ Item {
           id: popupContent
           width: parent.width
           Repeater {
-            model: popup.visible && root.controller.widgetPopupId === "*" ? root.controller.widgetIds : []
+            model: popup.visible && root.controller.widgetPopupId === "*" ? root.presentationWidgetIds : []
             delegate: Ui.Button {
               required property string modelData
               readonly property var snapshot: root.controller.widgetView(modelData)

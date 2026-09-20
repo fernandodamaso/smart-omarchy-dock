@@ -153,9 +153,9 @@ function sidebarTreeIconX(workspaceCardInset, treeDepth) {
 }
 
 // Horizontal insets for fillLayer / focus rail. Expanded window/application/
-// browser-tab rows start 3 logical px before artX so parent tree guides stay
-// visible; workspace headers keep the whole-card inset; collapsed rail keeps
-// centered/compact card geometry. Right edge always matches card inset.
+// browser-tab / herdr child rows start 3 logical px before artX so parent tree
+// guides stay visible; workspace headers keep the whole-card inset; collapsed
+// rail keeps centered/compact card geometry. Right edge always matches card inset.
 function sidebarSelectionInsets(input) {
   var o = input || {}
   var inset = Number(o.workspaceCardInset)
@@ -167,7 +167,8 @@ function sidebarSelectionInsets(input) {
     return { left: left, right: right }
   if (o.kind === "workspace")
     return { left: inset, right: right }
-  if (o.kind === "window" || o.kind === "application" || o.kind === "browser-tab") {
+  if (o.kind === "window" || o.kind === "application" || o.kind === "browser-tab"
+      || o.kind === "herdr-agent" || o.kind === "herdr-state") {
     var artX = Number(o.artX)
     if (!isFinite(artX)) artX = inset
     return { left: artX - 3, right: right }
@@ -270,7 +271,8 @@ function sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert) {
     if (kind === "monitor") baseline = sp(32)
     else if (kind === "workspace") baseline = sp(30)
     else if (kind === "section") baseline = sp(22)
-    else if (kind === "browser-tab") baseline = sp(28)
+    else if (kind === "browser-tab" || kind === "herdr-agent"
+        || kind === "herdr-state") baseline = sp(28)
     else baseline = alert ? sp(58) : sp(36)
   } else if (kind === "monitor") {
     baseline = sp(48)
@@ -398,12 +400,18 @@ function contextMenuMembers(target, anchor) {
 
 // Browser window parents show the desktop-entry application name; selected-tab
 // titles stay on browser-tab children and in the parent tooltip only.
+// Associated Herdr parents show "Herdr"; the original window title stays in the
+// tooltip. Agent activation is wired in a later task.
 function sidebarWindowDisplayTitle(input) {
   var source = input || ({})
   var kind = String(source.kind || "")
   if (kind === "browser-tab")
     return String(source.tabTitle || "").trim() || "Tab"
+  if (kind === "herdr-agent" || kind === "herdr-state")
+    return String(source.title || "").trim() || (kind === "herdr-state" ? "Herdr" : "Coding agent")
   var windowTitle = String(source.windowTitle || "").trim() || "Untitled window"
+  if (kind === "window" && source.isHerdr === true)
+    return "Herdr"
   if (kind === "window" && source.isBrowser === true) {
     var entryName = String(source.entryName || "").trim()
     if (entryName) return entryName
@@ -416,7 +424,7 @@ function sidebarWindowTooltipTitle(input) {
   var source = input || ({})
   var display = String(source.displayTitle || "").trim()
   var windowTitle = String(source.windowTitle || "").trim()
-  if (source.kind === "window" && source.isBrowser === true
+  if (source.kind === "window" && (source.isBrowser === true || source.isHerdr === true)
       && display && windowTitle && display !== windowTitle)
     return display + " · " + windowTitle
   return display || windowTitle

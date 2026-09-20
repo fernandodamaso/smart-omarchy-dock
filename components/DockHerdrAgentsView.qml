@@ -1,8 +1,11 @@
 import QtQuick
 import qs.Commons
+import "DockSidebarModel.js" as SidebarModel
 
 // Snapshot-only presentation. It never acquires a provider, starts a process,
-// subscribes to Herdr or emits desktop notifications.
+// subscribes to Herdr or emits desktop notifications. Matched sessions (live or
+// preserved parent associations) are filtered out of this fallback; they appear
+// as nested tree rows instead. Folding never changes which sessions are matched.
 Item {
   id: root
   property var widgetContext: ({})
@@ -12,15 +15,49 @@ Item {
   readonly property string presentation: widgetContext && widgetContext.presentation
     ? String(widgetContext.presentation) : "expanded"
   readonly property bool compact: presentation === "compact"
-  readonly property var servers: snapshot && Array.isArray(snapshot.servers)
-    ? snapshot.servers : []
-  readonly property var agents: snapshot && Array.isArray(snapshot.agents)
-    ? snapshot.agents : []
-  readonly property var counts: snapshot ? snapshot.liveCounts : null
+  readonly property var associations: widgetContext && widgetContext.herdrAssociations
+    ? widgetContext.herdrAssociations : ({ byWindowKey: ({}), unmatchedServerIds: [] })
+  readonly property var matchedIdSet: {
+    var set = Object.create(null)
+    var byWindow = associations && associations.byWindowKey
+    if (byWindow && typeof byWindow === "object") {
+      Object.keys(byWindow).forEach(function(windowKey) {
+        var serverId = byWindow[windowKey]
+        if (typeof serverId === "string" && serverId)
+          set[serverId] = true
+      })
+    }
+    return set
+  }
+  readonly property var servers: {
+    var all = snapshot && Array.isArray(snapshot.servers) ? snapshot.servers : []
+    return all.filter(function(server) {
+      return server && typeof server === "object"
+        && root.matchedIdSet[String(server.id || "")] !== true
+    })
+  }
+  readonly property var agents: {
+    var all = snapshot && Array.isArray(snapshot.agents) ? snapshot.agents : []
+    return all.filter(function(agent) {
+      return agent && typeof agent === "object"
+        && root.matchedIdSet[String(agent.serverId || "")] !== true
+    })
+  }
+  readonly property int unmatchedBlocked: {
+    var count = 0
+    root.agents.forEach(function(agent) {
+      if (String(agent.status || "") === "blocked") count += 1
+    })
+    return count
+  }
   readonly property var rows: buildRows()
+  readonly property bool hasFallbackContent: rows.length > 0
 
-  implicitHeight: compact ? 44 : Math.min(240, Math.max(44, 34 + rows.length * 38))
+  implicitHeight: !hasFallbackContent ? 0
+    : compact ? 44
+    : Math.min(240, Math.max(44, 34 + rows.length * 38))
   clip: true
+  visible: hasFallbackContent
 
   function buildRows() {
     var output = []
@@ -49,36 +86,24 @@ Item {
           status: String(agent.status || "unknown")
         })
       })
-      if (!items.length && server.health === "live") {
-        output.push({
-          kind: "empty",
-          key: "empty:" + id,
-          title: "No active coding agents",
-          detail: "",
-          status: "idle"
-        })
+      if (!items.length) {
+        var emptyChild = SidebarModel.herdrFallbackEmptyChild(server, root.snapshot)
+        if (emptyChild)
+          output.push(emptyChild)
       }
     })
-    if (!output.length) {
-      output.push({
-        kind: "empty",
-        key: "empty",
-        title: "No local Herdr session",
-        detail: "",
-        status: "unknown"
-      })
-    }
     return output
   }
 
   function summary() {
-    if (!root.counts) return "Herdr unavailable"
-    var total = root.counts.agents || 0
-    var text = String(total) + (total === 1 ? " agent" : " agents")
-    if ((root.counts.blocked || 0) > 0)
-      text += " · " + root.counts.blocked + " blocked"
-    if (root.snapshot.completeness
-        && root.snapshot.completeness.state === "partial")
+    if (!root.hasFallbackContent) return ""
+    var total = root.agents.length
+    var text = "Unmatched / unattached Herdr sessions"
+    if (total > 0)
+      text += " · " + String(total) + (total === 1 ? " agent" : " agents")
+    if (root.unmatchedBlocked > 0)
+      text += " · " + root.unmatchedBlocked + " blocked"
+    if (SidebarModel.herdrInventoryPartial(root.snapshot))
       text += " · partial"
     return text
   }
@@ -90,7 +115,7 @@ Item {
 
   Item {
     anchors.fill: parent
-    visible: root.compact
+    visible: root.compact && root.hasFallbackContent
 
     Rectangle {
       x: 12
@@ -99,7 +124,7 @@ Item {
       height: 8
       radius: 4
       color: Color.foreground
-      opacity: root.counts && (root.counts.blocked || 0) > 0 ? 1.0 : 0.55
+      opacity: root.unmatchedBlocked > 0 ? 1.0 : 0.55
     }
 
     Text {
@@ -117,7 +142,7 @@ Item {
 
   Flickable {
     anchors.fill: parent
-    visible: !root.compact
+    visible: !root.compact && root.hasFallbackContent
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     flickableDirection: Flickable.VerticalFlick
