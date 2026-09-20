@@ -189,6 +189,8 @@ assert.doesNotMatch(normalArea, /\bFlickable\b|\bListView\b/,
   'normal Widget section must use the hierarchy ListView scroll owner');
 assert.match(areaSource, /sectionVisible: !panel\.panelCollapsed && controller\.widgetIds\.length > 0/);
 assert.match(areaSource, /implicitHeight: root\.sectionVisible \?/);
+assert.match(areaSource, /target: root\.viewport\.listView/);
+assert.match(areaSource, /anchorOutsideViewport/);
 assert.match(cardSource, /Remove from Widgets/);
 assert.match(cardSource, /presentation: "expanded"/);
 assert.doesNotMatch(cardSource, /presentation: "compact"/);
