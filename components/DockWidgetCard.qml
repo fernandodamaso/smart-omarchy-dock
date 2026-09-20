@@ -35,7 +35,7 @@ Item {
       : Qt.darker(Color.background, 1.04)
     borderSpec: root.activeFocus
       ? Border.controlSpec("focus", Color.foreground, Color.accent)
-      : Border.none()
+      : Border.surfaceSpec("widget-card", "border", Util.alpha(Color.foreground, 0.10), 1)
   }
 
   Rectangle {
