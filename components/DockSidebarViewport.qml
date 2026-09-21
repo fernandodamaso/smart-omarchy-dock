@@ -15,6 +15,8 @@ FocusScope {
   // Connector of the owning PanelWindow; rows stamp this for Ctrl/drag.
   property string panelConnector: ""
   property bool panelCollapsed: false
+  // Effective owning-panel visibility. Rail mode is separately excluded below.
+  property bool presentationVisible: true
   // Phase 5 drives whole-workspace hover highlight; chrome already binds it.
   property string hoveredWorkspaceKey: ""
   readonly property var viewProjection: controller.projectionFor(panelCollapsed)
@@ -56,6 +58,15 @@ FocusScope {
   // Bump when list geometry/model changes so offscreen span estimates refresh.
   property int sectionChromeRevision: 0
   FontMetrics { id: metrics; font.family: Style.font.family; font.pixelSize: Style.font.body }
+
+  function rowIntersectsViewport(rowY, rowHeightValue) {
+    if (!root.presentationVisible || root.panelCollapsed || list.height <= 0) return false
+    var top = Number(rowY)
+    var bottom = top + Math.max(0, Number(rowHeightValue))
+    var viewportTop = list.contentY
+    var viewportBottom = viewportTop + list.height
+    return bottom > viewportTop && top < viewportBottom
+  }
 
   function estimatedRowHeight(row) {
     var attention = root.controller.attentionForRow(row)
@@ -536,6 +547,7 @@ FocusScope {
       panelConnector: root.panelConnector
       collapsed: root.panelCollapsed
       rowHeight: root.rowHeight
+      herdrAnimationEligible: root.rowIntersectsViewport(y, height)
       width: list.width
     }
     footer: Item {
