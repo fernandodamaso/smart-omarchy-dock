@@ -127,7 +127,16 @@ assert_file "$data_home/smartdock/assets/terminal-agents/ATTRIBUTIONS.md"
 diff -qr -- "$repo_dir/assets" "$data_home/smartdock/assets" \
   || fail "installed assets directory differs from bundled assets"
 assert_file "$config_file"
-assert_same_file "$config_file" <(printf '%s\n' '{"sentinel":"keep-me"}')
+python3 - "$config_file" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+assert data["sentinel"] == "keep-me"
+assert data["sidebarWidgets"] == [
+    "demo.display", "demo.lists", "demo.inputs", "demo.actions-states"
+]
+PY
+seeded_config="$(cat "$config_file")"
+assert_file "$config_home/smartdock/.demo-widgets-seeded-v1"
 assert_file "$config_home/autostart/smartdock.desktop"
 assert_file "$bin_home/smartdock"
 
@@ -137,6 +146,8 @@ PATH="$fake_qs_bin:/usr/bin:/bin" "$bin_home/smartdock" update \
 assert_same_file "$repo_dir/components/Dock.qml" \
   "$data_home/smartdock/components/Dock.qml"
 assert_file "$data_home/smartdock/assets/terminal-agents/ATTRIBUTIONS.md"
+test "$(cat "$config_file")" = "$seeded_config" \
+  || fail "update must not re-seed or rewrite an already-seeded Widget config"
 
 PATH="$no_qs_bin:/usr/bin:/bin" bash "$repo_dir/uninstall.sh" \
   --agent-assets-only \
