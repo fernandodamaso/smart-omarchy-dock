@@ -102,9 +102,13 @@ patches, then read back effective values and actual persistence. Never execute
 controlCommand for validation. Source work is reserved for an explicitly
 requested unsupported feature or an evidenced defect under its owning issue.
 
-Preferences and icon editing are CLI-only. Do not reintroduce a settings window,
-preview-only preferences, or a second config writer. Retain ordinary window
-previews, the app picker, dock menus, drag reordering and live theme bindings.
+Preferences and general application/profile icon editing are CLI-only. The one
+narrow exception is FDM-927's selected live window dialog: a context menu may
+change or reset the persistent rule for the explicitly captured live window
+through the existing host-owned writer. Do not reintroduce a settings window,
+generic icon editor, preview-only preferences, or a second config writer. Retain
+ordinary window previews, the app picker, dock menus, drag reordering and live
+theme bindings.
 The host's FileView remains the only live settings writer. Saved settings and
 verified rendering are separate facts; headless tests do not qualify Omarchy
 focus, auto-hide scheduling, image decoding or cache behavior.
