@@ -30,10 +30,10 @@ Item {
 
     WidgetDivider { width: parent.width }
 
-    WidgetState { width: parent.width; compact: true; kind: "loading"; message: "Synthetic loading state"; reducedMotion: false }
-    WidgetState { width: parent.width; compact: true; kind: "empty"; message: "Synthetic empty state" }
-    WidgetState { width: parent.width; compact: true; kind: "unavailable"; message: "Synthetic unavailable state" }
-    WidgetState { width: parent.width; compact: true; kind: "error"; message: "Synthetic error state"; actionText: "Retry" }
-    WidgetState { width: parent.width; compact: true; kind: "stale"; message: "Synthetic stale state" }
+    WidgetState { width: parent.width; compact: true; verticalPadding: Style.space(16); kind: "loading"; message: "Synthetic loading state"; reducedMotion: false }
+    WidgetState { width: parent.width; compact: true; verticalPadding: Style.space(16); kind: "empty"; message: "Synthetic empty state" }
+    WidgetState { width: parent.width; compact: true; verticalPadding: Style.space(16); kind: "unavailable"; message: "Synthetic unavailable state" }
+    WidgetState { width: parent.width; compact: true; verticalPadding: Style.space(16); kind: "error"; message: "Synthetic error state"; actionText: "Retry" }
+    WidgetState { width: parent.width; compact: true; verticalPadding: Style.space(16); kind: "stale"; message: "Synthetic stale state" }
   }
 }
