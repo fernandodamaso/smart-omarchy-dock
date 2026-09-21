@@ -142,7 +142,7 @@ reply = harness.request("icons.reset", {
   id: "org.ghostty", titlePattern: "*solar*"
 })
 assert.equal(reply.ok, true)
-assert.deepEqual(harness.host.settings.windowIconOverrides, [])
+assert.deepEqual(plain(harness.host.settings.windowIconOverrides), [])
 
 const dialogPath = new URL("../components/DockWindowIconDialog.qml", import.meta.url)
 assert.ok(fs.existsSync(dialogPath), "selected-window editing uses DockWindowIconDialog.qml")
