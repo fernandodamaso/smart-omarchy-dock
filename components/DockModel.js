@@ -443,12 +443,21 @@ function shouldReserveSpace(reserveSpace, autoHide) {
 }
 
 function classicDockPosition(value) {
-  if (value === "left" || value === "right") return "left"
+  // The classic dock renders on the bottom edge only; the left vertical
+  // presentation is the sidebar mode. Legacy left/right/top reads fall back
+  // to bottom without rewriting the user's stored value.
   return "bottom"
 }
 
+// Gesture edges for the mode-switch drag surface: the bottom dock and the
+// left sidebar. Independent from classicDockPosition, which no longer maps
+// legacy values onto a vertical classic dock.
+function dockGestureEdge(value) {
+  return (value === "left" || value === "right") ? "left" : "bottom"
+}
+
 function dockPositionDragTarget(position, deltaX, deltaY, threshold) {
-  var current = classicDockPosition(position)
+  var current = dockGestureEdge(position)
   var x = Number(deltaX)
   var y = Number(deltaY)
   var distance = Number(threshold)

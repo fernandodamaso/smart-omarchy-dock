@@ -648,8 +648,15 @@ Item {
             onHideRequested: desktopId => root.hideApplication(desktopId)
             onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
             onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
-            onPositionRequested: (position, expectedPosition) =>
-              root.saveSettingIntent("position", position, expectedPosition)
+            onPositionRequested: (position, expectedPosition) => {
+              // Dragging the bottom dock's empty background left switches to
+              // the sidebar mode; the classic dock itself is bottom-only.
+              if (position === "left")
+                root.saveSettingIntent("presentationMode", "sidebar",
+                  root.settings.presentationMode)
+              else
+                root.saveSettingIntent("position", position, expectedPosition)
+            }
             onOpenTrashRequested: root.openTrash()
             onEmptyTrashRequested: root.emptyTrash()
           }

@@ -31,7 +31,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows 
 | `workspaceBadgeTextColor` | `""` | Color string; requires workspaceBadgeTextColorEnabled. |
 | `borderWidthEnabled` | `false` | Boolean; enables a fixed width instead of theme-owned widths. |
 | `borderWidth` | `2` | Integer 0–8 logical pixels; relevant only with borderWidthEnabled. |
-| `presentationMode` | `"classic"` | Classic per-screen docks or mirrored sidebar panels. Sidebar is an unreleased integrated candidate. |
+| `presentationMode` | `"classic"` | Classic bottom dock or mirrored sidebar panels (the dock's vertical presentation). Drag empty dock background left to switch to the sidebar, or empty sidebar background down to return. |
 | `sidebarEdge` | `"left"` | Sidebar panel edge; leaves classic position unchanged. |
 | `sidebarMonitor` | `""` | Empty maps a mirrored panel on every connected screen. A connected connector maps only that output. Disconnected preferences are retained and fall back to all connected screens; control characters are rejected. |
 | `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
@@ -40,7 +40,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows 
 | `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. The array is both enabled state and card order. Runtime schema advertises source-registered IDs; unknown imports remain requested/unavailable. Add/remove/reorder use the host writer. |
 | `sidebarWidgetCollapsed` | `{}` | Valid internal widget ID → boolean card-body state. Missing means expanded. Removing a widget keeps its collapse preference so re-adding restores it. Preference reset clears the map. |
 | `sidebarBrowserTabsEnabled` | `true` | When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of `browserActivityMutedServices`. See the [online browser-tabs guide](https://github.com/fernandodamaso/smart-omarchy-dock/blob/370585ccfaed98f1d04954d8598a868aef80a087/docs/browser-tabs.md); it is not part of the offline CLI documentation bundle. |
-| `position` | `"bottom"` | String: bottom or left. Legacy requested top is effective bottom and right is effective left. Left renders workspaceLayout as flat. |
+| `position` | `"bottom"` | Classic dock edge; the classic dock renders on the bottom only and the left vertical presentation is the sidebar mode. Drag empty dock background left to switch to the sidebar, or empty sidebar background down to return. Legacy left, right and top read as bottom. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
 | `reserveSpace` | `true` | Boolean; effective false while autoHide is enabled, without erasing this request. |
 | `autoHide` | `false` | Boolean; existing edge-reveal auto-hide, not a new hide-mode enum. |

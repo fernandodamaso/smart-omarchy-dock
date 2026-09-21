@@ -20,17 +20,26 @@ const dock = loadModel('DockModel.js');
 const config = loadModel('DockConfigModel.js');
 const schema = JSON.parse(read('config/settings-schema.json'));
 
-assert.deepEqual(schema.settings.position.enum, ['bottom', 'left']);
+assert.deepEqual(schema.settings.position.enum, ['bottom']);
 assert.equal(config.validatePatch({ position: 'bottom' }, schema).ok, true);
-assert.equal(config.validatePatch({ position: 'left' }, schema).ok, true);
+assert.equal(config.validatePatch({ position: 'left' }, schema).ok, false);
 assert.equal(config.validatePatch({ position: 'top' }, schema).ok, false);
 assert.equal(config.validatePatch({ position: 'right' }, schema).ok, false);
 
+// The classic dock is bottom-only; the left vertical presentation is the
+// sidebar mode. Legacy stored values keep reading as bottom.
 assert.equal(dock.normalizeSetting('position', 'bottom'), 'bottom');
-assert.equal(dock.normalizeSetting('position', 'left'), 'left');
+assert.equal(dock.normalizeSetting('position', 'left'), 'bottom');
 assert.equal(dock.normalizeSetting('position', 'top'), 'bottom');
-assert.equal(dock.normalizeSetting('position', 'right'), 'left');
+assert.equal(dock.normalizeSetting('position', 'right'), 'bottom');
 assert.equal(dock.normalizeSetting('position', 'diagonal'), 'bottom');
+
+// The drag surface still maps between the bottom dock and the left sidebar
+// edge; DockHost translates those edges into presentationMode writes.
+assert.equal(dock.dockGestureEdge('bottom'), 'bottom');
+assert.equal(dock.dockGestureEdge('left'), 'left');
+assert.equal(dock.dockGestureEdge('right'), 'left');
+assert.equal(dock.dockGestureEdge('top'), 'bottom');
 
 assert.equal(dock.dockPositionDragTarget('bottom', -47, 0, 48), 'bottom');
 assert.equal(dock.dockPositionDragTarget('bottom', -48, 0, 48), 'left');

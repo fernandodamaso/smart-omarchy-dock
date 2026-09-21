@@ -23,9 +23,11 @@
 
 ### Changed
 
-- Classic dock positioning now supports only bottom and left. Drag empty dock
-  background left to move from bottom to left, or downward to return to bottom;
-  legacy top/right values remain readable as bottom/left compatibility values.
+- Dock presentation has two modes: the classic bottom dock and the sidebar
+  (the dock's left vertical presentation). Drag empty dock background left to
+  switch to the sidebar, or drag empty sidebar background down to return to
+  the dock; legacy top/right/left classic values remain readable as bottom
+  compatibility values.
 - Removed the graphical Dock Settings page, its menu route, temporary preference
   previews, exclusive controls and editor-only helpers. Configuration and icon
   editing now use `smartdock config`, `smartdock apps` and `smartdock icons`.
