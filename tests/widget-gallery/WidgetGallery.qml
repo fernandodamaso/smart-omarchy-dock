@@ -14,6 +14,7 @@ Flickable {
   boundsBehavior: Flickable.StopAtBounds
   flickableDirection: Flickable.VerticalFlick
   property bool reducedMotion: false
+  property real expandedFixtureHeight: 0
   readonly property string rasterFixture:
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
@@ -43,7 +44,7 @@ Flickable {
     id: galleryBody
     Item {
       property var widgetContext: ({})
-      implicitHeight: bodyColumn.implicitHeight + Style.space(8)
+      implicitHeight: Math.max(bodyColumn.implicitHeight + Style.space(8), root.expandedFixtureHeight)
 
       Column {
         id: bodyColumn
@@ -75,6 +76,7 @@ Flickable {
       subtitle: "Real FDM-973 shell, expanded and collapsed."
 
       DockWidgetCard {
+        objectName: "gallery-expanded-card"
         width: parent.width
         controller: galleryController
         widgetId: "gallery.expanded"
