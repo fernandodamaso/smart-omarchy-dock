@@ -151,7 +151,7 @@ A persistence error exits 4 and can leave `applied: true`, `persisted: false`. I
 
 Export writes a new owner-only plain JSON file and never overwrites a destination, follows a destination symlink, creates missing parents or aliases the live config. `exportWritten` concerns the snapshot; `sourcePersisted` concerns the live state. An unsaved snapshot is not evidence of a saved dock. Unknown exported keys are not accepted as new patch keys. Roll back only touched supported values after checking fresh state; when a prior value is a legacy alias or an absent key, inspect schema and report any normalization/absence limitation instead of writing raw bytes or pretending exact restoration.
 
-`config reset KEY` resets only that key. `config reset --preferences` preserves pins, hidden apps, iconOverrides, margin and unknown extensions, but resets other preferences **including `controlCommand`**. Do not use it for narrow requests. `controlCommand` is executable-on-use configuration: quote it literally and **never execute it to validate**. The launcher action may execute it later. Pointer `close` can close all grouped live windows on use. Change such settings only for explicit intent.
+`config reset KEY` resets only that key. `config reset --preferences` preserves pins, hidden apps, iconOverrides, windowIconOverrides, margin and unknown extensions, but resets other preferences **including `controlCommand`**. Do not use it for narrow requests. `controlCommand` is executable-on-use configuration: quote it literally and **never execute it to validate**. The launcher action may execute it later. Pointer `close` can close all grouped live windows on use. Change such settings only for explicit intent.
 
 ## Machine contract and installation
 
