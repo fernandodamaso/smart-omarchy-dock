@@ -4,7 +4,7 @@ import qs.Commons
 Item {
   id: root
   property var widgetContext: ({})
-  readonly property var data: widgetContext && widgetContext.data ? widgetContext.data : ({})
+  readonly property var snapshotData: widgetContext && widgetContext.data ? widgetContext.data : ({})
   implicitHeight: content.implicitHeight
 
   Column {
@@ -14,7 +14,7 @@ Item {
 
     WidgetText {
       width: parent.width
-      text: root.data.message || "Synthetic actions and framework states"
+      text: root.snapshotData.message || "Synthetic actions and framework states"
       role: "caption"
       muted: true
     }
