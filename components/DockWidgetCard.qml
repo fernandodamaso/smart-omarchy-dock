@@ -24,7 +24,7 @@ Item {
   signal dragMoved(real sceneX, real sceneY)
   signal dragFinished(real sceneX, real sceneY, bool cancelled)
 
-  // Set by the header drag MouseArea; parent clears it when beginDrag rejects.
+  // Set by the drag-handle MouseArea; parent clears it when beginDrag rejects.
   property bool dragActive: false
   readonly property int dragThreshold: 6
 
