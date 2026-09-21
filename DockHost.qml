@@ -132,7 +132,9 @@ Item {
       })
       Object.keys(parsed).forEach(function(key) { requested[key] = parsed[key] })
       showTrashSetting = TrashModel.normalizeShowTrash(parsed.showTrash)
-      if (ConfigModel.iconsChanged(settings.iconOverrides, requested.iconOverrides)) iconReloadRevision++
+      if (ConfigModel.iconsChanged(settings.iconOverrides, requested.iconOverrides)
+          || ConfigModel.windowIconsChanged(settings.windowIconOverrides, requested.windowIconOverrides))
+        iconReloadRevision++
       if (JSON.stringify(settings) !== JSON.stringify(requested)) settingsRevision++
       settings = requested
       settingsLoadState = "loaded"
