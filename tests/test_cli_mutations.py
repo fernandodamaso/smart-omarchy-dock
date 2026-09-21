@@ -49,6 +49,8 @@ elif command == 'config.get':
 elif command not in ('status', 'doctor'):
     data.update(applied=True, persisted=True, writeState='saved', changedKeys=[],
                 requested={}, effective={}, revision=1, noop=False)
+    if command.startswith('icons.'):
+        data.update(reloaded=True, renderVerified=False, iconReloadRevision=1)
     reply = f.get('mutationReply')
 if reply is None:
     reply = {'apiVersion': 1, 'ok': True, 'data': data, 'warnings': []}
