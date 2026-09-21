@@ -8,6 +8,10 @@ Item {
   required property string widgetId
   property string presentation: "expanded"
   property bool viewEnabled: true
+  property bool interfaceAnimationsEnabled: true
+  property bool presentationVisible: true
+  property Item presentationClipItem: null
+  property real presentationRevision: 0
   property Item popupAnchor: root
   readonly property var snapshot: controller.widgetView(widgetId)
   readonly property var factory: {
@@ -23,6 +27,12 @@ Item {
     data: snapshot ? snapshot.data : null,
     provider: snapshot ? snapshot.provider : null,
     presentation: presentation,
+    // Internal presentation metadata only: views may stop visual timers when
+    // animations are disabled or their rendered rows are clipped/offscreen.
+    interfaceAnimationsEnabled: root.interfaceAnimationsEnabled,
+    presentationVisible: root.presentationVisible && root.visible && root.viewEnabled,
+    presentationClipItem: root.presentationClipItem,
+    presentationRevision: root.presentationRevision,
     // Host-owned association map for filtering matched sessions out of the
     // Herdr fallback view. Delegates must not acquire a second lease.
     herdrAssociations: controller.herdrAssociations,
