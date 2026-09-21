@@ -10,6 +10,7 @@ import "components/DockModel.js" as DockModel
 import "components/DockWindowModel.js" as DockWindowModel
 import "components/DockTrashModel.js" as TrashModel
 import "components/DockConfigModel.js" as ConfigModel
+import "components/DockIconModel.js" as DockIconModel
 
 Item {
   id: root
