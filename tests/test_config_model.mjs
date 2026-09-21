@@ -168,7 +168,11 @@ assert.equal(host.settings.sidebarWidgetCollapsed['fixture.one'], true);
 assert.equal(apply({ sidebarWidgets:[] }).ok, true,
   'removal keeps collapse preference but clears enabled order');
 assert.equal(host.settings.sidebarWidgetCollapsed['fixture.one'], true);
-host.sidebarWidgetRegistry = {};
+host.sidebarWidgetRegistry = Object.fromEntries(
+  ['demo.display', 'demo.lists', 'demo.inputs', 'demo.actions-states'].map(id => [id, {
+    id, label:id, available:true,
+    acquire() { return { setActive() {}, release() {} } }
+  }]));
 
 // Preservation and dry-run behavior against the actual writer boundary.
 disk = JSON.stringify({ ...current, hoverGlowOpacity: .4 });
