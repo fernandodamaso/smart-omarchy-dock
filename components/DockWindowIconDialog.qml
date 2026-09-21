@@ -164,20 +164,28 @@ PopupWindow {
 
       Row {
         spacing: Style.space(12)
-        Image {
+        Item {
           width: 76
           height: 76
-          fillMode: Image.PreserveAspectFit
-          source: root.selectedSource
-          visible: status === Image.Ready
-        }
-        Rectangle {
-          width: 76
-          height: 76
-          radius: Style.cornerRadius
-          color: Util.alpha(Color.menu.text, 0.08)
-          visible: root.selectedSource === ""
-          Text { anchors.centerIn: parent; text: "Icon"; color: Color.menu.text }
+          Image {
+            id: previewImage
+            anchors.fill: parent
+            fillMode: Image.PreserveAspectFit
+            source: root.selectedSource
+            visible: status === Image.Ready
+          }
+          Rectangle {
+            anchors.fill: parent
+            radius: Style.cornerRadius
+            color: Util.alpha(Color.menu.text, 0.08)
+            visible: previewImage.status !== Image.Ready
+            Text {
+              anchors.centerIn: parent
+              text: previewImage.status === Image.Error ? "Icon unavailable" : "Icon"
+              color: Color.menu.text
+              font.pixelSize: Style.font.caption
+            }
+          }
         }
         Column {
           width: parent.parent.width - 88
