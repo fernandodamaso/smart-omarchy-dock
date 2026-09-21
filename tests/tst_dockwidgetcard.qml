@@ -87,34 +87,48 @@ TestCase {
     compare(testCase.toggleCount, 1)
   }
 
-  function test_header_drag_past_threshold_starts_without_toggle() {
+  function test_title_drag_past_threshold_does_not_start_reorder() {
     var card = makeCard()
-    var header = findByName(card, "widget-card-header-drag")
-    verify(header !== null)
+    var title = findByName(card, "widget-card-title")
+    verify(title !== null)
     var started = 0
     card.dragStarted.connect(function() { started += 1 })
-    mousePress(header, 8, header.height / 2, Qt.LeftButton)
-    mouseMove(header, 8, header.height / 2 + 2, Qt.LeftButton)
+    mousePress(title, title.width / 2, title.height / 2, Qt.LeftButton)
+    mouseMove(title, title.width / 2, title.height / 2 + card.dragThreshold + 8, Qt.LeftButton)
+    mouseRelease(title, title.width / 2, title.height / 2 + card.dragThreshold + 8, Qt.LeftButton)
     compare(started, 0)
     compare(card.dragActive, false)
-    mouseMove(header, 8, header.height / 2 + card.dragThreshold + 1, Qt.LeftButton)
+    compare(testCase.toggleCount, 0)
+  }
+
+  function test_drag_handle_past_threshold_starts_without_toggle() {
+    var card = makeCard()
+    var handle = findByName(card, "widget-card-drag-handle")
+    verify(handle !== null)
+    var started = 0
+    card.dragStarted.connect(function() { started += 1 })
+    mousePress(handle, 8, handle.height / 2, Qt.LeftButton)
+    mouseMove(handle, 8, handle.height / 2 + 2, Qt.LeftButton)
+    compare(started, 0)
+    compare(card.dragActive, false)
+    mouseMove(handle, 8, handle.height / 2 + card.dragThreshold + 1, Qt.LeftButton)
     compare(started, 1)
     compare(card.dragActive, true)
     compare(testCase.toggleCount, 0)
-    mouseRelease(header, 8, header.height / 2 + card.dragThreshold + 1, Qt.LeftButton)
+    mouseRelease(handle, 8, handle.height / 2 + card.dragThreshold + 1, Qt.LeftButton)
     compare(card.dragActive, false)
     compare(testCase.toggleCount, 0)
   }
 
   function test_rejected_drag_start_clears_drag_active() {
     var card = makeCard()
-    var header = findByName(card, "widget-card-header-drag")
-    verify(header !== null)
+    var handle = findByName(card, "widget-card-drag-handle")
+    verify(handle !== null)
     card.dragStarted.connect(function() { card.dragActive = false })
-    mousePress(header, 8, header.height / 2, Qt.LeftButton)
-    mouseMove(header, 8, header.height / 2 + card.dragThreshold + 2, Qt.LeftButton)
+    mousePress(handle, 8, handle.height / 2, Qt.LeftButton)
+    mouseMove(handle, 8, handle.height / 2 + card.dragThreshold + 2, Qt.LeftButton)
     compare(card.dragActive, false)
-    mouseRelease(header, 8, header.height / 2 + card.dragThreshold + 2, Qt.LeftButton)
+    mouseRelease(handle, 8, handle.height / 2 + card.dragThreshold + 2, Qt.LeftButton)
     compare(testCase.toggleCount, 0)
   }
 

@@ -77,51 +77,16 @@ Item {
     width: parent.width
     height: Style.space(34)
 
-    // Header (minus chevron) owns deliberate reorder after a threshold and
-    // double-click accordion toggle. Single-click never toggles; body/right-
-    // click/keys stay on their own handlers.
-    MouseArea {
-      id: headerDrag
-      objectName: "widget-card-header-drag"
-      anchors.left: parent.left
-      anchors.top: parent.top
-      anchors.bottom: parent.bottom
-      anchors.right: collapseButton.left
+    // Header double-click is a passive tap gesture so the parent ListView can
+    // still take vertical drags for scrolling. Reorder stays on the explicit
+    // drag handle below, where stealing is intentional.
+    TapHandler {
+      id: headerToggle
+      objectName: "widget-card-header-toggle"
       acceptedButtons: Qt.LeftButton
-      preventStealing: true
-      property real startX: 0
-      property real startY: 0
-
-      onPressed: function(mouse) {
-        startX = mouse.x
-        startY = mouse.y
-        root.dragActive = false
-      }
-      onPositionChanged: function(mouse) {
-        var dx = mouse.x - startX
-        var dy = mouse.y - startY
-        var point = mapToItem(null, mouse.x, mouse.y)
-        if (!root.dragActive
-            && Math.sqrt(dx * dx + dy * dy) >= root.dragThreshold) {
-          root.dragActive = true
-          root.dragStarted(point.x, point.y)
-        }
-        if (root.dragActive)
-          root.dragMoved(point.x, point.y)
-      }
-      onReleased: function(mouse) {
-        if (!root.dragActive) return
-        var point = mapToItem(null, mouse.x, mouse.y)
-        root.dragActive = false
-        root.dragFinished(point.x, point.y, false)
-      }
-      onCanceled: {
-        if (root.dragActive)
-          root.dragFinished(0, 0, true)
-        root.dragActive = false
-      }
-      onDoubleClicked: {
-        if (!root.dragActive)
+      gesturePolicy: TapHandler.DragThreshold
+      onDoubleTapped: function(eventPoint, button) {
+        if (eventPoint.position.x < dragHandle.x)
           root.toggleRequested()
       }
     }
@@ -145,6 +110,45 @@ Item {
         containerVariant: "plain"
         tint: Util.alpha(Color.foreground, 0.55)
         accessibleName: "Drag affordance"
+      }
+
+      MouseArea {
+        id: dragMouse
+        objectName: "widget-card-drag-handle"
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        preventStealing: true
+        property real startX: 0
+        property real startY: 0
+
+        onPressed: function(mouse) {
+          startX = mouse.x
+          startY = mouse.y
+          root.dragActive = false
+        }
+        onPositionChanged: function(mouse) {
+          var dx = mouse.x - startX
+          var dy = mouse.y - startY
+          var point = mapToItem(null, mouse.x, mouse.y)
+          if (!root.dragActive
+              && Math.sqrt(dx * dx + dy * dy) >= root.dragThreshold) {
+            root.dragActive = true
+            root.dragStarted(point.x, point.y)
+          }
+          if (root.dragActive)
+            root.dragMoved(point.x, point.y)
+        }
+        onReleased: function(mouse) {
+          if (!root.dragActive) return
+          var point = mapToItem(null, mouse.x, mouse.y)
+          root.dragActive = false
+          root.dragFinished(point.x, point.y, false)
+        }
+        onCanceled: {
+          if (root.dragActive)
+            root.dragFinished(0, 0, true)
+          root.dragActive = false
+        }
       }
     }
 

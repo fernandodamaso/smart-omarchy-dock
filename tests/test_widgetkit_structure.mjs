@@ -168,16 +168,20 @@ test('Widget accordion cards drop the idle wrapper border and keep focus feedbac
   assert.match(card, /id:\s*collapseButton[\s\S]*?onClicked:\s*root\.toggleRequested\(\)/)
 })
 
-test('Widget card header drag starts after a threshold without single-click toggle', () => {
+test('Widget card header toggle stays passive and reorder remains on the drag handle', () => {
   const card = fs.readFileSync(new URL('../components/DockWidgetCard.qml', import.meta.url), 'utf8')
-  assert.match(card, /id:\s*headerDrag/)
-  assert.match(card, /objectName:\s*"widget-card-header-drag"/)
-  assert.match(card, /preventStealing:\s*true/)
+  assert.match(card, /id:\s*headerToggle/)
+  assert.match(card, /objectName:\s*"widget-card-header-toggle"/)
+  assert.match(card, /gesturePolicy:\s*TapHandler\.DragThreshold/,
+    'header double-click detection must stay passive so Flickable/ListView can steal drags')
+  assert.match(card, /onDoubleTapped:[\s\S]*toggleRequested/)
+  assert.match(card, /id:\s*dragMouse/)
+  assert.match(card, /objectName:\s*"widget-card-drag-handle"/)
+  assert.match(card, /id:\s*dragHandle[\s\S]*?MouseArea\s*\{[\s\S]*?preventStealing:\s*true/,
+    'only the explicit reorder handle should prevent the parent scroller from stealing')
   assert.match(card, /dragThreshold/)
-  assert.match(card, /onDoubleClicked:[\s\S]*toggleRequested/)
   assert.match(card, /property bool dragActive/)
-  assert.doesNotMatch(card, /id:\s*headerToggle/)
-  assert.doesNotMatch(card, /id:\s*dragMouse/)
+  assert.doesNotMatch(card, /id:\s*headerDrag/)
   const area = fs.readFileSync(new URL('../components/DockSidebarWidgetArea.qml', import.meta.url), 'utf8')
   assert.match(area, /function syncDragFromController\(/)
   assert.match(area, /function onSurfaceInvalidated\(\)[\s\S]*finishDrag\(0,\s*0,\s*true\)/)
