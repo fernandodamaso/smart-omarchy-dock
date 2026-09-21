@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import "../components"
 import "../components/DockSidebarInteractionModel.js" as InteractionModel
 import "../components/DockHerdrModel.js" as HerdrModel
 
@@ -59,6 +60,8 @@ TestCase {
       property real workspaceCardInset: 10
       property bool insideWorkspaceCard: true
       property bool forceStateIcons: true
+      property bool interfaceAnimationsEnabled: true
+      property bool animationEligible: true
       property bool herdrFolded: false
       property var herdrStatusCounters: []
       property string liveTitle: "Herdr"
@@ -196,18 +199,37 @@ TestCase {
               id: counterItem
               objectName: "sidebar-herdr-counter"
               required property var modelData
+              readonly property string normalizedStatus: HerdrModel.normalizeStatus(modelData.status)
+              readonly property bool working: normalizedStatus === "working"
+              readonly property bool workingAnimationActive: working
+                && chrome.interfaceAnimationsEnabled && chrome.animationEligible
               width: counterRow.width
               height: counters.height
               Row {
                 id: counterRow
                 spacing: 2
                 height: parent.height
-                Rectangle {
-                  width: 7; height: 7; radius: 4
+                Item {
+                  objectName: "sidebar-herdr-counter-marker"
+                  width: counterItem.working ? 10 : 7
+                  height: counterItem.working ? 10 : 7
                   anchors.verticalCenter: parent.verticalCenter
-                  color: counterItem.modelData.status === "unknown" ? "transparent" : "#7aa2f7"
-                  border.width: counterItem.modelData.status === "unknown" ? 1 : 0
-                  border.color: "#888"
+                  DockHerdrWorkingIndicator {
+                    objectName: "sidebar-herdr-counter-working-indicator"
+                    anchors.centerIn: parent
+                    visible: counterItem.workingAnimationActive
+                    active: visible
+                    tint: "#7aa2f7"
+                  }
+                  Rectangle {
+                    objectName: "sidebar-herdr-counter-static-dot"
+                    visible: !counterItem.workingAnimationActive
+                    anchors.centerIn: parent
+                    width: 7; height: 7; radius: 4
+                    color: counterItem.modelData.status === "unknown" ? "transparent" : "#7aa2f7"
+                    border.width: counterItem.modelData.status === "unknown" ? 1 : 0
+                    border.color: "#888"
+                  }
                 }
                 Text {
                   objectName: "sidebar-herdr-counter-text"
@@ -305,6 +327,50 @@ TestCase {
     assertAllCountersPainted(chrome, counters, fold)
     compare(test.acquireCount, 0)
     compare(test.subscriptionCount, 0)
+  }
+
+  function test_viewport_intersection_boundaries() {
+    compare(InteractionModel.viewportIntersects(100, 40, 100, 200), true)
+    compare(InteractionModel.viewportIntersects(60, 40, 100, 200), false)
+    compare(InteractionModel.viewportIntersects(300, 40, 100, 200), false)
+    compare(InteractionModel.viewportIntersects(299, 40, 100, 200), true)
+    compare(InteractionModel.viewportIntersects(90, 20, 100, 200), true)
+    compare(InteractionModel.viewportIntersects(100, 0, 100, 200), false)
+    compare(InteractionModel.viewportIntersects(100, 40, 100, 0), false)
+  }
+
+  function test_working_counter_reserves_slot_and_static_fallback() {
+    var chrome = createTemporaryObject(chromeFactory, test, {
+      width: 240,
+      visible: true,
+      interfaceAnimationsEnabled: false,
+      animationEligible: true,
+      herdrStatusCounters: [{ status: "working", count: 2 }]
+    })
+    verify(chrome !== null)
+    waitForRendering(chrome)
+    var counters = findByName(chrome, "sidebar-herdr-counters")
+    var delegates = counterDelegates(counters)
+    compare(delegates.length, 1)
+    var marker = findByName(delegates[0], "sidebar-herdr-counter-marker")
+    var indicator = findByName(delegates[0], "sidebar-herdr-counter-working-indicator")
+    var staticDot = findByName(delegates[0], "sidebar-herdr-counter-static-dot")
+    verify(marker !== null && indicator !== null && staticDot !== null)
+    compare(marker.width, 10)
+    compare(staticDot.visible, true)
+    compare(indicator.visible, false)
+    verify(chrome.accessibleLabel.indexOf("Working 2") >= 0)
+
+    chrome.interfaceAnimationsEnabled = true
+    wait(0)
+    compare(indicator.visible, true)
+    compare(indicator.active, true)
+    compare(staticDot.visible, false)
+
+    chrome.animationEligible = false
+    wait(0)
+    compare(indicator.visible, false)
+    compare(staticDot.visible, true)
   }
 
   function test_agent_plain_text_kind_and_unknown_status() {
