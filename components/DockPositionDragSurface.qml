@@ -27,7 +27,7 @@ MouseArea {
   function resetGesture() {
     pressX = 0
     pressY = 0
-    startPosition = DockModel.normalizeSetting("position", dockPosition)
+    startPosition = DockModel.dockGestureEdge(dockPosition)
     expectedPosition = requestedPosition
     candidatePosition = startPosition
   }
@@ -35,7 +35,7 @@ MouseArea {
   onPressed: function(mouse) {
     pressX = mouse.x
     pressY = mouse.y
-    startPosition = DockModel.normalizeSetting("position", dockPosition)
+    startPosition = DockModel.dockGestureEdge(dockPosition)
     expectedPosition = requestedPosition
     candidatePosition = startPosition
   }

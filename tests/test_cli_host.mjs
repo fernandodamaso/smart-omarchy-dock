@@ -93,16 +93,15 @@ const proposal = { ...defaults, autoHide: true, reserveSpace: true,
   backgroundColorEnabled: true, backgroundColor: '@accent' };
 const projection = plain(control.effectiveSettings(proposal));
 assert.equal(projection.reserveSpace, false);
-assert.equal(projection.workspaceLayout, 'flat');
-assert.equal(projection.workspaceMonitorScope, 'all');
+assert.equal(projection.position, 'bottom',
+  'Legacy left reads as bottom; the vertical presentation is the sidebar mode');
+assert.equal(projection.workspaceLayout, 'grouped');
+assert.equal(projection.workspaceMonitorScope, 'current-monitor');
 assert.equal(projection.backgroundColor, null);
 assert.equal(proposal.workspaceLayout, 'grouped');
 assert.equal(proposal.reserveSpace, true);
 proposal.backgroundColor = '#80112233';
 assert.equal(control.effectiveSettings(proposal).backgroundColor, '#80112233');
-proposal.position = 'bottom';
-assert.equal(control.effectiveSettings(proposal).workspaceLayout, 'grouped');
-assert.equal(control.effectiveSettings(proposal).workspaceMonitorScope, 'current-monitor');
 
 const schema = request('config.schema');
 assert.equal(schema.data.source, 'runtime');

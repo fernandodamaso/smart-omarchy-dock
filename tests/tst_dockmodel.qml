@@ -124,8 +124,12 @@ TestCase {
     compare(DockModel.normalizeSetting("hoverGlowOpacity", 2), 1)
     compare(DockModel.normalizeSetting("hoverGlowRadius", 31), 30)
     compare(DockModel.normalizeSetting("hoverGlowRadius", -1), 0)
-    compare(DockModel.normalizeSetting("position", "left"), "left")
+    compare(DockModel.normalizeSetting("position", "left"), "bottom")
+    compare(DockModel.normalizeSetting("position", "right"), "bottom")
     compare(DockModel.normalizeSetting("position", "diagonal"), "bottom")
+    compare(DockModel.dockGestureEdge("left"), "left")
+    compare(DockModel.dockGestureEdge("right"), "left")
+    compare(DockModel.dockGestureEdge("bottom"), "bottom")
     compare(DockModel.normalizeSetting("clickAction", "launch"),
       "focus-or-launch")
     compare(DockModel.normalizeSetting("clickAction", "invalid"), "focus-or-launch")
