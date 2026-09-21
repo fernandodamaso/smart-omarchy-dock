@@ -139,11 +139,19 @@ class CliDocumentationTests(unittest.TestCase):
         self.assertTrue(after['backgroundColorEnabled'])
         self.assertTrue(after['borderColorEnabled'])
         self.assertEqual(after['clickAction'], 'launch', 'Unrelated legacy intent is preserved')
-        self.run_command('smartdock config set position left --json')
-        self.assertEqual(self.run_command('smartdock config get workspaceLayout --effective --json')['settings'],
-                         {'workspaceLayout': 'flat'})
-        self.assertEqual(self.run_command('smartdock config get workspaceLayout --json')['settings'],
-                         {'workspaceLayout': 'grouped'})
+        # The classic dock is bottom-only; legacy vertical positions are rejected
+        # for new writes and the sidebar mode is the vertical presentation.
+        rejected_args = shlex.split('smartdock config set position left --json')
+        rejected_args.pop(0)
+        rejected = cli.execute(cli.build_parser().parse_args(rejected_args))
+        self.assertFalse(rejected['ok'], rejected)
+        self.assertEqual(rejected['error']['code'], 'E_VALIDATION')
+        self.assertEqual(self.run_command('smartdock config get position --effective --json')['settings'],
+                         {'position': 'bottom'})
+        self.run_command('smartdock config set presentationMode sidebar --json')
+        self.assertEqual(self.run_command('smartdock config get presentationMode --json')['settings'],
+                         {'presentationMode': 'sidebar'})
+        self.run_command('smartdock config set presentationMode classic --json')
 
     def test_application_recipe_restores_and_orders_without_dropping_unknown_ids(self):
         for line in self.block('applications', 'sh').splitlines():
