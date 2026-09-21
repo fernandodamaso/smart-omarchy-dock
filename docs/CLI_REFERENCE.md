@@ -128,8 +128,8 @@ Full `install.sh` is an explicit standalone installation with separate lifecycle
 
 The SB-02 candidate adds `presentationMode`, `sidebarEdge`, `sidebarMonitor`,
 `sidebarExpandedWidth`, `sidebarCollapsed`, `sidebarCollapsedByMonitor`,
-`sidebarBrowserTabsEnabled` and
-`sidebarWidgets`. Discover these keys on the selected
+`sidebarBrowserTabsEnabled`, `sidebarWidgets` and `sidebarWidgetCollapsed`.
+Discover these keys on the selected
 host; do not assume an installed release implements this candidate.
 
 In an isolated candidate session only:
@@ -161,12 +161,14 @@ replayed as though rejected. `config retry` uses the latest host snapshot.
 These controls do not install widgets or alter the stock topbar. This Draft slice
 is not an integrated release; see `docs/SIDEBAR.md` in the source checkout.
 
-### Internal widget IDs (SB-05)
+### Internal Widgets (FDM-967 / FDM-973)
 
 ```sh
 smartdock config schema sidebarWidgets --json
 smartdock config get sidebarWidgets --json
 smartdock config set sidebarWidgets '[]' --json
+smartdock config get sidebarWidgetCollapsed --json
+smartdock config set sidebarWidgetCollapsed '{"example.internal":true}' --json
 smartdock config get --effective --json
 ```
 
@@ -177,5 +179,8 @@ independent of authentication or loading/error status. Imported unknown IDs surv
 unrelated writes and appear unavailable under `data.presentation.widgets`; they
 are omitted from effective `sidebarWidgets` and never executed. Diagnostics contain
 at most 32 status rows plus aggregate lifecycle counters, never task/window content
-or credentials. Clearing/resetting this key removes all widget space/work. No
-clock/Herdr/Todoist/test provider or external QML path is enabled by this candidate.
+or credentials. The ordered array is also the card order. Clearing/resetting it
+removes all enabled Widget cards. `sidebarWidgetCollapsed` is a separate typed
+ID→boolean map; missing keys mean expanded, and removing a Widget intentionally
+keeps its saved collapse state for a later re-add. No collapse entry enables or
+executes a provider. No test provider or external QML path is enabled by production.

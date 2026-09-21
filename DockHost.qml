@@ -27,8 +27,8 @@ Item {
   readonly property var hyprWorkspaces: Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
   readonly property var desktopToplevels: ToplevelManager.toplevels.values || []
   readonly property var hyprToplevels: Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
-  // Internal provider adapters register here in their own source slices. No
-  // external QML paths, configurable commands, test IDs or additional services.
+  // Internal source-owned providers only. Herdr is acquired through the shared
+  // service lease; no command/path/credential is accepted from settings.
   readonly property var sidebarWidgetRegistry: root.herdrService ? ({
     "herdr.agents": {
       id: "herdr.agents",
@@ -289,7 +289,8 @@ Item {
   function saveSettings(patch, dryRun) {
     var blocked = mutationBlocked()
     if (blocked) return blocked
-    return commitSettings(ConfigModel.applyPatch(settings, patch, dockControl.metadata), dryRun)
+    return commitSettings(ConfigModel.applyPatch(settings, patch,
+      dockControl.validationMetadata()), dryRun)
   }
 
   // Only validated config/app/icon model results reach this common live commit.
@@ -637,6 +638,8 @@ Item {
             onHideRequested: desktopId => root.hideApplication(desktopId)
             onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
             onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
+            onPositionRequested: (position, expectedPosition) =>
+              root.saveSettingIntent("position", position, expectedPosition)
             onOpenTrashRequested: root.openTrash()
             onEmptyTrashRequested: root.emptyTrash()
           }

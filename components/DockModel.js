@@ -418,6 +418,7 @@ function settingsDefaults() {
     sidebarCollapsed: false,
     sidebarCollapsedByMonitor: {},
     sidebarWidgets: [],
+    sidebarWidgetCollapsed: {},
     sidebarBrowserTabsEnabled: true,
     position: "bottom",
     fullLength: false,
@@ -439,6 +440,25 @@ function settingsDefaults() {
 
 function shouldReserveSpace(reserveSpace, autoHide) {
   return Boolean(reserveSpace) && !Boolean(autoHide)
+}
+
+function classicDockPosition(value) {
+  if (value === "left" || value === "right") return "left"
+  return "bottom"
+}
+
+function dockPositionDragTarget(position, deltaX, deltaY, threshold) {
+  var current = classicDockPosition(position)
+  var x = Number(deltaX)
+  var y = Number(deltaY)
+  var distance = Number(threshold)
+  if (!isFinite(x)) x = 0
+  if (!isFinite(y)) y = 0
+  if (!isFinite(distance) || distance <= 0) distance = 48
+
+  if (current === "bottom" && x <= -distance) return "left"
+  if (current === "left" && y >= distance) return "bottom"
+  return current
 }
 
 function applicationStateIndicatorGeometry(position, iconWidth, iconHeight,
@@ -564,6 +584,8 @@ function normalizeSetting(key, value) {
     return steppedNumber(value, 240, 480, 1, defaults.sidebarExpandedWidth, 0)
   case "sidebarWidgets":
     return SidebarWidgetModel.requestedIds(value)
+  case "sidebarWidgetCollapsed":
+    return SidebarWidgetModel.collapsedMap(value)
   case "sidebarCollapsed":
     return typeof value === "boolean" ? value : false
   case "sidebarCollapsedByMonitor":
@@ -606,8 +628,7 @@ function normalizeSetting(key, value) {
   case "workspaceLayout":
     return value === "grouped" ? "grouped" : "flat"
   case "position":
-    return ["top", "bottom", "left", "right"].indexOf(value) >= 0
-      ? value : defaults.position
+    return classicDockPosition(value)
   case "fullLength":
   case "reserveSpace":
   case "autoHide":

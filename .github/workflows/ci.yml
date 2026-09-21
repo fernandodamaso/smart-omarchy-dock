@@ -52,7 +52,13 @@ jobs:
             qml6-module-qtqml-workerscript \
             qml6-module-qtquick \
             qml6-module-qtquick-window \
+            qml6-module-qtquick-controls \
+            qml6-module-qtquick-templates \
+            qml6-module-qtquick-layouts \
+            qml6-module-qt5compat-graphicaleffects \
             qml6-module-qttest \
+            libqt6svg6 \
+            qt6-image-formats-plugins \
             qt6-declarative-dev-tools \
             ripgrep
 
@@ -110,7 +116,7 @@ jobs:
       - name: Run pure QML tests
         if: ${{ !cancelled() }}
         shell: bash
-        run: /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+        run: /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
 
       - name: Check final diff whitespace
         if: ${{ !cancelled() }}

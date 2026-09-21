@@ -432,9 +432,9 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 | `workspaceBadgeTextColor` | Workspace badge text in `#RRGGBB`, `#AARRGGBB`, or an Omarchy token such as `@foreground` |
 | `borderWidthEnabled` | When `true`, use `borderWidth` instead of the theme border width |
 | `borderWidth` | Custom dock border width from `0` to `8` pixels |
-| `position` | Screen edge: `top`, `bottom`, `left`, or `right` |
+| `position` | Classic dock edge: `bottom` or `left`; legacy `top` reads as bottom and `right` as left |
 | `fullLength` | Fill the screen width, or height for a vertical dock |
-| `workspaceLayout` | `flat` (default) or `grouped` workspace cards; grouped applies to top/bottom and scrolls when crowded |
+| `workspaceLayout` | `flat` (default) or `grouped` workspace cards; grouped applies to the bottom dock and scrolls when crowded |
 | `workspaceMonitorScope` | Grouped cards: `all` (default) mirrors workspaces across docks; `current-monitor` shows only each dock’s monitor |
 | `workspaceMonitorOrder` | Grouped/all monitor section order by exact connector name. `[]` uses automatic physical x/y order; saved disconnected connectors remain stored for reconnect. |
 | `reserveSpace` | When `true` and `autoHide` is `false`, tiled windows stop beside the visible dock; hidden auto-hide docks do not reserve space |
@@ -656,7 +656,7 @@ to clear hidden membership. Restoring an application returns it to its existing
 pinned position without pinning or unpinning anything. `config reset --preferences`
 intentionally preserves `hiddenApplications` and the other application collections.
 
-The configuration file is watched and updates automatically. Drag a dock icon to another slot to reorder it; the new `pinned` order is written back to this file. Reserved space follows visibility: while auto-hide is off, the `reserveSpace` option decides whether tiled windows keep a clear dock-sized area; while auto-hide is on, the hidden dock never reserves space.
+The configuration file is watched and updates automatically. Drag a dock icon to another slot to reorder it; the new `pinned` order is written back to this file. Drag empty dock background left to move a bottom dock to the left edge, or drag it downward to move a left dock back to the bottom; the existing settings writer persists `position` only after release. Reserved space follows visibility: while auto-hide is off, the `reserveSpace` option decides whether tiled windows keep a clear dock-sized area; while auto-hide is on, the hidden dock never reserves space.
 
 Surface override settings are independent. Leave an `*Enabled` flag set to
 `false` to follow the active Omarchy theme; enable it to use the matching
@@ -705,7 +705,7 @@ This disables cursor warping for all workspace changes, not only dock clicks.
 Use `smartdock config set workspaceLayout grouped --json` to enable horizontal
 workspace cards. Use `smartdock config set workspaceLayout flat --json` to roll
 back. Missing/invalid values and `config reset workspaceLayout` use flat.
-Left/right positions render flat without changing the saved preference. Window
+The left position renders flat without changing the saved preference. Window
 scope, workspace sorting and urgent-outside-scope affect the flat layout; their
 saved values are preserved. `groupWindows` remains effective in either layout.
 
@@ -807,7 +807,7 @@ workspace’s icons visible. Icon size, surface overrides and Show Trash still a
 
 ### Drag windows between workspace cards
 
-In a top/bottom grouped layout, hold the left mouse button without modifiers
+In the bottom grouped layout, hold the left mouse button without modifiers
 and drag a running icon past the normal drag threshold onto a workspace card's
 visible header or app area. A grouped icon moves only the exact windows captured
 from that icon, not other same-app windows elsewhere. The source artwork dims
@@ -854,16 +854,19 @@ for test coverage and the separate real-pointer Omarchy qualification gate.
 The unreleased sidebar candidate adds `presentationMode` (default `classic`),
 `sidebarEdge` (`left`), `sidebarMonitor` (empty = all connected monitors), `sidebarExpandedWidth` (320),
 `sidebarCollapsed` (false), `sidebarCollapsedByMonitor` (`{}`),
-`sidebarBrowserTabsEnabled` (true), and `sidebarWidgets` (empty). It shows
+`sidebarBrowserTabsEnabled` (true), `sidebarWidgets` (empty), and
+`sidebarWidgetCollapsed` (`{}`). It shows
 monitor/workspace/application/window hierarchy or every individual window icon
 in a rail; app groups fold, and Chrome windows can expand open tabs when the
 provider is available (see [`docs/browser-tabs.md`](docs/browser-tabs.md)).
 Classic preferences remain unchanged. This source slice is Draft, not a deployed
 or fully interactive sidebar release. [Implementation and qualification](docs/SIDEBAR.md).
 
-The SB-05 [internal widget foundation](docs/SIDEBAR_WIDGETS.md) adds bounded footer
-slots, host-owned leases and one inward popup. The production registry currently
-contains only `herdr.agents`; clock/calendar, Todoist and a universal external
-plugin ABI are not claimed. `sidebarWidgets` still defaults to `[]`, so an empty
-configuration adds no gap or provider work. Unknown imported IDs are unavailable
-and never executed. Full sidebar runtime acceptance remains SB-06.
+The [Widget foundation](docs/SIDEBAR_WIDGETS.md) keeps the FDM-967 host-owned
+provider leases while FDM-973 renders Widget cards as a content tail of the existing
+hierarchy scroll. Pinned and Applications remain fixed below that viewport. The
+production registry may be empty; Add/Manage discovers only source-registered types.
+`sidebarWidgets` stores enabled order and `sidebarWidgetCollapsed` stores card
+body state. Empty configuration adds no Widget-section height/work; unknown imported
+IDs are unavailable and never executed. Test providers exist only in fixtures.
+Real compositor qualification remains a local follow-up.

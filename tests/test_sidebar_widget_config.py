@@ -35,6 +35,11 @@ class SidebarWidgetConfigTests(unittest.TestCase):
         self.assertEqual(effective['presentation']['widgets']['rows'][0]['id'], 'future.clock')
         self.assertTrue(self.command('config reset sidebarWidgets --json')['ok'])
         self.assertEqual(self.command('config get sidebarWidgets --json')['data']['settings']['sidebarWidgets'], [])
+        collapse = self.command('config schema sidebarWidgetCollapsed --json')
+        self.assertTrue(collapse['ok'], collapse)
+        collapse_spec = collapse['data']['settings']['sidebarWidgetCollapsed']
+        self.assertEqual(collapse_spec['default'], {})
+        self.assertEqual(collapse_spec['format'], 'sidebar-widget-collapsed')
 
     def test_strict_bulk_validation_is_atomic_and_independent_of_readiness(self):
         before = self.command('config get --json')['data']['settings']

@@ -15,8 +15,7 @@ PanelWindow {
   readonly property var viewport: sidebarViewport
   readonly property var resizeHandle: resizeHandle
   readonly property var contextMenu: sidebarContext
-  readonly property var widgetArea: widgets
-  readonly property var widgetOverflowButton: widgetOverflow
+  readonly property var widgetArea: sidebarViewport.contentTailItem
   readonly property var collapseControl: collapseButton
   property var menuTarget: null
   property var menuAnchor: null
@@ -77,7 +76,11 @@ PanelWindow {
     picker.visible = false
     sidebarViewport.cancelInputs("surface-close")
     root.controller.cancelResize("surface-close")
-    widgets.closePopup()
+    if (root.widgetArea) {
+      if (root.widgetArea.dragWidgetId) root.widgetArea.finishDrag(0, 0, true)
+      root.widgetArea.closeManager()
+      root.widgetArea.closePopup()
+    }
     // A disappearing mirror must not release another panel's widget session.
     root.controller.interactionBusy = root.controller.widgetPopupId !== ""
     if (root.host && root.host.badgeTracker) root.host.badgeTracker.syncWorkspaceScopes(root.badgeScopeOwner, [])
@@ -219,7 +222,7 @@ PanelWindow {
           anchors.verticalCenter: parent.verticalCenter
           anchors.right: collapseButton.left
           anchors.rightMargin: Style.space(8)
-            + (widgetOverflow.visible ? widgetOverflow.width + Style.space(8) : 0)
+            + (widgetManage.visible ? widgetManage.width + Style.space(8) : 0)
           spacing: 0
           Accessible.role: Accessible.StaticText
           Accessible.name: "SmartDock"
@@ -274,27 +277,30 @@ PanelWindow {
           }
         }
         Ui.Button {
-          id: widgetOverflow
-          visible: widgets.overflowNeeded
+          id: widgetManage
+          visible: !root.panelCollapsed
           anchors.verticalCenter: parent.verticalCenter
           anchors.right: collapseButton.left
           anchors.rightMargin: Style.space(8)
           width: visible ? Style.space(30) : 0
           height: Style.space(30)
           iconText: ""
-          tooltipText: "Widgets"
+          tooltipText: "Add or manage Widgets"
           Accessible.role: Accessible.Button
-          Accessible.name: "Open widgets"
+          Accessible.name: tooltipText
           focusable: visible
-          onClicked: widgets.openOverflow(widgetOverflow)
+          enabled: !root.controller.interactionBusy
+          onClicked: {
+            if (root.widgetArea) root.widgetArea.openManager(widgetManage)
+          }
           DockLucideIcon {
             anchors.centerIn: parent
             width: 14
             height: 14
-            iconName: "layout-grid"
+            iconName: "plus"
             iconSize: 14
             tint: Color.foreground
-            visible: widgetOverflow.visible
+            visible: widgetManage.visible
           }
         }
       }
@@ -317,23 +323,22 @@ PanelWindow {
       panelCollapsed: root.panelCollapsed
       onContextRequested: (target, anchorItem) => root.openContext(target, anchorItem)
       onDismissContextRequested: sidebarContext.dismiss()
+      contentTail: Component {
+        DockSidebarWidgetArea {
+          controller: root.controller
+          panel: root
+          viewport: sidebarViewport
+          windowRowHeight: sidebarViewport.rowHeight
+        }
+      }
       anchors.top: controls.bottom
       anchors.topMargin: Style.space(6)
-      anchors.bottom: widgets.top
+      anchors.bottom: pinnedStrip.top
+      anchors.bottomMargin: root.panelCollapsed ? 0 : Style.space(8)
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.leftMargin: Style.space(6) + (!root.panelCollapsed && root.controller.edge === "right" ? 8 : 0)
       anchors.rightMargin: Style.space(6) + (!root.panelCollapsed && root.controller.edge === "left" ? 8 : 0)
-    }
-    DockSidebarWidgetArea {
-      id: widgets
-      controller: root.controller
-      panel: root
-      anchors.left: sidebarViewport.left
-      anchors.right: sidebarViewport.right
-      anchors.bottom: pinnedStrip.top
-      availableContentHeight: Math.max(0, pinnedStrip.y - controls.y - controls.height)
-      windowRowHeight: sidebarViewport.rowHeight
     }
     DockSidebarPinnedStrip {
       id: pinnedStrip
