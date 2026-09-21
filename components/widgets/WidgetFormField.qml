@@ -3,6 +3,7 @@ import qs.Commons
 
 Column {
   id: root
+  WidgetSemanticPalette { id: semanticPalette }
   default property alias content: controlHost.data
   property string label: ""
   property string helperText: ""
@@ -32,7 +33,7 @@ Column {
     text: root.errorText !== "" ? root.errorText : root.helperText
     role: "caption"
     muted: root.errorText === ""
-    color: root.errorText !== "" ? "#ff6b7a" : Util.alpha(Color.foreground, 0.62)
+    color: root.errorText !== "" ? semanticPalette.danger : Util.alpha(Color.foreground, 0.62)
     maxLines: 2
   }
 }
