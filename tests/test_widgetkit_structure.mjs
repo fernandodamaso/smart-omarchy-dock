@@ -131,3 +131,39 @@ test('approved HTML design reference is preserved and linked', () => {
   assert.match(docs, /widget-gallery\/reference\/approved-widget-mockup\.html/)
   assert.match(docs, /tests\/widget-gallery\/WidgetGallery\.qml/)
 })
+
+
+test('expanded Widget cards do not retain the legacy 240px body cap', () => {
+  const card = fs.readFileSync(new URL('../components/DockWidgetCard.qml', import.meta.url), 'utf8')
+  assert.doesNotMatch(card, /Math\.min\(240,\s*implicitHeight\)/)
+  assert.match(card, /objectName:\s*"widget-card-expanded-view"/)
+  assert.match(card, /height:\s*implicitHeight/)
+})
+
+test('Widget semantic colors are centralized and theme-aware', () => {
+  const palette = source('WidgetSemanticPalette')
+  assert.match(palette, /Color\.background/)
+  assert.match(palette, /Color\.accent/)
+  assert.match(palette, /backgroundLuminance/)
+  for (const semantic of ['danger', 'warning', 'success', 'info'])
+    assert.match(palette, new RegExp('property color ' + semantic))
+
+  const consumers = [
+    'WidgetButton', 'WidgetBadge', 'WidgetStatus', 'WidgetProgressBar',
+    'WidgetTextInput', 'WidgetTextArea', 'WidgetSelect', 'WidgetFormField',
+    'WidgetActivity', 'WidgetListItem', 'WidgetState',
+  ]
+  const fixtureHex = /#(?:ff6b7a|f5bd36|48d5a4|ff5b6c|16ff6b7a|10ff6b7a|10f5bd36)/i
+  for (const name of consumers) {
+    const text = source(name)
+    assert.match(text, /WidgetSemanticPalette/, name + ' must consume the shared semantic palette')
+    assert.doesNotMatch(text, fixtureHex, name + ' must not embed fixture semantic colors')
+  }
+})
+
+test('WidgetButtonGroup wraps actions instead of overflowing narrow bodies', () => {
+  const group = source('WidgetButtonGroup')
+  assert.match(group, /Flow\s*\{/)
+  assert.match(group, /width:\s*root\.width/)
+  assert.doesNotMatch(group, /\bRow\s*\{/)
+})
