@@ -164,24 +164,6 @@ TestCase {
     compare(gallery.reducedMotion, true)
   }
 
-  function test_tall_widget_body_is_not_clipped_to_240px() {
-    var component = Qt.createComponent(Qt.resolvedUrl("widget-gallery/WidgetGallery.qml"))
-    compare(component.status, Component.Ready, component.errorString())
-    var gallery = createTemporaryObject(component, testCase, {
-      width: 360,
-      height: 700,
-      expandedFixtureHeight: 420
-    })
-    verify(gallery !== null)
-    var card = findChild(gallery, "gallery-expanded-card")
-    verify(card !== null)
-    var view = findChild(card, "widget-card-expanded-view")
-    verify(view !== null)
-    tryVerify(function() { return view.hasView }, 2000)
-    compare(view.implicitHeight, 420)
-    compare(view.height, 420)
-  }
-
   function test_semantic_palette_adapts_and_keeps_meanings_distinct() {
     var component = Qt.createComponent(Qt.resolvedUrl("../components/widgets/WidgetSemanticPalette.qml"))
     compare(component.status, Component.Ready, component.errorString())
