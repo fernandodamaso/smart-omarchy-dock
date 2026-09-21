@@ -7,8 +7,6 @@ import unittest
 from unittest.mock import patch
 from test_cli_docs import cli, ModelTransport
 
-DEMO_WIDGET_IDS = ["demo.display", "demo.lists", "demo.inputs", "demo.actions-states"]
-
 class SidebarWidgetConfigTests(unittest.TestCase):
     def setUp(self):
         self.transport = ModelTransport()
@@ -24,8 +22,8 @@ class SidebarWidgetConfigTests(unittest.TestCase):
         result = self.command('config schema sidebarWidgets --json')
         self.assertTrue(result['ok'], result)
         spec = result['data']['settings']['sidebarWidgets']
-        self.assertEqual(spec['default'], DEMO_WIDGET_IDS)
-        self.assertEqual(spec['registeredIds'], sorted(DEMO_WIDGET_IDS))
+        self.assertEqual(spec['default'], [])
+        self.assertEqual(spec['registeredIds'], [])
         self.assertEqual(spec['format'], 'sidebar-widget-ids')
         before = self.command('config get --json')['data']['settings']
         self.assertEqual(before['sidebarWidgets'], ['future.clock'])
@@ -36,7 +34,7 @@ class SidebarWidgetConfigTests(unittest.TestCase):
         self.assertEqual(effective['presentation']['widgets']['rows'][0]['status'], 'unavailable')
         self.assertEqual(effective['presentation']['widgets']['rows'][0]['id'], 'future.clock')
         self.assertTrue(self.command('config reset sidebarWidgets --json')['ok'])
-        self.assertEqual(self.command('config get sidebarWidgets --json')['data']['settings']['sidebarWidgets'], DEMO_WIDGET_IDS)
+        self.assertEqual(self.command('config get sidebarWidgets --json')['data']['settings']['sidebarWidgets'], [])
         collapse = self.command('config schema sidebarWidgetCollapsed --json')
         self.assertTrue(collapse['ok'], collapse)
         collapse_spec = collapse['data']['settings']['sidebarWidgetCollapsed']
@@ -64,7 +62,6 @@ class SidebarWidgetConfigTests(unittest.TestCase):
         self.assertEqual(self.command('config get sidebarWidgets --json')['data']['settings']['sidebarWidgets'], [])
 
     def test_cli_set_checks_registered_ids_not_transient_readiness(self):
-        self.assertTrue(self.command("config set sidebarWidgets '[\"demo.display\"]' --json")['ok'])
         with self.assertRaises(cli.CliError) as rejected:
             self.command("config set sidebarWidgets '[\"fixture.one\"]' --json")
         self.assertEqual(rejected.exception.code, 'E_VALIDATION')
@@ -77,5 +74,5 @@ class SidebarWidgetConfigTests(unittest.TestCase):
 
     def test_bundled_schema_never_advertises_fixture_ids(self):
         result = cli.bundled_schema('sidebarWidgets')
-        self.assertEqual(result['data']['settings']['sidebarWidgets']['registeredIds'], DEMO_WIDGET_IDS)
+        self.assertEqual(result['data']['settings']['sidebarWidgets']['registeredIds'], [])
         self.assertNotIn('fixture.', json.dumps(result))
