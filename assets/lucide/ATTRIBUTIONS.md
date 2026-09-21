@@ -13,7 +13,6 @@ Bundled icons include:
   `minimize-2`, `minus`, `monitor`, `mouse-pointer-click`, `move`, `palette`,
   `panel-bottom`, `panel-left-close`, `panel-left-open`, `pin`, `pin-off`,
   `plus`, `rocket`, `rotate-ccw`, `settings-2`, `sparkles`, `square`,
-  `terminal`, `trash-2`, `x`, `search`, `check`, `chevron-down`, `circle-alert`,
-  `cloud-off`, `inbox`, `loader-circle`, `clock-3`
+  `terminal`, `trash-2`, `x`
 
 They are bundled locally so the dock does not need a network connection at runtime.

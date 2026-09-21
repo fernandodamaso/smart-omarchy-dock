@@ -1,28 +1,11 @@
 # SmartDock sidebar Widget contract
 
 **FDM-967 owns provider lifecycle; FDM-973 owns the shared-scroll Widget area and management foundation.**
-Classic remains the default. SmartDock now bundles four source-registered
-**Demo** Widgets so the Widget framework is immediately visible:
-`demo.display`, `demo.lists`, `demo.inputs`, and `demo.actions-states`.
-They publish static in-memory synthetic snapshots only—no process, network,
-credential, notification daemon or stock topbar change. Real Clock/calendar
-(FDM-969), Herdr (FDM-970) and Todoist (FDM-971) integrations remain independent
-follow-ups and can register alongside these demos.
-
-## Bundled Demo Widgets
-
-The four `demo.*` entries intentionally exercise the reusable UI kit in production
-without pretending to be real services:
-
-- **Demo · Display** — status, stats, key/value, meters and sparkline;
-- **Demo · Lists** — list rows, checklist and activity/timeline;
-- **Demo · Inputs** — search/text/number/select/text-area/checkbox/toggle/radio/segmented controls;
-- **Demo · Actions & states** — action variants plus loading/empty/unavailable/error/stale.
-
-Fresh installs enable them in that order. The installer performs a one-time seed
-for an existing installation whose Widget list is missing or empty. A marker under
-`~/.config/smartdock/.demo-widgets-seeded-v1` prevents later updates from
-re-adding demos after the user intentionally removes them.
+Classic remains the default. `sidebarWidgets` defaults to `[]`; that starts no
+provider, loads no widget view and reserves zero footer height. The production
+registry is deliberately empty. Clock/calendar (FDM-969), Herdr (FDM-970) and
+Todoist (FDM-971) are independent follow-ups, not implementations bundled here.
+No credential, stock topbar change, second host or notification daemon is needed.
 
 ## Registration and typed configuration
 
