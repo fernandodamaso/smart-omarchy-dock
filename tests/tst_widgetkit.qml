@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtTest
-import "../components"
 import "../components/widgets"
 import "widget-gallery" as Gallery
 
@@ -16,53 +15,6 @@ TestCase {
   Component {
     id: boundedHostFactory
     Item { width: 136; height: 500 }
-  }
-
-  Component {
-    id: tallCardHostFactory
-    Item {
-      width: 220
-      height: tallCard.implicitHeight
-
-      Component {
-        id: tallWidgetBody
-        Item {
-          property var widgetContext: ({})
-          implicitHeight: 420
-        }
-      }
-
-      QtObject {
-        id: tallWidgetController
-        function widgetView(id) {
-          return {
-            active: true,
-            status: "ready",
-            revision: 1,
-            data: {count: 0},
-            provider: null,
-            descriptor: {
-              id: id,
-              label: "Tall fixture",
-              iconName: "layout-grid",
-              expandedView: tallWidgetBody
-            }
-          }
-        }
-        function openWidgetPopup(id, anchor) { return true }
-        function closeWidgetPopup() {}
-        function widgetViewFailed(id, expected) {}
-      }
-
-      DockWidgetCard {
-        id: tallCard
-        objectName: "tall-widget-card"
-        width: parent.width
-        controller: tallWidgetController
-        widgetId: "fixture.tall"
-        collapsed: false
-      }
-    }
   }
 
   Component {
@@ -213,9 +165,15 @@ TestCase {
   }
 
   function test_tall_widget_body_is_not_clipped_to_240px() {
-    var host = createTemporaryObject(tallCardHostFactory, testCase)
-    verify(host !== null)
-    var card = findChild(host, "tall-widget-card")
+    var component = Qt.createComponent(Qt.resolvedUrl("widget-gallery/WidgetGallery.qml"))
+    compare(component.status, Component.Ready, component.errorString())
+    var gallery = createTemporaryObject(component, testCase, {
+      width: 360,
+      height: 700,
+      expandedFixtureHeight: 420
+    })
+    verify(gallery !== null)
+    var card = findChild(gallery, "gallery-expanded-card")
     verify(card !== null)
     var view = findChild(card, "widget-card-expanded-view")
     verify(view !== null)
