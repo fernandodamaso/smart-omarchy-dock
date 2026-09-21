@@ -140,7 +140,8 @@ PopupWindow {
   }
 
   function dismiss() {
-    if (windowIconDialog.visible) windowIconDialog.closeDialog()
+    if (typeof windowIconDialog !== "undefined" && windowIconDialog
+        && windowIconDialog.visible) windowIconDialog.closeDialog()
     visible = false
     root.entranceOpacity = 0
     root.entranceOffset = 0
