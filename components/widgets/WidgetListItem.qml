@@ -3,6 +3,7 @@ import qs.Commons
 
 Item {
   id: root
+  WidgetSemanticPalette { id: semanticPalette }
   property string iconName: ""
   property url iconSource: ""
   property bool preserveBrandIcon: false
@@ -28,7 +29,7 @@ Item {
     anchors.fill: parent
     radius: Math.min(6, Style.cornerRadius)
     color: root.attention === "urgent" || root.attention === "overdue"
-      ? Qt.tint(Color.background, "#16ff6b7a")
+      ? semanticPalette.surface("danger", 0.086)
       : hover.hovered && root.interactive ? Util.alpha(Color.foreground, 0.05) : "transparent"
     border.width: root.activeFocus ? 1 : 0
     border.color: Color.accent
@@ -98,7 +99,7 @@ Item {
       text: root.trailing
       role: "caption"
       muted: root.attention === "none"
-      color: root.attention === "urgent" || root.attention === "overdue" ? "#ff6b7a" : Color.foreground
+      color: root.attention === "urgent" || root.attention === "overdue" ? semanticPalette.danger : Color.foreground
       allowWrap: false
     }
   }
