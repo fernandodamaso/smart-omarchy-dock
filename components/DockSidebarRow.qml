@@ -55,6 +55,10 @@ Item {
       || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader)
       || kind === "herdr-state")
   readonly property string normalizedHerdrStatus: HerdrModel.normalizeStatus(row.status)
+  readonly property bool herdrWorkingStatusTarget: kind === "herdr-agent"
+    || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader)
+  readonly property bool herdrWorkingStatus: root.herdrWorkingStatusTarget
+    && root.normalizedHerdrStatus === "working"
   readonly property string tabFaviconSource: nestedTab
     ? DockIconModel.faviconFileUrl(String(row.faviconPath || "")) : ""
   readonly property bool tabFaviconReady: nestedTab && tabFaviconSource !== ""
@@ -417,7 +421,7 @@ Item {
   readonly property bool animationsEnabled: root.controller.settings
     && root.controller.settings.interfaceAnimationsEnabled !== false
   readonly property bool herdrWorkingAnimationActive: root.herdrStatusDotVisible
-    && root.normalizedHerdrStatus === "working"
+    && root.herdrWorkingStatus
     && root.animationsEnabled
     && root.herdrAnimationEligible
   readonly property bool dropTarget: root.controller.dragTarget
@@ -703,9 +707,9 @@ Item {
       id: herdrStatusMarker
       objectName: "sidebar-herdr-status-marker"
       visible: root.herdrStatusDotVisible
-      width: root.normalizedHerdrStatus === "working" ? 10 : 8
+      width: root.herdrWorkingStatus ? 10 : 8
       height: width
-      x: root.artX + (root.normalizedHerdrStatus === "working" ? 2 : 3)
+      x: root.artX + (root.herdrWorkingStatus ? 2 : 3)
       anchors.verticalCenter: parent.verticalCenter
 
       DockHerdrWorkingIndicator {
