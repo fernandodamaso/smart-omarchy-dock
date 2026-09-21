@@ -217,6 +217,10 @@ Item {
     reply.data.iconReloadRevision = iconReloadRevision
     reply.data.reloaded = reloaded
     reply.data.renderVerified = false
+    reply.data.windowOverrides = Array.isArray(settings.windowIconOverrides)
+      ? settings.windowIconOverrides : []
+    reply.data.effectiveWindowOverrides = DockIconModel.normalizeWindowRules(
+      settings.windowIconOverrides)
     reply.warnings.push("Artwork is referenced in place. Saving or requesting a reload does not verify decoding or rendering.")
     return reply
   }
