@@ -13,10 +13,11 @@ function load(name, imports = {}) {
   return scope
 }
 const DockModel = load('DockModel')
+const DockIconModel = load('DockIconModel')
 const DockWindowModel = load('DockWindowModel', { DockModel })
 const WorkspaceModel = load('DockWorkspaceModel', { DockModel, DockWindowModel })
 const WorkspaceGroupModel = load('DockWorkspaceGroupModel', { DockModel })
-const imports = { DockModel, DockWindowModel, WorkspaceModel, WorkspaceGroupModel }
+const imports = { DockModel, DockIconModel, DockWindowModel, WorkspaceModel, WorkspaceGroupModel }
 const source = read('components/Dock.qml')
 const method = (text, name) => {
   const match = text.match(new RegExp(`^  function ${name}\\([^]*?^  }`, 'm'))
