@@ -4,6 +4,7 @@ import qs.Commons
 
 Controls.AbstractButton {
   id: root
+  WidgetSemanticPalette { id: semanticPalette }
   property string variant: "secondary"
   property string iconName: ""
   property url iconSource: ""
@@ -20,7 +21,7 @@ Controls.AbstractButton {
   rightPadding: Style.space(9)
 
   readonly property color baseTone: root.variant === "primary" ? Color.accent
-    : root.variant === "danger" ? "#ff5b6c"
+    : root.variant === "danger" ? semanticPalette.danger
     : root.variant === "ghost" ? "transparent"
     : Qt.tint(Color.background, Util.alpha(Color.foreground, 0.08))
   readonly property color stateTone: !root.enabled ? root.baseTone
