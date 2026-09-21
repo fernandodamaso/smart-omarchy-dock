@@ -28,11 +28,17 @@ Item {
   signal dragMoved(real sceneX, real sceneY)
   signal dragFinished(real sceneX, real sceneY, bool cancelled)
 
+  // Set by the drag-handle MouseArea; parent clears it when beginDrag rejects.
+  property bool dragActive: false
+  readonly property int dragThreshold: 6
+
   activeFocusOnTab: true
   implicitHeight: header.height + (collapsed ? 0 : body.implicitHeight)
   height: implicitHeight
 
   Ui.BorderSurface {
+    id: cardSurface
+    objectName: "widget-card-surface"
     anchors.fill: parent
     radius: Math.min(4, Style.cornerRadius)
     color: root.activeFocus || cardHover.hovered || cardContext.pressed
@@ -40,7 +46,7 @@ Item {
       : Qt.darker(Color.background, 1.04)
     borderSpec: root.activeFocus
       ? Border.controlSpec("focus", Color.foreground, Color.accent)
-      : Border.surfaceSpec("widget-card", "border", Util.alpha(Color.foreground, 0.10), 1)
+      : Border.none()
   }
 
   Rectangle {
@@ -71,8 +77,24 @@ Item {
 
   Item {
     id: header
+    objectName: "widget-card-header"
     width: parent.width
     height: Style.space(34)
+
+    // Header double-click keeps ordinary pointer ownership stealable so the
+    // parent ListView can still take vertical drags for scrolling. Reorder
+    // stays on the explicit drag handle below, where stealing is intentional.
+    MouseArea {
+      id: headerToggle
+      objectName: "widget-card-header-toggle"
+      anchors.left: parent.left
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      anchors.right: dragHandle.left
+      acceptedButtons: Qt.LeftButton
+      preventStealing: false
+      onDoubleClicked: root.toggleRequested()
+    }
 
     Item {
       id: dragHandle
@@ -80,6 +102,7 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       width: Style.space(22)
       height: parent.height
+      z: 1
       Accessible.role: Accessible.Button
       Accessible.name: "Drag " + root.title + " to reorder"
 
@@ -96,30 +119,40 @@ Item {
 
       MouseArea {
         id: dragMouse
+        objectName: "widget-card-drag-handle"
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
         preventStealing: true
-        property bool dragging: false
+        property real startX: 0
         property real startY: 0
 
-        onPressed: function(mouse) { startY = mouse.y }
+        onPressed: function(mouse) {
+          startX = mouse.x
+          startY = mouse.y
+          root.dragActive = false
+        }
         onPositionChanged: function(mouse) {
+          var dx = mouse.x - startX
+          var dy = mouse.y - startY
           var point = mapToItem(null, mouse.x, mouse.y)
-          if (!dragging && Math.abs(mouse.y - startY) >= 5) {
-            dragging = true
+          if (!root.dragActive
+              && Math.sqrt(dx * dx + dy * dy) >= root.dragThreshold) {
+            root.dragActive = true
             root.dragStarted(point.x, point.y)
           }
-          if (dragging) root.dragMoved(point.x, point.y)
+          if (root.dragActive)
+            root.dragMoved(point.x, point.y)
         }
         onReleased: function(mouse) {
-          if (!dragging) return
+          if (!root.dragActive) return
           var point = mapToItem(null, mouse.x, mouse.y)
-          dragging = false
+          root.dragActive = false
           root.dragFinished(point.x, point.y, false)
         }
         onCanceled: {
-          if (dragging) root.dragFinished(0, 0, true)
-          dragging = false
+          if (root.dragActive)
+            root.dragFinished(0, 0, true)
+          root.dragActive = false
         }
       }
     }
@@ -139,6 +172,8 @@ Item {
     }
 
     Text {
+      id: titleLabel
+      objectName: "widget-card-title"
       anchors.left: widgetIcon.right
       anchors.leftMargin: Style.space(7)
       anchors.right: badge.visible ? badge.left : dragHandle.left
@@ -180,11 +215,13 @@ Item {
 
     Ui.Button {
       id: collapseButton
+      objectName: "widget-card-collapse"
       anchors.right: parent.right
       anchors.rightMargin: Style.space(3)
       anchors.verticalCenter: parent.verticalCenter
       width: Style.space(24)
       height: Style.space(24)
+      z: 2
       iconText: ""
       tooltipText: (root.collapsed ? "Expand " : "Collapse ") + root.title
       Accessible.role: Accessible.Button

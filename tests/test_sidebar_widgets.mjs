@@ -211,7 +211,8 @@ assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"
     widgetRegistry:registry, widgetIds:['fixture.one','fixture.two'],
     widgetCollapsed:{}, widgetPopupId:'', widgetPopupAnchor:null,
     widgetDragId:'', interactionBusy:false, resizeActive:false, rowDragActive:false,
-    mutationFeedback:''
+    mutationFeedback:'',
+    closeWidgetPopup() { this.widgetPopupId = ''; this.widgetPopupAnchor = null },
   });
   assert.equal(c.reorderWidget('fixture.one',1).noop,true,
     'dropping immediately after the source is a no-op');
@@ -230,6 +231,116 @@ assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"
   assert.deepEqual(intents.at(-1).value,['fixture.two']);
   assert.equal(c.widgetCollapsedFor('fixture.one'),true,
     'removal does not clear the saved collapse preference');
+}
+
+// Widget reorder gestures: persist through hostIntent, cancel/no-op cleanly, reject busy starts.
+{
+  const intents = [];
+  const three = adapter('fixture.three');
+  const reorderRegistry = {
+    'fixture.one': a.descriptor,
+    'fixture.two': b.descriptor,
+    'fixture.three': three.descriptor,
+  };
+  const c = qmlMethods('DockSidebarController.qml', {
+    SidebarWidgetModel: Model,
+    host: { saveSettingIntent(key,value,expected) {
+      intents.push({key,value:plain(value),expected:plain(expected)});
+      return {accepted:true,pending:false,reply:{ok:true,data:{applied:true},warnings:[]}};
+    }},
+    settings:{sidebarWidgets:['fixture.one','fixture.two','fixture.three'],sidebarWidgetCollapsed:{}},
+    widgetRegistry:reorderRegistry,
+    widgetIds:['fixture.one','fixture.two','fixture.three'],
+    widgetCollapsed:{}, widgetPopupId:'', widgetPopupAnchor:null,
+    widgetDragId:'', interactionBusy:false, resizeActive:false, rowDragActive:false,
+    mutationFeedback:'',
+    closeWidgetPopup() { this.widgetPopupId = ''; this.widgetPopupAnchor = null },
+  });
+  assert.equal(c.beginWidgetReorder('fixture.one'), true);
+  assert.equal(c.widgetDragId, 'fixture.one');
+  assert.equal(c.interactionBusy, true);
+  assert.equal(c.beginWidgetReorder('fixture.two'), false, 'busy rejects a second reorder start');
+  const before = intents.length;
+  assert.equal(c.finishWidgetReorder(1, false).noop, true, 'drop beside source is a no-op');
+  assert.equal(intents.length, before);
+  assert.equal(c.widgetDragId, '');
+  assert.equal(c.interactionBusy, false);
+  assert.equal(c.finishWidgetReorder(2, false).noop, true, 'finish is idempotent once consumed');
+
+  assert.equal(c.beginWidgetReorder('fixture.one'), true);
+  const persisted = c.finishWidgetReorder(3, false);
+  assert.equal(persisted.accepted, true);
+  assert.equal(persisted.noop, undefined);
+  assert.deepEqual(intents.at(-1), {
+    key: 'sidebarWidgets',
+    value: ['fixture.two', 'fixture.three', 'fixture.one'],
+    expected: ['fixture.one', 'fixture.two', 'fixture.three'],
+  }, 'accepted finish persists the new order through hostIntent');
+
+  assert.equal(c.beginWidgetReorder('fixture.two'), true);
+  const cancelBefore = intents.length;
+  c.cancelWidgetReorder();
+  assert.equal(c.widgetDragId, '');
+  assert.equal(c.interactionBusy, false);
+  assert.equal(c.finishWidgetReorder(0, false).noop, true,
+    'finish after cancel does not write');
+  assert.equal(intents.length, cancelBefore);
+  c.cancelWidgetReorder();
+  assert.equal(c.interactionBusy, false, 'cancel remains idempotent');
+
+  c.interactionBusy = true;
+  assert.equal(c.beginWidgetReorder('fixture.one'), false, 'busy rejects start without session');
+  c.interactionBusy = false;
+  assert.equal(c.beginWidgetReorder('missing.widget'), false);
+}
+
+// Widget area drag cleanup stays synced with controller cancel and preserves hidden IDs.
+{
+  let ended = 0;
+  const controller = qmlMethods('DockSidebarController.qml', {
+    SidebarWidgetModel: Model,
+    host: { saveSettingIntent() {
+      return {accepted:true,pending:false,reply:{ok:true,data:{applied:true},warnings:[]}};
+    }},
+    settings:{sidebarWidgets:['hidden.one','fixture.one','fixture.two'],sidebarWidgetCollapsed:{}},
+    widgetRegistry:registry,
+    widgetIds:['hidden.one','fixture.one','fixture.two'],
+    widgetCollapsed:{}, widgetPopupId:'', widgetPopupAnchor:null,
+    widgetDragId:'', interactionBusy:false, resizeActive:false, rowDragActive:false,
+    mutationFeedback:'',
+    closeWidgetPopup() { this.widgetPopupId = ''; this.widgetPopupAnchor = null },
+  });
+  const viewport = {
+    contentTailDragPoint: null,
+    beginContentTailDrag() { this.contentTailDragPoint = {x:1,y:1} },
+    updateContentTailDrag() {},
+    endContentTailDrag() { this.contentTailDragPoint = null; ended += 1 },
+  };
+  const area = qmlMethods('DockSidebarWidgetArea.qml', {
+    controller,
+    panel: { panelCollapsed: false, visible: true, contentItem: {}, height: 400, width: 280, screen: {width:1920,height:1080} },
+    viewport,
+    presentationWidgetIds: ['fixture.one', 'fixture.two'],
+    dragWidgetId: '',
+    dragTargetSlot: -1,
+    dragSceneX: 0,
+    dragSceneY: 0,
+    cardRepeater: { itemAt() { return null } },
+    cardColumn: { mapFromItem() { return {x:0,y:0} } },
+  });
+  assert.equal(area.fullReorderSlot(0), 1, 'visible slot 0 maps past the hidden prefix');
+  assert.equal(area.fullReorderSlot(2), 3, 'append stays after the last visible id in the full list');
+  assert.equal(area.beginDrag('fixture.one', 10, 20), true);
+  assert.equal(area.dragWidgetId, 'fixture.one');
+  assert.ok(viewport.contentTailDragPoint);
+  controller.cancelWidgetReorder();
+  area.syncDragFromController();
+  assert.equal(area.dragWidgetId, '');
+  assert.equal(viewport.contentTailDragPoint, null, 'controller cancel clears autoscroll');
+  assert.ok(ended >= 1);
+  area.finishDrag(0, 0, true);
+  area.finishDrag(0, 0, true);
+  assert.equal(controller.interactionBusy, false, 'finish stays idempotent after cancel');
 }
 
 // A deferred view error from an old instance/revision cannot poison recovery.
