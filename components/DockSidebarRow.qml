@@ -22,6 +22,9 @@ Item {
   property var viewport: null
   property var appearance: null
   property string panelConnector: ""
+  // Presentation-only eligibility supplied by DockSidebarViewport. This keeps
+  // cached/offscreen rows from running their local working-state timer.
+  property bool herdrAnimationEligible: false
   readonly property var input: rowInput
   readonly property string desktopId: String(row.desktopId || "")
   readonly property var applications: DesktopEntries.applications.values || []
@@ -38,6 +41,12 @@ Item {
   required property real rowHeight
   readonly property string rowKey: row.key
   readonly property string kind: row.kind
+  readonly property var liveWindowIconRule: kind === "window" && row.toplevel
+    ? DockIconModel.matchWindowRule(controller.windowIconOverrides || [],
+        String(row.toplevel.appId || ""), String(row.toplevel.title || ""))
+    : null
+  readonly property string liveWindowOverrideSource: liveWindowIconRule
+    ? String(liveWindowIconRule.source || "") : ""
   readonly property bool hasArtwork: kind === "window" || kind === "application" || kind === "launcher"
   readonly property bool nestedWindow: kind === "window" && row.nested === true
   readonly property bool nestedTab: kind === "browser-tab"
@@ -51,6 +60,11 @@ Item {
     && (kind === "herdr-agent"
       || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader)
       || kind === "herdr-state")
+  readonly property string normalizedHerdrStatus: HerdrModel.normalizeStatus(row.status)
+  readonly property bool herdrWorkingStatusTarget: kind === "herdr-agent"
+    || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader)
+  readonly property bool herdrWorkingStatus: root.herdrWorkingStatusTarget
+    && root.normalizedHerdrStatus === "working"
   readonly property string tabFaviconSource: nestedTab
     ? DockIconModel.faviconFileUrl(String(row.faviconPath || "")) : ""
   readonly property bool tabFaviconReady: nestedTab && tabFaviconSource !== ""
@@ -459,6 +473,10 @@ Item {
 
   readonly property bool animationsEnabled: root.controller.settings
     && root.controller.settings.interfaceAnimationsEnabled !== false
+  readonly property bool herdrWorkingAnimationActive: root.herdrStatusDotVisible
+    && root.herdrWorkingStatus
+    && root.animationsEnabled
+    && root.herdrAnimationEligible
   readonly property bool dropTarget: root.controller.dragTarget
     && root.controller.dragTarget.key === root.rowKey
   // Persistent included-alert window-name nudge (label Translate only).
@@ -763,6 +781,8 @@ Item {
       desktopId: String(root.row.desktopId || "")
       desktopIcon: root.entry ? String(root.entry.icon || "") : ""
       iconOverrides: root.controller.settings.iconOverrides || ({})
+      windowOverrideSource: root.kind === "window"
+        ? root.liveWindowOverrideSource : ""
       reloadRevision: root.controller.host.iconReloadRevision || 0
       profileKey: root.profile ? root.profile.key : ""
       profileName: root.profile && root.profile.entry ? String(root.profile.entry.name || "") : ""
@@ -837,25 +857,46 @@ Item {
         : Util.alpha(Color.foreground, 0.75)
     }
 
-    // Nested Herdr marker — status-colored dot for agents / actionable tabs / state.
-    Rectangle {
+    // Nested Herdr marker — working uses the short dot trail when eligible.
+    // The 10px working slot keeps the legacy 8px static dot centered when
+    // animations are disabled/offscreen; every other status keeps its old size.
+    Item {
+      id: herdrStatusMarker
+      objectName: "sidebar-herdr-status-marker"
       visible: root.herdrStatusDotVisible
-      width: 8
-      height: 8
-      radius: 4
-      x: root.artX + 3
+      width: root.herdrWorkingStatus ? 10 : 8
+      height: width
+      x: root.artX + (root.herdrWorkingStatus ? 2 : 3)
       anchors.verticalCenter: parent.verticalCenter
-      color: root.herdrStatusHollow(row.status)
-        ? "transparent"
-        : root.herdrStatusColor(row.status)
-      border.width: root.herdrStatusHollow(row.status) ? 1 : 0
-      border.color: Color.muted
-      opacity: root.herdrActionable
-        && (HerdrModel.normalizeStatus(row.status) === "working"
-          || HerdrModel.normalizeStatus(row.status) === "blocked") ? 1.0
-        : root.herdrActionable
-          && HerdrModel.normalizeStatus(row.status) === "done" ? 0.9
-        : 0.75
+
+      DockHerdrWorkingIndicator {
+        id: herdrWorkingIndicator
+        objectName: "sidebar-herdr-working-indicator"
+        anchors.centerIn: parent
+        visible: root.herdrWorkingAnimationActive
+        active: visible
+        tint: Color.accent
+      }
+
+      Rectangle {
+        objectName: "sidebar-herdr-static-status-dot"
+        visible: !herdrWorkingIndicator.visible
+        anchors.centerIn: parent
+        width: 8
+        height: 8
+        radius: 4
+        color: root.herdrStatusHollow(row.status)
+          ? "transparent"
+          : root.herdrStatusColor(row.status)
+        border.width: root.herdrStatusHollow(row.status) ? 1 : 0
+        border.color: Color.muted
+        opacity: root.herdrActionable
+          && (root.normalizedHerdrStatus === "working"
+            || root.normalizedHerdrStatus === "blocked") ? 1.0
+          : root.herdrActionable
+            && root.normalizedHerdrStatus === "done" ? 0.9
+          : 0.75
+      }
     }
 
     // Compact single-line monitor identity — the header shows the monitor name
@@ -1113,6 +1154,10 @@ Item {
         delegate: Item {
           id: counterItem
           required property var modelData
+          readonly property string normalizedStatus: HerdrModel.normalizeStatus(modelData.status)
+          readonly property bool working: normalizedStatus === "working"
+          readonly property bool workingAnimationActive: working
+            && root.animationsEnabled && root.herdrAnimationEligible
           width: counterRow.width
           height: herdrCounters.height
 
@@ -1120,17 +1165,35 @@ Item {
             id: counterRow
             spacing: 2
             height: parent.height
-            Rectangle {
-              width: 7
-              height: 7
-              radius: 4
+            Item {
+              objectName: "sidebar-herdr-counter-marker"
+              width: counterItem.working ? 10 : 7
+              height: counterItem.working ? 10 : 7
               anchors.verticalCenter: parent.verticalCenter
-              color: root.herdrStatusHollow(counterItem.modelData.status)
-                ? "transparent" : root.herdrStatusColor(counterItem.modelData.status)
-              border.width: root.herdrStatusHollow(counterItem.modelData.status) ? 1 : 0
-              border.color: Color.muted
+
+              DockHerdrWorkingIndicator {
+                objectName: "sidebar-herdr-counter-working-indicator"
+                anchors.centerIn: parent
+                visible: counterItem.workingAnimationActive
+                active: visible
+                tint: Color.accent
+              }
+
+              Rectangle {
+                objectName: "sidebar-herdr-counter-static-dot"
+                visible: !counterItem.workingAnimationActive
+                anchors.centerIn: parent
+                width: 7
+                height: 7
+                radius: 4
+                color: root.herdrStatusHollow(counterItem.modelData.status)
+                  ? "transparent" : root.herdrStatusColor(counterItem.modelData.status)
+                border.width: root.herdrStatusHollow(counterItem.modelData.status) ? 1 : 0
+                border.color: Color.muted
+              }
             }
             Text {
+              objectName: "sidebar-herdr-counter-text"
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
               text: String(counterItem.modelData.count)

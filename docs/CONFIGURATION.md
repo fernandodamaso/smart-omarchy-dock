@@ -6,11 +6,12 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 53 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 56 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
 | `iconOverrides` | `{}` | Object mapping canonical app IDs to local PNG/SVG sources; prefer per-app intents. Preserved by preference reset. |
+| `windowIconOverrides` | `[]` | Ordered normalized raw-Wayland app ID/title-pattern rules for local PNG/SVG artwork; first match wins. Preserved by preference reset. |
 | `iconSize` | `42` | Integer 24–96 logical pixels. |
 | `magnification` | `1.2` | Number 1–2; effective step 0.05. Set 1 for no hover enlargement. |
 | `magnificationRadius` | `95` | Number 40–240; effective step 5. |
@@ -112,9 +113,26 @@ Right click remains the context menu. Existing modifier precedence, grouped clos
 
 Icon overrides are app-wide and SmartDock-only. Set/reset changes one latest-map entry, including for an unavailable safe identity, without changing desktop files, launch commands, grouping or screenshots. The local PNG/SVG is referenced in place. Use explicit reload after same-path byte replacement. Missing/corrupt artwork retains the mapping and uses the bounded original/generic/bundled-glyph fallback. All CLI icon acknowledgments retain `renderVerified: false`.
 
+Window icon overrides are a separate ordered rule collection keyed by normalized raw
+Wayland `(appId, titlePattern)`. Only `*` is wildcard syntax; matching is
+case-insensitive and full-title, first match wins, patterns are trimmed and limited
+to 1–200 characters with no control characters. Rules survive restarts and apply to
+all matching current/future windows. Grouped application/workspace pairs are
+partitioned into distinct matched-rule and unmatched subsets; ungrouped windows keep
+their exact-window identity. Different workspaces never merge. Sidebar keeps its
+existing per-window hierarchy and only receives the matched artwork.
+
+Renderer precedence is window rule → browser-profile override → app-wide override →
+desktop icon → generic icon → bundled glyph. Reset removes only the exact rule and
+may expose another rule or fallback. A source-only edit keeps stable rule/presentation
+identity; changing the pattern may change identity. Source A→B propagation and
+same-source byte reload are distinct: the latter advances the shared artwork revision
+without a redundant settings write. Malformed/duplicate collections are rejected
+unchanged; no migration or partial repair is attempted.
+
 ## Reset, preservation and executable settings
 
-`config reset --preferences` preserves pinned, hiddenApplications, browserActivityMutedServices, iconOverrides, margin and unknown extension keys; **controlCommand is reset** along with other preferences. `workspaceMonitorOrder` and `workspaceGroups` are ordinary preferences, so preference reset restores automatic monitor ordering and clears local grouping pairs; `config reset workspaceMonitorOrder` and `config reset workspaceGroups` reset only their exact keys. Do not perform a broad reset for a narrow request.
+`config reset --preferences` preserves pinned, hiddenApplications, browserActivityMutedServices, iconOverrides, windowIconOverrides, margin and unknown extension keys; **controlCommand is reset** along with other preferences. `workspaceMonitorOrder` and `workspaceGroups` are ordinary preferences, so preference reset restores automatic monitor ordering and clears local grouping pairs; `config reset workspaceMonitorOrder` and `config reset workspaceGroups` reset only their exact keys. Do not perform a broad reset for a narrow request.
 
 Existing unknown keys and untouched legacy values survive minimal mutations. New unknown keys are rejected. An explicit array/object patch replaces that whole key, not a deep merge. Prefer `apps`/`icons` commands for individual membership/order/artwork changes and touched-key rollback after fresh readback.
 

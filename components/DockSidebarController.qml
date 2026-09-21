@@ -1,5 +1,6 @@
 import QtQuick
 import "DockModel.js" as DockModel
+import "DockIconModel.js" as DockIconModel
 import "DockWindowModel.js" as WindowModel
 import "DockDesktopModel.js" as DesktopModel
 import "DockSidebarModel.js" as SidebarModel
@@ -27,6 +28,8 @@ Item {
   property string focusedWorkspace: ""
   property int scopeRevision: 0
   readonly property var windowActions: host ? host.windowActions || null : null
+  readonly property var windowIconOverrides: DockIconModel.normalizeWindowRules(
+    settings.windowIconOverrides || [])
   property var dragSession: null
   property var dragTarget: null
   property var focusReturnTarget: null
@@ -218,7 +221,9 @@ Item {
   }
 
   function beginWidgetReorder(id) {
-    if (root.interactionBusy || root.widgetIds.indexOf(id) < 0) return false
+    if (root.interactionBusy || root.resizeActive || root.rowDragActive)
+      return false
+    if (root.widgetIds.indexOf(id) < 0) return false
     root.closeWidgetPopup()
     root.widgetDragId = id
     root.interactionBusy = true
@@ -480,6 +485,10 @@ Item {
         workspaceMonitorScope: "all", workspaceMonitorOrder: DockModel.normalizeSetting(
           "workspaceMonitorOrder", root.settings.workspaceMonitorOrder), sortByWorkspace: false
       }, applications: root.applications, toplevels: root.toplevels,
+      windowRuleMatches: root.toplevels.map(function(toplevel) {
+        return DockIconModel.matchWindowRule(root.windowIconOverrides,
+          toplevel ? toplevel.appId : "", toplevel ? toplevel.title : "")
+      }),
       filteredToplevels: root.toplevels, hyprToplevels: root.hyprToplevels,
       hyprWorkspaces: root.workspaces, hyprMonitors: root.monitors,
       dockMonitor: WindowModel.monitorForScreen(nextPrimary, root.monitors),

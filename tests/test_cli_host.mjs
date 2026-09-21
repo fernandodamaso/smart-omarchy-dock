@@ -33,6 +33,7 @@ function functions(name, state) {
 const shared = {
   console: { warn() {} },
   ConfigModel: loadModel('DockConfigModel.js'),
+  DockIconModel: loadModel('DockIconModel.js'),
   DockModel: loadModel('DockModel.js'),
   DockWindowModel: loadModel('DockWindowModel.js'),
   WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js'),

@@ -957,7 +957,10 @@ function project(input) {
     var window = { kind: "window", key: entry.key, order: entry.order, toplevel: toplevel,
       address: record.address || "", title: String(toplevel.title || ""),
       workspaceIdentity: workspace, monitorIdentity: owner, applicationKey: appKey,
-      desktopId: item.desktopId, item: item, minimized: record.minimized === true,
+      desktopId: item.desktopId, item: item,
+      windowRuleKey: String(item.windowRuleKey || ""),
+      windowOverrideSource: String(item.windowOverrideSource || ""),
+      minimized: record.minimized === true,
       sticky: record.sticky === true && !record.minimized, urgent: record.urgent === true,
       primaryOwner: false, members: [toplevel] }
     windowsByHandleKey[entry.key] = window

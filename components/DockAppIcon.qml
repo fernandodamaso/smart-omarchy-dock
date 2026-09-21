@@ -10,6 +10,7 @@ Item {
   property string desktopId: ""
   property string desktopIcon: ""
   property var iconOverrides: ({})
+  property string windowOverrideSource: ""
   property int reloadRevision: 0
   property string profileKey: ""
   property string profileName: ""
@@ -22,9 +23,11 @@ Item {
     DockIconModel.normalizeOverrideKey(desktopId)] || ""
   readonly property string profileOverrideSource: overrideKey
     ? (DockIconModel.normalizeOverrides(iconOverrides)[overrideKey] || "") : ""
+  readonly property string windowSource: String(windowOverrideSource || "")
   readonly property string desktopSource: resolveDesktopIcon(desktopIcon)
-  readonly property var sourceCandidates: DockIconModel.candidates(profileOverrideSource,
-    overrideSource, desktopSource, String(Quickshell.iconPath("application-x-executable", true) || ""))
+  readonly property var sourceCandidates: DockIconModel.candidates(windowSource,
+    profileOverrideSource, overrideSource, desktopSource,
+    String(Quickshell.iconPath("application-x-executable", true) || ""))
 
   // Diagnostics describe this attempt, never mutate the configured mapping.
   readonly property bool usingOverride: !reloadPending
@@ -77,7 +80,8 @@ Item {
     if (!componentReady) return
     if (reloadPending) {
       attemptSources = sourceCandidates.slice()
-      attemptedOverrides = DockIconModel.candidates(profileOverrideSource, overrideSource)
+      attemptedOverrides = DockIconModel.candidates(
+        windowSource, profileOverrideSource, overrideSource, "", "")
       attemptedProfileOverride = profileOverrideSource
       attemptIndex = 0
       customFailed = false

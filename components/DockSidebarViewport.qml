@@ -6,6 +6,7 @@ import qs.Commons
 import qs.Ui as Ui
 import "DockSidebarModel.js" as SidebarModel
 import "DockSidebarInteractionModel.js" as InteractionModel
+import "DockIconModel.js" as DockIconModel
 
 FocusScope {
   id: root
@@ -15,6 +16,8 @@ FocusScope {
   // Connector of the owning PanelWindow; rows stamp this for Ctrl/drag.
   property string panelConnector: ""
   property bool panelCollapsed: false
+  // Effective owning-panel visibility. Rail mode is separately excluded below.
+  property bool presentationVisible: true
   // Phase 5 drives whole-workspace hover highlight; chrome already binds it.
   property string hoveredWorkspaceKey: ""
   readonly property var viewProjection: controller.projectionFor(panelCollapsed)
@@ -92,6 +95,11 @@ FocusScope {
       readonly property real layoutWidth: InteractionModel.sidebarInlineWorkspaceBadgeLayoutWidth(
         implicitWidth, root.inlineWorkspaceBadgeAvailable, Style.space)
     }
+  }
+
+  function rowIntersectsViewport(rowY, rowHeightValue) {
+    return root.presentationVisible && !root.panelCollapsed
+      && InteractionModel.viewportIntersects(rowY, rowHeightValue, list.contentY, list.height)
   }
 
   function estimatedRowHeight(row) {
@@ -560,6 +568,7 @@ FocusScope {
     flickableDirection: Flickable.VerticalFlick
     orientation: ListView.Vertical
     keyNavigationEnabled: false
+
     // ScriptModel reconciles supplied domain keys; index is geometry only.
     model: ScriptModel { objectProp: "key"; values: root.visibleRows }
     delegate: DockSidebarRow {
@@ -573,6 +582,7 @@ FocusScope {
       panelConnector: root.panelConnector
       collapsed: root.panelCollapsed
       rowHeight: root.rowHeight
+      herdrAnimationEligible: root.rowIntersectsViewport(y, height)
       width: list.width
     }
     footer: Item {
@@ -751,6 +761,10 @@ FocusScope {
     height: root.rowHeight
     property var sourceRow: root.controller.dragSession
       ? root.controller.rowsByKey[root.controller.dragSession.target.key] : null
+    property var sourceWindowRule: sourceRow && sourceRow.kind === "window" && sourceRow.toplevel
+      ? DockIconModel.matchWindowRule(root.controller.windowIconOverrides || [],
+          String(sourceRow.toplevel.appId || ""), String(sourceRow.toplevel.title || ""))
+      : null
     DockAppIcon {
       visible: parent.sourceRow && parent.sourceRow.kind === "window"
       width: 22; height: 22
@@ -759,6 +773,8 @@ FocusScope {
       desktopIcon: parent.sourceRow && parent.sourceRow.item && parent.sourceRow.item.entry
         ? String(parent.sourceRow.item.entry.icon || "") : ""
       iconOverrides: root.controller.settings.iconOverrides || ({})
+      windowOverrideSource: parent.sourceWindowRule
+        ? String(parent.sourceWindowRule.source || "") : ""
       reloadRevision: root.controller.host.iconReloadRevision || 0
     }
     Text {

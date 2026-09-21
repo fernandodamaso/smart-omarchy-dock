@@ -38,7 +38,8 @@ badgeGeometry.width = 20
 badgeGeometry.height = 20
 assert.equal(vm.runInContext(binding('profileBadgeSize'), badgeGeometry), 12,
   'small icons retain a readable minimum badge size')
-function renderer({ desktop = 'desktop', generic = 'image://icon/generic', overrides = { app: '/tmp/custom.png' } } = {}) {
+function renderer({ desktop = 'desktop', generic = 'image://icon/generic',
+    overrides = { app: '/tmp/custom.png' }, windowOverride = '' } = {}) {
   const queue = new Set()
   const loads = []
   const clears = []
@@ -58,7 +59,8 @@ function renderer({ desktop = 'desktop', generic = 'image://icon/generic', overr
     DockIconModel: icons, Image, artwork,
     Quickshell: { iconPath: name => name === 'application-x-executable' ? generic : name === 'desktop' ? 'image://icon/desktop' : '' },
     Qt: { callLater: fn => queue.add(fn), resolvedUrl: path => `file:///repo/components/${path}` },
-    desktopId: 'app', desktopIcon: desktop, iconOverrides: overrides, reloadRevision: 0,
+    desktopId: 'app', desktopIcon: desktop, iconOverrides: overrides,
+    windowOverrideSource: windowOverride, reloadRevision: 0,
     profileKey: '', profileName: '', profileAvatarPath: '', profileBadgesEnabled: true,
     componentReady: true, reloadPending: false, attemptSources: [], attemptIndex: 0,
     attemptedOverrides: [], attemptedProfileOverride: '', customFailed: false,
@@ -66,8 +68,8 @@ function renderer({ desktop = 'desktop', generic = 'image://icon/generic', overr
   })
   scope.root = scope
   vm.runInContext(methods.join('\n'), scope)
-  for (const name of ['overrideKey', 'profileOverrideSource', 'overrideSource', 'desktopSource',
-      'sourceCandidates', 'usingOverride', 'overrideFailed', 'renderedSource',
+  for (const name of ['overrideKey', 'profileOverrideSource', 'overrideSource', 'windowSource',
+      'desktopSource', 'sourceCandidates', 'usingOverride', 'overrideFailed', 'renderedSource',
       'profileBadgeVisible', 'profileBadgeActive', 'profileBadgeAvatarVisible']) {
     Object.defineProperty(scope, name, { get: () => vm.runInContext(binding(name), scope) })
   }
@@ -94,6 +96,25 @@ function renderer({ desktop = 'desktop', generic = 'image://icon/generic', overr
 
 const valid = renderer()
 assert.deepEqual(valid.loads, [{ source: 'file:///tmp/custom.png', cache: false }])
+
+const perWindow = renderer({
+  windowOverride: 'file:///tmp/window-a.svg',
+  overrides: { app: '/tmp/custom.png', 'app@profile:Profile 1': '/tmp/profile.svg' }
+})
+assert.equal(perWindow.artwork.source, 'file:///tmp/window-a.svg',
+  'per-window artwork wins over app-wide artwork')
+perWindow.scope.profileKey = 'Profile 1'
+perWindow.scope.requestReload()
+perWindow.flush()
+assert.equal(perWindow.artwork.source, 'file:///tmp/window-a.svg',
+  'per-window artwork also wins over a profile override')
+perWindow.scope.windowOverrideSource = 'file:///tmp/window-b.svg'
+perWindow.scope.requestReload()
+perWindow.flush()
+assert.equal(perWindow.artwork.source, 'file:///tmp/window-b.svg',
+  'source-only A -> B changes reach the renderer')
+assert.equal(perWindow.loads.at(-1).cache, false,
+  'per-window custom artwork bypasses stale image caching')
 assert.equal(valid.scope.usingOverride, false)
 valid.artwork.status = valid.Image.Ready
 assert.equal(valid.scope.usingOverride, true)
@@ -213,7 +234,9 @@ interrupted.flush()
 assert.equal(interrupted.loads.length, 2)
 
 // Structural guards supplement, but do not establish, real QML/image behavior.
-for (const declaration of ['property string desktopId: ""', 'property string desktopIcon: ""', 'property var iconOverrides: ({})', 'property int reloadRevision: 0',
+for (const declaration of ['property string desktopId: ""', 'property string desktopIcon: ""',
+    'property var iconOverrides: ({})', 'property string windowOverrideSource: ""',
+    'property int reloadRevision: 0',
     'property string profileKey: ""', 'property string profileName: ""', 'property bool profileBadgesEnabled: true'])
   assert.ok(qml.includes(declaration), declaration)
 for (const event of ['onSourceCandidatesChanged', 'onDesktopIdChanged', 'onReloadRevisionChanged'])

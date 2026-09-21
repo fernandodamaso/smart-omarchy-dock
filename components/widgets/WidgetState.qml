@@ -10,6 +10,8 @@ Item {
   property bool reducedMotion: false
   property bool compact: false
   property string actionText: ""
+  // Total vertical inset beyond content (split top/bottom). -1 keeps prior defaults.
+  property int verticalPadding: -1
   signal actionTriggered()
 
   readonly property bool motionActive: root.kind === "loading" && !root.reducedMotion
@@ -27,8 +29,11 @@ Item {
     : root.kind === "stale" ? "↻" : "–"
   readonly property string semantic: root.kind === "error" ? "danger"
     : root.kind === "stale" ? "warning" : root.kind === "loading" ? "info" : "neutral"
+  readonly property int resolvedVerticalPadding: root.verticalPadding >= 0
+    ? root.verticalPadding
+    : Style.space(root.compact ? 8 : 16)
 
-  implicitHeight: content.implicitHeight + Style.space(root.compact ? 8 : 16)
+  implicitHeight: content.implicitHeight + root.resolvedVerticalPadding
   clip: true
 
   Rectangle {

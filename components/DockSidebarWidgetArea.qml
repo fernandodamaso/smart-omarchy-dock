@@ -60,6 +60,15 @@ Item {
     return false
   }
 
+  function itemIntersectsViewport(item) {
+    if (!item || !root.viewport || !root.viewport.visible || item.height <= 0) return false
+    // Reading contentY makes this binding update while the shared sidebar scrolls.
+    var scrollRevision = root.viewport.listView ? root.viewport.listView.contentY : 0
+    var point = root.viewport.mapFromItem(item, 0, 0)
+    return point.x + item.width > 0 && point.x < root.viewport.width
+      && point.y + item.height > 0 && point.y < root.viewport.height
+  }
+
   function anchorInsideViewport(anchor) {
     for (var item = anchor; item; item = item.parent) {
       if (item === root.viewport) return true
@@ -187,14 +196,28 @@ Item {
     root.dragTargetSlot = root.slotForSceneY(sceneY)
   }
 
-  function finishDrag(sceneX, sceneY, cancelled) {
-    if (!root.dragWidgetId) return
-    if (!cancelled) root.updateDrag(sceneX, sceneY)
-    var slot = root.dragTargetSlot
+  // Controller may cancel underneath us (surface/collapse). Clear local + autoscroll.
+  function syncDragFromController() {
+    if (root.controller.widgetDragId) return
+    if (!root.dragWidgetId && root.viewport.contentTailDragPoint === null) return
     root.viewport.endContentTailDrag()
-    root.controller.finishWidgetReorder(root.fullReorderSlot(slot), cancelled)
     root.dragWidgetId = ""
     root.dragTargetSlot = -1
+  }
+
+  function finishDrag(sceneX, sceneY, cancelled) {
+    if (!root.dragWidgetId && !root.controller.widgetDragId) {
+      root.viewport.endContentTailDrag()
+      root.dragTargetSlot = -1
+      return
+    }
+    if (!cancelled && root.dragWidgetId)
+      root.updateDrag(sceneX, sceneY)
+    var slot = root.dragTargetSlot
+    root.dragWidgetId = ""
+    root.dragTargetSlot = -1
+    root.viewport.endContentTailDrag()
+    root.controller.finishWidgetReorder(root.fullReorderSlot(slot), cancelled === true)
   }
 
   Column {
@@ -244,19 +267,30 @@ Item {
         model: root.presentationWidgetIds
 
         delegate: DockWidgetCard {
+          id: widgetCard
           required property string modelData
           required property int index
           width: cardColumn.width
           controller: root.controller
           widgetId: modelData
           collapsed: root.controller.widgetCollapsedFor(modelData)
+          interfaceAnimationsEnabled: root.controller.settings
+            && root.controller.settings.interfaceAnimationsEnabled !== false
+          presentationVisible: root.sectionVisible && root.panel.visible
+            && root.itemIntersectsViewport(widgetCard)
+          presentationClipItem: root.viewport
+          presentationRevision: root.viewport && root.viewport.listView
+            ? root.viewport.listView.contentY : 0
           dropBefore: root.dragWidgetId !== "" && root.dragTargetSlot === index
           dropAfter: root.dragWidgetId !== ""
             && root.dragTargetSlot === root.presentationWidgetIds.length
             && index === root.presentationWidgetIds.length - 1
           onToggleRequested: root.controller.toggleWidgetCollapsed(modelData)
           onRemoveRequested: root.controller.setWidgetEnabled(modelData, false)
-          onDragStarted: function(sceneX, sceneY) { root.beginDrag(modelData, sceneX, sceneY) }
+          onDragStarted: function(sceneX, sceneY) {
+            if (!root.beginDrag(modelData, sceneX, sceneY))
+              dragActive = false
+          }
           onDragMoved: function(sceneX, sceneY) { root.updateDrag(sceneX, sceneY) }
           onDragFinished: function(sceneX, sceneY, cancelled) {
             root.finishDrag(sceneX, sceneY, cancelled)
@@ -315,6 +349,7 @@ Item {
       }
 
       Flickable {
+        id: popupScroll
         anchors.top: popupClose.bottom
         anchors.bottom: parent.bottom
         anchors.left: parent.left
@@ -339,6 +374,11 @@ Item {
             presentation: "popup"
             popupAnchor: root.controller.widgetPopupAnchor
             viewEnabled: popup.visible
+            interfaceAnimationsEnabled: root.controller.settings
+              && root.controller.settings.interfaceAnimationsEnabled !== false
+            presentationVisible: popup.visible
+            presentationClipItem: popupScroll
+            presentationRevision: popupScroll.contentY
             width: parent.width
             height: implicitHeight
           }
@@ -526,9 +566,12 @@ Item {
   Connections {
     target: root.controller
     function onWidgetAnchorChanged() { Qt.callLater(root.updatePopupAnchor) }
+    function onWidgetDragIdChanged() { root.syncDragFromController() }
     function onSurfaceInvalidated() {
       root.closePopup()
       root.closeManager()
+      if (root.dragWidgetId || root.controller.widgetDragId)
+        root.finishDrag(0, 0, true)
     }
   }
 
@@ -546,6 +589,8 @@ Item {
       if (!root.panel.visible) {
         root.closePopup()
         root.closeManager()
+        if (root.dragWidgetId || root.controller.widgetDragId)
+          root.finishDrag(0, 0, true)
       }
     }
     function onPanelCollapsedChanged() {

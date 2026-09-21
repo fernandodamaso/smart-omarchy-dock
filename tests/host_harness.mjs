@@ -24,6 +24,7 @@ export function hostHarness(settings, applications = []) {
   const defaults = JSON.parse(read('config/dock.json'));
   const metadata = JSON.parse(read('config/settings-schema.json'));
   const shared = { console: { warn() {} }, ConfigModel: loadModel('DockConfigModel'),
+    DockIconModel: loadModel('DockIconModel'),
     DockModel: loadModel('DockModel'), DockWindowModel: loadModel('DockWindowModel'),
     WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel'),
     SidebarModel: loadModel('DockSidebarModel'),

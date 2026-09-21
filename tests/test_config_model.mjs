@@ -78,7 +78,7 @@ for (const patch of [{ browserActivityMutedServices: ['Gmail'] },
 
 const preferences = model.preferenceResetPatch(defaults, schema);
 for (const key of ['pinned', 'hiddenApplications', 'browserActivityMutedServices',
-  'margin', 'iconOverrides', 'extensionData'])
+  'margin', 'iconOverrides', 'windowIconOverrides', 'extensionData'])
   assert.equal(Object.hasOwn(preferences, key), false, key);
 const reset = model.applyPatch(current, preferences, schema);
 assert.equal(reset.ok, true);
@@ -104,6 +104,7 @@ function functions(name, state) {
   return context;
 }
 const shared = { console: { warn() {} }, ConfigModel: model,
+  DockIconModel: loadModel('DockIconModel.js'),
   DockModel: loadModel('DockModel.js'), DockWindowModel: loadModel('DockWindowModel.js'),
   WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js'),
   SidebarModel: loadModel('DockSidebarModel.js'),

@@ -27,6 +27,7 @@ PopupWindow {
   property var identityToplevel: null
   property bool originOnly: false
   property string desktopId: ""
+  property string windowOverrideSource: ""
   property var applicationEntry: null
   property var members: []
   property bool anchorHovered: false
@@ -147,6 +148,7 @@ PopupWindow {
     root.identityToplevel = null
     root.originOnly = false
     root.desktopId = ""
+    root.windowOverrideSource = ""
     root.applicationEntry = null
     root.members = []
     root.anchorHovered = false
@@ -203,6 +205,7 @@ PopupWindow {
     closeTimer.stop()
     root.anchorItem = anchorItem
     root.desktopId = String(desktopId || "")
+    root.windowOverrideSource = String(anchorItem.windowOverrideSource || "")
     root.presentationId = String(anchorItem.presentationId || root.desktopId)
     root.identityToplevel = anchorItem.identityToplevel || null
     root.originOnly = anchorItem.originOnly === true
@@ -246,6 +249,7 @@ PopupWindow {
       return
     }
     root.members = refreshed
+    root.windowOverrideSource = String(target.windowOverrideSource || "")
     if (root.visible) Qt.callLater(root.reanchor)
   }
 
@@ -389,6 +393,7 @@ PopupWindow {
             desktopIcon: root.applicationEntry && root.applicationEntry.icon
               ? root.applicationEntry.icon : ""
             iconOverrides: root.iconOverrides
+            windowOverrideSource: root.windowOverrideSource
             reloadRevision: root.iconReloadRevision
           }
 
@@ -753,6 +758,7 @@ PopupWindow {
                 applicationEntry: root.applicationEntry
                 desktopId: root.desktopId
                 iconOverrides: root.iconOverrides
+                windowOverrideSource: root.windowOverrideSource
                 iconReloadRevision: root.iconReloadRevision
                 captureEnabled: root.visible && root.previewCaptureEnabled
                 compactActivityLayout: root.hasActivity

@@ -541,6 +541,19 @@ function herdrStatusAccessibleText(status) {
   return HerdrModel.statusLabel(status)
 }
 
+// Strict intersection keeps cached ListView delegates from animating outside the
+// rendered viewport. Boundary-touching rectangles are offscreen.
+function viewportIntersects(itemY, itemHeight, contentY, viewportHeight) {
+  var top = Number(itemY)
+  var height = Math.max(0, Number(itemHeight) || 0)
+  var viewportTop = Number(contentY) || 0
+  var viewportSize = Math.max(0, Number(viewportHeight) || 0)
+  if (!isFinite(top) || height <= 0 || viewportSize <= 0) return false
+  var bottom = top + height
+  var viewportBottom = viewportTop + viewportSize
+  return bottom > viewportTop && top < viewportBottom
+}
+
 // Reserve kind / counters / fold control width first; name receives the remainder.
 function herdrCompactLabelWidths(input) {
   var o = input || ({})

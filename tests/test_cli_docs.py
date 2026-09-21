@@ -183,6 +183,29 @@ class CliDocumentationTests(unittest.TestCase):
         self.assertEqual(settings['pinned'], pins)
         self.assertEqual(settings['extensionData'], self.transport.initial['extensionData'])
 
+    def test_window_icon_recipe_roundtrips_exact_rule_without_touching_app_icons(self):
+        before_icons = dict(self.transport.initial['iconOverrides'])
+        saw_set = False
+        for line in self.block('window-icons', 'sh').splitlines():
+            data = self.run_command(line)
+            if 'icons ' in line:
+                self.assertFalse(data['renderVerified'])
+            if 'icons set ' in line:
+                saw_set = True
+                self.assertTrue(data['persisted'])
+                self.assertEqual(data['effectiveWindowOverrides'], [{
+                    'appId': 'com.mitchellh.ghostty',
+                    'titlePattern': '*solar*',
+                    'source': Path('Pictures/solar.svg').absolute().as_uri(),
+                }])
+            if 'icons reset ' in line:
+                self.assertEqual(data['requested']['windowIconOverrides'], [])
+        self.assertTrue(saw_set)
+        settings = self.run_command('smartdock config get --json')['settings']
+        self.assertEqual(settings['windowIconOverrides'], [])
+        self.assertEqual(settings['iconOverrides'], before_icons)
+        self.assertEqual(settings['extensionData'], self.transport.initial['extensionData'])
+
     def test_document_shell_syntax_and_relative_links(self):
         for name in DOCUMENTS:
             text = (ROOT / 'docs' / name).read_text(encoding='utf-8')

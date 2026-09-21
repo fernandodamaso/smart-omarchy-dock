@@ -114,6 +114,15 @@ function cloneItem(item, members) {
   return result
 }
 
+function windowRuleDiscriminator(item) {
+  var key = String(item && item.windowRuleKey || "")
+  return key ? "rule:" + key : "unmatched"
+}
+
+function groupedPresentationId(item, workspace) {
+  return workspace + "/" + item.desktopId + "/window-rule:" + windowRuleDiscriminator(item)
+}
+
 function individualPresentationId(item, record, ordinal) {
   var workspace = recordWorkspace(record) || "other"
   var address = record && typeof record.address === "string"
@@ -146,12 +155,13 @@ function localizeItems(appItems, records, groups) {
       var workspace = recordWorkspace(record)
       if (workspace && workspaceGroupEnabled(policy, item.desktopId, workspace)) {
         var groupKey = applicationKey(item.desktopId) + "\u001f" + workspace
+          + "\u001f" + windowRuleDiscriminator(item)
         var bucket = buckets[groupKey]
         if (!bucket) {
           bucket = cloneItem(item, [])
           bucket.workspaceGrouped = true
           bucket.localWorkspaceIdentity = workspace
-          bucket.presentationId = workspace + "/" + item.desktopId
+          bucket.presentationId = groupedPresentationId(item, workspace)
           bucket.identityToplevel = null
           buckets[groupKey] = bucket
           result.push(bucket)
@@ -208,7 +218,7 @@ function decorateScopedItem(item, workspaceIdentity, groups) {
     && item.localWorkspaceIdentity === workspaceIdentity
     && workspaceGroupEnabled(groups, item.desktopId, workspaceIdentity)
   if (grouped) {
-    item.presentationId = workspaceIdentity + "/" + item.desktopId
+    item.presentationId = groupedPresentationId(item, workspaceIdentity)
     item.identityToplevel = null
   }
   return item
