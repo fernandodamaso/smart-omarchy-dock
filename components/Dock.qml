@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
+import "DockIconModel.js" as DockIconModel
 import "DockDesktopModel.js" as DesktopModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockWindowPreviewModel.js" as PreviewModel
@@ -419,6 +420,8 @@ PanelWindow {
     "workspaceMonitorOrder", settings.workspaceMonitorOrder)
   readonly property var workspaceGroups: WorkspaceGroupModel.normalizeWorkspaceGroups(
     settings.workspaceGroups || [])
+  readonly property var windowIconOverrides: DockIconModel.normalizeWindowRules(
+    settings.windowIconOverrides || [])
   readonly property string windowScope: DockWindowModel.normalizeWindowScope(
     settings.windowScope)
   readonly property bool showUrgentOutsideScope:
@@ -605,7 +608,8 @@ PanelWindow {
         workspaceGroups: workspaceGroups,
         workspaceMonitorScope: workspaceMonitorScope,
         workspaceMonitorOrder: workspaceMonitorOrder,
-        sortByWorkspace: sortByWorkspace
+        sortByWorkspace: sortByWorkspace,
+        windowIconOverrides: windowIconOverrides
       },
       applications: applications,
       toplevels: toplevels,
@@ -948,6 +952,8 @@ PanelWindow {
         desktopIcon: workspaceDrag.sourceItem && workspaceDrag.sourceItem.entry
           ? workspaceDrag.sourceItem.entry.icon || "" : ""
         iconOverrides: root.iconOverrides
+        windowOverrideSource: workspaceDrag.sourceItem
+          ? String(workspaceDrag.sourceItem.windowOverrideSource || "") : ""
         reloadRevision: root.iconReloadRevision
       }
     }
@@ -1472,6 +1478,7 @@ PanelWindow {
 
     desktopId: modelData.desktopId
     iconOverrides: root.iconOverrides
+    windowOverrideSource: String(modelData.windowOverrideSource || "")
     iconReloadRevision: root.iconReloadRevision
     browserProfileService: root.browserProfileService
     browserProfileKey: root.profileKeyFor(modelData)

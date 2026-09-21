@@ -29,7 +29,7 @@ function build(input) {
     })
     var baseItems = sidebar ? sidebarBaseItems(input) : DockModel.buildVisibleItems(
       settings.pinned, input.toplevels, input.applications, input.hyprToplevels,
-      false, false, settings.hiddenApplications)
+      false, false, settings.hiddenApplications, settings.windowIconOverrides || [])
     var localizedItems = WorkspaceGroupModel.prepareWorkspaceItems(
       baseItems, records, settings.workspaceGroups)
     workspacePresentation = WorkspaceModel.buildWorkspacePresentation(
@@ -55,7 +55,7 @@ function build(input) {
   })
   var flatBaseItems = sidebar ? baseItems : DockModel.buildVisibleItems(
     settings.pinned, input.filteredToplevels, input.applications, input.hyprToplevels,
-    false, false, settings.hiddenApplications)
+    false, false, settings.hiddenApplications, settings.windowIconOverrides || [])
   var visibleItems = WorkspaceGroupModel.buildFlatPresentation(
     flatBaseItems, flatRecords, settings.workspaceGroups, settings.sortByWorkspace)
   return {
@@ -72,5 +72,5 @@ function sidebarBaseItems(input) {
   var unknown = input.toplevels.filter(function(t) { return !String(t.appId || "").trim() })
   return DockModel.buildVisibleItems(input.settings.pinned, known, input.applications,
     input.hyprToplevels, false, false, input.settings.hiddenApplications).concat(
-      DockModel.buildVisibleItems([], unknown, [], input.hyprToplevels, false, false, []))
+      DockModel.buildVisibleItems([], unknown, [], input.hyprToplevels, false, false, [], input.settings.windowIconOverrides || []))
 }

@@ -722,6 +722,8 @@ FocusScope {
       desktopIcon: parent.sourceRow && parent.sourceRow.item && parent.sourceRow.item.entry
         ? String(parent.sourceRow.item.entry.icon || "") : ""
       iconOverrides: root.controller.settings.iconOverrides || ({})
+      windowOverrideSource: parent.sourceRow
+        ? String(parent.sourceRow.windowOverrideSource || "") : ""
       reloadRevision: root.controller.host.iconReloadRevision || 0
     }
     Text {

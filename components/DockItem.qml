@@ -44,6 +44,7 @@ Item {
   required property bool previewActive
   required property bool interfaceAnimationsEnabled
   property var iconOverrides: ({})
+  property string windowOverrideSource: ""
   property int iconReloadRevision: 0
   property DockWorkspaceDrag workspaceDrag: null
   property bool workspaceDragEnabled: false
@@ -422,6 +423,7 @@ Item {
         desktopId: root.desktopId
         desktopIcon: root.entry && root.entry.icon ? root.entry.icon : ""
         iconOverrides: root.iconOverrides
+        windowOverrideSource: root.windowOverrideSource
         reloadRevision: root.iconReloadRevision
         profileKey: root.browserProfileKey
         profileName: root.browserProfileEntry ? String(root.browserProfileEntry.name || "") : ""

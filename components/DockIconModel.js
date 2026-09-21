@@ -102,9 +102,116 @@ function applyOverride(overrides, desktopId, sourceOrNull) {
   return { ok: true, changed: changed, overrides: updated, error: "" }
 }
 
-function candidates(profileUrl, overrideUrl, desktopUrl, genericUrl) {
+function normalizeWindowAppId(value) {
+  if (typeof value !== "string") return ""
+  var id = value.trim().toLowerCase()
+  return !id || /[\x00-\x1f\x7f]/.test(id) ? "" : id
+}
+
+function normalizeTitlePattern(value) {
+  if (typeof value !== "string") return ""
+  var pattern = value.trim()
+  return !pattern || pattern.length > 200 || /[\x00-\x1f\x7f]/.test(pattern)
+    ? "" : pattern
+}
+
+function windowRuleKey(appId, titlePattern) {
+  var app = normalizeWindowAppId(appId)
+  var pattern = normalizeTitlePattern(titlePattern)
+  if (!app || !pattern) return ""
+  pattern = pattern.toLowerCase()
+  return app.length + ":" + app + "|" + pattern.length + ":" + pattern
+}
+
+function windowRulesError(value) {
+  if (!Array.isArray(value)) return "Expected an array of window icon override rules"
+  var seen = Object.create(null)
+  for (var i = 0; i < value.length; ++i) {
+    var rule = value[i]
+    if (!rule || typeof rule !== "object" || Array.isArray(rule))
+      return "Expected a window icon override object at index " + i
+    var keys = Object.keys(rule).sort()
+    if (keys.length !== 3 || keys[0] !== "appId" || keys[1] !== "source"
+        || keys[2] !== "titlePattern")
+      return "Window icon override entries require only appId, titlePattern and source at index " + i
+    var appId = normalizeWindowAppId(rule.appId)
+    if (!appId) return "Invalid raw Wayland appId at index " + i
+    if (typeof rule.titlePattern !== "string" || !rule.titlePattern.trim())
+      return "Title pattern must not be empty at index " + i
+    if (rule.titlePattern.trim().length > 200)
+      return "Title pattern must be at most 200 characters at index " + i
+    if (/[\x00-\x1f\x7f]/.test(rule.titlePattern))
+      return "Title pattern must not contain control characters at index " + i
+    var pattern = normalizeTitlePattern(rule.titlePattern)
+    if (!pattern) return "Invalid title pattern at index " + i
+    if (!normalizeSource(rule.source))
+      return "Expected a local PNG or SVG source at index " + i
+    var key = windowRuleKey(appId, pattern)
+    if (Object.prototype.hasOwnProperty.call(seen, key))
+      return "Duplicate window icon override rule at index " + i
+    seen[key] = true
+  }
+  return ""
+}
+
+function normalizeWindowRules(value) {
+  if (windowRulesError(value)) return []
+  return value.map(function(rule) {
+    return {
+      appId: normalizeWindowAppId(rule.appId),
+      titlePattern: normalizeTitlePattern(rule.titlePattern),
+      source: normalizeSource(rule.source)
+    }
+  })
+}
+
+// Only '*' is special. Matching is case-insensitive and anchored to the full
+// title unless the pattern explicitly begins/ends with '*'. No regex is built,
+// so adversarial wildcard input cannot trigger regex backtracking.
+function titlePatternMatches(titlePattern, title) {
+  var pattern = String(titlePattern || "").toLowerCase()
+  var text = String(title === undefined || title === null ? "" : title).toLowerCase()
+  if (!pattern) return false
+  if (pattern === "*") return true
+  var leadingWildcard = pattern.charAt(0) === "*"
+  var trailingWildcard = pattern.charAt(pattern.length - 1) === "*"
+  var parts = pattern.split("*").filter(function(part) { return part !== "" })
+  if (parts.length === 0) return true
+  var cursor = 0
+  for (var i = 0; i < parts.length; ++i) {
+    var position = text.indexOf(parts[i], cursor)
+    if (position < 0) return false
+    if (i === 0 && !leadingWildcard && position !== 0) return false
+    cursor = position + parts[i].length
+  }
+  if (!trailingWildcard && cursor !== text.length) return false
+  return true
+}
+
+function matchWindowRule(rules, appId, title) {
+  var wanted = normalizeWindowAppId(appId)
+  if (!wanted || !Array.isArray(rules)) return null
+  for (var i = 0; i < rules.length; ++i) {
+    var rule = rules[i]
+    if (!rule || rule.appId !== wanted
+        || !titlePatternMatches(rule.titlePattern, title)) continue
+    return {
+      appId: rule.appId,
+      titlePattern: rule.titlePattern,
+      source: rule.source,
+      key: windowRuleKey(rule.appId, rule.titlePattern)
+    }
+  }
+  return null
+}
+
+function candidates(windowUrl, profileUrl, overrideUrl, desktopUrl, genericUrl) {
   var result = []
-  var sources = [profileUrl, overrideUrl, desktopUrl, genericUrl]
+  // Four arguments retain the historic profile -> app -> desktop -> generic
+  // order. Five arguments opt into window -> profile -> app -> desktop -> generic.
+  var sources = arguments.length >= 5
+    ? [windowUrl, profileUrl, overrideUrl, desktopUrl, genericUrl]
+    : [windowUrl, profileUrl, overrideUrl, desktopUrl]
   sources.forEach(function(source) {
     if (typeof source === "string" && source && result.indexOf(source) < 0)
       result.push(source)

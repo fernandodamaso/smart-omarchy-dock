@@ -1,5 +1,6 @@
 .pragma library
 .import "DockSidebarWidgetModel.js" as SidebarWidgetModel
+.import "DockIconModel.js" as DockIconModel
 
 function normalizedId(value) {
   return String(value || "").toLowerCase().replace(/\.desktop$/, "")
@@ -434,7 +435,8 @@ function settingsDefaults() {
     workspaceMonitorOrder: [],
     groupWindows: true,
     interfaceAnimationsEnabled: true,
-    browserProfileBadgesEnabled: true
+    browserProfileBadgesEnabled: true,
+    windowIconOverrides: []
   }
 }
 
@@ -1234,6 +1236,8 @@ function visibleItemsEqual(current, next) {
         || currentItem.pinned !== nextItem.pinned
         || currentItem.presentationId !== nextItem.presentationId
         || currentItem.identityToplevel !== nextItem.identityToplevel
+        || String(currentItem.windowRuleKey || "") !== String(nextItem.windowRuleKey || "")
+        || String(currentItem.windowOverrideSource || "") !== String(nextItem.windowOverrideSource || "")
         || !Array.isArray(currentItem.toplevels)
         || !Array.isArray(nextItem.toplevels)
         || currentItem.toplevels.length !== nextItem.toplevels.length)
@@ -1248,7 +1252,7 @@ function visibleItemsEqual(current, next) {
 }
 
 function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspace,
-                           groupWindows, hiddenApplicationIds) {
+                           groupWindows, hiddenApplicationIds, windowIconOverrides) {
   var items = []
   var runningByKey = {}
   var nextOriginalIndex = 0
@@ -1261,6 +1265,8 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
       desktopId: pinnedId,
       pinned: true,
       toplevels: [],
+      windowRuleKey: "",
+      windowOverrideSource: "",
       originalIndex: nextOriginalIndex++
     })
   }
@@ -1268,11 +1274,18 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
   for (var topIndex = 0; topIndex < toplevels.length; ++topIndex) {
     var toplevel = toplevels[topIndex]
     var matchedPinned = false
+    // Match the raw Wayland identity before terminal remapping, DesktopEntry
+    // resolution, or pin attachment.
+    var windowRule = DockIconModel.matchWindowRule(
+      windowIconOverrides || [], toplevel ? toplevel.appId : "",
+      toplevel ? toplevel.title : "")
+    var windowRuleKey = windowRule ? windowRule.key : ""
+    var windowOverrideSource = windowRule ? windowRule.source : ""
     // Terminal windows running a recognized CLI app (e.g. opencode)
     // group under that app instead of the terminal emulator.
     var effectiveAppId = toplevelAppId(toplevel, catalog)
 
-    if (mergeWindows) {
+    if (mergeWindows && !windowRule) {
       for (var pinnedIndex = 0; pinnedIndex < items.length; ++pinnedIndex) {
         var item = items[pinnedIndex]
         var pinnedEntry = entryForDesktopId(item.desktopId, catalog)
@@ -1294,7 +1307,7 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
 
     if (!mergeWindows) {
       var attachedPinned = false
-      for (var pinIndex = 0; pinIndex < items.length; ++pinIndex) {
+      for (var pinIndex = 0; !windowRule && pinIndex < items.length; ++pinIndex) {
         var pinnedItem = items[pinIndex]
         if (pinnedItem.toplevels.length > 0) continue
         var pinnedEntry = entryForDesktopId(pinnedItem.desktopId, catalog)
@@ -1310,18 +1323,23 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
         desktopId: desktopId,
         pinned: false,
         toplevels: [toplevel],
+        windowRuleKey: windowRuleKey,
+        windowOverrideSource: windowOverrideSource,
         originalIndex: nextOriginalIndex++
       })
       continue
     }
 
-    var key = normalizedId(desktopId)
+    var key = normalizedId(desktopId) + "\u001f"
+      + (windowRuleKey || "@unmatched")
     var runningItem = runningByKey[key]
     if (!runningItem) {
       runningItem = {
         desktopId: desktopId,
         pinned: false,
         toplevels: [],
+        windowRuleKey: windowRuleKey,
+        windowOverrideSource: windowOverrideSource,
         originalIndex: nextOriginalIndex++
       }
       runningByKey[key] = runningItem

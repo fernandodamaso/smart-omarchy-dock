@@ -614,6 +614,8 @@ Item {
       desktopId: String(root.row.desktopId || "")
       desktopIcon: root.entry ? String(root.entry.icon || "") : ""
       iconOverrides: root.controller.settings.iconOverrides || ({})
+      windowOverrideSource: root.kind === "window"
+        ? String(root.row.windowOverrideSource || "") : ""
       reloadRevision: root.controller.host.iconReloadRevision || 0
       profileKey: root.profile ? root.profile.key : ""
       profileName: root.profile && root.profile.entry ? String(root.profile.entry.name || "") : ""

@@ -1,5 +1,6 @@
 import QtQuick
 import "DockModel.js" as DockModel
+import "DockIconModel.js" as DockIconModel
 import "DockWindowModel.js" as WindowModel
 import "DockDesktopModel.js" as DesktopModel
 import "DockSidebarModel.js" as SidebarModel
@@ -27,6 +28,8 @@ Item {
   property string focusedWorkspace: ""
   property int scopeRevision: 0
   readonly property var windowActions: host ? host.windowActions || null : null
+  readonly property var windowIconOverrides: DockIconModel.normalizeWindowRules(
+    settings.windowIconOverrides || [])
   property var dragSession: null
   property var dragTarget: null
   property var focusReturnTarget: null
@@ -478,7 +481,8 @@ Item {
         pinned: root.settings.pinned || [], hiddenApplications: DockModel.normalizeSetting(
           "hiddenApplications", root.settings.hiddenApplications), workspaceGroups: [],
         workspaceMonitorScope: "all", workspaceMonitorOrder: DockModel.normalizeSetting(
-          "workspaceMonitorOrder", root.settings.workspaceMonitorOrder), sortByWorkspace: false
+          "workspaceMonitorOrder", root.settings.workspaceMonitorOrder), sortByWorkspace: false,
+        windowIconOverrides: root.windowIconOverrides
       }, applications: root.applications, toplevels: root.toplevels,
       filteredToplevels: root.toplevels, hyprToplevels: root.hyprToplevels,
       hyprWorkspaces: root.workspaces, hyprMonitors: root.monitors,
