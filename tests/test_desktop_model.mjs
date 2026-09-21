@@ -43,7 +43,7 @@ function fixture(options = {}) {
   const settings = {
     position: 'bottom', workspaceLayout: 'grouped', windowScope: 'all',
     workspaceMonitorScope: 'all', workspaceMonitorOrder: [], sortByWorkspace: false,
-    showUrgentOutsideScope: true, groupWindows: false,
+    showUrgentOutsideScope: true, groupWindows: false, windowIconOverrides: [],
     pinned: ['app.browser', 'app.closed', 'app.hidden'], hiddenApplications: ['app.hidden'],
     workspaceGroups: [{ desktopId: 'app.browser', workspace: 'id:1' }],
     autoHide: true, reserveSpace: false, showPreviews: true,
