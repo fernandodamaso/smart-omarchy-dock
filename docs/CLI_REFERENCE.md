@@ -91,13 +91,19 @@ Configured spelling and order are retained. Pinned/hidden filters preserve their
 
 | Command | Arguments and semantics |
 | --- | --- |
-| `icons list` | Requested `data.overrides`, normalized `effectiveOverrides`, `iconReloadRevision`, `renderVerified: false`, plus status. |
-| `icons set` | `ID PATH`; update one app-wide mapping against the latest map and request fresh artwork. |
-| `icons reset` | `ID`; remove only that mapping. Repeating a reset is a true settings/reload no-op. |
-| `icons reload` | `ID`; require a valid existing local mapping and advance the shared reload revision without a config write. |
-| `--profile DIR` | With `set`/`reset`/`reload`, target one browser profile instead of the whole application: the key becomes `ID@profile:DIR` (DIR is the on-disk profile directory, e.g. `Profile 1`, matching a browser-profile provider badge). |
+| `icons list` | Requested app-wide `data.overrides`, normalized `effectiveOverrides`, requested `windowOverrides`, normalized `effectiveWindowOverrides`, `iconReloadRevision`, `renderVerified: false`, plus status. |
+| `icons set` | `ID PATH`; update one app-wide mapping, or add/edit a window rule when `--title-pattern` is supplied. |
+| `icons reset` | `ID`; remove only that app-wide mapping, or the exact window rule when `--title-pattern` is supplied. |
+| `icons reload` | `ID`; require a valid existing app/profile mapping and advance the shared reload revision without a config write. Window rules use same-source `icons set ... --title-pattern` for byte reload. |
+| `--profile DIR` | With `set`/`reset`/`reload`, target one browser profile instead of the whole application. Mutually exclusive with `--title-pattern`. |
+| `--title-pattern PATTERN` | With `set`/`reset`, target raw Wayland `ID` + title rule. Only `*` is special; patterns are trimmed, case-insensitive, 1–200 chars, and cannot contain controls. Mutually exclusive with `--profile`. |
 
 Use static local PNG/SVG files referenced in place. The client resolves ordinary relative paths against its current directory; the shared model validates absolute paths and supported local `file:///` URLs, preserving spaces/Unicode through URL encoding. No remote URLs, downloads, system theme writes, imports or `.desktop` edits. Store artwork outside the plugin checkout. Missing/unreadable/corrupt files keep their requested mapping and fall back.
+
+Window-rule set/reset is also a latest-state intent: a CLI set edits the exact normalized
+`(appId,titlePattern)` key in place or appends it when absent; reset removes only that
+key. Rule order controls first-match precedence. The selected-window dialog adds
+captured-rule stale-edit protection, but no public concurrency flag is added.
 
 Set/reset preserves unrelated map entries, including untouched legacy sources. A bulk `iconOverrides` patch instead validates/replaces the whole map, rejecting canonical duplicates. A same-source set requests fresh bytes without a redundant settings write. There is no continuous artwork-file watch. Reload advances a global revision, so other mapped icons may refresh too.
 
