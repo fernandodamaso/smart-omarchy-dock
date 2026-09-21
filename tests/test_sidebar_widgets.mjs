@@ -187,7 +187,9 @@ assert.doesNotMatch(areaSource, /footerLayout|openOverflow|overflowNeeded/);
 const normalArea = areaSource.slice(0, areaSource.indexOf('  PopupWindow {'));
 assert.doesNotMatch(normalArea, /\bFlickable\b|\bListView\b/,
   'normal Widget section must use the hierarchy ListView scroll owner');
-assert.match(areaSource, /sectionVisible: !panel\.panelCollapsed && controller\.widgetIds\.length > 0/);
+assert.match(areaSource, /presentationWidgetIds/);
+assert.match(areaSource, /SidebarModel\.herdrFallbackVisible/);
+assert.match(areaSource, /sectionVisible: !panel\.panelCollapsed && root\.presentationWidgetIds\.length > 0/);
 assert.match(areaSource, /implicitHeight: root\.sectionVisible \?/);
 assert.match(areaSource, /target: root\.viewport\.listView/);
 assert.match(areaSource, /anchorOutsideViewport/);

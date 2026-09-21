@@ -30,10 +30,10 @@
     "sidebarWidgets": {
       "type": "array",
       "format": "sidebar-widget-ids",
-      "registeredIds": [],
+      "registeredIds": ["herdr.agents"],
       "uniqueItems": true,
       "resetWithPreferences": true,
-      "description": "Ordered internal widget IDs. Runtime schema readback injects source-registered IDs available in this host. Unknown imported IDs are retained but unavailable."
+      "description": "Ordered internal widget IDs. SmartDock registers herdr.agents; unknown imported IDs are retained but unavailable and explicit writes require registered IDs."
     },
     "sidebarWidgetCollapsed": {
       "type": "object",

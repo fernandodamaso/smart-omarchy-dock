@@ -49,7 +49,7 @@ an empty map.
 - When the provider is unavailable or the setting is false, Chrome windows stay
   ordinary window rows with no tab children.
 - Sole Chrome windows can expand for tabs (session fold key `tabs:<windowKey>`).
-  Tabs start **folded**; the window-row chevron expands the list. Clicking the
+  Tabs start **expanded**; the window-row chevron folds the list. Clicking the
   window header still focuses the toplevel.
 - Clicking a `browser-tab` row focuses the owning Hyprland window, then runs
   `Target.activateTarget` through the provider (same activation path as classic

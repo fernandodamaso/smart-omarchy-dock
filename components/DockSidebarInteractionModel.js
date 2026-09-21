@@ -1,4 +1,5 @@
 .pragma library
+.import "DockHerdrModel.js" as HerdrModel
 
 // Geometry is supplied by the actual clipped ListView delegates. Indices are
 // never action identities, and offscreen/utility/footer rectangles are not hits.
@@ -153,9 +154,9 @@ function sidebarTreeIconX(workspaceCardInset, treeDepth) {
 }
 
 // Horizontal insets for fillLayer / focus rail. Expanded window/application/
-// browser-tab rows start 3 logical px before artX so parent tree guides stay
-// visible; workspace headers keep the whole-card inset; collapsed rail keeps
-// centered/compact card geometry. Right edge always matches card inset.
+// browser-tab / herdr child rows start 3 logical px before artX so parent tree
+// guides stay visible; workspace headers keep the whole-card inset; collapsed
+// rail keeps centered/compact card geometry. Right edge always matches card inset.
 function sidebarSelectionInsets(input) {
   var o = input || {}
   var inset = Number(o.workspaceCardInset)
@@ -167,7 +168,9 @@ function sidebarSelectionInsets(input) {
     return { left: left, right: right }
   if (o.kind === "workspace")
     return { left: inset, right: right }
-  if (o.kind === "window" || o.kind === "application" || o.kind === "browser-tab") {
+  if (o.kind === "window" || o.kind === "application" || o.kind === "browser-tab"
+      || o.kind === "herdr-agent" || o.kind === "herdr-tab"
+      || o.kind === "herdr-state") {
     var artX = Number(o.artX)
     if (!isFinite(artX)) artX = inset
     return { left: artX - 3, right: right }
@@ -188,6 +191,14 @@ function composeRowFill(state) {
     return s.hoverFill
   }
   return s.persistentFill
+}
+
+// Hover fill for navigable rows plus actionable Herdr agents/tabs
+// (including multi-panel tab headers that focus the Herdr tab).
+function rowHoverFillEligible(kind, actionable) {
+  if (kind === "herdr-tab") return actionable === true
+  return ["window", "workspace", "application", "launcher", "browser-tab",
+    "herdr-agent"].indexOf(kind) >= 0
 }
 
 // Numeric attention tokens are `count:<n>[:severity]` (see DockApplicationBadge).
@@ -270,7 +281,8 @@ function sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert) {
     if (kind === "monitor") baseline = sp(32)
     else if (kind === "workspace") baseline = sp(30)
     else if (kind === "section") baseline = sp(22)
-    else if (kind === "browser-tab") baseline = sp(28)
+    else if (kind === "browser-tab" || kind === "herdr-agent"
+        || kind === "herdr-tab" || kind === "herdr-state") baseline = sp(28)
     else baseline = alert ? sp(58) : sp(36)
   } else if (kind === "monitor") {
     baseline = sp(48)
@@ -278,6 +290,12 @@ function sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert) {
     baseline = sp(22)
   } else if (kind === "workspace") {
     baseline = sp(30)
+  } else if (kind === "herdr-tab" && row && row.actionable === true
+      && row.groupHeader !== true) {
+    baseline = sp(36)
+  } else if (kind === "herdr-agent") {
+    // Two-line title + workspace/kind secondary; keep compact vs window rows.
+    baseline = sp(36)
   } else {
     baseline = sp(28)
   }
@@ -398,12 +416,20 @@ function contextMenuMembers(target, anchor) {
 
 // Browser window parents show the desktop-entry application name; selected-tab
 // titles stay on browser-tab children and in the parent tooltip only.
+// Associated Herdr parents show "Herdr"; the original window title stays in the
+// tooltip. Agent activation is wired in a later task.
 function sidebarWindowDisplayTitle(input) {
   var source = input || ({})
   var kind = String(source.kind || "")
   if (kind === "browser-tab")
     return String(source.tabTitle || "").trim() || "Tab"
+  if (kind === "herdr-tab")
+    return String(source.title || "").trim() || "Tab"
+  if (kind === "herdr-agent" || kind === "herdr-state")
+    return String(source.title || "").trim() || (kind === "herdr-state" ? "Herdr" : "Coding agent")
   var windowTitle = String(source.windowTitle || "").trim() || "Untitled window"
+  if (kind === "window" && source.isHerdr === true)
+    return "Herdr"
   if (kind === "window" && source.isBrowser === true) {
     var entryName = String(source.entryName || "").trim()
     if (entryName) return entryName
@@ -416,8 +442,51 @@ function sidebarWindowTooltipTitle(input) {
   var source = input || ({})
   var display = String(source.displayTitle || "").trim()
   var windowTitle = String(source.windowTitle || "").trim()
-  if (source.kind === "window" && source.isBrowser === true
+  if (source.kind === "window" && (source.isBrowser === true || source.isHerdr === true)
       && display && windowTitle && display !== windowTitle)
     return display + " · " + windowTitle
   return display || windowTitle
+}
+
+// Familiar agent-kind capitalization for compact rows (Codex / Claude / Cursor).
+function herdrAgentKindLabel(input) {
+  var source = input || ({})
+  var kind = source.agentKind !== undefined ? source.agentKind : source.kind
+  return HerdrModel.displayAgentKind(kind)
+}
+
+function herdrStatusAccessibleText(status) {
+  return HerdrModel.statusLabel(status)
+}
+
+// Reserve kind / counters / fold control width first; name receives the remainder.
+function herdrCompactLabelWidths(input) {
+  var o = input || ({})
+  var available = Math.max(0, Number(o.availableWidth) || 0)
+  var kindWidth = Math.max(0, Number(o.kindWidth) || 0)
+  var countersWidth = Math.max(0, Number(o.countersWidth) || 0)
+  var controlsWidth = Math.max(0, Number(o.controlsWidth) || 0)
+  var gap = Math.max(0, Number(o.gap) || 0)
+  var trailing = 0
+  var gaps = 0
+  if (kindWidth > 0) {
+    trailing += kindWidth
+    gaps += 1
+  }
+  if (countersWidth > 0) {
+    trailing += countersWidth
+    gaps += 1
+  }
+  if (controlsWidth > 0) {
+    trailing += controlsWidth
+    gaps += 1
+  }
+  var reserved = trailing + gap * gaps
+  return {
+    nameWidth: Math.max(0, available - reserved),
+    kindWidth: kindWidth,
+    countersWidth: countersWidth,
+    controlsWidth: controlsWidth,
+    reserved: reserved
+  }
 }

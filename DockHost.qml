@@ -19,6 +19,7 @@ Item {
   property var notificationService: null
   property var launcherBadgeService: null
   property var browserProfileService: null
+  property var herdrService: null
   readonly property var applications: DesktopEntries.applications.values || []
   property int iconReloadRevision: 0
   readonly property var connectedScreens: Quickshell.screens
@@ -26,9 +27,20 @@ Item {
   readonly property var hyprWorkspaces: Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
   readonly property var desktopToplevels: ToplevelManager.toplevels.values || []
   readonly property var hyprToplevels: Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
-  // Internal provider adapters register here in their own source slices. No
-  // external QML paths, configurable commands, test IDs or additional services.
-  readonly property var sidebarWidgetRegistry: ({})
+  // Internal source-owned providers only. Herdr is acquired through the shared
+  // service lease; no command/path/credential is accepted from settings.
+  readonly property var sidebarWidgetRegistry: root.herdrService ? ({
+    "herdr.agents": {
+      id: "herdr.agents",
+      label: "Coding agents",
+      available: root.herdrService.available !== false,
+      revision: 1,
+      acquire: function(owner) { return root.herdrService.acquire(owner) },
+      expandedView: herdrExpandedView,
+      compactView: herdrCompactView,
+      popupView: herdrPopupView
+    }
+  }) : ({})
   readonly property var sidebarController: sidebarState
   readonly property var sidebarPanels: rendererMode === "sidebar" && presentationLoader.item
     ? presentationLoader.item.panels : []
@@ -539,6 +551,10 @@ Item {
       "browserActivityMutedServices", root.settings.browserActivityMutedServices)
     launcherBadgeMode: root.settings.launcherBadgeMode === "dots-only" ? "dots-only" : "automatic"
   }
+
+  Component { id: herdrExpandedView; DockHerdrAgentsView {} }
+  Component { id: herdrCompactView; DockHerdrAgentsView {} }
+  Component { id: herdrPopupView; DockHerdrAgentsView {} }
 
   DockSidebarController {
     id: sidebarState

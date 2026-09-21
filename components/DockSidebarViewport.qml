@@ -280,7 +280,8 @@ FocusScope {
   }
 
   function activate(target, control, connector, modifiers) {
-    var accepted = root.controller.activateTarget(target, control, connector)
+    var accepted = root.controller.activateTarget(
+      target, control, connector, Number(modifiers || 0))
     root.activationDispatched(target, control === true, connector, modifiers, accepted)
     return accepted
   }

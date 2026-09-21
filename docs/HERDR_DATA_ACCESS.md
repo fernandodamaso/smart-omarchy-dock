@@ -1,100 +1,162 @@
-# Herdr data access: inactive scaffold (FDM-970, step 1)
+# Herdr data access: SmartDock-owned local provider (FDM-970)
 
-**Delivered:** a read-only socket helper extracted/adapted from omaherdr, pinned
-provenance/license, real Unix-socket fixture tests and an explicit CI gate.
-**Not delivered:** discovery, a shared provider/service, installation, normalized
-live counts, remote access, widgets or real Herdr/Omarchy qualification.
+SmartDock now owns the local Herdr integration. It does **not** require omaherdr
+to be installed or running and it does not import, call, stop or configure
+omaherdr.
 
-SmartDock does not need omaherdr installed or running. This branch does not
-modify either product's active processes, installed checkouts or user settings.
-It does not wire the helper into `Service.qml`, `DockHost.qml` or any widget.
+The production path is:
 
-## Source entry points
+```text
+local Herdr session socket(s)
+  -> provider/herdr/bin/smartdock-herdr-helper
+  -> provider/herdr/bin/smartdock-herdr-provider
+  -> components/DockHerdrService.qml
+  -> internal sidebar widget herdr.agents
+```
 
-| File | Purpose |
-| --- | --- |
-| `provider/herdr/bin/smartdock-herdr-helper` | Explicit single-socket transport; standard-library Python 3. |
-| `provider/herdr/UPSTREAM.md` | Upstream commit, source-to-destination map and modifications. |
-| `provider/herdr/LICENSE.omaherdr` | Full license for the reused source. |
-| `provider/herdr/tests/test_events.py` | Real Unix-socket fake server; bootstrap, events, reconnect, no RPC, backpressure and cleanup. |
-| `provider/herdr/tests/test_protocol.py` | Shape validation, framing, privacy projection and lossless sequences. |
-| `tests/check_herdr_data_access.sh` | Provenance and inactive/read-only scaffold guards. |
+The first milestone is intentionally local-only. Normalized snapshots advertise
+`capabilities.remote: false`; no SSH bridge or remote-session support is implied.
 
-## Running tests
+## Activation and ownership
 
-From the source repository, without Herdr, omaherdr, SSH or a graphical session:
+`sidebarWidgets` still defaults to `[]`. Registering the source descriptor does
+not start Herdr work.
+
+Enable the production widget explicitly:
+
+```sh
+smartdock config set sidebarWidgets '["herdr.agents"]'
+```
+
+When the sidebar has usable mapped screens, the host acquires one lease from the
+shared `DockHerdrService`. The first active lease starts exactly one provider
+process. Additional SmartDock views share it. Suspending or removing the final
+active lease sends `quit`, waits briefly for clean provider/helper shutdown and
+then terminates only if the process did not exit. SmartDock never stops Herdr or
+an omaherdr process.
+
+Plugin mode exposes the service through the plugin singleton
+(`Service.qml -> Overlay.qml -> DockHost.qml`). Standalone mode creates one
+service next to its single `DockHost`.
+
+## Local discovery
+
+`provider/herdr/discovery.py` resolves local endpoints from:
+
+- the documented default socket `~/.config/herdr/herdr.sock`;
+- documented named sockets under `~/.config/herdr/sessions/<name>/herdr.sock`;
+- bounded `herdr session list` metadata when available, including running
+  unattached sessions.
+
+Canonical socket paths are deduplicated before helpers are started, so aliases
+for the same endpoint do not create duplicate subscriptions. A failed or stopped
+named-session lookup never falls back to the default socket.
+
+The provider checks a cheap filesystem fingerprint every 10 seconds and reruns
+metadata discovery only when the local socket/session set changes. Explicit
+`refresh` also rescans. There is no recurring `herdr agent list` or equivalent
+agent-status subprocess loop.
+
+## Socket protocol
+
+The private helper is adapted from omaherdr's proven transport behavior but is
+owned by this repository. It:
+
+1. opens `events.subscribe` and waits for acknowledgement;
+2. takes the baseline `session.snapshot`;
+3. replaces the per-pane status subscriptions when pane inventory changes;
+4. takes another baseline after each replacement to cover the live-stream gap;
+5. forwards status and structural invalidations to the provider;
+6. reconnects with bounded backoff.
+
+Stdin accepts `snapshot`, `quit`, and one bounded JSON `focus-agent` command that
+calls only Herdr `agent.focus` with a pane id. The helper emits correlated
+`action-result` records with fixed error codes. There is no generic RPC surface,
+answer command, notification command or transcript access.
+
+Sidebar click-to-focus requires **Herdr 0.9.1+**. On 0.9.0, `agent.focus`
+updates server focus and marks agents seen, but does not move attached TUI
+clients to the target pane (fixed upstream in 0.9.1). Multi-panel tab headers
+focus that Herdr tab by targeting the first nested panel's pane id; single-panel
+tabs and agent rows target their own pane.
+
+Structural invalidations include the current Herdr workspace/tab/pane/layout
+event families, including `workspace.metadata_updated` and `pane.updated`.
+They debounce to a replacement snapshot; a 60-second safety snapshot reconciles
+missed structural changes.
+
+## Normalized snapshot
+
+The provider emits JSON-lines with `schemaVersion: 1`, a process-scoped
+`providerEpoch` and monotonically increasing `revision`. Public state contains:
+
+- `capabilities`;
+- `servers`;
+- `agents`;
+- `attention` (blocked/done agents only);
+- `liveCounts`;
+- `completeness`.
+
+A server is live only after both a valid snapshot and a healthy event
+subscription are observed. Disconnect immediately removes that server from live
+agent totals. A connected, observed-empty inventory reports zero; unavailable or
+unknown inventory reports `liveCounts: null`.
+
+Agent identities include the server ID and connection generation so a pane ID
+reused after reconnect cannot alias prior state. Valid Herdr
+`state_change_seq` values remain decimal strings to preserve uint64 precision.
+Observed status ages are in-memory monotonic ages only; they are not persisted.
+
+The view renders projected names/labels/statuses as plain text. Socket paths,
+transcripts, cwd, arbitrary metadata, credentials and raw provider exceptions are
+not exposed through widget diagnostics.
+
+## Bounds
+
+The integration keeps the following hard limits:
+
+- 8 MiB incoming socket snapshot;
+- 1 MiB incoming event/helper frame;
+- 1 MiB normalized provider output frame;
+- 2 MiB bounded provider event queue;
+- 64 discovered servers;
+- 256 public agent rows;
+- 4 KiB private stdin command;
+- 2-second helper socket/output deadlines.
+
+Truncation is explicit in `completeness`; partial data never claims an exact
+overall total.
+
+## Installation
+
+Standalone installation copies `provider/herdr/` into the installed SmartDock
+tree beside `components/`. The helper and provider are invoked with Python 3;
+no omaherdr package, daemon, D-Bus service or runtime download is installed.
+
+Plugin/source mode uses the same repository-owned provider files.
+
+## Verification
+
+Headless gates:
 
 ```sh
 python3 -B -m unittest discover -s provider/herdr/tests -p 'test_*.py' -v
+python3 -B -m unittest discover -s tests -p 'test_herdr_*.py' -v
 bash tests/check_herdr_data_access.sh
+bash tests/check_launcher_badge_counts.sh
+git diff --check
 ```
 
-The existing `Headless CI` now executes that nested suite explicitly. Keep the
-existing launcher-badge anti-polling guards intact. Tests exercise a synthetic
-server matching the inspected protocol; they are not live compatibility evidence.
+The provider tests cover socket bootstrap/events, discovery, endpoint
+deduplication, unavailable-vs-empty semantics, reconnect generations, status
+updates, truncation, process refresh, pane focus transport and clean helper
+shutdown. The lifecycle tests lock the real source registry, shared service
+ownership, standalone/plugin wiring, schema registration and packaging.
 
-## Private helper protocol
-
-A future owner starts one helper for an explicitly resolved local Unix socket:
-
-```sh
-python3 -B provider/herdr/bin/smartdock-herdr-helper /absolute/path/to/herdr.sock
-```
-
-Do not run this command merely to import/register the future service. It opens
-real socket subscriptions until stdin closes, `quit` arrives or SIGTERM is sent.
-Do not redirect its output into public logs: even projected labels are user data.
-Use the installed `herdr api schema --json` to qualify that binary's API before a
-real integration; see https://herdr.dev/docs/socket-api/ for protocol guidance.
-
-Stdin accepts newline-delimited `snapshot` and `quit` only. Every other command
-returns `{"kind":"error","error":"unsupported_command"}` without invoking Herdr.
-Output is JSON-lines with these records:
-
-- `snapshot`: `ok: true` and projected `snapshot`, or `ok: false` and a fixed error.
-- `event`: source event name and projected identity/status metadata.
-- `status`: `connected: true|false`.
-- `error`: fixed command error code; never echoed source text.
-
-The helper's records are **not** the versioned FDM-970 public provider snapshot.
-A successful snapshot alone does not establish a healthy event stream. The future
-provider must use both snapshot and connection state, invalidate live counts on
-failure, and scope identities to its per-server connection generation.
-
-The helper subscribes and waits for acknowledgement before bootstrap. Per-pane
-subscription changes trigger a follow-up snapshot covering the replacement gap.
-Structural events are forwarded as invalidation signals: their full layout data
-is deliberately omitted. The future supervisor must debounce them into snapshot
-requests and perform the provider-owned safety reconciliation. This scaffold
-adds no process-discovery or periodic CLI/status-polling loop.
-
-Limits: 8 MiB per incoming snapshot, 1 MiB per event/output frame, 4 KiB per stdin
-command, 32 JSON nesting levels, 100,000 visited JSON nodes and 16,384 records per
-source collection. I/O deadlines are 2 seconds per connection/read or output
-operation; reconnect delay grows from 1 to 30 seconds. Output is a single bounded
-frame with a write deadline, not an unbounded queue; an undrained pipe terminates
-the helper. Oversized snapshots/output fail explicitly, never become healthy
-empty data. The future normalized provider must add its 64-server/256-agent caps
-and completeness metadata; those aggregate limits are not implemented here.
-
-No arbitrary RPC, focus, answers, notifications, transcript reads, persisted
-status ages, terminal subprocesses, remote connections or omaherdr state files.
-
-## Next implementation: FDM-970 step 2
-
-Continue this branch with a SmartDock-owned `provider/herdr/discovery.py`,
-`provider/herdr/model.py` and `provider/herdr/bin/smartdock-herdr-provider`.
-Port the audited daemon's `Discovery` / `Helper` / `Server` behavior selectively;
-do not copy its notifier or turn the helper into a second agent detector.
-
-Resolve default/named/unattached local sessions, deduplicate actual endpoints,
-supervise one helper per endpoint, debounce structural invalidations, reject
-late output from replaced helpers, and publish versioned live/unavailable/partial
-state. Never silently resolve a failed named-session lookup to the default socket.
-
-After that, add the demand-driven shared QML service and XDG-aware packaging.
-Keep one acquisition owner across all SmartDock consumers. Qualification must
-prove data access with omaherdr absent; coexistence is tested separately. No
-widget issue is a prerequisite for this backend work.
+These tests use controlled socket/provider fixtures. They establish source and
+protocol behavior but are not a substitute for the separate native
+Omarchy/Quickshell qualification with a real Herdr installation. That native
+gate should verify default, named and unattached local sessions, omaherdr absent,
+and coexistence when omaherdr is installed separately.
 
 Canonical issue: https://linear.app/fdamaso/issue/FDM-970

@@ -2,6 +2,7 @@
 .import "DockModel.js" as DockModel
 .import "DockWindowModel.js" as WindowModel
 .import "DockWorkspaceModel.js" as WorkspaceModel
+.import "DockHerdrModel.js" as HerdrModel
 
 // Pure, host-session identity. Never identify a window by title, index or address.
 function reconcileHandles(previous, toplevels) {
@@ -337,12 +338,29 @@ function annotateTreeAndSpans(result) {
       }
       continue
     }
-    if (row.kind === "browser-tab") {
+    if (row.kind === "browser-tab" || row.kind === "herdr-state"
+        || row.kind === "herdr-workspace") {
       var windowParent = rowByKey[row.windowKey] || null
       row.monitorKey = monitorKey
       row.workspaceKey = workspaceKey
       row.parentKey = row.windowKey || ""
       row.treeDepth = windowParent ? Number(windowParent.treeDepth || 0) + 1 : 2
+      continue
+    }
+    if (row.kind === "herdr-tab") {
+      var tabWindow = rowByKey[row.windowKey] || null
+      row.monitorKey = monitorKey
+      row.workspaceKey = workspaceKey
+      row.parentKey = row.windowKey || ""
+      row.treeDepth = tabWindow ? Number(tabWindow.treeDepth || 0) + 1 : 2
+      continue
+    }
+    if (row.kind === "herdr-agent") {
+      var agentParent = rowByKey[row.herdrTabKey] || rowByKey[row.windowKey] || null
+      row.monitorKey = monitorKey
+      row.workspaceKey = workspaceKey
+      row.parentKey = row.herdrTabKey || row.windowKey || ""
+      row.treeDepth = agentParent ? Number(agentParent.treeDepth || 0) + 1 : 3
     }
   }
 
@@ -454,7 +472,8 @@ function remapFocusKey(key, visibleRows, rowsByKey) {
   if (rows.some(function(row) { return row.key === key })) return key
   var row = rowsByKey && rowsByKey[key]
   if (!row) return recoverAnchor({ key: key, offset: 0 }, [], rows).key
-  if (row.kind === "browser-tab") {
+  if (row.kind === "browser-tab" || row.kind === "herdr-agent"
+      || row.kind === "herdr-tab" || row.kind === "herdr-state") {
     var windowKey = row.windowKey || ""
     if (windowKey && rows.some(function(candidate) { return candidate.key === windowKey }))
       return windowKey
@@ -474,6 +493,108 @@ function remapFocusKey(key, visibleRows, rowsByKey) {
   return recoverAnchor({ key: key, offset: 0 }, [], rows).key
 }
 
+// Matched servers are those referenced by byWindowKey. Fold state never affects this set.
+function matchedHerdrServerIds(associations) {
+  var matched = Object.create(null)
+  var byWindow = associations && associations.byWindowKey
+  if (!byWindow || typeof byWindow !== "object") return matched
+  Object.keys(byWindow).forEach(function(windowKey) {
+    var serverId = byWindow[windowKey]
+    if (typeof serverId === "string" && serverId)
+      matched[serverId] = true
+  })
+  return matched
+}
+
+function herdrServerById(snapshot, serverId) {
+  var servers = snapshot && Array.isArray(snapshot.servers) ? snapshot.servers : []
+  for (var i = 0; i < servers.length; ++i) {
+    var server = servers[i]
+    if (server && typeof server === "object" && String(server.id || "") === serverId)
+      return server
+  }
+  return null
+}
+
+function herdrAgentsForServer(snapshot, serverId) {
+  var agents = snapshot && Array.isArray(snapshot.agents) ? snapshot.agents : []
+  var output = []
+  for (var i = 0; i < agents.length; ++i) {
+    var agent = agents[i]
+    if (!agent || typeof agent !== "object") continue
+    if (String(agent.serverId || "") !== serverId) continue
+    output.push(agent)
+  }
+  return output
+}
+
+// Non-actionable child title for an associated parent. Actionable agent rows are
+// only emitted from a live ready snapshot; never reuse prior agents/counts.
+function herdrStateTitle(server, snapshot) {
+  if (!snapshot || typeof snapshot !== "object")
+    return "Herdr unavailable"
+  var health = server ? String(server.health || "") : ""
+  if (health === "connecting")
+    return "Reconnecting"
+  if (health === "unavailable" || !server)
+    return "Herdr unavailable"
+  var completeness = snapshot.completeness && typeof snapshot.completeness === "object"
+    ? snapshot.completeness : null
+  var completenessState = completeness ? String(completeness.state || "") : ""
+  if (snapshot.liveCounts === null || snapshot.liveCounts === undefined) {
+    if (completenessState === "partial")
+      return "Partial inventory"
+    return "Herdr unavailable"
+  }
+  if (completenessState === "partial"
+      || (completeness && (completeness.truncated === true
+        || completeness.agentTruncated === true
+        || completeness.serverTruncated === true)))
+    return "Partial inventory"
+  if (health === "live")
+    return "No active agents"
+  return "Herdr unavailable"
+}
+
+function herdrInventoryPartial(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return false
+  var completeness = snapshot.completeness && typeof snapshot.completeness === "object"
+    ? snapshot.completeness : null
+  if (!completeness) return false
+  if (String(completeness.state || "") === "partial") return true
+  return completeness.truncated === true
+    || completeness.agentTruncated === true
+    || completeness.serverTruncated === true
+}
+
+// True when at least one snapshot server is not matched to a window. Lease IDs
+// are unrelated; this only drives redundant fallback presentation.
+function herdrFallbackVisible(snapshot, associations) {
+  var matched = matchedHerdrServerIds(associations)
+  var servers = snapshot && Array.isArray(snapshot.servers) ? snapshot.servers : []
+  for (var i = 0; i < servers.length; ++i) {
+    var server = servers[i]
+    if (!server || typeof server !== "object") continue
+    if (matched[String(server.id || "")] !== true) return true
+  }
+  return false
+}
+
+// Fallback empty/unknown child for a live unmatched server with no listed agents.
+// Uses the same classification as tree state children (never lies about partial).
+function herdrFallbackEmptyChild(server, snapshot) {
+  if (!server || typeof server !== "object") return null
+  if (String(server.health || "") !== "live") return null
+  var title = herdrStateTitle(server, snapshot)
+  return {
+    kind: "empty",
+    key: "empty:" + String(server.id || ""),
+    title: title,
+    detail: "",
+    status: title === "No active agents" ? "idle" : "unknown"
+  }
+}
+
 function project(input) {
   var native = input.desktop.workspacePresentation
   var result = emptyProjection()
@@ -483,6 +604,15 @@ function project(input) {
   var browserTabs = browserTabsEnabled && input.browserTabs
     && typeof input.browserTabs === "object" && !Array.isArray(input.browserTabs)
     ? input.browserTabs : ({})
+  var herdrSnapshot = input.herdrSnapshot && typeof input.herdrSnapshot === "object"
+    && !Array.isArray(input.herdrSnapshot) ? input.herdrSnapshot : null
+  var herdrAssociations = input.herdrAssociations && typeof input.herdrAssociations === "object"
+    ? input.herdrAssociations : ({ byWindowKey: ({}), unmatchedServerIds: [] })
+  var herdrByWindow = herdrAssociations.byWindowKey
+    && typeof herdrAssociations.byWindowKey === "object"
+    ? herdrAssociations.byWindowKey : ({})
+  // Live agents require current-epoch association evidence, not a retained label.
+  var herdrAssociationsVerified = input.herdrAssociationsVerified === true
   function tabsForWindow(window) {
     var address = String(window.address || "").trim().toLowerCase()
     if (!address || !browserTabsEnabled) return []
@@ -514,13 +644,198 @@ function project(input) {
     window.tabs = tabs
     window.tabsKey = tabsKey
     window.tabsExpandable = tabs.length > 0
-    // Missing fold key => folded (default). folds[tabsKey] === true => expanded.
-    window.tabsFolded = !window.tabsExpandable || folds[tabsKey] !== true
+    // Missing fold key => expanded (default). folds[tabsKey] === true => folded.
+    window.tabsFolded = window.tabsExpandable && folds[tabsKey] === true
     return window
+  }
+  function attachHerdr(window) {
+    var serverId = herdrByWindow[window.key]
+    var emptyCounts = HerdrModel.emptyStatusCounts()
+    if (typeof serverId !== "string" || !serverId) {
+      window.herdrAssociated = false
+      window.herdrServerId = ""
+      window.herdrFoldKey = ""
+      window.herdrExpandable = false
+      window.herdrFolded = false
+      window.herdrStatusCounts = emptyCounts
+      window.herdrStatusCounters = []
+      return window
+    }
+    window.herdrAssociated = true
+    window.herdrServerId = serverId
+    window.herdrFoldKey = HerdrModel.herdrFoldKeyForWindow(window.key)
+    // Missing fold key => expanded. folds[herdrFoldKey] === true => folded.
+    window.herdrFolded = !!window.herdrFoldKey && folds[window.herdrFoldKey] === true
+    var agents = []
+    if (herdrAssociationsVerified && herdrSnapshot)
+      agents = herdrAgentsForServer(herdrSnapshot, serverId)
+    var counts = HerdrModel.countAgentStatuses(agents)
+    window.herdrStatusCounts = counts
+    window.herdrStatusCounters = HerdrModel.statusCounters(counts)
+    // Foldable whenever associated; empty/unavailable state children also fold.
+    window.herdrExpandable = true
+    return window
+  }
+  function emitHerdrState(window, serverId, server, epoch, title, status) {
+    row({
+      kind: "herdr-state",
+      key: JSON.stringify(["herdr-state", window.key, serverId, title]),
+      windowKey: window.key,
+      providerEpoch: epoch,
+      serverId: serverId,
+      title: title,
+      status: status || (server ? String(server.health || "unavailable") : "unavailable"),
+      nested: true,
+      actionable: false,
+      toplevel: window.toplevel,
+      address: window.address,
+      desktopId: window.desktopId,
+      workspaceIdentity: window.workspaceIdentity,
+      monitorIdentity: window.monitorIdentity
+    })
+  }
+  function emitHerdrChildren(window) {
+    if (input.collapsed || !window.herdrAssociated) return
+    // Collapsed parents keep counts on the window row; hide nested children.
+    if (window.herdrFolded) return
+    var serverId = window.herdrServerId
+    var server = herdrServerById(herdrSnapshot, serverId)
+    var agents = herdrSnapshot ? herdrAgentsForServer(herdrSnapshot, serverId) : []
+    var epoch = herdrSnapshot && typeof herdrSnapshot.providerEpoch === "string"
+      ? herdrSnapshot.providerEpoch : ""
+    // Preserved parent labels must not route live inventory before revalidation.
+    if (!herdrAssociationsVerified) {
+      var pendingTitle = server && String(server.health || "") === "connecting"
+        ? "Reconnecting" : "Herdr unavailable"
+      emitHerdrState(window, serverId, server, epoch, pendingTitle)
+      return
+    }
+    // Actionable agents require verified association + a live ready snapshot.
+    // Nesting is tab → panels (workspace stays on the secondary line).
+    if (herdrSnapshot && agents.length > 0) {
+      var groups = HerdrModel.groupAgentsForTree(agents)
+      groups.forEach(function(workspace) {
+        workspace.tabs.forEach(function(tab) {
+          var tabRowKey = JSON.stringify([
+            "herdr-tab", window.key, workspace.id, tab.id
+          ])
+          var shared = {
+            kind: "herdr-tab",
+            key: tabRowKey,
+            windowKey: window.key,
+            providerEpoch: epoch,
+            serverId: serverId,
+            herdrWorkspaceId: workspace.id,
+            herdrTabId: tab.id,
+            nested: true,
+            toplevel: window.toplevel,
+            address: window.address,
+            desktopId: window.desktopId,
+            workspaceIdentity: window.workspaceIdentity,
+            monitorIdentity: window.monitorIdentity
+          }
+          if (tab.agents.length === 1) {
+            var sole = tab.agents[0]
+            var soleKind = sole.agent || ""
+            var solePayload = Object.assign({}, sole, {
+              workspaceLabel: sole.workspaceLabel || workspace.label || "",
+              agent: soleKind
+            })
+            row(Object.assign({}, shared, {
+              title: tab.title || HerdrModel.displayAgentTitle(sole),
+              subtitle: HerdrModel.displayAgentSecondary(solePayload),
+              agentId: String(sole.id || ""),
+              connectionGeneration: sole.connectionGeneration,
+              paneId: sole.paneId,
+              terminalId: sole.terminalId || "",
+              agentKind: soleKind,
+              workspaceLabel: solePayload.workspaceLabel,
+              tabTitle: tab.title || "",
+              status: HerdrModel.normalizeStatus(sole.status),
+              actionable: true,
+              groupHeader: false
+            }))
+            return
+          }
+          // Multi-panel tab header: keep group styling, but focus the tab via
+          // the first panel's pane (agent.focus moves the client onto that tab).
+          var focusPane = null
+          for (var fi = 0; fi < tab.agents.length; fi++) {
+            var candidate = tab.agents[fi]
+            if (candidate && String(candidate.id || "") && candidate.paneId) {
+              focusPane = candidate
+              break
+            }
+          }
+          if (focusPane) {
+            row(Object.assign({}, shared, {
+              title: tab.title || "Tab",
+              subtitle: "",
+              agentId: String(focusPane.id || ""),
+              connectionGeneration: focusPane.connectionGeneration,
+              paneId: focusPane.paneId,
+              terminalId: focusPane.terminalId || "",
+              tabTitle: tab.title || "",
+              actionable: true,
+              groupHeader: true
+            }))
+          } else {
+            row(Object.assign({}, shared, {
+              title: tab.title || "Tab",
+              subtitle: "",
+              actionable: false,
+              groupHeader: true
+            }))
+          }
+          tab.agents.forEach(function(agent) {
+            var agentId = String(agent.id || "")
+            if (!agentId) return
+            var agentKind = agent.agent || ""
+            var agentPayload = Object.assign({}, agent, {
+              workspaceLabel: agent.workspaceLabel || workspace.label || "",
+              agent: agentKind
+            })
+            row({
+              kind: "herdr-agent",
+              key: JSON.stringify(["herdr-agent", window.key, agentId]),
+              windowKey: window.key,
+              providerEpoch: epoch,
+              serverId: serverId,
+              herdrWorkspaceId: workspace.id,
+              herdrTabId: tab.id,
+              herdrTabKey: tabRowKey,
+              agentId: agentId,
+              connectionGeneration: agent.connectionGeneration,
+              paneId: agent.paneId,
+              terminalId: agent.terminalId || "",
+              title: HerdrModel.displayAgentTitle(agent),
+              subtitle: HerdrModel.displayAgentSecondary(agentPayload),
+              agentKind: agentKind,
+              workspaceLabel: agentPayload.workspaceLabel,
+              tabTitle: tab.title || agent.tabTitle || "",
+              status: HerdrModel.normalizeStatus(agent.status),
+              nested: true,
+              actionable: true,
+              toplevel: window.toplevel,
+              address: window.address,
+              desktopId: window.desktopId,
+              workspaceIdentity: window.workspaceIdentity,
+              monitorIdentity: window.monitorIdentity
+            })
+          })
+        })
+      })
+      if (herdrInventoryPartial(herdrSnapshot))
+        emitHerdrState(window, serverId, server, epoch, "Partial inventory", "partial")
+      return
+    }
+    emitHerdrState(window, serverId, server, epoch, herdrStateTitle(server, herdrSnapshot))
   }
   function emitWindow(window) {
     attachTabs(window)
+    // herdr metadata already applied to every live window before emission.
     row(window)
+    emitHerdrChildren(window)
     if (input.collapsed || !window.tabsExpandable || window.tabsFolded) return
     window.tabs.forEach(function(tab) {
       row({
@@ -659,6 +974,11 @@ function project(input) {
     })
   })
   result.unassignedWindows.sort(function(a, b) { return a.order - b.order })
+  // Attach Herdr fold/count metadata to every live window before emission so
+  // folded application members still retain session fold keys for pruning.
+  Object.keys(windowsByHandleKey).forEach(function(key) {
+    attachHerdr(windowsByHandleKey[key])
+  })
   // Pin shelf follows settings.pinned order and includes running apps (focus-or-launch).
   // Strip owns these rows; they never appear in the hierarchy ListView (expanded or rail).
   var windowsByDesktop = Object.create(null)

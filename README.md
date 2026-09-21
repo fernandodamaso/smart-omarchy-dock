@@ -164,10 +164,11 @@ does not own this provider and therefore remains dot-only. See
 [`docs/launcher-badge-counts.md`](docs/launcher-badge-counts.md) for architecture,
 compatibility, and local validation details.
 
-SmartDock does not invoke Herdr or any recurring agent-status CLI. Agent-status
-integration is intentionally excluded until a separate event-driven provider
-exists; numeric counts remain authoritative when published by LauncherEntry,
-with the optional Chrome activity provider supplying only its strict fallback.
+Launcher badge counts do not invoke Herdr or poll any recurring agent-status CLI.
+Herdr agent state is a separate, opt-in sidebar source: `herdr.agents` starts a
+SmartDock-owned local event provider only while the sidebar widget is active.
+LauncherEntry numeric counts remain authoritative for application badges, with
+the optional Chrome activity provider supplying only its strict fallback.
 
 ### Browser profile badges and activity
 

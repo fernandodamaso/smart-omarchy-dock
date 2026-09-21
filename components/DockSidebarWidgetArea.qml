@@ -4,6 +4,7 @@ import Quickshell
 import qs.Commons
 import qs.Ui as Ui
 import "DockSidebarWidgetModel.js" as WidgetModel
+import "DockSidebarModel.js" as SidebarModel
 
 // Shared-scroll Widget section. Provider leases remain owned by the host controller;
 // this item owns only card composition, picker state, drag targeting and popup views.
@@ -14,7 +15,23 @@ Item {
   required property var viewport
   required property real windowRowHeight
 
-  readonly property bool sectionVisible: !panel.panelCollapsed && controller.widgetIds.length > 0
+  // Keep the Herdr provider lease active while suppressing its fallback card
+  // whenever live agents are already represented under associated window rows.
+  readonly property var presentationWidgetIds: {
+    var revision = root.controller.widgetRevision
+    var ids = root.controller.widgetIds || []
+    var view = root.controller.widgetView("herdr.agents")
+    var snap = view && view.status === "ready" && view.data ? view.data : null
+    var showHerdr = SidebarModel.herdrFallbackVisible(snap, root.controller.herdrAssociations)
+    var out = []
+    for (var i = 0; i < ids.length; ++i) {
+      if (ids[i] === "herdr.agents" && !showHerdr) continue
+      out.push(ids[i])
+    }
+    return out
+  }
+
+  readonly property bool sectionVisible: !panel.panelCollapsed && root.presentationWidgetIds.length > 0
   readonly property var registeredRows: WidgetModel.registeredRows(controller.widgetRegistry)
   readonly property int availableTypeCount: registeredRows.filter(function(row) {
     return row.available
@@ -130,12 +147,25 @@ Item {
 
   function slotForSceneY(sceneY) {
     var point = cardColumn.mapFromItem(null, root.dragSceneX, sceneY)
-    var count = root.controller.widgetIds.length
+    var count = root.presentationWidgetIds.length
     for (var i = 0; i < count; ++i) {
       var card = cardRepeater.itemAt(i)
       if (card && point.y < card.y + card.height / 2) return i
     }
     return count
+  }
+
+  function fullReorderSlot(presentationSlot) {
+    var visibleIds = root.presentationWidgetIds || []
+    var fullIds = root.controller.widgetIds || []
+    if (visibleIds.length === fullIds.length) return presentationSlot
+    if (presentationSlot >= visibleIds.length) {
+      if (!visibleIds.length) return fullIds.length
+      var last = fullIds.indexOf(visibleIds[visibleIds.length - 1])
+      return last < 0 ? fullIds.length : last + 1
+    }
+    var target = fullIds.indexOf(visibleIds[presentationSlot])
+    return target < 0 ? fullIds.length : target
   }
 
   function beginDrag(id, sceneX, sceneY) {
@@ -162,7 +192,7 @@ Item {
     if (!cancelled) root.updateDrag(sceneX, sceneY)
     var slot = root.dragTargetSlot
     root.viewport.endContentTailDrag()
-    root.controller.finishWidgetReorder(slot, cancelled)
+    root.controller.finishWidgetReorder(root.fullReorderSlot(slot), cancelled)
     root.dragWidgetId = ""
     root.dragTargetSlot = -1
   }
@@ -211,7 +241,7 @@ Item {
 
       Repeater {
         id: cardRepeater
-        model: root.controller.widgetIds
+        model: root.presentationWidgetIds
 
         delegate: DockWidgetCard {
           required property string modelData
@@ -222,8 +252,8 @@ Item {
           collapsed: root.controller.widgetCollapsedFor(modelData)
           dropBefore: root.dragWidgetId !== "" && root.dragTargetSlot === index
           dropAfter: root.dragWidgetId !== ""
-            && root.dragTargetSlot === root.controller.widgetIds.length
-            && index === root.controller.widgetIds.length - 1
+            && root.dragTargetSlot === root.presentationWidgetIds.length
+            && index === root.presentationWidgetIds.length - 1
           onToggleRequested: root.controller.toggleWidgetCollapsed(modelData)
           onRemoveRequested: root.controller.setWidgetEnabled(modelData, false)
           onDragStarted: function(sceneX, sceneY) { root.beginDrag(modelData, sceneX, sceneY) }
