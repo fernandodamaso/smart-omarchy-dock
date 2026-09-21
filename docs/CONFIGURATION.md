@@ -6,11 +6,12 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 55 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
 | `iconOverrides` | `{}` | Object mapping canonical app IDs to local PNG/SVG sources; prefer per-app intents. Preserved by preference reset. |
+| `windowIconOverrides` | `[]` | Ordered normalized raw-Wayland app ID/title-pattern rules for local PNG/SVG artwork; first match wins. Preserved by preference reset. |
 | `iconSize` | `42` | Integer 24–96 logical pixels. |
 | `magnification` | `1.2` | Number 1–2; effective step 0.05. Set 1 for no hover enlargement. |
 | `magnificationRadius` | `95` | Number 40–240; effective step 5. |

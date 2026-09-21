@@ -143,5 +143,14 @@ assert.equal(DockModel.visibleItemsEqual([
     identityToplevel: alphaOne, toplevels: [alphaOne],
     windowRuleKey: betaAfter.key, windowOverrideSource: betaAfter.source }
 ]), false, "rule changes invalidate the visible-item snapshot even when sources are equal")
+assert.equal(DockModel.visibleItemsEqual([
+  { desktopId: "com.google.Chrome", pinned: false, presentationId: "same",
+    identityToplevel: alphaOne, toplevels: [alphaOne],
+    windowRuleKey: alphaBefore.key, windowOverrideSource: "file:///tmp/a.svg" }
+], [
+  { desktopId: "com.google.Chrome", pinned: false, presentationId: "same",
+    identityToplevel: alphaOne, toplevels: [alphaOne],
+    windowRuleKey: alphaBefore.key, windowOverrideSource: "file:///tmp/b.svg" }
+]), false, "source A -> B invalidates the snapshot without changing rule/window identity")
 
 console.log("window icon override contracts: PASS")

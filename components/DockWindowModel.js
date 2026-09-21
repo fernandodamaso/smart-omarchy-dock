@@ -377,8 +377,7 @@ function shouldRefreshWindowScope(eventName) {
     "workspace", "workspacev2", "createworkspace", "createworkspacev2",
     "destroyworkspace", "destroyworkspacev2", "moveworkspace", "moveworkspacev2",
     "renameworkspace", "focusedmon", "focusedmonv2", "configreloaded",
-    "activewindow", "activewindowv2", "windowtitle", "windowtitlev2",
-    "fullscreen", "urgent", "pin",
+    "activewindow", "activewindowv2", "fullscreen", "urgent", "pin",
     "monitoradded", "monitoraddedv2", "monitorremoved", "monitorremovedv2"
   ].indexOf(String(eventName || "")) >= 0
 }

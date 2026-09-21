@@ -6,6 +6,7 @@ import qs.Commons
 import qs.Ui as Ui
 import "DockSidebarModel.js" as SidebarModel
 import "DockSidebarInteractionModel.js" as InteractionModel
+import "DockIconModel.js" as DockIconModel
 
 FocusScope {
   id: root
@@ -714,6 +715,10 @@ FocusScope {
     height: root.rowHeight
     property var sourceRow: root.controller.dragSession
       ? root.controller.rowsByKey[root.controller.dragSession.target.key] : null
+    property var sourceWindowRule: sourceRow && sourceRow.kind === "window" && sourceRow.toplevel
+      ? DockIconModel.matchWindowRule(root.controller.windowIconOverrides || [],
+          String(sourceRow.toplevel.appId || ""), String(sourceRow.toplevel.title || ""))
+      : null
     DockAppIcon {
       visible: parent.sourceRow && parent.sourceRow.kind === "window"
       width: 22; height: 22
@@ -722,8 +727,8 @@ FocusScope {
       desktopIcon: parent.sourceRow && parent.sourceRow.item && parent.sourceRow.item.entry
         ? String(parent.sourceRow.item.entry.icon || "") : ""
       iconOverrides: root.controller.settings.iconOverrides || ({})
-      windowOverrideSource: parent.sourceRow
-        ? String(parent.sourceRow.windowOverrideSource || "") : ""
+      windowOverrideSource: parent.sourceWindowRule
+        ? String(parent.sourceWindowRule.source || "") : ""
       reloadRevision: root.controller.host.iconReloadRevision || 0
     }
     Text {
