@@ -40,7 +40,7 @@ Column {
             allowWrap: false
           }
           WidgetText {
-            visible: !!(modelData && modelData.detail)
+            visible: modelData && modelData.detail
             width: parent.width
             text: modelData && modelData.detail ? String(modelData.detail) : ""
             role: "caption"
@@ -51,7 +51,7 @@ Column {
 
         WidgetBadge {
           id: status
-          visible: !!(modelData && modelData.reference)
+          visible: modelData && modelData.reference
           text: modelData && modelData.reference ? String(modelData.reference) : ""
           semantic: modelData && (modelData.attention === "urgent" || modelData.attention === "overdue")
             ? "danger" : "neutral"

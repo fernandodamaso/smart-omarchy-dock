@@ -147,7 +147,7 @@ Item {
       ? requested.urgentWindowAnimationEnabled : true
     result.launcherBadgeMode = requested.launcherBadgeMode === "dots-only" ? "dots-only" : "automatic"
     result.reserveSpace = DockModel.shouldReserveSpace(result.reserveSpace, result.autoHide)
-    if (result.position === "left" || result.position === "right") result.workspaceLayout = "flat"
+    if (result.position === "left") result.workspaceLayout = "flat"
     if (result.workspaceLayout === "flat") result.workspaceMonitorScope = "all"
     if (result.presentationMode === "sidebar") {
       var presentation = root.presentationData(requested)

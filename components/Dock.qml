@@ -41,6 +41,7 @@ PanelWindow {
   signal hideRequested(string desktopId)
   signal browserActivityMuteToggled(string serviceId)
   signal autoHideRequested(bool enabled)
+  signal positionRequested(string position, var expectedPosition)
   signal openTrashRequested()
   signal emptyTrashRequested()
 
@@ -583,7 +584,7 @@ PanelWindow {
   readonly property bool keepAutoHideOpen: windowPointer.hovered
     || appPicker.visible || openMenuCount > 0
     || dragSource >= 0 || windowPreview.interactionActive || workspaceDragActive
-    || workspaceMonitorDragSourceActive || dragRevealed
+    || workspaceMonitorDragSourceActive || positionDragSurface.pressed || dragRevealed
   readonly property bool dockShown: !autoHide || autoHideRevealed || dragRevealed
   readonly property real pointerPosition: !pointer.hovered
     ? -10000
@@ -1046,6 +1047,24 @@ PanelWindow {
       visible: !root.borderColorEnabled && !root.borderWidthEnabled
       color: Qt.rgba(root.dockBorderColor.r, root.dockBorderColor.g,
         root.dockBorderColor.b, root.dockBorderColor.a * root.dockBackgroundColor.a * 0.12)
+    }
+
+    DockPositionDragSurface {
+      id: positionDragSurface
+
+      anchors.fill: parent
+      dockPosition: root.position
+      requestedPosition: root.settings.position
+      switchThreshold: 48
+      interactionAllowed: root.dockShown
+        && root.dragSource < 0
+        && !root.workspaceDragActive
+        && !root.workspaceMonitorDragSourceActive
+        && root.openMenuCount === 0
+        && !windowPreview.interactionActive
+        && !appPicker.visible
+      onPositionRequested: (position, expectedPosition) =>
+        root.positionRequested(position, expectedPosition)
     }
 
     Item {

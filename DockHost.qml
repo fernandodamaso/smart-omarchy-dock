@@ -26,9 +26,9 @@ Item {
   readonly property var hyprWorkspaces: Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
   readonly property var desktopToplevels: ToplevelManager.toplevels.values || []
   readonly property var hyprToplevels: Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
-  // Trusted source-owned Widget descriptors only. Demo Widgets are static,
-  // synthetic fixtures; real service integrations register alongside them.
-  readonly property var sidebarWidgetRegistry: demoWidgetRegistry.descriptors
+  // Internal provider adapters register here in their own source slices. No
+  // external QML paths, configurable commands, test IDs or additional services.
+  readonly property var sidebarWidgetRegistry: ({})
   readonly property var sidebarController: sidebarState
   readonly property var sidebarPanels: rendererMode === "sidebar" && presentationLoader.item
     ? presentationLoader.item.panels : []
@@ -394,8 +394,6 @@ Item {
     if (!trashEmptyProcess.running) trashEmptyProcess.running = true
   }
 
-  DockDemoWidgetRegistry { id: demoWidgetRegistry }
-
   DockControl {
     id: dockControl
     host: root
@@ -624,6 +622,8 @@ Item {
             onHideRequested: desktopId => root.hideApplication(desktopId)
             onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
             onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
+            onPositionRequested: (position, expectedPosition) =>
+              root.saveSettingIntent("position", position, expectedPosition)
             onOpenTrashRequested: root.openTrash()
             onEmptyTrashRequested: root.emptyTrash()
           }
