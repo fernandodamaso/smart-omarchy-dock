@@ -9,8 +9,9 @@ Item {
   implicitHeight: body.implicitHeight
   width: parent ? parent.width : implicitWidth
 
-  Row {
+  Flow {
     id: body
+    width: root.width
     spacing: root.gap
   }
 }
