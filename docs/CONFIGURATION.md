@@ -131,7 +131,7 @@ unchanged; no migration or partial repair is attempted.
 
 ## Reset, preservation and executable settings
 
-`config reset --preferences` preserves pinned, hiddenApplications, browserActivityMutedServices, iconOverrides, margin and unknown extension keys; **controlCommand is reset** along with other preferences. `workspaceMonitorOrder` and `workspaceGroups` are ordinary preferences, so preference reset restores automatic monitor ordering and clears local grouping pairs; `config reset workspaceMonitorOrder` and `config reset workspaceGroups` reset only their exact keys. Do not perform a broad reset for a narrow request.
+`config reset --preferences` preserves pinned, hiddenApplications, browserActivityMutedServices, iconOverrides, windowIconOverrides, margin and unknown extension keys; **controlCommand is reset** along with other preferences. `workspaceMonitorOrder` and `workspaceGroups` are ordinary preferences, so preference reset restores automatic monitor ordering and clears local grouping pairs; `config reset workspaceMonitorOrder` and `config reset workspaceGroups` reset only their exact keys. Do not perform a broad reset for a narrow request.
 
 Existing unknown keys and untouched legacy values survive minimal mutations. New unknown keys are rejected. An explicit array/object patch replaces that whole key, not a deep merge. Prefer `apps`/`icons` commands for individual membership/order/artwork changes and touched-key rollback after fresh readback.
 
