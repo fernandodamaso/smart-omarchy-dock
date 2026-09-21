@@ -523,6 +523,7 @@ FocusScope {
     flickableDirection: Flickable.VerticalFlick
     orientation: ListView.Vertical
     keyNavigationEnabled: false
+
     // ScriptModel reconciles supplied domain keys; index is geometry only.
     model: ScriptModel { objectProp: "key"; values: root.visibleRows }
     delegate: DockSidebarRow {

@@ -68,6 +68,10 @@ test('buttons expose semantic variants and consistent state language', () => {
     assert.match(button, new RegExp(`"${variant}"`))
   for (const state of ['disabled', 'pressed', 'focus', 'hover', 'idle'])
     assert.match(button, new RegExp(`"${state}"`))
+  assert.match(button, /contentItem:\s*Item\s*\{[\s\S]*?implicitWidth:\s*content\.implicitWidth/,
+    'button content keeps its natural size inside the control-managed content box')
+  assert.match(button, /id:\s*content[\s\S]*?anchors\.centerIn:\s*parent/,
+    'button labels and icons center inside their button by default')
   assert.match(button, /Qt\.darker\(root\.baseTone, 1\.14\)/)
   assert.match(button, /Qt\.darker\(root\.baseTone, 1\.28\)/)
   assert.match(button, /WidgetIcon/)
@@ -79,12 +83,29 @@ test('state and attention surfaces are semantic and reduced-motion safe', () => 
     assert.match(state, new RegExp(`"${kind}"`))
   assert.match(state, /!root\.reducedMotion/)
   assert.match(state, /RotationAnimation/)
+  assert.match(state, /property int verticalPadding/)
+  assert.match(state, /resolvedVerticalPadding/)
+  assert.match(state, /Style\.space\(root\.compact \? 8 : 16\)/)
 
   const row = source('WidgetListItem')
   assert.match(row, /attention === "urgent"/)
   assert.match(row, /attention === "overdue"/)
   assert.match(row, /!root\.reducedMotion/)
   assert.match(row, /PauseAnimation/)
+})
+
+test('Demo actions-states opts compact WidgetState into larger vertical padding', () => {
+  const demo = fs.readFileSync(
+    new URL('../components/widgets/DemoWidgetActionsStatesBody.qml', import.meta.url), 'utf8')
+  const states = [...demo.matchAll(/WidgetState\s*\{([^}]*)\}/g)].map(m => m[1])
+  assert.equal(states.length, 5, 'demo exposes five framework state cards')
+  for (const body of states) {
+    assert.match(body, /compact:\s*true/)
+    assert.match(body, /verticalPadding:\s*Style\.space\(16\)/)
+  }
+  const card = fs.readFileSync(new URL('../components/DockWidgetCard.qml', import.meta.url), 'utf8')
+  assert.doesNotMatch(card, /verticalPadding/,
+    'card framework state keeps WidgetState default padding')
 })
 
 test('Widget UI kit cannot acquire providers or write settings', () => {
@@ -139,6 +160,30 @@ test('expanded Widget cards do not retain the legacy 240px body cap', () => {
   assert.match(card, /height:\s*implicitHeight/)
 })
 
+test('Widget accordion cards drop the idle wrapper border and keep focus feedback', () => {
+  const card = fs.readFileSync(new URL('../components/DockWidgetCard.qml', import.meta.url), 'utf8')
+  assert.match(card, /Border\.none\(\)/)
+  assert.match(card, /Border\.controlSpec\(\s*"focus"/)
+  assert.doesNotMatch(card, /Border\.surfaceSpec\(\s*"widget-card"/)
+  assert.match(card, /id:\s*collapseButton[\s\S]*?onClicked:\s*root\.toggleRequested\(\)/)
+})
+
+test('Widget card header drag starts after a threshold without single-click toggle', () => {
+  const card = fs.readFileSync(new URL('../components/DockWidgetCard.qml', import.meta.url), 'utf8')
+  assert.match(card, /id:\s*headerDrag/)
+  assert.match(card, /objectName:\s*"widget-card-header-drag"/)
+  assert.match(card, /preventStealing:\s*true/)
+  assert.match(card, /dragThreshold/)
+  assert.match(card, /onDoubleClicked:[\s\S]*toggleRequested/)
+  assert.match(card, /property bool dragActive/)
+  assert.doesNotMatch(card, /id:\s*headerToggle/)
+  assert.doesNotMatch(card, /id:\s*dragMouse/)
+  const area = fs.readFileSync(new URL('../components/DockSidebarWidgetArea.qml', import.meta.url), 'utf8')
+  assert.match(area, /function syncDragFromController\(/)
+  assert.match(area, /function onSurfaceInvalidated\(\)[\s\S]*finishDrag\(0,\s*0,\s*true\)/)
+  assert.match(area, /if\s*\(!root\.beginDrag\([\s\S]*?dragActive\s*=\s*false/)
+})
+
 test('Widget semantic colors are centralized and theme-aware', () => {
   const palette = source('WidgetSemanticPalette')
   assert.match(palette, /Color\.background/)
@@ -160,9 +205,11 @@ test('Widget semantic colors are centralized and theme-aware', () => {
   }
 })
 
-test('WidgetButtonGroup wraps actions instead of overflowing narrow bodies', () => {
+test('WidgetButtonGroup fills width and avoids non-wrapping Row/Flow shells', () => {
   const group = source('WidgetButtonGroup')
-  assert.match(group, /Flow\s*\{/)
   assert.match(group, /width:\s*root\.width/)
+  assert.match(group, /default property alias content:/)
+  assert.match(group, /property int gap:/)
   assert.doesNotMatch(group, /\bRow\s*\{/)
+  assert.doesNotMatch(group, /\bFlow\s*\{/)
 })

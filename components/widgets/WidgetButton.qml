@@ -39,33 +39,40 @@ Controls.AbstractButton {
     border.color: root.activeFocus ? Color.accent : Util.alpha(Color.foreground, 0.14)
   }
 
-  contentItem: Row {
-    id: content
-    spacing: Style.space(5)
+  contentItem: Item {
+    implicitWidth: content.implicitWidth
+    implicitHeight: content.implicitHeight
 
-    WidgetIcon {
-      visible: root.iconName !== "" || String(root.iconSource).length > 0
-      anchors.verticalCenter: parent.verticalCenter
-      iconName: root.iconName
-      source: root.iconSource
-      preserveBrand: root.preserveBrandIcon
-      sizeToken: "sm"
-      containerVariant: "plain"
-      tint: root.variant === "primary" || root.variant === "danger"
-        ? Color.background : Color.foreground
-    }
+    Row {
+      id: content
+      objectName: "widget-button-content"
+      anchors.centerIn: parent
+      spacing: Style.space(5)
 
-    Text {
-      visible: root.text !== ""
-      anchors.verticalCenter: parent.verticalCenter
-      text: root.text
-      textFormat: Text.PlainText
-      color: root.variant === "primary" || root.variant === "danger"
-        ? Color.background : Color.foreground
-      font.family: Style.font.family
-      font.pixelSize: Style.font.bodySmall
-      font.bold: root.variant === "primary"
-      elide: Text.ElideRight
+      WidgetIcon {
+        visible: root.iconName !== "" || String(root.iconSource).length > 0
+        anchors.verticalCenter: parent.verticalCenter
+        iconName: root.iconName
+        source: root.iconSource
+        preserveBrand: root.preserveBrandIcon
+        sizeToken: "sm"
+        containerVariant: "plain"
+        tint: root.variant === "primary" || root.variant === "danger"
+          ? Color.background : Color.foreground
+      }
+
+      Text {
+        visible: root.text !== ""
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.text
+        textFormat: Text.PlainText
+        color: root.variant === "primary" || root.variant === "danger"
+          ? Color.background : Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        font.bold: root.variant === "primary"
+        elide: Text.ElideRight
+      }
     }
   }
 

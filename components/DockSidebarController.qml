@@ -218,7 +218,9 @@ Item {
   }
 
   function beginWidgetReorder(id) {
-    if (root.interactionBusy || root.widgetIds.indexOf(id) < 0) return false
+    if (root.interactionBusy || root.resizeActive || root.rowDragActive)
+      return false
+    if (root.widgetIds.indexOf(id) < 0) return false
     root.closeWidgetPopup()
     root.widgetDragId = id
     root.interactionBusy = true

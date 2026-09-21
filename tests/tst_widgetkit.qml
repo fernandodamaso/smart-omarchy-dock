@@ -179,17 +179,90 @@ TestCase {
     verify(group !== null)
     wait(0)
     verify(group.implicitHeight > 32, "narrow populated action group should wrap")
-    var flow = group.children[0]
-    verify(flow !== null)
+    var body = group.children[0]
+    verify(body !== null)
     var wrapped = false
-    for (var i = 0; i < flow.children.length; ++i) {
-      var child = flow.children[i]
+    for (var i = 0; i < body.children.length; ++i) {
+      var child = body.children[i]
       if (!child.visible) continue
-      verify(child.x + child.width <= flow.width + 0.5,
+      verify(child.x + child.width <= body.width + 0.5,
         "action must stay inside bounded width")
       if (child.y > 0.5) wrapped = true
     }
     verify(wrapped, "at least one action should wrap onto another row")
+  }
+
+  function test_button_group_centers_every_wrapped_row() {
+    var group = createTemporaryObject(narrowActionsFactory, testCase)
+    verify(group !== null)
+    wait(0)
+    var body = group.children[0]
+    verify(body !== null)
+
+    function collectRows() {
+      var rows = {}
+      var keys = []
+      for (var i = 0; i < body.children.length; ++i) {
+        var child = body.children[i]
+        if (!child.visible) continue
+        var key = Math.round(child.y)
+        if (!rows[key]) {
+          rows[key] = []
+          keys.push(key)
+        }
+        rows[key].push(child)
+      }
+      return { rows: rows, keys: keys }
+    }
+
+    function assertRowsCentered() {
+      var collected = collectRows()
+      var rows = collected.rows
+      var keys = collected.keys
+      for (var r = 0; r < keys.length; ++r) {
+        var row = rows[keys[r]]
+        var left = row[0].x
+        var right = row[0].x + row[0].width
+        for (var j = 1; j < row.length; ++j) {
+          left = Math.min(left, row[j].x)
+          right = Math.max(right, row[j].x + row[j].width)
+        }
+        var rowCenter = (left + right) / 2
+        var bodyCenter = body.width / 2
+        verify(Math.abs(rowCenter - bodyCenter) <= 1.0,
+          "row at y=" + keys[r] + " should be centered (center=" + rowCenter
+            + " bodyCenter=" + bodyCenter + " width=" + body.width + ")")
+      }
+      return keys.length
+    }
+
+    verify(assertRowsCentered() >= 2, "narrow group should produce multiple rows")
+    group.width = 220
+    wait(0)
+    assertRowsCentered()
+  }
+
+  function test_widget_state_vertical_padding_default_and_override() {
+    var defaults = make("WidgetState", {
+      width: 180, compact: true, kind: "empty", message: "Synthetic empty state"
+    })
+    compare(defaults.verticalPadding, -1)
+    compare(defaults.resolvedVerticalPadding, 8)
+    var defaultHeight = defaults.implicitHeight
+
+    var roomy = make("WidgetState", {
+      width: 180, compact: true, kind: "empty", message: "Synthetic empty state",
+      verticalPadding: 16
+    })
+    compare(roomy.resolvedVerticalPadding, 16)
+    verify(roomy.implicitHeight > defaultHeight,
+      "larger verticalPadding must grow the state card itself")
+    compare(roomy.implicitHeight - defaultHeight, 8)
+
+    var comfortable = make("WidgetState", {
+      width: 180, compact: false, kind: "empty", message: "Synthetic empty state"
+    })
+    compare(comfortable.resolvedVerticalPadding, 16)
   }
 
 }
