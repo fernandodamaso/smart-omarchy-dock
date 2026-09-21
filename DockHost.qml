@@ -27,20 +27,28 @@ Item {
   readonly property var hyprWorkspaces: Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
   readonly property var desktopToplevels: ToplevelManager.toplevels.values || []
   readonly property var hyprToplevels: Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
-  // Internal source-owned providers only. Herdr is acquired through the shared
-  // service lease; no command/path/credential is accepted from settings.
-  readonly property var sidebarWidgetRegistry: root.herdrService ? ({
-    "herdr.agents": {
-      id: "herdr.agents",
-      label: "Coding agents",
-      available: root.herdrService.available !== false,
-      revision: 1,
-      acquire: function(owner) { return root.herdrService.acquire(owner) },
-      expandedView: herdrExpandedView,
-      compactView: herdrCompactView,
-      popupView: herdrPopupView
+  // Branch-only synthetic Widget fixtures are combined with internal source-owned
+  // providers. Neither accepts commands, paths, or credentials from settings.
+  readonly property var sidebarWidgetRegistry: {
+    var registry = {}
+    var demoDescriptors = demoWidgetRegistry.descriptors
+    Object.keys(demoDescriptors).forEach(function(widgetId) {
+      registry[widgetId] = demoDescriptors[widgetId]
+    })
+    if (root.herdrService) {
+      registry["herdr.agents"] = {
+        id: "herdr.agents",
+        label: "Coding agents",
+        available: root.herdrService.available !== false,
+        revision: 1,
+        acquire: function(owner) { return root.herdrService.acquire(owner) },
+        expandedView: herdrExpandedView,
+        compactView: herdrCompactView,
+        popupView: herdrPopupView
+      }
     }
-  }) : ({})
+    return registry
+  }
   readonly property var sidebarController: sidebarState
   readonly property var sidebarPanels: rendererMode === "sidebar" && presentationLoader.item
     ? presentationLoader.item.panels : []
@@ -405,6 +413,8 @@ Item {
   function emptyTrash() {
     if (!trashEmptyProcess.running) trashEmptyProcess.running = true
   }
+
+  DockDemoWidgetRegistry { id: demoWidgetRegistry }
 
   DockControl {
     id: dockControl

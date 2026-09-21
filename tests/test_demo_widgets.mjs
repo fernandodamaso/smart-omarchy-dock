@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import test from 'node:test'
+
+const read = path => fs.readFileSync(new URL('../' + path, import.meta.url), 'utf8')
+const ids = ['demo.display', 'demo.lists', 'demo.inputs', 'demo.actions-states']
+
+test('branch host exposes the source-owned demo registry', () => {
+  const host = read('DockHost.qml')
+  assert.match(host, /DockDemoWidgetRegistry\s*\{/)
+  assert.match(host, /demoWidgetRegistry\.descriptors/)
+  assert.match(host, /registry\["herdr\.agents"\]/)
+  const registry = read('components/DockDemoWidgetRegistry.qml')
+  for (const id of ids) assert.match(registry, new RegExp(id.replace(/[.-]/g, '\\$&')))
+  assert.doesNotMatch(registry, /\bProcess\s*\{|https?:\/\//)
+})
+
+test('all four demo bodies are real Widget-kit compositions', () => {
+  const bodies = [
+    'components/widgets/DemoWidgetDisplayBody.qml',
+    'components/widgets/DemoWidgetListsBody.qml',
+    'components/widgets/DemoWidgetInputsBody.qml',
+    'components/widgets/DemoWidgetActionsStatesBody.qml',
+  ]
+  for (const path of bodies) {
+    const source = read(path)
+    assert.match(source, /property var widgetContext:\s*\(\{\}\)/)
+    assert.doesNotMatch(source, /\bProcess\s*\{|\bFileView\s*\{|https?:\/\//)
+  }
+})
+
+test('branch installer seeds demos alongside existing Widgets exactly once', () => {
+  const installer = read('install.sh')
+  assert.match(installer, /\.demo-widgets-seeded-v2/)
+  assert.match(installer, /smartdock_seed_demo_widgets\.py/)
+  const seeder = read('scripts/smartdock_seed_demo_widgets.py')
+  assert.match(seeder, /next_ids = list\(current\)/)
+  assert.match(seeder, /if widget_id not in next_ids/)
+  assert.match(seeder, /if marker_path\.exists\(\)/)
+})
+
+test('Widget demo Lucide assets are bundled', () => {
+  for (const name of ['search','check','chevron-down','circle-alert','cloud-off','inbox','loader-circle','clock-3'])
+    assert.equal(fs.existsSync(new URL('../assets/lucide/' + name + '.svg', import.meta.url)), true, name)
+})
