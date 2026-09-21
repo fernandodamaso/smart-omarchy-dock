@@ -4,7 +4,7 @@ import qs.Commons
 Item {
   id: root
   property var widgetContext: ({})
-  readonly property var data: widgetContext && widgetContext.data ? widgetContext.data : ({})
+  readonly property var snapshotData: widgetContext && widgetContext.data ? widgetContext.data : ({})
   implicitHeight: content.implicitHeight
 
   Column {
@@ -17,7 +17,7 @@ Item {
     WidgetList {
       width: parent.width
       Repeater {
-        model: root.data.rows || []
+        model: root.snapshotData.rows || []
         delegate: WidgetListItem {
           required property var modelData
           width: parent ? parent.width : 0
@@ -34,7 +34,7 @@ Item {
 
     WidgetChecklist {
       width: parent.width
-      model: root.data.checklist || []
+      model: root.snapshotData.checklist || []
       reducedMotion: false
     }
 
@@ -42,7 +42,7 @@ Item {
 
     WidgetActivity {
       width: parent.width
-      model: root.data.activity || []
+      model: root.snapshotData.activity || []
     }
   }
 }
