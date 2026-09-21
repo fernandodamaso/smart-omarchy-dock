@@ -138,6 +138,30 @@ class MutationCliTests(unittest.TestCase):
         result = self.response(('config', 'set', 'showTrash', 'false', '--json'), 5)
         self.assertEqual(result['error']['code'], 'E_PROTOCOL')
 
+    def test_window_icon_title_pattern_cli_is_explicit_and_exclusive(self):
+        source = self.tmp / 'window icon.svg'
+        source.write_text('<svg/>', encoding='utf-8')
+        self.response(('icons', 'set', 'org.ghostty', str(source),
+                       '--title-pattern', ' *solar* ', '--json'))
+        self.assertEqual(self.requests('icons.set')[-1], {
+            'id': 'org.ghostty',
+            'source': str(source.resolve()),
+            'titlePattern': ' *solar* ',
+        })
+        self.response(('icons', 'reset', 'org.ghostty',
+                       '--title-pattern', '*solar*', '--json'))
+        self.assertEqual(self.requests('icons.reset')[-1], {
+            'id': 'org.ghostty',
+            'titlePattern': '*solar*',
+        })
+        before = len(self.requests('icons.set'))
+        self.response(('icons', 'set', 'org.ghostty', str(source),
+                       '--profile', 'Profile 1', '--title-pattern', '*solar*', '--json'), 2)
+        self.assertEqual(len(self.requests('icons.set')), before)
+        self.response(('icons', 'reload', 'org.ghostty',
+                       '--title-pattern', '*solar*', '--json'), 2)
+        self.assertEqual(self.requests('icons.reload'), [])
+
     def export_fixture(self, live):
         fixture = json.loads(self.fixture.read_text())
         fixture['hosts']['101']['status']['configPath'] = str(live)
