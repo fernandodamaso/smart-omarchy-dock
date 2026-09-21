@@ -379,6 +379,12 @@ apply. Read the running host's schema/defaults and preserve the user's values:
   "workspaceBadgeTextColor": "",
   "borderWidthEnabled": false,
   "borderWidth": 2,
+  "presentationMode": "classic",
+  "sidebarEdge": "left",
+  "sidebarMonitor": "",
+  "sidebarExpandedWidth": 320,
+  "sidebarCollapsed": false,
+  "sidebarInlineSoloWorkspace": true,
   "position": "bottom",
   "fullLength": false,
   "reserveSpace": true,
@@ -453,6 +459,7 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
 | `browserActivityMutedServices` | Service IDs muted from Chrome activity header and badge totals (`gmail`, `whatsapp`, …); rows stay visible/dimmed and openable; retained by preference reset |
 | `sidebarBrowserTabsEnabled` | When true and the browser-profile provider is available, sidebar Chrome windows can expand to list open page tabs (titles only, no URLs) |
+| `sidebarInlineSoloWorkspace` | When true, populated workspace names share the first application/window row instead of using a dedicated row; empty workspaces remain dedicated rows. Set `false` to retain separate workspace rows |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
@@ -854,6 +861,7 @@ for test coverage and the separate real-pointer Omarchy qualification gate.
 The unreleased sidebar candidate adds `presentationMode` (default `classic`),
 `sidebarEdge` (`left`), `sidebarMonitor` (empty = all connected monitors), `sidebarExpandedWidth` (320),
 `sidebarCollapsed` (false), `sidebarCollapsedByMonitor` (`{}`),
+`sidebarInlineSoloWorkspace` (true),
 `sidebarBrowserTabsEnabled` (true), `sidebarWidgets` (empty), and
 `sidebarWidgetCollapsed` (`{}`). It shows
 monitor/workspace/application/window hierarchy or every individual window icon

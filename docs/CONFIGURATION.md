@@ -6,7 +6,7 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 53 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
@@ -37,6 +37,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows 
 | `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
 | `sidebarCollapsed` | `false` | Default icon rail for monitors without a `sidebarCollapsedByMonitor` override. Expanded width and session app folds are retained. |
 | `sidebarCollapsedByMonitor` | `{}` | Object map of exact connector → boolean. Missing connectors follow `sidebarCollapsed`. Disconnected names retained; control characters and non-booleans rejected. |
+| `sidebarInlineSoloWorkspace` | `true` | Boolean; when enabled, populated workspace names share the first application/window row instead of emitting a separate workspace row. Empty workspaces remain dedicated rows. |
 | `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. The array is both enabled state and card order. Runtime schema advertises source-registered IDs; unknown imports remain requested/unavailable. Add/remove/reorder use the host writer. |
 | `sidebarWidgetCollapsed` | `{}` | Valid internal widget ID → boolean card-body state. Missing means expanded. Removing a widget keeps its collapse preference so re-adding restores it. Preference reset clears the map. |
 | `sidebarBrowserTabsEnabled` | `true` | When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of `browserActivityMutedServices`. See the [online browser-tabs guide](https://github.com/fernandodamaso/smart-omarchy-dock/blob/370585ccfaed98f1d04954d8598a868aef80a087/docs/browser-tabs.md); it is not part of the offline CLI documentation bundle. |
@@ -137,7 +138,7 @@ These are source projections, not proof that the compositor mapped a surface. No
 screen means zero width and `mapped: false`. Width uses unreserved logical screen
 geometry. Each output reserves its own exclusive zone from its clamped width.
 
-The seven sidebar settings support the existing typed set/apply/reset/schema/get
+The eight sidebar settings support the existing typed set/apply/reset/schema/get
 commands. Width writes accept integers 240–480; the runtime may clamp the effective
 width below 240 on narrow screens without rewriting the requested value. The
 expanded resize handle lives inside the reserved width. Pointer motion changes only

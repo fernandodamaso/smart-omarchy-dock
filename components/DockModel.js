@@ -417,6 +417,7 @@ function settingsDefaults() {
     sidebarExpandedWidth: 320,
     sidebarCollapsed: false,
     sidebarCollapsedByMonitor: {},
+    sidebarInlineSoloWorkspace: true,
     sidebarWidgets: [],
     sidebarWidgetCollapsed: {},
     sidebarBrowserTabsEnabled: true,
@@ -599,6 +600,8 @@ function normalizeSetting(key, value) {
     return typeof value === "boolean" ? value : false
   case "sidebarCollapsedByMonitor":
     return normalizeSidebarCollapsedByMonitor(value)
+  case "sidebarInlineSoloWorkspace":
+    return typeof value === "boolean" ? value : defaults.sidebarInlineSoloWorkspace
   case "iconSize":
     return steppedNumber(value, 24, 96, 1, defaults.iconSize, 0)
   case "magnification":

@@ -90,6 +90,31 @@ Item {
   readonly property var treeLayout: InteractionModel.sidebarTreeGuideLayout(root.workspaceCardInset)
   readonly property bool insideWorkspaceCard: kind !== "monitor" && kind !== "section"
     && (kind === "workspace" || !!row.workspaceKey)
+  // Populated expanded workspaces put the badge on the first child and shift
+  // the art column by the *actual* (clamped) badge width — not a reserved max.
+  readonly property bool inlineWorkspaceLayout: !root.collapsed
+    && (root.leadingWorkspaceBadgeVisible || row.inlineWorkspaceGroup === true)
+  // One measured chip width per workspace, owned by the viewport, so the badge
+  // and every guide/artwork/selection inset agree across all rows of the
+  // workspace — including rows rendered while the leading delegate is
+  // scrolled out of view. Nothing re-estimates the label per row.
+  readonly property string inlineWorkspaceKey: {
+    if (!root.inlineWorkspaceLayout) return ""
+    if (root.leadingWorkspace) return String(root.leadingWorkspace.key)
+    return String(row.workspaceKey || "")
+  }
+  readonly property real inlineBadgeLayoutWidth: {
+    if (!root.inlineWorkspaceLayout) return 0
+    var key = root.inlineWorkspaceKey
+    var widths = root.viewport ? root.viewport.inlineWorkspaceBadgeWidths : null
+    var measured = key && widths ? Number(widths[key]) : NaN
+    if (isFinite(measured) && measured > 0) return measured
+    // Probe not ready yet (first frame / hostless harness): keep the shared
+    // floor so rows still agree with each other instead of diverging.
+    return 24
+  }
+  readonly property var inlineWorkspaceGeometry: InteractionModel.sidebarInlineWorkspaceGeometry(
+    root.workspaceCardInset, Style.space, root.inlineBadgeLayoutWidth)
   // Empty workspace cards must not draw a fake header→children stem.
   readonly property bool workspaceHasChildren: {
     if (kind !== "workspace") return false
@@ -161,6 +186,12 @@ Item {
   readonly property string workspaceBadgeText: kind === "workspace"
     ? InteractionModel.workspaceBadgeLabel(row.workspaceIdentity || "", row.label || "")
     : ""
+  readonly property var leadingWorkspace: !root.collapsed && row.leadingWorkspace
+    ? row.leadingWorkspace : null
+  readonly property bool leadingWorkspaceBadgeVisible: !!root.leadingWorkspace
+  readonly property string leadingWorkspaceBadgeText: root.leadingWorkspace
+    ? InteractionModel.workspaceBadgeLabel(root.leadingWorkspace.workspaceIdentity || "",
+      root.leadingWorkspace.label || "") : ""
   // Rail keeps the compact two-code-point token; tooltips/expanded keep full name.
   readonly property string workspaceRailLabel: {
     if (kind !== "workspace") return ""
@@ -234,7 +265,9 @@ Item {
     return titleLabel
       + (kind === "application" && windowCount > 1 ? " · " + windowCount : "")
       + herdrCountBits
-      + (row.workspaceIdentity ? " · Workspace " + row.workspaceIdentity : "")
+      + (root.leadingWorkspaceBadgeText
+        ? " · Workspace " + root.leadingWorkspaceBadgeText
+        : (row.workspaceIdentity ? " · Workspace " + row.workspaceIdentity : ""))
       + (row.monitorIdentity ? " · Monitor " + row.monitorIdentity : "")
       + (state.fullscreen ? " · Fullscreen" : "")
       + (state.pinned ? " · Pinned" : "")
@@ -274,8 +307,22 @@ Item {
   readonly property real artX: {
     if (collapsed) return 0
     if (kind === "workspace") return root.treeLayout.badgeLeft
+    if (root.inlineWorkspaceLayout) {
+      if (root.leadingWorkspaceBadgeVisible || root.treeDepth <= 1)
+        return root.inlineWorkspaceGeometry.artX
+      return InteractionModel.sidebarTreeIconX(root.workspaceCardInset, Math.max(1, root.treeDepth))
+        + root.inlineWorkspaceGeometry.guideOffset
+    }
     if (nestedChild || hasArtwork)
       return InteractionModel.sidebarTreeIconX(root.workspaceCardInset, Math.max(1, root.treeDepth))
+    return root.padding
+  }
+  readonly property real baseLabelX: {
+    if (root.leadingWorkspaceBadgeVisible && root.hasArtwork)
+      return root.inlineWorkspaceGeometry.labelX
+    if (root.nestedChild)
+      return root.artX + 14 + Style.space(8)
+    if (root.hasArtwork) return artwork.x + artwork.width + Style.space(8)
     return root.padding
   }
   // Shared fill/rail horizontal bounds (tree-indented vs whole-card workspace).
@@ -501,14 +548,46 @@ Item {
     readonly property real guideTop: root.row.layoutGapBefore === "children" ? 0 : root.contentY
     readonly property real contentMid: root.contentY + root.contentHeight / 2
     readonly property real contentBottom: root.contentY + root.contentHeight
+    // Chip bottom edges in row coordinates. Vertical guides start here so no
+    // line is ever painted through a translucent workspace badge; horizontal
+    // connectors start at the chip's right edge for the same reason.
+    readonly property real inlineBadgeBottom: root.contentY + leadingWorkspaceBadge.y
+      + leadingWorkspaceBadge.height
+    readonly property real workspaceBadgeBottom: root.contentY + workspaceBadge.y
+      + workspaceBadge.height
+    // Depth-1 stems use stemOffset so they stay under the badge (not under
+    // the icons); artwork keeps geometry.artX on the guideOffset column.
+    readonly property real stemOffset: root.inlineWorkspaceLayout
+      ? root.inlineWorkspaceGeometry.stemOffset : 0
+    // Deeper guide columns follow guideOffset so they sit at the center of
+    // the parent row's rendered window icon, not its left edge.
+    readonly property real guideOffset: root.inlineWorkspaceLayout
+      ? root.inlineWorkspaceGeometry.guideOffset : 0
+    // Only another *direct* row of this workspace continues the badge column.
+    // Expanded tabs / windows / Herdr agents live in a deeper guide column and
+    // never justify a downward stem beneath the badge.
+    readonly property bool badgeStemExtendsDown: root.leadingWorkspaceBadgeVisible
+      && !root.isLastSibling
 
-    // Workspace stem from badge center down to first-child gap bridge.
+    // Workspace stem from badge bottom down to first-child gap bridge.
     // Suppress on empty workspaces (no visible children / no applications).
     Rectangle {
       visible: root.kind === "workspace" && root.workspaceHasChildren
       x: root.treeLayout.guide0
       width: 1
-      y: treeGuides.contentMid
+      y: treeGuides.workspaceBadgeBottom
+      height: Math.max(0, treeGuides.contentBottom - y)
+      color: treeGuides.guideColor
+    }
+
+    // Inline badge stem: drops from the rendered badge's bottom edge at the
+    // badge center, so it bridges into the next direct row without crossing
+    // the chip. Sole first rows keep only the horizontal connector.
+    Rectangle {
+      visible: root.leadingWorkspaceBadgeVisible && treeGuides.badgeStemExtendsDown
+      x: leadingWorkspaceBadge.x + leadingWorkspaceBadge.width / 2
+      width: 1
+      y: Math.max(treeGuides.contentMid, treeGuides.inlineBadgeBottom)
       height: Math.max(0, treeGuides.contentBottom - y)
       color: treeGuides.guideColor
     }
@@ -518,7 +597,9 @@ Item {
       Rectangle {
         required property int index
         visible: root.ancestorContinues[index] === true
-        x: InteractionModel.sidebarTreeStemX(root.workspaceCardInset, index + 1)
+          && !(root.leadingWorkspaceBadgeVisible && index === 0)
+        x: InteractionModel.sidebarTreeGuideColumnX(root.workspaceCardInset,
+          index + 1, treeGuides.guideOffset, treeGuides.stemOffset)
         width: 1
         y: treeGuides.guideTop
         height: Math.max(0, treeGuides.contentBottom - y)
@@ -528,8 +609,10 @@ Item {
 
     Rectangle {
       id: ownStem
-      visible: root.treeDepth >= 1
-      x: InteractionModel.sidebarTreeStemX(root.workspaceCardInset, root.treeDepth)
+      // First inline row uses the badge stem; suppress the old header-relative stem.
+      visible: root.treeDepth >= 1 && !root.leadingWorkspaceBadgeVisible
+      x: InteractionModel.sidebarTreeGuideColumnX(root.workspaceCardInset,
+        root.treeDepth, treeGuides.guideOffset, treeGuides.stemOffset)
       width: 1
       y: treeGuides.guideTop
       height: Math.max(0, (root.isLastSibling ? treeGuides.contentMid : treeGuides.contentBottom) - y)
@@ -537,7 +620,17 @@ Item {
     }
 
     Rectangle {
-      visible: root.treeDepth >= 1 && (root.hasArtwork || root.nestedChild)
+      visible: root.leadingWorkspaceBadgeVisible && (root.hasArtwork || root.nestedChild)
+      x: leadingWorkspaceBadge.x + leadingWorkspaceBadge.width
+      y: treeGuides.contentMid
+      width: Math.max(0, root.artX - x - 2)
+      height: 1
+      color: treeGuides.guideColor
+    }
+
+    Rectangle {
+      visible: !root.leadingWorkspaceBadgeVisible
+        && root.treeDepth >= 1 && (root.hasArtwork || root.nestedChild)
       x: ownStem.x
       y: treeGuides.contentMid
       width: Math.max(0, root.artX - x - 2)
@@ -563,10 +656,10 @@ Item {
       visible: root.kind === "monitor" && !root.collapsed
       x: root.padding
       anchors.verticalCenter: parent.verticalCenter
-      width: root.iconSize
-      height: root.iconSize
+      width: Style.space(16)
+      height: Style.space(16)
       iconName: "monitor"
-      iconSize: root.iconSize
+      iconSize: Style.space(16)
       tint: Color.foreground
       opacity: 0.85
     }
@@ -601,6 +694,62 @@ Item {
         font.pixelSize: Style.font.caption
         font.bold: true
         renderType: Text.NativeRendering
+      }
+    }
+
+    // Populated expanded workspaces share the first application/window row.
+    // Keep this as a separate hit target so its activation and context menu
+    // still address the workspace rather than the child window.
+    Rectangle {
+      id: leadingWorkspaceBadge
+      visible: root.leadingWorkspaceBadgeVisible
+      objectName: "sidebar-inline-workspace-badge"
+      z: 4
+      x: root.inlineWorkspaceGeometry.badgeX
+      anchors.verticalCenter: parent.verticalCenter
+      // Single viewport-measured width: the rendered chip, every guide column,
+      // artwork slot and selection inset in this workspace use the same value.
+      width: root.inlineBadgeLayoutWidth
+      height: Style.space(20)
+      radius: Style.space(4)
+      color: Util.alpha(Color.foreground, 0.08)
+      border.width: 1
+      border.color: root.leadingWorkspace && root.leadingWorkspace.active
+        ? Util.alpha(Color.accent, 0.50)
+        : Util.alpha(Color.foreground, 0.14)
+      Text {
+        id: leadingWorkspaceBadgeLabel
+        anchors.centerIn: parent
+        width: Math.max(0, parent.width - Style.space(8))
+        text: root.leadingWorkspaceBadgeText
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        horizontalAlignment: Text.AlignHCenter
+        color: root.leadingWorkspace && root.leadingWorkspace.active
+          ? Color.accent : Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        renderType: Text.NativeRendering
+      }
+      Accessible.role: Accessible.Button
+      Accessible.name: "Workspace " + root.leadingWorkspaceBadgeText
+      DockSidebarRowInput {
+        anchors.fill: parent
+        controller: root.controller
+        rowKey: root.leadingWorkspace ? root.leadingWorkspace.key : ""
+        panelConnector: root.panelConnector
+        workspaceHeader: false
+        dragEnabled: false
+        viewport: root.viewport
+        enabled: leadingWorkspaceBadge.visible && !root.controller.interactionBusy
+        onFocusRequested: root.forceActiveFocus(Qt.MouseFocusReason)
+        onActivated: function(target, control, connector, modifiers) {
+          if (root.viewport) root.viewport.activate(target, control, connector, modifiers)
+        }
+        onContextRequested: target => {
+          if (root.viewport) root.viewport.contextRequested(target, leadingWorkspaceBadge)
+        }
       }
     }
 
@@ -709,17 +858,19 @@ Item {
         : 0.75
     }
 
-    // Two-line monitor identity — separate Text nodes, shown only after width is
-    // stable, so layershell settle cannot double-paint a growing elided string.
-    Column {
+    // Compact single-line monitor identity — the header shows the monitor name
+    // and the topology strip only; connector names (HDMI-A-1, DP-1) stay out of
+    // the header and remain available for targeting/accessibility.
+    Row {
       id: monitorLabels
       visible: root.kind === "monitor" && !root.collapsed && content.width >= 140
       x: monitorGlyph.x + monitorGlyph.width + Style.space(8)
       width: Math.max(0, content.width - x - root.padding
         - (displayStrip.visible ? displayStrip.width + Style.space(8) : 0))
-      y: Math.round((content.height - implicitHeight) / 2)
-      spacing: Style.space(2)
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(4)
       Text {
+        id: monitorTitleLabel
         objectName: "sidebar-label"
         width: parent.width
         height: Math.ceil(font.pixelSize * 1.25)
@@ -730,24 +881,8 @@ Item {
         maximumLineCount: 1
         color: Color.foreground
         font.family: Style.font.family
-        font.pixelSize: Style.font.title
+        font.pixelSize: Style.font.bodySmall
         font.bold: true
-        renderType: Text.NativeRendering
-        verticalAlignment: Text.AlignVCenter
-      }
-      Text {
-        objectName: "sidebar-label-connector"
-        width: parent.width
-        height: visible ? Math.ceil(font.pixelSize * 1.2) : 0
-        visible: root.monitorConnector !== "" && root.monitorConnector !== root.monitorTitle
-        text: root.monitorConnector
-        textFormat: Text.PlainText
-        elide: Text.ElideRight
-        wrapMode: Text.NoWrap
-        maximumLineCount: 1
-        color: Color.muted
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
         renderType: Text.NativeRendering
         verticalAlignment: Text.AlignVCenter
       }
@@ -814,10 +949,7 @@ Item {
       visible: !root.collapsed && root.kind !== "monitor" && root.kind !== "workspace"
         && root.kind !== "herdr-agent" && root.kind !== "herdr-tab"
       x: {
-        if (root.nestedChild)
-          return root.artX + 14 + Style.space(8)
-        if (root.hasArtwork) return artwork.x + artwork.width + Style.space(8)
-        return root.padding
+        return root.baseLabelX
       }
       width: {
         // Herdr: reserve fold + full natural counter/kind width first so every

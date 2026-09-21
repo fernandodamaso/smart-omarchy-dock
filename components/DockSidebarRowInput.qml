@@ -10,6 +10,7 @@ Item {
   property string panelConnector: ""
   // Workspace header: whole-card hover via viewport.hoveredWorkspaceKey + grab cursor.
   property bool workspaceHeader: false
+  property bool dragEnabled: true
   property var viewport: null
   // Key last published to viewport; clear uses this even after kind/key change.
   property string lastPublishedWorkspaceKey: ""
@@ -119,7 +120,7 @@ Item {
   DragHandler {
     id: drag
     target: null
-    enabled: root.inputEnabled
+    enabled: root.inputEnabled && root.dragEnabled
     acceptedButtons: Qt.LeftButton
     onActiveChanged: if (active) {
       root.consumed = true

@@ -24,12 +24,12 @@ Item {
   readonly property real iconSize: 26
   readonly property real cell: 36
   readonly property real pinGap: Style.space(6)
-  readonly property real headingHeight: Style.space(28)
   readonly property real shelfPadX: Style.space(4)
+  readonly property real shelfPadTop: Style.space(3)
   readonly property real shelfPadBottom: Style.space(5)
   // Rail hides the strip entirely — zero height and no residual gap.
-  implicitHeight: collapsed ? 0 : (headingHeight + Style.space(3)
-    + Math.max(0, flow.implicitHeight) + shelfPadBottom)
+  implicitHeight: collapsed ? 0 : (shelfPadTop + Math.max(0, flow.implicitHeight)
+    + shelfPadBottom)
   height: implicitHeight
   visible: !collapsed
   enabled: !collapsed
@@ -157,71 +157,15 @@ Item {
     enabled: false
   }
 
-  Item {
-    id: headingRow
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.top: parent.top
-    anchors.leftMargin: root.shelfPadX
-    anchors.rightMargin: root.shelfPadX
-    height: root.headingHeight
-    Text {
-      id: caption
-      anchors.left: parent.left
-      anchors.leftMargin: Style.space(3)
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.right: addPin.left
-      anchors.rightMargin: Style.space(6)
-      text: "Pinned"
-      textFormat: Text.PlainText
-      color: Color.foreground
-      font.family: Style.font.family
-      font.pixelSize: Style.font.bodySmall
-      font.bold: true
-      elide: Text.ElideRight
-    }
-    Ui.Button {
-      id: addPin
-      objectName: "sidebar-pin-strip-add"
-      property bool pinStripOwned: true
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      width: Style.space(24)
-      height: Style.space(24)
-      visible: !root.collapsed
-      iconText: ""
-      tooltipText: "Add a pinned application"
-      Accessible.name: "Add pinned application"
-      focusable: true
-      enabled: !root.controller.interactionBusy
-      onClicked: root.panel.openPinPicker(addPin)
-      DockLucideIcon {
-        anchors.centerIn: parent
-        width: 13
-        height: 13
-        iconName: "plus"
-        iconSize: 13
-        tint: Color.foreground
-      }
-    }
-    Rectangle {
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.bottom: parent.bottom
-      height: 1
-      color: Util.alpha(Color.foreground, 0.08)
-    }
-  }
-
   Flow {
     id: flow
     objectName: "sidebar-pin-strip"
     anchors.left: parent.left
     anchors.right: parent.right
-    anchors.top: headingRow.bottom
-    anchors.topMargin: Style.space(3)
-    anchors.leftMargin: Style.space(3)
-    anchors.rightMargin: Style.space(3)
+    anchors.top: parent.top
+    anchors.topMargin: root.shelfPadTop
+    anchors.leftMargin: root.shelfPadX
+    anchors.rightMargin: root.shelfPadX
     spacing: root.pinGap
     flow: Flow.LeftToRight
 
@@ -357,6 +301,37 @@ Item {
           fontFamily: Style.font.family
           fontSize: Style.font.bodySmall
         }
+      }
+    }
+
+    Ui.Button {
+      id: addPin
+      objectName: "sidebar-pin-strip-add"
+      property bool pinStripOwned: true
+      width: root.cell
+      height: root.cell
+      visible: !root.collapsed
+      iconText: ""
+      tooltipText: "Add a pinned application"
+      Accessible.name: "Add pinned application"
+      focusable: true
+      enabled: !root.controller.interactionBusy
+      onClicked: root.panel.openPinPicker(addPin)
+      DockLucideIcon {
+        anchors.centerIn: parent
+        width: 13
+        height: 13
+        iconName: "plus"
+        iconSize: 13
+        tint: Color.foreground
+      }
+      Rectangle {
+        anchors.fill: parent
+        radius: root.appearance.cardRadius
+        color: "transparent"
+        border.width: 1
+        border.color: Util.alpha(Color.foreground, 0.24)
+        enabled: false
       }
     }
   }

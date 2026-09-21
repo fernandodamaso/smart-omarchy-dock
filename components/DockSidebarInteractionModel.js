@@ -127,7 +127,8 @@ function topologyStripWidth(count) {
 
 // Tree guide columns relative to workspace card left (viewport.workspaceCardInset).
 // Badge at left+8, min-24 center at left+20 = guide0; depth-1 icon at guide0+12;
-// each deeper depth +24.
+// each deeper depth +24. iconHalf is half of the 18px expanded artwork icon,
+// used to center child guide columns on the parent's rendered window icon.
 function sidebarTreeGuideLayout(workspaceCardInset) {
   var left = Number(workspaceCardInset)
   if (!isFinite(left)) left = 0
@@ -136,21 +137,102 @@ function sidebarTreeGuideLayout(workspaceCardInset) {
     badgeLeft: left + 8,
     guide0: left + 20,
     depthStep: 24,
-    iconOffset: 12
+    iconOffset: 12,
+    iconHalf: 9
   }
-}
-
-function sidebarTreeStemX(workspaceCardInset, depth) {
-  var layout = sidebarTreeGuideLayout(workspaceCardInset)
-  var d = Number(depth)
-  if (!isFinite(d) || d < 1) return layout.guide0
-  return layout.guide0 + (d - 1) * layout.depthStep
 }
 
 function sidebarTreeIconX(workspaceCardInset, treeDepth) {
   var layout = sidebarTreeGuideLayout(workspaceCardInset)
   var d = Math.max(1, Number(treeDepth) || 1)
   return layout.guide0 + layout.iconOffset + (d - 1) * layout.depthStep
+}
+
+// Guide column a row at `depth` draws its stem on and branches from.
+// Depth-1 rows keep the badge column (guide0 + stemOffset, under the chip).
+// Deeper rows branch from the center of the parent row's rendered window
+// icon: parentArt = sidebarTreeIconX(depth - 1) + guideOffset, so nested
+// indentation hangs from the icon's middle instead of its left edge.
+// guideOffset/stemOffset are 0 outside the inline workspace layout.
+function sidebarTreeGuideColumnX(workspaceCardInset, depth, guideOffset, stemOffset) {
+  var layout = sidebarTreeGuideLayout(workspaceCardInset)
+  var d = Number(depth)
+  if (!isFinite(d) || d < 1) d = 1
+  var artShift = Number(guideOffset)
+  if (!isFinite(artShift)) artShift = 0
+  var badgeShift = Number(stemOffset)
+  if (!isFinite(badgeShift)) badgeShift = 0
+  if (d === 1) return layout.guide0 + badgeShift
+  return sidebarTreeIconX(workspaceCardInset, d - 1) + artShift + layout.iconHalf
+}
+
+// Clamp ceiling for the inline workspace badge. Long names elide past this;
+// layout uses the *actual* (clamped) badge width so short names sit tight.
+function sidebarInlineWorkspaceBadgeMaxWidth(space) {
+  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
+  return Math.max(24, sp(64))
+}
+
+// Workspace-wide right-chrome budget for inline chips. Fold/tabs/herdr
+// chevrons differ per row, but the shared chip must not: reserving a different
+// budget per row is what made first and following rows disagree. Reserve the
+// widest per-row control stack once so every row of a workspace clamps the
+// measured chip against the same available width.
+function sidebarInlineWorkspaceBadgeAvailableWidth(contentWidth, workspaceCardInset, space) {
+  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
+  var width = Number(contentWidth)
+  if (!isFinite(width) || width <= 0) return 0
+  var layout = sidebarTreeGuideLayout(workspaceCardInset)
+  var chrome = sp(8) + sp(28) + sp(28) // row padding + two chevron controls
+  return Math.max(24, width - layout.badgeLeft - chrome)
+}
+
+// The one chip-width contract for every row of an inline workspace: real font
+// advance (textWidth = measured implicitWidth) + padding, clamped to the 24px
+// floor, the shared ceiling, and the workspace-wide available slot. The
+// rendered badge and all guide/artwork/selection geometry consume this value;
+// no row re-estimates it from the label.
+function sidebarInlineWorkspaceBadgeLayoutWidth(textWidth, availableWidth, space) {
+  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
+  var measured = Number(textWidth)
+  if (!isFinite(measured) || measured < 0) measured = 0
+  var natural = Math.max(24, measured + sp(8))
+  var width = Math.min(sidebarInlineWorkspaceBadgeMaxWidth(space), natural)
+  var available = Number(availableWidth)
+  if (isFinite(available) && available > 0) width = Math.min(Math.max(24, available), width)
+  return Math.max(24, width)
+}
+
+// Shared geometry for populated workspaces that put the badge on the first
+// visible child row. badgeWidth is the single measured chip width shared by
+// every row of the workspace (sidebarInlineWorkspaceBadgeLayoutWidth);
+// defaults to the 24px minimum so missing widths do not shove icons right.
+// guideOffset shifts the artwork column; stemOffset shifts vertical guide
+// columns so they stay under the badge center (not under the icons).
+function sidebarInlineWorkspaceGeometry(workspaceCardInset, space, badgeWidth) {
+  var layout = sidebarTreeGuideLayout(workspaceCardInset)
+  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
+  var maxW = sidebarInlineWorkspaceBadgeMaxWidth(space)
+  var bw = Number(badgeWidth)
+  if (!isFinite(bw) || bw <= 0) bw = 24
+  if (bw > maxW) bw = maxW
+  if (bw < 24) bw = 24
+  var gap = sp(6) + 5
+  var iconGap = sp(8)
+  var iconSize = 18
+  var badgeX = layout.badgeLeft
+  var stemX = badgeX + bw / 2
+  var artX = badgeX + bw + gap
+  var normalArt = sidebarTreeIconX(workspaceCardInset, 1)
+  return {
+    badgeX: badgeX,
+    artX: artX,
+    stemX: stemX,
+    labelX: artX + iconSize + iconGap,
+    guideOffset: artX - normalArt,
+    stemOffset: stemX - layout.guide0,
+    badgeMaxWidth: maxW
+  }
 }
 
 // Horizontal insets for fillLayer / focus rail. Expanded window/application/
@@ -234,7 +316,7 @@ function attentionNameMotionEligible(kind, collapsed, countVisible, count,
 // sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert=false)
 // → { contentHeight, gapBefore, gapAfter, height, contentY }
 //
-// Baselines (logical, then Style.space): monitor 48 expanded / 32 rail;
+// Baselines (logical, then Style.space): monitor 32 expanded / 32 rail;
 // workspace 30 both; app/window/tab 28 expanded; rail window 36 or 58 when
 // hasAlert; section 22. Font floor = max(0, rowHeight - space(12)). Default
 // viewport rowHeight≈34 → floor 22, so expanded 28 is NOT forced back to 34.
@@ -285,7 +367,7 @@ function sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert) {
         || kind === "herdr-tab" || kind === "herdr-state") baseline = sp(28)
     else baseline = alert ? sp(58) : sp(36)
   } else if (kind === "monitor") {
-    baseline = sp(48)
+    baseline = sp(32)
   } else if (kind === "section") {
     baseline = sp(22)
   } else if (kind === "workspace") {

@@ -43,6 +43,7 @@
     },
     "sidebarCollapsed": {"type":"boolean","description":"Default icon rail for monitors without a sidebarCollapsedByMonitor override. Every eligible window remains represented; expanded width and session app folds are retained."},
     "sidebarCollapsedByMonitor": {"type":"object","format":"sidebar-collapsed-by-monitor","description":"Per-connector sidebar collapse overrides. Missing connectors follow sidebarCollapsed. Disconnected names are retained; control characters and non-boolean values are rejected."},
+    "sidebarInlineSoloWorkspace": {"type":"boolean","description":"When true, populated workspace names share the first application/window row instead of emitting a separate workspace row. Empty workspaces remain dedicated rows."},
     "sidebarBrowserTabsEnabled": {"type":"boolean","description":"When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of browserActivityMutedServices."},
     "position": {"type":"string","enum":["bottom"],"description":"Classic dock edge; the classic dock renders on the bottom only and the left vertical presentation is the sidebar mode. Drag empty dock background left to switch to the sidebar. Legacy left, right and top read as bottom."},
     "fullLength": {"type":"boolean","description":"Extend the dock along its available screen edge."},

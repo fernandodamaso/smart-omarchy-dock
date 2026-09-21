@@ -57,6 +57,43 @@ FocusScope {
   property int sectionChromeRevision: 0
   FontMetrics { id: metrics; font.family: Style.font.family; font.pixelSize: Style.font.body }
 
+  // Inline workspace chips are measured here, once per workspace, so every row
+  // of that workspace renders the same badge width and therefore the same
+  // artwork/label/hover/selection/guide geometry — including rows whose
+  // leading delegate is scrolled out of view. The probes are invisible Text
+  // nodes that exist only to measure the production badge font; nothing paints
+  // them and they never join the hierarchy list.
+  readonly property var inlineWorkspaceTargets: root.panelCollapsed
+    ? [] : (root.viewProjection.workspaceTargets || [])
+  readonly property real inlineWorkspaceBadgeAvailable: InteractionModel
+    .sidebarInlineWorkspaceBadgeAvailableWidth(list.width, root.workspaceCardInset, Style.space)
+  readonly property var inlineWorkspaceBadgeWidths: {
+    var widths = {}
+    for (var i = 0; i < inlineBadgeProbe.count; ++i) {
+      var probe = inlineBadgeProbe.itemAt(i)
+      if (probe) widths[probe.workspaceKey] = probe.layoutWidth
+    }
+    return widths
+  }
+
+  Repeater {
+    id: inlineBadgeProbe
+    model: ScriptModel { objectProp: "key"; values: root.inlineWorkspaceTargets }
+    delegate: Text {
+      required property var modelData
+      visible: false
+      text: InteractionModel.workspaceBadgeLabel(modelData.workspaceIdentity, modelData.label)
+      textFormat: Text.PlainText
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      renderType: Text.NativeRendering
+      readonly property string workspaceKey: String(modelData.key)
+      readonly property real layoutWidth: InteractionModel.sidebarInlineWorkspaceBadgeLayoutWidth(
+        implicitWidth, root.inlineWorkspaceBadgeAvailable, Style.space)
+    }
+  }
+
   function estimatedRowHeight(row) {
     var attention = root.controller.attentionForRow(row)
     var hasAlert = InteractionModel.sidebarRowHasNumericAlert(

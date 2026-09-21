@@ -510,6 +510,8 @@ Item {
       folds: root.folds,
       sidebarBrowserTabsEnabled: DockModel.normalizeSetting(
         "sidebarBrowserTabsEnabled", root.settings.sidebarBrowserTabsEnabled),
+      sidebarInlineSoloWorkspace: DockModel.normalizeSetting(
+        "sidebarInlineSoloWorkspace", root.settings.sidebarInlineSoloWorkspace),
       browserTabs: browserTabs,
       herdrSnapshot: herdrSnapshot,
       herdrAssociations: root.herdrAssociations,

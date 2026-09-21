@@ -243,6 +243,7 @@ function writeScrollState(states, panelConnector, collapsed, anchor, keys) {
 function emptyProjection() {
   return {
     monitorSections: [], launchers: [], unassignedWindows: [], rows: [], badgeItems: [],
+    workspaceTargets: [],
     sectionSpans: []
   }
 }
@@ -256,6 +257,16 @@ function annotateTreeAndSpans(result) {
   var rows = result.rows || []
   result.sectionSpans = []
   var rowByKey = Object.create(null)
+  var inlineWorkspaceByIdentity = Object.create(null)
+  ;(result.workspaceTargets || []).forEach(function(workspace) {
+    if (!workspace || !workspace.key) return
+    // Synthetic inline workspace targets resolve ancestry at workspace depth
+    // zero without ever inserting a visible header row. Registering them keeps
+    // parent lookups coherent while sibling scope stays inside one workspace.
+    if (!rowByKey[workspace.key]) rowByKey[workspace.key] = workspace
+    if (workspace.workspaceIdentity)
+      inlineWorkspaceByIdentity[workspace.workspaceIdentity] = workspace
+  })
   var monitorKey = ""
   var workspaceKey = ""
   var applicationKey = ""
@@ -276,6 +287,7 @@ function annotateTreeAndSpans(result) {
     row.workspaceKey = ""
     row.parentKey = ""
     row.treeDepth = 0
+    row.inlineWorkspaceGroup = false
 
     if (row.kind === "monitor") {
       monitorKey = row.key
@@ -304,13 +316,22 @@ function annotateTreeAndSpans(result) {
       if (monitorKey) monitorWorkspaceSeen[monitorKey] = true
       continue
     }
+    var inlineWorkspace = inlineWorkspaceByIdentity[row.workspaceIdentity] || null
     if (row.kind === "application") {
       applicationKey = row.key
       row.monitorKey = monitorKey
-      row.workspaceKey = workspaceKey
-      row.parentKey = workspaceKey
+      row.workspaceKey = inlineWorkspace ? inlineWorkspace.key : workspaceKey
+      // Direct inline rows are children of their own workspace target, never
+      // of the monitor: siblings (and therefore guide continuation) are
+      // scoped to one workspace.
+      row.parentKey = inlineWorkspace ? inlineWorkspace.key : workspaceKey
       row.treeDepth = 1
-      if (workspaceKey && !workspaceChildSeen[workspaceKey]) {
+      row.inlineWorkspaceGroup = !!inlineWorkspace
+      if (inlineWorkspace && !workspaceChildSeen[inlineWorkspace.key]) {
+        row.layoutGapBefore = monitorWorkspaceSeen[monitorKey] ? "workspace" : "children"
+        workspaceChildSeen[inlineWorkspace.key] = true
+        monitorWorkspaceSeen[monitorKey] = true
+      } else if (workspaceKey && !workspaceChildSeen[workspaceKey]) {
         row.layoutGapBefore = "children"
         workspaceChildSeen[workspaceKey] = true
       }
@@ -318,7 +339,8 @@ function annotateTreeAndSpans(result) {
     }
     if (row.kind === "window") {
       row.monitorKey = monitorKey
-      row.workspaceKey = workspaceKey
+      row.workspaceKey = inlineWorkspace ? inlineWorkspace.key : workspaceKey
+      row.inlineWorkspaceGroup = !!inlineWorkspace
       if (row.nested === true && applicationKey) {
         row.parentKey = applicationKey
         row.treeDepth = 2
@@ -328,11 +350,15 @@ function annotateTreeAndSpans(result) {
         applicationKey = ""
       } else {
         // Sole window or rail: direct child of the workspace.
-        row.parentKey = workspaceKey
+        row.parentKey = inlineWorkspace ? inlineWorkspace.key : workspaceKey
         row.treeDepth = 1
         applicationKey = ""
       }
-      if (row.treeDepth === 1 && workspaceKey && !workspaceChildSeen[workspaceKey]) {
+      if (row.treeDepth === 1 && inlineWorkspace && !workspaceChildSeen[inlineWorkspace.key]) {
+        row.layoutGapBefore = monitorWorkspaceSeen[monitorKey] ? "workspace" : "children"
+        workspaceChildSeen[inlineWorkspace.key] = true
+        monitorWorkspaceSeen[monitorKey] = true
+      } else if (row.treeDepth === 1 && workspaceKey && !workspaceChildSeen[workspaceKey]) {
         row.layoutGapBefore = "children"
         workspaceChildSeen[workspaceKey] = true
       }
@@ -342,7 +368,8 @@ function annotateTreeAndSpans(result) {
         || row.kind === "herdr-workspace") {
       var windowParent = rowByKey[row.windowKey] || null
       row.monitorKey = monitorKey
-      row.workspaceKey = workspaceKey
+      row.workspaceKey = inlineWorkspace ? inlineWorkspace.key : workspaceKey
+      row.inlineWorkspaceGroup = !!inlineWorkspace
       row.parentKey = row.windowKey || ""
       row.treeDepth = windowParent ? Number(windowParent.treeDepth || 0) + 1 : 2
       continue
@@ -350,7 +377,8 @@ function annotateTreeAndSpans(result) {
     if (row.kind === "herdr-tab") {
       var tabWindow = rowByKey[row.windowKey] || null
       row.monitorKey = monitorKey
-      row.workspaceKey = workspaceKey
+      row.workspaceKey = inlineWorkspace ? inlineWorkspace.key : workspaceKey
+      row.inlineWorkspaceGroup = !!inlineWorkspace
       row.parentKey = row.windowKey || ""
       row.treeDepth = tabWindow ? Number(tabWindow.treeDepth || 0) + 1 : 2
       continue
@@ -358,7 +386,8 @@ function annotateTreeAndSpans(result) {
     if (row.kind === "herdr-agent") {
       var agentParent = rowByKey[row.herdrTabKey] || rowByKey[row.windowKey] || null
       row.monitorKey = monitorKey
-      row.workspaceKey = workspaceKey
+      row.workspaceKey = inlineWorkspace ? inlineWorkspace.key : workspaceKey
+      row.inlineWorkspaceGroup = !!inlineWorkspace
       row.parentKey = row.herdrTabKey || row.windowKey || ""
       row.treeDepth = agentParent ? Number(agentParent.treeDepth || 0) + 1 : 3
     }
@@ -406,18 +435,29 @@ function annotateTreeAndSpans(result) {
         focused: mon.focused === true, endPadding: 5
       })
       rows[monLast].layoutPadMonitorEnd = true
-      for (var j = monStart; j <= monLast; ++j) {
-        if (rows[j].kind !== "workspace") continue
-        var wsLast = j
-        for (var k = j + 1; k <= monLast; ++k) {
-          if (rows[k].kind === "workspace") break
-          wsLast = k
+      var currentWorkspaceKey = ""
+      var workspaceStart = -1
+      for (var j = monStart + 1; j <= monLast + 1; ++j) {
+        var candidate = j <= monLast ? rows[j] : null
+        var candidateKey = candidate
+          ? (candidate.kind === "workspace" ? candidate.key : String(candidate.workspaceKey || ""))
+          : ""
+        if (candidateKey === currentWorkspaceKey) continue
+        if (currentWorkspaceKey && workspaceStart >= 0) {
+          var workspaceLast = j - 1
+          var workspaceTarget = rowByKey[currentWorkspaceKey]
+            || (result.workspaceTargets || []).find(function(target) {
+              return target && target.key === currentWorkspaceKey
+            })
+          result.sectionSpans.push({
+            kind: "workspace", key: currentWorkspaceKey,
+            firstKey: rows[workspaceStart].key, lastKey: rows[workspaceLast].key,
+            focused: workspaceTarget && workspaceTarget.active === true, endPadding: 5
+          })
+          rows[workspaceLast].layoutPadWorkspaceEnd = true
         }
-        result.sectionSpans.push({
-          kind: "workspace", key: rows[j].key, firstKey: rows[j].key,
-          lastKey: rows[wsLast].key, focused: rows[j].active === true, endPadding: 5
-        })
-        rows[wsLast].layoutPadWorkspaceEnd = true
+        currentWorkspaceKey = candidateKey
+        workspaceStart = candidateKey ? j : -1
       }
       continue
     }
@@ -439,6 +479,9 @@ function indexRowsByKey(expanded, optionalRail) {
     var projection = source || emptyProjection()
     ;(projection.rows || []).forEach(function(row) {
       if (!result[row.key]) result[row.key] = row
+    })
+    ;(projection.workspaceTargets || []).forEach(function(target) {
+      if (target && target.key && !result[target.key]) result[target.key] = target
     })
     ;(projection.launchers || []).forEach(function(row) {
       if (!result[row.key]) result[row.key] = row
@@ -1037,29 +1080,55 @@ function project(input) {
     result.rows.push(value)
   }
   result.monitorSections.forEach(function(section, sectionIndex) {
-    row({ kind: "monitor", key: section.key, label: section.label, title: section.title || section.label,
+    var monitorRow = { kind: "monitor", key: section.key, label: section.label,
+      title: section.title || section.label,
       connector: section.connector, monitorIdentity: section.monitorIdentity, focused: section.focused,
-      target: section, sectionIndex: sectionIndex })
+      target: section, sectionIndex: sectionIndex }
     section.workspaces.sort(WorkspaceModel.workspaceCompare)
+    row(monitorRow)
     section.workspaces.forEach(function(workspace) {
-      row({ kind: "workspace", key: workspace.key, label: workspace.label, workspaceIdentity: workspace.identity,
-        monitorIdentity: workspace.owner, active: workspace.active, urgent: workspace.urgent, target: workspace })
+      var workspaceRow = { kind: "workspace", key: workspace.key, label: workspace.label,
+        workspaceIdentity: workspace.identity, monitorIdentity: workspace.owner,
+        active: workspace.active, urgent: workspace.urgent, target: workspace }
+      // Expanded populated workspaces put their label on the first visible
+      // child row. Empty workspaces retain a dedicated row so they remain
+      // discoverable and actionable. The setting is also the compatibility
+      // switch for retaining the old separate-header layout.
+      var inlineWorkspace = input.collapsed !== true
+        && input.sidebarInlineSoloWorkspace !== false
+        && workspace.applications.length > 0
+      var inlineWorkspaceTarget = inlineWorkspace ? Object.assign({}, workspaceRow) : null
+      if (inlineWorkspaceTarget) delete inlineWorkspaceTarget.target
+      if (!inlineWorkspace) row(workspaceRow)
+      else result.workspaceTargets.push(inlineWorkspaceTarget)
+      var leadingChild = true
+      function emitWorkspaceChild(value) {
+        if (inlineWorkspace && leadingChild) {
+          value.leadingWorkspace = inlineWorkspaceTarget
+          leadingChild = false
+        }
+        row(value)
+      }
       workspace.applications.forEach(function(app) {
         if (app.expandable) {
-          if (!input.collapsed) row(app)
+          if (!input.collapsed) emitWorkspaceChild(app)
           if (input.collapsed || !app.folded) {
             app.windows.forEach(function(window) {
               window.nested = !input.collapsed
               emitWindow(window)
             })
           }
-        } else {
-          app.windows.forEach(function(window) {
-            window.nested = false
-            window.soleWindow = true
-            emitWindow(window)
-          })
-        }
+          } else {
+            app.windows.forEach(function(window) {
+              window.nested = false
+              window.soleWindow = true
+              if (inlineWorkspace && leadingChild) {
+                window.leadingWorkspace = inlineWorkspaceTarget
+                leadingChild = false
+              }
+              emitWindow(window)
+            })
+          }
       })
     })
   })

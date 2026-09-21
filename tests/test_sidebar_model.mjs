@@ -309,10 +309,21 @@ assert.ok(p.rows.some(r => r.key === 'section:unassigned'), 'unassigned section 
 
 const chromeApp = p.rows.find(r => r.key === chromeLeft.key)
 assert.equal(chromeApp.treeDepth, 1)
-assert.equal(chromeApp.parentKey, chromeApp.workspaceKey)
+const inlineId3 = p.workspaceTargets.find(w => w.workspaceIdentity === 'id:3')
+assert.ok(inlineId3, 'id:3 stays an inline workspace target')
+assert.equal(chromeApp.parentKey, inlineId3.key,
+  'inline direct rows hang from their workspace target, never the monitor')
+assert.equal(chromeApp.workspaceKey, inlineId3.key)
+assert.equal(chromeApp.leadingWorkspace.workspaceIdentity, 'id:3',
+  'first visible child carries the inline workspace target')
+assert.equal(chromeApp.inlineWorkspaceGroup, true,
+  'first child is marked as part of the inline workspace group')
 assert.equal(chromeApp.monitorKey, p.rows.find(r => r.kind === 'monitor').key)
 const nestedWins = p.rows.filter(r => r.kind === 'window' && r.applicationKey === chromeLeft.key)
 assert.ok(nestedWins.length >= 2)
+assert.ok(nestedWins.every(w => w.inlineWorkspaceGroup === true
+  && !w.leadingWorkspace),
+  'later descendants keep the group flag but not the badge owner')
 assert.ok(nestedWins.every(w => w.treeDepth === 2 && w.parentKey === chromeApp.key),
   'grouped windows are depth-2 under the visible app row')
 assert.equal(nestedWins[nestedWins.length - 1].isLastSibling, true)
@@ -320,6 +331,36 @@ assert.ok(nestedWins.slice(0, -1).every(w => w.isLastSibling === false))
 const midNested = nestedWins[0]
 assert.deepEqual(plain(midNested.ancestorContinues), [chromeApp.isLastSibling !== true],
   'ancestorContinues reflects whether the app stem continues')
+
+// Direct-row siblings are scoped to one workspace: the badge-centered guide
+// exists only while another direct row of the *same* workspace follows, and
+// expanded descendants alone never keep it alive.
+{
+  assert.equal(chromeApp.isLastSibling, true,
+    'id:3 has a single direct row, so its badge stem stops at the chip')
+  assert.deepEqual(plain(midNested.ancestorContinues), [false],
+    'expanded app children alone never continue the workspace-column guide')
+
+  const id7Target = p.workspaceTargets.find(w => w.workspaceIdentity === 'id:7')
+  const id7Direct = p.rows.filter(r => r.workspaceKey === id7Target.key && r.treeDepth === 1)
+  assert.deepEqual(Array.from(id7Direct, r => r.kind), ['window', 'application', 'window'],
+    'Code has three direct rows: the chrome window, the firefox group, sticky')
+  assert.ok(id7Direct.every(r => r.parentKey === id7Target.key),
+    'every direct row is parented to the same workspace target')
+  assert.deepEqual(Array.from(id7Direct, r => r.isLastSibling), [false, false, true],
+    'only the final direct row ends the badge-centered guide')
+  const id7Nested = p.rows.filter(r => r.workspaceKey === id7Target.key && r.treeDepth === 2)
+  assert.ok(id7Nested.length >= 2, 'the middle direct row still nests its windows')
+  assert.deepEqual(plain(id7Nested[0].ancestorContinues), [true],
+    'descendants of a non-final direct row keep the column continuous')
+  assert.ok(p.rows.slice(p.rows.indexOf(id7Direct[2]) + 1)
+    .some(r => r.workspaceKey !== id7Target.key),
+    'rows of other workspaces follow without joining this sibling set')
+}
+
+const emptyWsParent = p.rows.find(r => r.kind === 'workspace' && r.workspaceIdentity === 'id:4')
+assert.equal(emptyWsParent.parentKey, p.rows.find(r => r.kind === 'monitor').key,
+  'explicit workspace headers remain monitor children')
 
 const tabProj = project({
   browserTabs: {
@@ -336,6 +377,8 @@ assert.ok(tabs.every(t => t.parentKey === tabParent.key && t.treeDepth === tabPa
 assert.equal(tabs[0].isLastSibling, false)
 assert.equal(tabs[1].isLastSibling, true)
 assert.equal(tabs[0].treeDepth, 2)
+assert.equal(tabParent.isLastSibling, false,
+  'direct rows still follow the Code window, so its guide continues')
 assert.equal(tabs[0].ancestorContinues.length, 1)
 assert.equal(tabs[0].ancestorContinues[0], tabParent.isLastSibling !== true)
 
@@ -348,6 +391,130 @@ assert.equal(railWin.treeDepth, 1, 'rail windows sit directly under workspace')
 assert.equal(railWin.parentKey, railWin.workspaceKey)
 assert.equal(railWin.nested, false)
 
+// Populated workspaces share their first visible child row. Empty workspaces
+// remain explicit rows, and hidden workspace targets remain live activation /
+// menu targets even though they are not part of the rendered row list.
+{
+  f = sidebarFixture()
+  f.workspaces.push({ id: 13, name: 'Solo', monitorID: 5 })
+  f.input.hyprWorkspaces = f.workspaces
+  f.settings.workspaceMonitorScope = 'all'
+  registry = Model.reconcileHandles(null, f.toplevels)
+  const emptySolo = project()
+  const emptyWorkspace = emptySolo.rows.find(r => r.kind === 'workspace'
+    && r.workspaceIdentity === 'id:13')
+  assert.ok(emptyWorkspace)
+  assert.equal(emptyWorkspace.layoutPadWorkspaceEnd, true)
+  assert.equal(emptyWorkspace.layoutPadMonitorEnd, true)
+  assert.equal(Model.indexRowsByKey(emptySolo)[emptyWorkspace.key].kind, 'workspace')
+  assert.ok(emptySolo.rows.some(r => r.kind === 'workspace' && r.workspaceIdentity === 'id:4'),
+    'multi-workspace monitors retain their separate workspace rows')
+
+  const soloHandle = f.handles.find(handle => handle.wayland.id === 'c')
+  soloHandle.lastIpcObject.workspace = { id: 13 }
+  soloHandle.lastIpcObject.monitor = 5
+  const populatedSolo = project()
+  const populatedMonitor = populatedSolo.rows.find(r => r.kind === 'monitor' && r.connector === 'USB-C-1')
+  const soloRow = populatedSolo.rows.find(r => r.toplevel && r.toplevel.id === 'c')
+  const populatedTarget = populatedSolo.workspaceTargets.find(w => w.workspaceIdentity === 'id:13')
+  assert.equal(populatedSolo.rows.filter(r => r.kind === 'workspace'
+    && r.workspaceIdentity === 'id:13').length, 0)
+  assert.equal(populatedSolo.workspaceTargets.filter(w => w.workspaceIdentity === 'id:13').length, 1)
+  assert.equal(soloRow.leadingWorkspace.workspaceIdentity, 'id:13')
+  assert.equal(soloRow.inlineWorkspaceGroup, true)
+  assert.equal(soloRow.parentKey, populatedTarget.key,
+    'an inline sole row hangs from its workspace target, not the monitor')
+  assert.equal(soloRow.monitorKey, populatedMonitor.key,
+    'monitor targeting is preserved for the same row')
+  assert.equal(soloRow.layoutGapBefore, 'children')
+  assert.equal(soloRow.layoutPadWorkspaceEnd, true)
+  assert.equal(soloRow.layoutPadMonitorEnd, true)
+  assert.equal(populatedSolo.sectionSpans.some(s => s.kind === 'workspace'
+    && s.key === populatedTarget.key && s.firstKey === soloRow.key
+    && s.lastKey === soloRow.key), true,
+    'inline workspace span begins and ends on the sole child')
+  assert.equal(Model.indexRowsByKey(populatedSolo)[populatedTarget.key].kind, 'workspace')
+
+  // Subsequent populated workspace on the same monitor gets a workspace gap,
+  // not another children gap, and only its first visible row owns the badge.
+  const id3Target = populatedSolo.workspaceTargets.find(w => w.workspaceIdentity === 'id:3')
+  const id3First = populatedSolo.rows.find(r => r.leadingWorkspace
+    && r.leadingWorkspace.workspaceIdentity === 'id:3')
+  assert.ok(id3First, 'populated multi-app workspace still has a badge owner')
+  assert.equal(id3First.layoutGapBefore, 'children',
+    'first populated group on a monitor keeps the children gap')
+  assert.ok(populatedSolo.rows.filter(r => r.workspaceKey === id3Target.key
+    && r.leadingWorkspace).length === 1,
+    'only the first visible child owns leadingWorkspace')
+  const id3Span = populatedSolo.sectionSpans.find(s => s.kind === 'workspace'
+    && s.key === id3Target.key)
+  assert.ok(id3Span)
+  assert.equal(id3Span.firstKey, id3First.key)
+  const id3Last = [...populatedSolo.rows].reverse()
+    .find(r => r.workspaceKey === id3Target.key)
+  assert.equal(id3Span.lastKey, id3Last.key)
+
+  // HDMI-A-1 has two populated workspaces; the second group uses "workspace".
+  const hdmiGroups = populatedSolo.rows.filter(r => r.leadingWorkspace
+    && r.monitorKey === populatedSolo.rows.find(m => m.kind === 'monitor'
+      && m.connector === 'HDMI-A-1').key)
+  assert.ok(hdmiGroups.length >= 2, 'HDMI has multiple inline workspace groups')
+  assert.equal(hdmiGroups[0].layoutGapBefore, 'children')
+  assert.equal(hdmiGroups[1].layoutGapBefore, 'workspace')
+
+  const legacy = project({ sidebarInlineSoloWorkspace: false })
+  assert.ok(legacy.rows.some(r => r.kind === 'workspace' && r.workspaceIdentity === 'id:13'))
+  assert.equal(legacy.workspaceTargets.length, 0)
+  assert.ok(project({ collapsed: true }).rows.some(r => r.kind === 'workspace'
+    && r.workspaceIdentity === 'id:13'))
+}
+
+// Adjacent single-window workspaces (the reported "dangling stem" layout):
+// workspace 1 keeps no downward badge stem even though workspace 2 follows on
+// the same monitor and the sole window has expanded tabs underneath it.
+{
+  f = sidebarFixture()
+  f.workspaces.push({ id: 13, name: '1', monitorID: 5 })
+  f.workspaces.push({ id: 14, name: '2', monitorID: 5 })
+  f.input.hyprWorkspaces = f.workspaces
+  f.settings.workspaceMonitorScope = 'all'
+  const firstHandle = f.handles.find(h => h.wayland.id === 'c')
+  firstHandle.lastIpcObject.workspace = { id: 13 }
+  firstHandle.lastIpcObject.monitor = 5
+  const secondHandle = f.handles.find(h => h.wayland.id === 'terminal')
+  secondHandle.lastIpcObject.workspace = { id: 14 }
+  secondHandle.lastIpcObject.monitor = 5
+  registry = Model.reconcileHandles(null, f.toplevels)
+  const adjacent = project({
+    browserTabs: { '0xc': [
+      { targetId: tabId, title: 'Inbox - Gmail', active: true },
+      { targetId: tabId2, title: 'Linear', active: false }
+    ] }
+  })
+  const ws13 = adjacent.workspaceTargets.find(w => w.workspaceIdentity === 'id:13')
+  const ws14 = adjacent.workspaceTargets.find(w => w.workspaceIdentity === 'id:14')
+  const firstRow = adjacent.rows.find(r => r.toplevel && r.toplevel.id === 'c')
+  const secondRow = adjacent.rows.find(r => r.toplevel && r.desktopId === 'terminal')
+  assert.ok(ws13 && ws14 && firstRow && secondRow, 'both single-window groups project')
+  assert.ok(adjacent.rows.indexOf(secondRow) > adjacent.rows.indexOf(firstRow),
+    'the second workspace renders after the first one')
+  assert.equal(firstRow.parentKey, ws13.key)
+  assert.equal(secondRow.parentKey, ws14.key,
+    'each direct row belongs to its own workspace, never to the monitor')
+  assert.equal(firstRow.isLastSibling, true,
+    'a later workspace on the same monitor must not keep the badge stem alive')
+  assert.equal(secondRow.isLastSibling, true)
+  assert.deepEqual(plain(firstRow.ancestorContinues), [],
+    'a depth-1 row draws no ancestor stems of its own')
+  const soleTabs = adjacent.rows.filter(r => r.kind === 'browser-tab')
+  assert.equal(soleTabs.length, 2, 'expanded tabs still project under the sole window')
+  assert.ok(soleTabs.every(t => t.parentKey === firstRow.key))
+  assert.equal(soleTabs[0].isLastSibling, false)
+  assert.equal(soleTabs[1].isLastSibling, true)
+  assert.deepEqual(plain(soleTabs[0].ancestorContinues), [false],
+    'expanded descendants alone never continue the workspace-column guide')
+}
+
 const Interaction = loadModel('DockSidebarInteractionModel')
 const id = n => n
 const sampleWin = { kind: 'window', layoutGapBefore: '', layoutPadWorkspaceEnd: false,
@@ -356,7 +523,7 @@ const metrics = Interaction.sidebarRowMetrics(sampleWin, false, 34, id, false)
 assert.equal(metrics.contentHeight, 28, 'default rowHeight 34 must not force expanded 28→34')
 assert.equal(metrics.height, Interaction.estimatedSidebarRowHeight(sampleWin, false, 34, id, false))
 assert.equal(Interaction.sidebarRowMetrics(
-  { kind: 'monitor', sectionIndex: 0, layoutGapBefore: '' }, false, 34, id).contentHeight, 48)
+  { kind: 'monitor', sectionIndex: 0, layoutGapBefore: '' }, false, 34, id).contentHeight, 32)
 assert.equal(Interaction.sidebarRowMetrics(
   { kind: 'monitor', sectionIndex: 1, layoutGapBefore: 'monitor' }, false, 34, id).gapBefore, 8)
 assert.equal(Interaction.sidebarRowMetrics(

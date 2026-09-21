@@ -370,7 +370,7 @@ PanelWindow {
       anchors.leftMargin: Style.space(10)
       anchors.rightMargin: Style.space(10) + (!root.panelCollapsed && root.controller.edge === "left" ? 8 : 0)
     }
-    Column {
+    Row {
       id: utilities
       x: root.panelCollapsed ? Style.space(6) : Style.space(10)
       width: Math.max(0, surface.width - (root.panelCollapsed ? Style.space(12) : Style.space(20)))
@@ -379,7 +379,7 @@ PanelWindow {
       spacing: Style.space(6)
       Item {
         id: launcher
-        width: parent.width
+        width: Math.max(0, parent.width - trashButton.width - parent.spacing)
         height: Style.space(36)
         focus: true
         activeFocusOnTab: true
@@ -471,12 +471,11 @@ PanelWindow {
       Ui.Button {
         id: trashButton
         visible: root.host.showTrash
-        width: parent.width
+        width: visible ? Style.space(36) : 0
         height: visible ? Style.space(36) : 0
-        text: root.panelCollapsed ? "" : "Trash"
+        text: ""
         iconText: ""
-        leftAlign: !root.panelCollapsed
-        horizontalPadding: root.panelCollapsed ? Style.spacing.controlPaddingX : Style.space(28)
+        horizontalPadding: 0
         tooltipText: "Open Trash"
         Accessible.role: Accessible.Button
         Accessible.name: "Open Trash"
@@ -484,7 +483,7 @@ PanelWindow {
         onClicked: root.host.openTrash()
         DockLucideIcon {
           anchors.verticalCenter: parent.verticalCenter
-          x: root.panelCollapsed ? (parent.width - width) / 2 : Style.space(8)
+          anchors.horizontalCenter: parent.horizontalCenter
           width: 14
           height: 14
           iconName: "trash-2"
