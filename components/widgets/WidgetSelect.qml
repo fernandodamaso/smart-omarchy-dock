@@ -4,6 +4,7 @@ import qs.Commons
 
 Controls.ComboBox {
   id: root
+  WidgetSemanticPalette { id: semanticPalette }
   property string accessibleName: ""
   property string validationState: "none"
 
@@ -36,7 +37,7 @@ Controls.ComboBox {
     radius: Math.min(6, Style.cornerRadius)
     color: Qt.darker(Color.background, 1.03)
     border.width: 1
-    border.color: root.validationState === "error" ? "#ff6b7a"
+    border.color: root.validationState === "error" ? semanticPalette.danger
       : root.activeFocus ? Color.accent : Util.alpha(Color.foreground, 0.16)
   }
 

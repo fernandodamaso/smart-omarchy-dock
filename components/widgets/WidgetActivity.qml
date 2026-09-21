@@ -4,6 +4,7 @@ import qs.Commons
 
 Column {
   id: root
+  WidgetSemanticPalette { id: semanticPalette }
   property var model: []
   width: parent ? parent.width : implicitWidth
   spacing: 0
@@ -31,8 +32,7 @@ Column {
         width: 7
         height: 7
         radius: 4
-        color: modelData && modelData.semantic === "danger" ? "#ff6b7a"
-          : modelData && modelData.semantic === "success" ? "#48d5a4" : Color.accent
+        color: semanticPalette.tone(modelData && modelData.semantic ? String(modelData.semantic) : "info")
       }
 
       Column {

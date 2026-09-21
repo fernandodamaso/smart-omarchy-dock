@@ -3,6 +3,7 @@ import qs.Commons
 
 Item {
   id: root
+  WidgetSemanticPalette { id: semanticPalette }
   property string kind: "empty"
   property string title: ""
   property string message: ""
@@ -33,8 +34,8 @@ Item {
   Rectangle {
     anchors.fill: parent
     radius: Math.min(7, Style.cornerRadius)
-    color: root.kind === "error" ? Qt.tint(Color.background, "#10ff6b7a")
-      : root.kind === "stale" ? Qt.tint(Color.background, "#10f5bd36")
+    color: root.kind === "error" ? semanticPalette.surface("danger", 0.063)
+      : root.kind === "stale" ? semanticPalette.surface("warning", 0.063)
       : Util.alpha(Color.foreground, 0.025)
     border.width: 1
     border.color: Util.alpha(Color.foreground, 0.08)
@@ -55,8 +56,7 @@ Item {
       iconName: root.iconName
       sizeToken: root.compact ? "sm" : "md"
       containerVariant: root.compact ? "plain" : "soft"
-      tint: root.semantic === "danger" ? "#ff6b7a"
-        : root.semantic === "warning" ? "#f5bd36" : Color.accent
+      tint: semanticPalette.tone(root.semantic)
       accessibleName: root.defaultTitle
       fallbackText: root.fallbackText
     }

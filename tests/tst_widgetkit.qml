@@ -17,6 +17,16 @@ TestCase {
     Item { width: 136; height: 500 }
   }
 
+  Component {
+    id: narrowActionsFactory
+    WidgetButtonGroup {
+      width: 136
+      WidgetButton { text: "Primary action"; variant: "primary" }
+      WidgetButton { text: "Secondary action"; variant: "secondary" }
+      WidgetButton { text: "Remove"; variant: "danger" }
+    }
+  }
+
   function make(name, properties) {
     var component = Qt.createComponent(Qt.resolvedUrl("../components/widgets/" + name + ".qml"))
     compare(component.status, Component.Ready, component.errorString())
@@ -153,4 +163,33 @@ TestCase {
     gallery.reducedMotion = true
     compare(gallery.reducedMotion, true)
   }
+
+  function test_semantic_palette_adapts_and_keeps_meanings_distinct() {
+    var component = Qt.createComponent(Qt.resolvedUrl("../components/widgets/WidgetSemanticPalette.qml"))
+    compare(component.status, Component.Ready, component.errorString())
+    var palette = createTemporaryObject(component, testCase)
+    verify(palette !== null)
+    verify(String(palette.danger) !== String(palette.warning))
+    verify(String(palette.warning) !== String(palette.success))
+    verify(String(palette.info) !== "")
+  }
+
+  function test_button_group_wraps_inside_narrow_widget_width() {
+    var group = createTemporaryObject(narrowActionsFactory, testCase)
+    verify(group !== null)
+    wait(0)
+    verify(group.implicitHeight > 32, "narrow populated action group should wrap")
+    var flow = group.children[0]
+    verify(flow !== null)
+    var wrapped = false
+    for (var i = 0; i < flow.children.length; ++i) {
+      var child = flow.children[i]
+      if (!child.visible) continue
+      verify(child.x + child.width <= flow.width + 0.5,
+        "action must stay inside bounded width")
+      if (child.y > 0.5) wrapped = true
+    }
+    verify(wrapped, "at least one action should wrap onto another row")
+  }
+
 }
