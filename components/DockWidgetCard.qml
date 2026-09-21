@@ -225,6 +225,7 @@ Item {
 
     DockSidebarWidgetView {
       id: widgetView
+      objectName: "widget-card-expanded-view"
       controller: root.controller
       widgetId: root.widgetId
       presentation: "expanded"
@@ -233,7 +234,7 @@ Item {
       x: Style.space(9)
       y: Style.space(7)
       width: Math.max(0, parent.width - Style.space(18))
-      height: Math.min(240, implicitHeight)
+      height: implicitHeight
     }
 
     WidgetState {
