@@ -5,38 +5,35 @@ import qs.Commons
 import qs.Ui as Ui
 import "DockSidebarWidgetModel.js" as WidgetModel
 
-// Sidebar-only composition. All snapshot/subscriptions survive in the host-owned
-// controller. The footer and its popup never instantiate services or writers.
+// Shared-scroll Widget section. Provider leases remain owned by the host controller;
+// this item owns only card composition, picker state, drag targeting and popup views.
 Item {
   id: root
   required property var controller
   required property var panel
-  required property real availableContentHeight
+  required property var viewport
   required property real windowRowHeight
-  readonly property var layout: WidgetModel.footerLayout(availableContentHeight,
-    windowRowHeight, controller.widgetIds.length, panel.panelCollapsed === true)
-  readonly property bool overflowNeeded: layout.mode === "overflow"
-  readonly property var popupWindow: popup
-  readonly property var scrollView: footerScroll
-  readonly property var slots: slotRepeater
-  property int anchorRevision: 0
-  property bool fromOverflow: false
-  readonly property var popupGeometry: {
-    var revision = root.anchorRevision
-    var anchor = root.ownsPopupAnchor() ? controller.widgetPopupAnchor : null
-    var point = anchor && panel.contentItem ? panel.contentItem.mapFromItem(anchor, 0, anchor.height / 2) : {y:0}
-    // Panel height excludes other reserved surfaces (e.g. the untouched topbar).
-    // Clamping within that height is stricter than screen-only vertical bounds.
-    return WidgetModel.popupGeometry(panel.screen ? panel.screen.width : 1,
-      Math.min(panel.height, panel.screen ? panel.screen.height : panel.height), panel.width,
-      controller.edge, point.y, 320, 400)
-  }
-  implicitHeight: Math.min(layout.height, widgetColumn.implicitHeight)
-  height: implicitHeight
-  clip: true
 
-  // The shared session has one anchor. Only the panel containing that anchor
-  // may map, reposition or dismiss its popup, including during owner transfer.
+  readonly property bool sectionVisible: !panel.panelCollapsed && controller.widgetIds.length > 0
+  readonly property var registeredRows: WidgetModel.registeredRows(controller.widgetRegistry)
+  readonly property int availableTypeCount: registeredRows.filter(function(row) {
+    return row.available
+  }).length
+  readonly property var popupWindow: popup
+  readonly property var managerWindow: managerPopup
+  readonly property var cards: cardRepeater
+  property bool managerOpen: false
+  property Item managerAnchor: null
+  property int anchorRevision: 0
+  property int managerAnchorRevision: 0
+  property string dragWidgetId: ""
+  property int dragTargetSlot: -1
+  property real dragSceneX: 0
+  property real dragSceneY: 0
+
+  implicitHeight: root.sectionVisible ? sectionColumn.implicitHeight + Style.space(8) : 0
+  height: implicitHeight
+
   function ownsPopupAnchor() {
     var content = root.panel ? root.panel.contentItem : null
     if (!content) return false
@@ -45,103 +42,202 @@ Item {
     }
     return false
   }
+
+  function anchorInsideViewport(anchor) {
+    for (var item = anchor; item; item = item.parent) {
+      if (item === root.viewport) return true
+    }
+    return false
+  }
+
+  function anchorOutsideViewport(anchor) {
+    if (!root.anchorInsideViewport(anchor)) return false
+    var point = root.viewport.mapFromItem(anchor, 0, 0)
+    return point.y + anchor.height <= 0 || point.y >= root.viewport.height
+  }
+
+  function popupGeometryFor(anchor, wantedWidth, wantedHeight) {
+    var point = anchor && panel.contentItem
+      ? panel.contentItem.mapFromItem(anchor, 0, anchor.height / 2) : {y:0}
+    return WidgetModel.popupGeometry(panel.screen ? panel.screen.width : 1,
+      Math.min(panel.height, panel.screen ? panel.screen.height : panel.height), panel.width,
+      controller.edge, point.y, wantedWidth, wantedHeight)
+  }
+
+  readonly property var popupGeometry: {
+    var revision = root.anchorRevision
+    return root.popupGeometryFor(root.ownsPopupAnchor()
+      ? root.controller.widgetPopupAnchor : null, 320, 400)
+  }
+
+  readonly property var managerGeometry: {
+    var revision = root.managerAnchorRevision
+    return root.popupGeometryFor(root.managerAnchor, 360, 420)
+  }
+
   function closePopup() {
     if (root.ownsPopupAnchor()) root.controller.closeWidgetPopup()
   }
-  function statusText(view) {
-    if (!view) return "Unavailable"
-    return view.status === "ready" ? "Ready" : view.status === "loading" ? "Loading"
-      : view.status === "error" ? "Error" : "Unavailable"
-  }
-  function labelFor(id, view) {
-    return view && view.descriptor && view.descriptor.label ? String(view.descriptor.label) : id
-  }
+
   function openWidget(id, anchor) {
-    root.fromOverflow = false
-    if (root.ownsPopupAnchor() && root.controller.widgetPopupId === id) root.closePopup()
-    else root.controller.openWidgetPopup(id, anchor)
+    root.closeManager()
+    if (root.ownsPopupAnchor() && root.controller.widgetPopupId === id)
+      root.closePopup()
+    else
+      root.controller.openWidgetPopup(id, anchor)
   }
-  function openOverflow(anchor) {
-    root.fromOverflow = true
-    if (root.ownsPopupAnchor() && root.controller.widgetPopupId === "*") root.closePopup()
-    else root.controller.openWidgetPopup("*", anchor)
+
+  function openManager(anchor) {
+    if (root.panel.panelCollapsed || !anchor || !anchor.visible) return false
+    root.closePopup()
+    root.managerAnchor = anchor
+    root.managerOpen = true
+    Qt.callLater(root.updateManagerAnchor)
+    return true
   }
+
+  function closeManager() {
+    root.managerOpen = false
+    root.managerAnchor = null
+  }
+
   function updatePopupAnchor() {
     if (!root.controller.widgetPopupId || !root.ownsPopupAnchor()) return
     var anchor = root.controller.widgetPopupAnchor
-    if (!anchor || !anchor.visible || !root.panel.visible) { root.closePopup(); return }
-    var ancestor = anchor
-    while (ancestor && ancestor !== root) ancestor = ancestor.parent
-    if (ancestor === root) {
-      var point = root.mapFromItem(anchor, 0, 0)
-      if (root.height <= 0 || point.y + anchor.height <= 0 || point.y >= root.height) {
-        root.closePopup()
-        return
-      }
+    if (!anchor || !anchor.visible || !root.panel.visible) {
+      root.closePopup()
+      return
+    }
+    if (root.anchorOutsideViewport(anchor)) {
+      root.closePopup()
+      return
     }
     root.anchorRevision = (root.anchorRevision + 1) % 1000000000
     popup.anchor.updateAnchor()
   }
 
-  Flickable {
-    id: footerScroll
-    anchors.fill: parent
-    clip: true
-    boundsBehavior: Flickable.StopAtBounds
-    flickableDirection: Flickable.VerticalFlick
-    contentWidth: width
-    contentHeight: widgetColumn.implicitHeight
-    onContentYChanged: root.updatePopupAnchor()
+  function updateManagerAnchor() {
+    if (!root.managerOpen) return
+    var anchor = root.managerAnchor
+    if (!anchor || !anchor.visible || !root.panel.visible || root.panel.panelCollapsed
+        || root.anchorOutsideViewport(anchor)) {
+      root.closeManager()
+      return
+    }
+    root.managerAnchorRevision = (root.managerAnchorRevision + 1) % 1000000000
+    managerPopup.anchor.updateAnchor()
+  }
+
+  function slotForSceneY(sceneY) {
+    var point = cardColumn.mapFromItem(null, root.dragSceneX, sceneY)
+    var count = root.controller.widgetIds.length
+    for (var i = 0; i < count; ++i) {
+      var card = cardRepeater.itemAt(i)
+      if (card && point.y < card.y + card.height / 2) return i
+    }
+    return count
+  }
+
+  function beginDrag(id, sceneX, sceneY) {
+    root.closeManager()
+    if (!root.controller.beginWidgetReorder(id)) return false
+    root.dragWidgetId = id
+    root.dragSceneX = sceneX
+    root.dragSceneY = sceneY
+    root.dragTargetSlot = root.slotForSceneY(sceneY)
+    root.viewport.beginContentTailDrag(sceneX, sceneY)
+    return true
+  }
+
+  function updateDrag(sceneX, sceneY) {
+    if (!root.dragWidgetId) return
+    root.dragSceneX = sceneX
+    root.dragSceneY = sceneY
+    root.viewport.updateContentTailDrag(sceneX, sceneY)
+    root.dragTargetSlot = root.slotForSceneY(sceneY)
+  }
+
+  function finishDrag(sceneX, sceneY, cancelled) {
+    if (!root.dragWidgetId) return
+    if (!cancelled) root.updateDrag(sceneX, sceneY)
+    var slot = root.dragTargetSlot
+    root.viewport.endContentTailDrag()
+    root.controller.finishWidgetReorder(slot, cancelled)
+    root.dragWidgetId = ""
+    root.dragTargetSlot = -1
+  }
+
+  Column {
+    id: sectionColumn
+    visible: root.sectionVisible
+    width: parent.width
+    spacing: Style.space(6)
+
+    Item {
+      id: sectionHeader
+      width: parent.width
+      height: Style.space(32)
+
+      Text {
+        anchors.left: parent.left
+        anchors.leftMargin: Style.space(5)
+        anchors.verticalCenter: parent.verticalCenter
+        text: "Widgets"
+        textFormat: Text.PlainText
+        color: Util.alpha(Color.foreground, 0.76)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+      }
+
+      Ui.Button {
+        id: manageButton
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        height: Style.space(28)
+        text: "Add/Manage"
+        tooltipText: "Add or manage Widgets"
+        Accessible.role: Accessible.Button
+        Accessible.name: tooltipText
+        focusable: true
+        onClicked: root.openManager(manageButton)
+      }
+    }
+
     Column {
-      id: widgetColumn
-      width: footerScroll.width
+      id: cardColumn
+      width: parent.width
+      spacing: Style.space(6)
+
       Repeater {
-        id: slotRepeater
+        id: cardRepeater
         model: root.controller.widgetIds
-        delegate: Item {
-          id: slot
+
+        delegate: DockWidgetCard {
           required property string modelData
-          readonly property var snapshot: root.controller.widgetView(modelData)
-          readonly property bool compact: root.layout.mode !== "expanded"
-          readonly property var button: openButton
-          readonly property var view: widgetView
-          width: widgetColumn.width
-          height: root.windowRowHeight + (compact ? 0 : Math.min(240, widgetView.implicitHeight))
-          Ui.Button {
-            id: openButton
-            width: parent.width
-            height: root.windowRowHeight
-            text: slot.compact ? (widgetView.hasView ? "" : "…")
-              : root.labelFor(slot.modelData,slot.snapshot) + " · " + root.statusText(slot.snapshot)
-            tooltipText: root.labelFor(slot.modelData,slot.snapshot) + " · " + root.statusText(slot.snapshot)
-            Accessible.role: Accessible.Button
-            Accessible.name: tooltipText
-            focusable: true
-            enabled: !!slot.snapshot && slot.snapshot.registered && slot.snapshot.available
-            onClicked: root.openWidget(slot.modelData, openButton)
-          }
-          DockSidebarWidgetView {
-            id: widgetView
-            controller: root.controller
-            widgetId: slot.modelData
-            presentation: slot.compact ? "compact" : "expanded"
-            popupAnchor: openButton
-            viewEnabled: root.layout.height > 0
-            y: slot.compact ? 0 : openButton.height
-            width: slot.width
-            height: slot.compact ? root.windowRowHeight : Math.min(240, implicitHeight)
-            // Compact views are read-only; the native button owns activation.
-            enabled: !slot.compact
-          }
-          Component.onDestruction: {
-            if (root.controller.widgetPopupAnchor === openButton) root.closePopup()
+          required property int index
+          width: cardColumn.width
+          controller: root.controller
+          widgetId: modelData
+          collapsed: root.controller.widgetCollapsedFor(modelData)
+          dropBefore: root.dragWidgetId !== "" && root.dragTargetSlot === index
+          dropAfter: root.dragWidgetId !== ""
+            && root.dragTargetSlot === root.controller.widgetIds.length
+            && index === root.controller.widgetIds.length - 1
+          onToggleRequested: root.controller.toggleWidgetCollapsed(modelData)
+          onRemoveRequested: root.controller.setWidgetEnabled(modelData, false)
+          onDragStarted: function(sceneX, sceneY) { root.beginDrag(modelData, sceneX, sceneY) }
+          onDragMoved: function(sceneX, sceneY) { root.updateDrag(sceneX, sceneY) }
+          onDragFinished: function(sceneX, sceneY, cancelled) {
+            root.finishDrag(sceneX, sceneY, cancelled)
           }
         }
       }
     }
   }
 
-  // One visible popup across mirrored panels, reused for slots and overflow.
+  // Existing host-owned single Widget-specific popup. The retired overflow
+  // sentinel is not used by the shared-scroll area.
   PopupWindow {
     id: popup
     visible: root.ownsPopupAnchor() && root.controller.widgetPopupId !== "" && root.panel.visible
@@ -149,6 +245,7 @@ Item {
     grabFocus: false
     implicitWidth: root.popupGeometry.width
     implicitHeight: root.popupGeometry.height
+
     anchor {
       window: root.panel
       adjustment: PopupAdjustment.Slide
@@ -161,44 +258,34 @@ Item {
         popup.anchor.rect.y = Math.round(root.popupGeometry.y)
       }
     }
+
     onVisibleChanged: {
       if (!visible) root.closePopup()
       else Qt.callLater(root.updatePopupAnchor)
     }
+
     Ui.BorderSurface {
       id: popupSurface
       anchors.fill: parent
       color: Color.menu.background
       borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Style.normalBorderWidth)
       clip: true
-      Row {
-        id: popupHeader
+
+      Ui.Button {
+        id: popupClose
         x: popupSurface.contentLeftInset
         y: popupSurface.contentTopInset
         width: Math.max(0, parent.width - popupSurface.contentLeftInset - popupSurface.contentRightInset)
         height: Math.min(root.windowRowHeight, popup.height)
-        Ui.Button {
-          visible: root.fromOverflow && root.controller.widgetPopupId !== "*"
-          width: visible ? parent.width / 2 : 0
-          height: parent.height
-          text: "Back"
-          focusable: false
-          Accessible.role: Accessible.Button
-          Accessible.name: "Back to widgets"
-          onClicked: root.controller.openWidgetPopup("*", root.controller.widgetPopupAnchor)
-        }
-        Ui.Button {
-          width: root.fromOverflow && root.controller.widgetPopupId !== "*" ? parent.width / 2 : parent.width
-          height: parent.height
-          text: "Close"
-          focusable: false
-          Accessible.role: Accessible.Button
-          Accessible.name: "Close widget popup"
-          onClicked: root.closePopup()
-        }
+        text: "Close"
+        focusable: false
+        Accessible.role: Accessible.Button
+        Accessible.name: "Close Widget popup"
+        onClicked: root.closePopup()
       }
+
       Flickable {
-        anchors.top: popupHeader.bottom
+        anchors.top: popupClose.bottom
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
@@ -210,40 +297,27 @@ Item {
         flickableDirection: Flickable.VerticalFlick
         contentWidth: width
         contentHeight: popupContent.implicitHeight
+
         Column {
           id: popupContent
           width: parent.width
-          Repeater {
-            model: popup.visible && root.controller.widgetPopupId === "*" ? root.controller.widgetIds : []
-            delegate: Ui.Button {
-              required property string modelData
-              readonly property var snapshot: root.controller.widgetView(modelData)
-              width: popupContent.width
-              height: root.windowRowHeight
-              text: root.labelFor(modelData,snapshot) + " · " + root.statusText(snapshot)
-              tooltipText: text
-              enabled: !!snapshot && snapshot.registered && snapshot.available
-              focusable: false
-              Accessible.role: Accessible.Button
-              Accessible.name: text
-              onClicked: root.controller.openWidgetPopup(modelData,root.controller.widgetPopupAnchor)
-            }
-          }
+
           DockSidebarWidgetView {
             id: popupView
             controller: root.controller
             widgetId: root.controller.widgetPopupId
             presentation: "popup"
             popupAnchor: root.controller.widgetPopupAnchor
-            viewEnabled: popup.visible && widgetId !== "*"
+            viewEnabled: popup.visible
             width: parent.width
             height: implicitHeight
           }
+
           Text {
-            visible: popup.visible && root.controller.widgetPopupId !== "*" && !popupView.hasView
+            visible: popup.visible && !popupView.hasView
             height: visible ? implicitHeight : 0
             width: parent.width
-            text: root.statusText(popupView.snapshot)
+            text: popupView.snapshot ? String(popupView.snapshot.status || "unavailable") : "Unavailable"
             textFormat: Text.PlainText
             color: Color.foreground
             font.family: Style.font.family
@@ -254,18 +328,214 @@ Item {
       }
     }
   }
+
+  PopupWindow {
+    id: managerPopup
+    visible: root.managerOpen && root.panel.visible && !root.panel.panelCollapsed
+    color: "transparent"
+    grabFocus: false
+    implicitWidth: root.managerGeometry.width
+    implicitHeight: root.managerGeometry.height
+
+    anchor {
+      window: root.panel
+      adjustment: PopupAdjustment.Slide
+      edges: Edges.Top | Edges.Left
+      gravity: Edges.Bottom | Edges.Right
+      rect.width: 1
+      rect.height: 1
+      onAnchoring: {
+        managerPopup.anchor.rect.x = Math.round(root.managerGeometry.x)
+        managerPopup.anchor.rect.y = Math.round(root.managerGeometry.y)
+      }
+    }
+
+    onVisibleChanged: {
+      if (!visible && root.managerOpen) root.closeManager()
+      else if (visible) Qt.callLater(root.updateManagerAnchor)
+    }
+
+    Ui.BorderSurface {
+      id: managerSurface
+      anchors.fill: parent
+      color: Color.menu.background
+      borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Style.normalBorderWidth)
+      clip: true
+
+      Item {
+        id: managerHeader
+        x: managerSurface.contentLeftInset
+        y: managerSurface.contentTopInset
+        width: Math.max(0, parent.width - managerSurface.contentLeftInset - managerSurface.contentRightInset)
+        height: root.windowRowHeight
+
+        Text {
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
+          text: "Widgets"
+          textFormat: Text.PlainText
+          color: Color.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.body
+          font.bold: true
+        }
+
+        Ui.Button {
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          height: Style.space(28)
+          text: "Close"
+          Accessible.role: Accessible.Button
+          Accessible.name: "Close Widget manager"
+          onClicked: root.closeManager()
+        }
+      }
+
+      Flickable {
+        anchors.top: managerHeader.bottom
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: managerSurface.contentLeftInset
+        anchors.rightMargin: managerSurface.contentRightInset
+        anchors.bottomMargin: managerSurface.contentBottomInset
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        contentWidth: width
+        contentHeight: managerContent.implicitHeight
+
+        Column {
+          id: managerContent
+          width: parent.width
+          spacing: Style.space(4)
+
+          Text {
+            visible: root.availableTypeCount === 0
+            width: parent.width
+            text: root.registeredRows.length === 0
+              ? "No Widgets are available in this build."
+              : "No registered Widgets are currently available."
+            textFormat: Text.PlainText
+            color: Util.alpha(Color.foreground, 0.68)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.Wrap
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+          }
+
+          Repeater {
+            model: root.registeredRows
+
+            delegate: Item {
+              required property var modelData
+              width: managerContent.width
+              height: Style.space(42)
+              readonly property bool enabledWidget:
+                root.controller.widgetIds.indexOf(modelData.id) >= 0
+
+              DockLucideIcon {
+                id: managerIcon
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 18
+                height: 18
+                iconName: modelData.iconName
+                iconSize: 18
+                tint: modelData.available ? Color.foreground : Util.alpha(Color.foreground, 0.45)
+              }
+
+              Text {
+                anchors.left: managerIcon.right
+                anchors.leftMargin: Style.space(8)
+                anchors.right: toggleButton.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                text: modelData.label
+                textFormat: Text.PlainText
+                color: modelData.available ? Color.foreground : Util.alpha(Color.foreground, 0.55)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                elide: Text.ElideRight
+              }
+
+              Ui.Button {
+                id: toggleButton
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                height: Style.space(30)
+                text: parent.enabledWidget ? "Remove" : "Add"
+                enabled: parent.enabledWidget || modelData.available
+                Accessible.role: Accessible.Button
+                Accessible.name: text + " " + modelData.label
+                onClicked: root.controller.setWidgetEnabled(modelData.id, !parent.enabledWidget)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Connections {
+    target: root.viewport
+    function onContentTailAutoScrolled() {
+      if (root.dragWidgetId) root.updateDrag(root.dragSceneX, root.dragSceneY)
+    }
+  }
+
+  Connections {
+    target: root.viewport.listView
+    function onContentYChanged() {
+      Qt.callLater(root.updatePopupAnchor)
+      Qt.callLater(root.updateManagerAnchor)
+    }
+  }
+
   Connections {
     target: root.controller
     function onWidgetAnchorChanged() { Qt.callLater(root.updatePopupAnchor) }
-    function onSurfaceInvalidated() { root.closePopup() }
+    function onSurfaceInvalidated() {
+      root.closePopup()
+      root.closeManager()
+    }
   }
+
   Connections {
     target: root.panel
-    function onWidthChanged() { Qt.callLater(root.updatePopupAnchor) }
-    function onHeightChanged() { Qt.callLater(root.updatePopupAnchor) }
-    function onVisibleChanged() { if (!root.panel.visible) root.closePopup() }
+    function onWidthChanged() {
+      Qt.callLater(root.updatePopupAnchor)
+      Qt.callLater(root.updateManagerAnchor)
+    }
+    function onHeightChanged() {
+      Qt.callLater(root.updatePopupAnchor)
+      Qt.callLater(root.updateManagerAnchor)
+    }
+    function onVisibleChanged() {
+      if (!root.panel.visible) {
+        root.closePopup()
+        root.closeManager()
+      }
+    }
+    function onPanelCollapsedChanged() {
+      if (root.panel.panelCollapsed) {
+        root.closePopup()
+        root.closeManager()
+        if (root.dragWidgetId) root.finishDrag(0, 0, true)
+      }
+    }
   }
-  onHeightChanged: Qt.callLater(root.updatePopupAnchor)
-  onLayoutChanged: root.closePopup()
-  Component.onDestruction: root.closePopup()
+
+  onImplicitHeightChanged: {
+    Qt.callLater(root.updatePopupAnchor)
+    Qt.callLater(root.updateManagerAnchor)
+  }
+
+  Component.onDestruction: {
+    if (root.dragWidgetId) root.finishDrag(0, 0, true)
+    else root.viewport.endContentTailDrag()
+    root.closePopup()
+    root.closeManager()
+  }
 }

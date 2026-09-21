@@ -853,15 +853,19 @@ for test coverage and the separate real-pointer Omarchy qualification gate.
 The unreleased sidebar candidate adds `presentationMode` (default `classic`),
 `sidebarEdge` (`left`), `sidebarMonitor` (empty = all connected monitors), `sidebarExpandedWidth` (320),
 `sidebarCollapsed` (false), `sidebarCollapsedByMonitor` (`{}`),
-`sidebarBrowserTabsEnabled` (true), and `sidebarWidgets` (empty). It shows
+`sidebarBrowserTabsEnabled` (true), `sidebarWidgets` (empty), and
+`sidebarWidgetCollapsed` (`{}`). It shows
 monitor/workspace/application/window hierarchy or every individual window icon
 in a rail; app groups fold, and Chrome windows can expand open tabs when the
 provider is available (see [`docs/browser-tabs.md`](docs/browser-tabs.md)).
 Classic preferences remain unchanged. This source slice is Draft, not a deployed
 or fully interactive sidebar release. [Implementation and qualification](docs/SIDEBAR.md).
 
-The SB-05 [internal widget foundation](docs/SIDEBAR_WIDGETS.md) adds bounded footer
-slots, host-owned leases and one inward popup. The production registry is empty: no
-clock/calendar, Herdr, Todoist or universal external plugin integration is claimed.
-Empty configuration adds no gap/work; unknown imported IDs are unavailable, never
-executed. Test providers exist only in fixtures. Full runtime acceptance is SB-06.
+The [Widget foundation](docs/SIDEBAR_WIDGETS.md) keeps the FDM-967 host-owned
+provider leases while FDM-973 renders Widget cards as a content tail of the existing
+hierarchy scroll. Pinned and Applications remain fixed below that viewport. The
+production registry may be empty; Add/Manage discovers only source-registered types.
+`sidebarWidgets` stores enabled order and `sidebarWidgetCollapsed` stores card
+body state. Empty configuration adds no Widget-section height/work; unknown imported
+IDs are unavailable and never executed. Test providers exist only in fixtures.
+Real compositor qualification remains a local follow-up.

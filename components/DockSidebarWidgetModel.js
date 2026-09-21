@@ -43,11 +43,48 @@ function idsError(value, registered) {
   }
   return ""
 }
+function collapsedMap(value) {
+  var result = Object.create(null)
+  if (!value || typeof value !== "object" || Array.isArray(value)) return result
+  Object.keys(value).forEach(function(id) {
+    if (validId(id) && typeof value[id] === "boolean") result[id] = value[id]
+  })
+  return result
+}
+function collapsedError(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return "Expected an object"
+  var ids = Object.keys(value)
+  for (var i = 0; i < ids.length; ++i) {
+    var id = ids[i]
+    if (!validId(id)) return "Invalid widget ID: " + id
+    if (typeof value[id] !== "boolean")
+      return "Expected a boolean collapse flag for " + id
+  }
+  return ""
+}
 function descriptorFor(registry, id) {
   if (!registry || !own(registry, id) || !validId(id)) return null
   var descriptor = registry[id]
   return descriptor && descriptor.id === id && typeof descriptor.acquire === "function"
     ? descriptor : null
+}
+function registeredIds(registry) {
+  if (!registry || typeof registry !== "object") return []
+  return Object.keys(registry).filter(function(id) {
+    return descriptorFor(registry, id) !== null
+  }).sort()
+}
+function registeredRows(registry) {
+  return registeredIds(registry).map(function(id) {
+    var descriptor = registry[id]
+    return {
+      id: id,
+      label: descriptor && descriptor.label ? String(descriptor.label) : id,
+      iconName: descriptor && descriptor.iconName ? String(descriptor.iconName) : "layout-grid",
+      available: descriptor && descriptor.available !== false
+    }
+  })
 }
 function effectiveIds(value, registry) {
   return requestedIds(value).filter(function(id) { return descriptorFor(registry, id) !== null })
@@ -61,14 +98,6 @@ function revision(value) {
 }
 function finite(value, fallback) {
   return typeof value === "number" && isFinite(value) ? value : fallback
-}
-function footerLayout(availableContentHeight, windowRowHeight, count, collapsed) {
-  var available = Math.max(0, finite(availableContentHeight, 0))
-  var row = Math.max(1, finite(windowRowHeight, 44))
-  var cap = Math.min(240, Math.floor(0.30 * available), Math.max(0, available - 2 * row))
-  var mode = count <= 0 ? "none" : cap < row ? "overflow"
-    : collapsed || cap < 2 * row ? "compact" : "expanded"
-  return {cap:cap, mode:mode, height:mode === "none" || mode === "overflow" ? 0 : cap}
 }
 // Coordinates are logical pixels relative to a full-height edge panel. The
 // compositor performs the final slide adjustment for other exclusive surfaces.

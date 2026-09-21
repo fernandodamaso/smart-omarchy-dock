@@ -87,6 +87,8 @@ function valueError(value, spec) {
     }
   }
   if (spec.type === "object" && !isObject(value)) return "Expected an object"
+  if (spec.format === "sidebar-widget-collapsed")
+    return SidebarWidgetModel.collapsedError(value)
   if (spec.format === "icon-overrides") {
     var keys = Object.keys(value)
     var seenIcons = Object.create(null)

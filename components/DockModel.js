@@ -418,6 +418,7 @@ function settingsDefaults() {
     sidebarCollapsed: false,
     sidebarCollapsedByMonitor: {},
     sidebarWidgets: [],
+    sidebarWidgetCollapsed: {},
     sidebarBrowserTabsEnabled: true,
     position: "bottom",
     fullLength: false,
@@ -583,6 +584,8 @@ function normalizeSetting(key, value) {
     return steppedNumber(value, 240, 480, 1, defaults.sidebarExpandedWidth, 0)
   case "sidebarWidgets":
     return SidebarWidgetModel.requestedIds(value)
+  case "sidebarWidgetCollapsed":
+    return SidebarWidgetModel.collapsedMap(value)
   case "sidebarCollapsed":
     return typeof value === "boolean" ? value : false
   case "sidebarCollapsedByMonitor":
