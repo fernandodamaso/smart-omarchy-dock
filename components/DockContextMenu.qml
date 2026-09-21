@@ -140,6 +140,7 @@ PopupWindow {
   }
 
   function dismiss() {
+    if (windowIconDialog.visible) windowIconDialog.closeDialog()
     visible = false
     root.entranceOpacity = 0
     root.entranceOffset = 0
@@ -753,7 +754,7 @@ PopupWindow {
       titlePattern: rule.titlePattern,
       source: rule.source
     })
-    if (reply && (reply.ok === true || (reply.data && reply.data.applied === true))) {
+    if (reply && reply.data && (reply.ok || reply.data.applied)) {
       root.dismiss()
       return true
     }
