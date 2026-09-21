@@ -374,9 +374,13 @@ def build_parser():
         child.add_argument('id')
         if name == 'set':
             child.add_argument('source')
-        child.add_argument('--profile',
-                           help='Target one browser profile: "ID@profile:DIR" key '
-                                '(DIR is the on-disk profile directory, e.g. "Profile 1")')
+        selector = child.add_mutually_exclusive_group()
+        selector.add_argument('--profile',
+                              help='Target one browser profile: "ID@profile:DIR" key '
+                                   '(DIR is the on-disk profile directory, e.g. "Profile 1")')
+        if name in ('set', 'reset'):
+            selector.add_argument('--title-pattern',
+                                  help='Target raw Wayland app ID + title wildcard rule; only * is special')
     return parser
 
 
@@ -505,6 +509,9 @@ def app_icon_request(transport, instance, args):
             key = 'before' if args.before is not None else 'after'
             arguments[key] = getattr(args, key)
         if args.group == 'icons':
+            title_pattern = getattr(args, 'title_pattern', None)
+            if title_pattern is not None:
+                arguments['titlePattern'] = title_pattern
             profile = getattr(args, 'profile', None)
             if profile is not None:
                 profile = str(profile).strip()

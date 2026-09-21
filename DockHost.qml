@@ -10,6 +10,7 @@ import "components/DockModel.js" as DockModel
 import "components/DockWindowModel.js" as DockWindowModel
 import "components/DockTrashModel.js" as TrashModel
 import "components/DockConfigModel.js" as ConfigModel
+import "components/DockIconModel.js" as DockIconModel
 
 Item {
   id: root
@@ -132,7 +133,9 @@ Item {
       })
       Object.keys(parsed).forEach(function(key) { requested[key] = parsed[key] })
       showTrashSetting = TrashModel.normalizeShowTrash(parsed.showTrash)
-      if (ConfigModel.iconsChanged(settings.iconOverrides, requested.iconOverrides)) iconReloadRevision++
+      if (ConfigModel.iconsChanged(settings.iconOverrides, requested.iconOverrides)
+          || ConfigModel.windowIconsChanged(settings.windowIconOverrides, requested.windowIconOverrides))
+        iconReloadRevision++
       if (JSON.stringify(settings) !== JSON.stringify(requested)) settingsRevision++
       settings = requested
       settingsLoadState = "loaded"
@@ -215,6 +218,10 @@ Item {
     reply.data.iconReloadRevision = iconReloadRevision
     reply.data.reloaded = reloaded
     reply.data.renderVerified = false
+    reply.data.windowOverrides = Array.isArray(settings.windowIconOverrides)
+      ? settings.windowIconOverrides : []
+    reply.data.effectiveWindowOverrides = DockIconModel.normalizeWindowRules(
+      settings.windowIconOverrides)
     reply.warnings.push("Artwork is referenced in place. Saving or requesting a reload does not verify decoding or rendering.")
     return reply
   }
@@ -229,6 +236,17 @@ Item {
     // Same-path Apply deliberately reloads bytes, but never creates a redundant
     // config write. Failed persistence still leaves the accepted live intent.
     if (result.ok && source !== null && iconReloadRevision === revision) iconReloadRevision++
+    return iconResult(reply, iconReloadRevision !== revision)
+  }
+
+  function saveWindowIconOverride(action, args) {
+    var blocked = mutationBlocked()
+    if (blocked) return iconResult(blocked, false)
+    var result = ConfigModel.windowIconIntent(settings, action, args)
+    var revision = iconReloadRevision
+    var reply = commitSettings(result, false)
+    // A same-source set is an explicit byte reload without a redundant settings write.
+    if (result.ok && action === "set" && iconReloadRevision === revision) iconReloadRevision++
     return iconResult(reply, iconReloadRevision !== revision)
   }
 
@@ -308,7 +326,10 @@ Item {
     if (!result.ok) {
       var rejected = dockControl.mutationData(before, before, [], false, false)
       rejected.validationErrors = result.errors
-      return dockControl.failure("E_VALIDATION", "Patch rejected; no values were changed.", rejected)
+      return dockControl.failure(result.errorCode || "E_VALIDATION",
+        result.errorCode === "E_CONFLICT"
+          ? "Window icon rule changed while the edit was open; refresh before retrying."
+          : "Patch rejected; no values were changed.", rejected)
     }
     if (dryRun === true)
       return dockControl.success(dockControl.mutationData(before, result.settings, result.changedKeys, true, false),
@@ -316,7 +337,9 @@ Item {
     if (result.changedKeys.length === 0)
       return mutationOutcome(dockControl.mutationData(before, before, [], false, false))
     showTrashSetting = TrashModel.normalizeShowTrash(result.settings.showTrash)
-    if (ConfigModel.iconsChanged(before.iconOverrides, result.settings.iconOverrides)) iconReloadRevision++
+    if (ConfigModel.iconsChanged(before.iconOverrides, result.settings.iconOverrides)
+        || ConfigModel.windowIconsChanged(before.windowIconOverrides, result.settings.windowIconOverrides))
+      iconReloadRevision++
     settings = result.settings
     settingsRevision++
     settingsDefaultsInUse = false

@@ -9,6 +9,7 @@ import "DockSidebarWidgetModel.js" as SidebarWidgetModel
 import "DockWindowModel.js" as DockWindowModel
 import "DockTrashModel.js" as TrashModel
 import "DockConfigModel.js" as ConfigModel
+import "DockIconModel.js" as DockIconModel
 import "DockWorkspaceGroupModel.js" as WorkspaceGroupModel
 
 // Exactly one host-owned target, never one target per screen/Variants delegate.
@@ -135,6 +136,7 @@ Item {
     }
     result.sidebarWidgets = SidebarWidgetModel.effectiveIds(requested.sidebarWidgets, root.host.sidebarWidgetRegistry || {})
     result.iconOverrides = ConfigModel.effectiveIcons(requested.iconOverrides)
+    result.windowIconOverrides = DockIconModel.normalizeWindowRules(requested.windowIconOverrides)
     result.workspaceGroups = WorkspaceGroupModel.normalizeWorkspaceGroups(
       requested.workspaceGroups === undefined ? root.defaults.workspaceGroups : requested.workspaceGroups)
     result.groupWindows = false
@@ -251,14 +253,18 @@ Item {
 
   function iconCommand(command, args) {
     var action = command.slice(6)
-    var allowed = action === "list" ? [] : action === "set" ? ["id", "source"]
-      : action === "reset" || action === "reload" ? ["id"] : null
+    var allowed = action === "list" ? [] : action === "set" ? ["id", "source", "titlePattern"]
+      : action === "reset" ? ["id", "titlePattern"]
+      : action === "reload" ? ["id"] : null
     if (!allowed || Object.keys(args).some(function(key) { return allowed.indexOf(key) < 0 }))
       return root.failure("E_USAGE", "Unsupported icon command or arguments: " + command)
     if (action === "list") {
       var data = root.statusData()
       data.overrides = ConfigModel.isObject(root.host.settings.iconOverrides) ? root.host.settings.iconOverrides : {}
       data.effectiveOverrides = ConfigModel.effectiveIcons(root.host.settings.iconOverrides)
+      data.windowOverrides = ConfigModel.isObject(root.host.settings) && Array.isArray(root.host.settings.windowIconOverrides)
+        ? root.host.settings.windowIconOverrides : []
+      data.effectiveWindowOverrides = DockIconModel.normalizeWindowRules(root.host.settings.windowIconOverrides)
       data.iconReloadRevision = root.host.iconReloadRevision
       data.renderVerified = false
       return root.success(data, root.readWarnings())
@@ -269,6 +275,14 @@ Item {
     // An empty set is invalid. Only the explicit reset command removes artwork.
     if (action === "set" && args.source === "")
       return root.failure("E_VALIDATION", "Select a local PNG or SVG file.")
+    if (args.titlePattern !== undefined) {
+      if (typeof args.titlePattern !== "string")
+        return root.failure("E_USAGE", "titlePattern must be a string.")
+      return root.host.saveWindowIconOverride(action, {
+        mode: "cli", appId: args.id, titlePattern: args.titlePattern,
+        source: action === "set" ? args.source : null
+      })
+    }
     return root.host.saveIconOverride(args.id, action === "reset" ? "" : args.source)
   }
 

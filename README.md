@@ -170,6 +170,24 @@ SmartDock-owned local event provider only while the sidebar widget is active.
 LauncherEntry numeric counts remain authoritative for application badges, with
 the optional Chrome activity provider supplying only its strict fallback.
 
+### Per-window icon rules
+
+Persistent window artwork rules are keyed by the raw Wayland application ID and a
+title pattern. Only `*` is special; matching is case-insensitive across the full
+title and the first matching rule wins. Rules apply to all matching current and
+future windows and survive restart.
+
+```bash
+smartdock icons set com.mitchellh.ghostty ~/Pictures/solar.svg --title-pattern '*solar*'
+smartdock icons reset com.mitchellh.ghostty --title-pattern '*solar*'
+```
+
+Window-rule artwork has renderer precedence over profile/app-wide artwork. It can
+split grouped presentation slots by rule without changing launch, pin, hide, badge
+or workspace identity. Reset removes only the targeted rule; another matching rule
+or lower-priority artwork can immediately become visible. Missing/corrupt artwork
+keeps the rule and falls back while `renderVerified` remains false.
+
 ### Browser profile badges and activity
 
 Chrome can run every profile inside a single browser process, so a window's
@@ -319,8 +337,10 @@ for atomic patches, dry runs, persistence errors, reset scope and safe exports.
 [`config/dock.json`](config/dock.json) contains bundled defaults, not necessarily
 the running configuration.
 
-Configuration is CLI-only: there is no settings window, live preference preview,
-or graphical icon editor. The dock, ordinary window previews, application picker,
+Configuration is CLI-first: there is no settings window or live preference preview.
+General app/profile icon editing stays CLI-only; the narrow exception is the
+selected-live-window **Change Icon** dialog, which writes only that captured window
+rule through the same host writer. The dock, ordinary window previews, application picker,
 context menus, drag reordering, workspace controls and Trash remain available.
 The first sliders icon opens the existing launcher/add-application/auto-hide menu.
 Changes are applied through the same host-owned writer without resetting existing
@@ -412,6 +432,7 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 | Option | Description |
 | --- | --- |
 | `iconOverrides` | App-wide, SmartDock-only local PNG/SVG artwork by desktop ID; defaults to `{}`; use `icons set/reset/reload` |
+| `windowIconOverrides` | Ordered raw-Wayland `appId` + case-insensitive title-pattern rules; only `*` is special, first match wins, defaults to `[]` |
 | `iconSize` | Base icon size in pixels |
 | `magnification` | Maximum icon scale under the pointer |
 | `magnificationRadius` | Distance over which nearby icons magnify |

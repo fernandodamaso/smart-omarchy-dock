@@ -41,6 +41,12 @@ Item {
   required property real rowHeight
   readonly property string rowKey: row.key
   readonly property string kind: row.kind
+  readonly property var liveWindowIconRule: kind === "window" && row.toplevel
+    ? DockIconModel.matchWindowRule(controller.windowIconOverrides || [],
+        String(row.toplevel.appId || ""), String(row.toplevel.title || ""))
+    : null
+  readonly property string liveWindowOverrideSource: liveWindowIconRule
+    ? String(liveWindowIconRule.source || "") : ""
   readonly property bool hasArtwork: kind === "window" || kind === "application" || kind === "launcher"
   readonly property bool nestedWindow: kind === "window" && row.nested === true
   readonly property bool nestedTab: kind === "browser-tab"
@@ -626,6 +632,8 @@ Item {
       desktopId: String(root.row.desktopId || "")
       desktopIcon: root.entry ? String(root.entry.icon || "") : ""
       iconOverrides: root.controller.settings.iconOverrides || ({})
+      windowOverrideSource: root.kind === "window"
+        ? root.liveWindowOverrideSource : ""
       reloadRevision: root.controller.host.iconReloadRevision || 0
       profileKey: root.profile ? root.profile.key : ""
       profileName: root.profile && root.profile.entry ? String(root.profile.entry.name || "") : ""

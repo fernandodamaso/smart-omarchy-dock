@@ -14,6 +14,7 @@ Item {
   required property var applicationEntry
   required property bool captureEnabled
   property string desktopId: ""
+  property string windowOverrideSource: ""
   property var iconOverrides: ({})
   property int iconReloadRevision: 0
   property int previewWidth: 216
@@ -129,6 +130,7 @@ Item {
     desktopIcon: root.applicationEntry && root.applicationEntry.icon
       ? root.applicationEntry.icon : ""
     iconOverrides: root.iconOverrides
+    windowOverrideSource: root.windowOverrideSource
     reloadRevision: root.iconReloadRevision
   }
 
