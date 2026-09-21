@@ -6,6 +6,7 @@ import qs.Commons
 import qs.Ui as Ui
 import "DockSidebarInteractionModel.js" as InteractionModel
 import "DockSidebarModel.js" as SidebarModel
+import "DockHerdrModel.js" as HerdrModel
 import "DockIconModel.js" as DockIconModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockBrowserActivityModel.js" as ActivityModel
@@ -40,6 +41,16 @@ Item {
   readonly property bool hasArtwork: kind === "window" || kind === "application" || kind === "launcher"
   readonly property bool nestedWindow: kind === "window" && row.nested === true
   readonly property bool nestedTab: kind === "browser-tab"
+  readonly property bool nestedHerdr: kind === "herdr-agent" || kind === "herdr-tab"
+    || kind === "herdr-state"
+  readonly property bool nestedChild: nestedTab || nestedHerdr
+  readonly property bool herdrActionable: (kind === "herdr-agent"
+    || kind === "herdr-tab") && row.actionable === true
+  readonly property bool herdrGroupHeader: kind === "herdr-tab" && row.groupHeader === true
+  readonly property bool herdrStatusDotVisible: !root.collapsed
+    && (kind === "herdr-agent"
+      || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader)
+      || kind === "herdr-state")
   readonly property string tabFaviconSource: nestedTab
     ? DockIconModel.faviconFileUrl(String(row.faviconPath || "")) : ""
   readonly property bool tabFaviconReady: nestedTab && tabFaviconSource !== ""
@@ -47,6 +58,29 @@ Item {
   readonly property bool soleWindow: kind === "window" && row.soleWindow === true
   readonly property bool tabsExpandable: kind === "window" && row.tabsExpandable === true
   readonly property bool appExpandable: kind === "application" && row.expandable === true
+  readonly property bool herdrAssociated: kind === "window" && row.herdrAssociated === true
+  readonly property bool herdrExpandable: herdrAssociated && row.herdrExpandable === true
+  readonly property bool herdrFolded: herdrAssociated && row.herdrFolded === true
+  readonly property var herdrStatusCounters: {
+    if (!herdrAssociated) return []
+    var values = row.herdrStatusCounters
+    return Array.isArray(values) ? values : []
+  }
+  readonly property bool herdrCountersVisible: !root.collapsed && herdrAssociated
+    && herdrStatusCounters.length > 0
+  readonly property string herdrKindLabel: kind === "herdr-agent" || kind === "herdr-tab"
+    ? InteractionModel.herdrAgentKindLabel({ agentKind: row.agentKind || "" })
+    : ""
+  // Kind moves onto the two-line secondary row; do not reserve side kind width.
+  readonly property bool herdrKindVisible: false
+  readonly property string herdrAgentSubtitle: (kind === "herdr-agent"
+      || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader))
+    ? String(row.subtitle || "")
+    : ""
+  readonly property bool herdrTwoLineLabels: !root.collapsed
+    && (kind === "herdr-agent"
+      || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader))
+  readonly property bool herdrGroupLabel: !root.collapsed && root.herdrGroupHeader
   readonly property int windowCount: kind === "application" ? Number(row.windowCount || row.windows && row.windows.length || 0) : 0
   readonly property int treeDepth: Number(row.treeDepth || 0)
   readonly property bool isLastSibling: row.isLastSibling !== false
@@ -94,16 +128,26 @@ Item {
     return BadgeModel.strictIdentityMatches(root.desktopId, root.entry, classes, aliases)
   }
   readonly property string windowTitle: {
-    if (kind === "browser-tab") return String(row.title || "Tab")
+    if (kind === "browser-tab" || kind === "herdr-agent" || kind === "herdr-tab"
+        || kind === "herdr-state")
+      return String(row.title || (kind === "herdr-state" ? "Herdr"
+        : kind === "herdr-tab" ? "Tab"
+        : kind === "herdr-agent" ? "Coding agent" : "Tab"))
     if (kind === "window" && row.toplevel)
       return String(row.toplevel.title || "").trim() || "Untitled window"
     return ""
   }
   readonly property string liveTitle: {
+    if (kind === "herdr-agent" || kind === "herdr-tab" || kind === "herdr-state")
+      return InteractionModel.sidebarWindowDisplayTitle({
+        kind: kind,
+        title: String(row.title || "")
+      })
     if (kind === "browser-tab" || kind === "window")
       return InteractionModel.sidebarWindowDisplayTitle({
         kind: kind,
         isBrowser: root.isBrowserWindow,
+        isHerdr: root.herdrAssociated,
         entryName: root.entry ? String(root.entry.name || "") : String(row.label || ""),
         windowTitle: root.windowTitle,
         tabTitle: kind === "browser-tab" ? String(row.title || "") : ""
@@ -155,16 +199,41 @@ Item {
     if (kind === "browser-tab")
       return (row.active === true ? "Active tab: " : "Tab: ") + liveTitle + alertBits
         + (attention.muted ? " · Alerts excluded from totals" : "")
+    if (kind === "herdr-agent"
+        || (kind === "herdr-tab" && row.actionable === true && row.groupHeader !== true))
+      return "Herdr agent: " + liveTitle
+        + (root.herdrAgentSubtitle ? " · " + root.herdrAgentSubtitle : "")
+        + " · " + InteractionModel.herdrStatusAccessibleText(row.status)
+        + (root.controller.herdrFocusErrorFor(root.rowKey)
+          ? " · Focus failed (" + root.controller.herdrFocusErrorFor(root.rowKey) + ")"
+          : "")
+    if (kind === "herdr-tab")
+      return "Herdr tab: " + liveTitle
+        + (row.actionable === true && root.controller.herdrFocusErrorFor(root.rowKey)
+          ? " · Focus failed (" + root.controller.herdrFocusErrorFor(root.rowKey) + ")"
+          : "")
+    if (kind === "herdr-state")
+      return "Herdr: " + liveTitle
     var titleLabel = kind === "window"
       ? InteractionModel.sidebarWindowTooltipTitle({
         kind: "window",
         isBrowser: root.isBrowserWindow,
+        isHerdr: root.herdrAssociated,
         displayTitle: liveTitle,
         windowTitle: root.windowTitle
       })
       : liveTitle
+    var herdrCountBits = ""
+    if (root.herdrAssociated && root.herdrStatusCounters.length) {
+      for (var ci = 0; ci < root.herdrStatusCounters.length; ++ci) {
+        var counter = root.herdrStatusCounters[ci]
+        herdrCountBits += " · " + InteractionModel.herdrStatusAccessibleText(counter.status)
+          + " " + String(counter.count)
+      }
+    }
     return titleLabel
       + (kind === "application" && windowCount > 1 ? " · " + windowCount : "")
+      + herdrCountBits
       + (row.workspaceIdentity ? " · Workspace " + row.workspaceIdentity : "")
       + (row.monitorIdentity ? " · Monitor " + row.monitorIdentity : "")
       + (state.fullscreen ? " · Fullscreen" : "")
@@ -173,6 +242,7 @@ Item {
       + alertBits
       + (containsFocusedWindow && row.folded ? " · Contains focused window" : "")
       + (tabsExpandable ? (row.tabsFolded ? " · Tabs folded" : " · Tabs expanded") : "")
+      + (herdrExpandable ? (root.herdrFolded ? " · Agents folded" : " · Agents expanded") : "")
   }
   readonly property var profile: hasArtwork ? controller.profileForRow(row) : null
   readonly property var attention: controller.attentionForRow(row)
@@ -204,7 +274,7 @@ Item {
   readonly property real artX: {
     if (collapsed) return 0
     if (kind === "workspace") return root.treeLayout.badgeLeft
-    if (nestedTab || hasArtwork)
+    if (nestedChild || hasArtwork)
       return InteractionModel.sidebarTreeIconX(root.workspaceCardInset, Math.max(1, root.treeDepth))
     return root.padding
   }
@@ -285,6 +355,61 @@ Item {
   onActiveFocusChanged: if (activeFocus) root.controller.focusedRowKey = root.rowKey
   opacity: root.controller.dragSession && root.controller.dragSession.target.key === root.rowKey ? 0.4 : 1
 
+  // Right edge reserved for mute / fold chevrons. Matches fold/tabsFold
+  // anchors.rightMargin (workspace-card inset), not left padding.
+  readonly property real herdrRightChromeWidth: {
+    if (root.collapsed) return 0
+    var w = 0
+    if (root.insideWorkspaceCard) w += root.workspaceCardInset
+    if (fold.visible) w += fold.width
+    if (tabsFold.visible) w += tabsFold.width
+    if (herdrFold.visible) w += herdrFold.width
+    if (root.showAlertControl) w += Style.space(22) + Style.space(4)
+    return w
+  }
+  // Left edge of the fold stack; counters sit immediately to its left.
+  readonly property real herdrFoldLeft: {
+    if (!content.width) return 0
+    return Math.max(0, content.width - root.herdrRightChromeWidth)
+  }
+  readonly property real herdrCountersRightLimit: root.herdrFoldLeft
+  // Prefer showing every nonzero counter at full width; name/state yield.
+  readonly property real herdrCountersNaturalWidth: herdrCountersVisible
+    ? herdrCounters.implicitWidth : 0
+  readonly property bool herdrStateStripFits: {
+    if (!root.herdrCountersVisible) return true
+    if (root.kind !== "window") return true
+    if (!(root.windowState.fullscreen || root.windowState.pinned || root.windowState.minimized))
+      return true
+    var gap = Style.space(6)
+    var labelRight = label.x + Math.min(label.implicitWidth, label.width)
+    var countersLeft = root.herdrFoldLeft - root.herdrCountersNaturalWidth - gap
+    // stateStrip is Style.space(14) tall with up to 3×12 icons + spacing.
+    var stripW = 0
+    if (root.windowState.fullscreen) stripW += 12
+    if (root.windowState.pinned) stripW += (stripW ? Style.space(4) : 0) + 12
+    if (root.windowState.minimized) stripW += (stripW ? Style.space(4) : 0) + 12
+    return labelRight + gap + stripW + gap <= countersLeft
+  }
+
+  // Resolve Herdr status roles to Omarchy Color tokens. Idle uses brighter
+  // foreground alpha than Color.muted for counter readability. done/blocked
+  // prefer theme green/yellow hex tokens via flatColor; hollow is outline-only.
+  // "done" is Herdr state, not proven task success.
+  function herdrStatusColor(status) {
+    var role = HerdrModel.statusColorRole(status)
+    if (role === "accent") return Color.accent
+    if (role === "idle") return Util.alpha(Color.foreground, 0.78)
+    if (role === "muted") return Color.muted
+    if (role === "done") return Color.flatColor("#9ece6a", Color.accent)
+    if (role === "blocked") return Color.flatColor("#e0af68", Color.urgent)
+    return Color.muted
+  }
+
+  function herdrStatusHollow(status) {
+    return HerdrModel.statusColorRole(status) === "hollow"
+  }
+
   readonly property bool animationsEnabled: root.controller.settings
     && root.controller.settings.interfaceAnimationsEnabled !== false
   readonly property bool dropTarget: root.controller.dragTarget
@@ -313,7 +438,7 @@ Item {
     activeFocus: root.activeFocus,
     hovered: root.kind === "monitor" ? false
       : (root.input.hovered || passiveHover.hovered),
-    navigable: root.navigable,
+    navigable: InteractionModel.rowHoverFillEligible(root.kind, root.row.actionable === true),
     persistentSelected: root.persistentSelected,
     persistentContext: root.persistentContext,
     dropFill: Style.pressedFillFor(Color.accent, Color.accent),
@@ -412,7 +537,7 @@ Item {
     }
 
     Rectangle {
-      visible: root.treeDepth >= 1 && (root.hasArtwork || root.nestedTab)
+      visible: root.treeDepth >= 1 && (root.hasArtwork || root.nestedChild)
       x: ownStem.x
       y: treeGuides.contentMid
       width: Math.max(0, root.artX - x - 2)
@@ -563,6 +688,27 @@ Item {
         : Util.alpha(Color.foreground, 0.75)
     }
 
+    // Nested Herdr marker — status-colored dot for agents / actionable tabs / state.
+    Rectangle {
+      visible: root.herdrStatusDotVisible
+      width: 8
+      height: 8
+      radius: 4
+      x: root.artX + 3
+      anchors.verticalCenter: parent.verticalCenter
+      color: root.herdrStatusHollow(row.status)
+        ? "transparent"
+        : root.herdrStatusColor(row.status)
+      border.width: root.herdrStatusHollow(row.status) ? 1 : 0
+      border.color: Color.muted
+      opacity: root.herdrActionable
+        && (HerdrModel.normalizeStatus(row.status) === "working"
+          || HerdrModel.normalizeStatus(row.status) === "blocked") ? 1.0
+        : root.herdrActionable
+          && HerdrModel.normalizeStatus(row.status) === "done" ? 0.9
+        : 0.75
+    }
+
     // Two-line monitor identity — separate Text nodes, shown only after width is
     // stable, so layershell settle cannot double-paint a growing elided string.
     Column {
@@ -666,31 +812,42 @@ Item {
       id: label
       objectName: "sidebar-label"
       visible: !root.collapsed && root.kind !== "monitor" && root.kind !== "workspace"
+        && root.kind !== "herdr-agent" && root.kind !== "herdr-tab"
       x: {
-        if (root.nestedTab)
+        if (root.nestedChild)
           return root.artX + 14 + Style.space(8)
         if (root.hasArtwork) return artwork.x + artwork.width + Style.space(8)
         return root.padding
       }
       width: {
-        // Reserve left-flowing chrome (state / window-count / alert badge /
-        // severity) plus right-anchored mute/folds so the badge rectangle
-        // cannot overlap them.
-        var afterLabel = 0
-        if (stateStrip.visible)
-          afterLabel += Style.space(6) + stateStrip.width
+        // Herdr: reserve fold + full natural counter/kind width first so every
+        // nonzero count stays visible; name elides (may reach zero). State icons
+        // are optional and yield via herdrStateStripFits — not taken from the
+        // counter budget.
+        var leading = 0
         if (countBadge.visible)
-          afterLabel += Style.space(6) + countBadge.width
+          leading += Style.space(6) + countBadge.width
         if (alertCount.visible)
-          afterLabel += Style.space(4) + alertCount.reservedWidth
+          leading += Style.space(4) + alertCount.reservedWidth
         if (severityDot.visible)
-          afterLabel += Style.space(4) + severityDot.width
-        var rightAnchored = root.padding
-          + (root.insideWorkspaceCard ? root.workspaceCardInset : 0)
-          + (fold.visible ? fold.width : 0)
-          + (tabsFold.visible ? tabsFold.width : 0)
-          + (root.showAlertControl ? Style.space(22) + Style.space(4) : 0)
-        return Math.max(0, content.width - x - afterLabel - rightAnchored)
+          leading += Style.space(4) + severityDot.width
+        if (root.herdrCountersVisible || root.herdrKindVisible || herdrFold.visible) {
+          var available = Math.max(0, content.width - x - leading - root.herdrRightChromeWidth)
+          return InteractionModel.herdrCompactLabelWidths({
+            availableWidth: available,
+            kindWidth: herdrKindLabel.visible ? herdrKindLabel.implicitWidth : 0,
+            countersWidth: herdrCounters.visible ? herdrCounters.implicitWidth : 0,
+            controlsWidth: 0,
+            gap: Style.space(6)
+          }).nameWidth
+        }
+        if (stateStrip.visible)
+          leading += Style.space(6) + stateStrip.width
+        return Math.max(0, content.width - x - leading - root.padding
+          - (root.insideWorkspaceCard ? root.workspaceCardInset : 0)
+          - (fold.visible ? fold.width : 0)
+          - (tabsFold.visible ? tabsFold.width : 0)
+          - (root.showAlertControl ? Style.space(22) + Style.space(4) : 0))
       }
       anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
@@ -699,7 +856,7 @@ Item {
       wrapMode: Text.NoWrap
       maximumLineCount: 1
       horizontalAlignment: Text.AlignLeft
-      color: root.kind === "section" ? Color.muted
+      color: root.kind === "section" || root.kind === "herdr-state" ? Color.muted
         : root.row.urgent ? Color.urgent
         : root.focusedWindow ? Color.accent
         : Color.foreground
@@ -712,11 +869,165 @@ Item {
       transform: Translate { x: root.attentionNudgeX }
     }
 
+    // Two-line Herdr agent / actionable single-panel tab identity.
+    Column {
+      id: herdrAgentLabels
+      objectName: "sidebar-herdr-agent-labels"
+      visible: root.herdrTwoLineLabels
+      x: root.artX + 14 + Style.space(8)
+      width: {
+        var available = Math.max(0, content.width - x - root.herdrRightChromeWidth)
+        return InteractionModel.herdrCompactLabelWidths({
+          availableWidth: available,
+          kindWidth: 0,
+          countersWidth: herdrCounters.visible ? herdrCounters.implicitWidth : 0,
+          controlsWidth: 0,
+          gap: Style.space(6)
+        }).nameWidth
+      }
+      y: Math.round((content.height - implicitHeight) / 2)
+      spacing: 1
+      Text {
+        objectName: "sidebar-label"
+        width: parent.width
+        height: Math.ceil(font.pixelSize * 1.15)
+        text: root.liveTitle
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        wrapMode: Text.NoWrap
+        maximumLineCount: 1
+        color: Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        renderType: Text.NativeRendering
+        verticalAlignment: Text.AlignVCenter
+      }
+      Text {
+        objectName: "sidebar-herdr-agent-subtitle"
+        visible: root.herdrAgentSubtitle.length > 0
+        width: parent.width
+        height: Math.ceil(font.pixelSize * 1.1)
+        text: root.herdrAgentSubtitle
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        wrapMode: Text.NoWrap
+        maximumLineCount: 1
+        color: Color.muted
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        renderType: Text.NativeRendering
+        verticalAlignment: Text.AlignVCenter
+      }
+    }
+
+    // Multi-panel tab group headers.
+    Text {
+      objectName: "sidebar-herdr-group-label"
+      visible: root.herdrGroupLabel
+      x: root.artX + Style.space(8)
+      width: Math.max(0, content.width - x - root.herdrRightChromeWidth)
+      anchors.verticalCenter: parent.verticalCenter
+      text: root.liveTitle
+      textFormat: Text.PlainText
+      elide: Text.ElideRight
+      wrapMode: Text.NoWrap
+      maximumLineCount: 1
+      color: Util.alpha(Color.foreground, 0.72)
+      font.family: Style.font.family
+      font.pixelSize: Style.font.bodySmall
+      renderType: Text.NativeRendering
+      verticalAlignment: Text.AlignVCenter
+    }
+
+    // Agent kind (Codex / Claude / Cursor) — after name; parents use counters instead.
+    Text {
+      id: herdrKindLabel
+      objectName: "sidebar-herdr-kind"
+      visible: root.herdrKindVisible
+      anchors.verticalCenter: parent.verticalCenter
+      x: label.x + Math.min(label.implicitWidth, label.width) + Style.space(6)
+      width: Math.min(implicitWidth, Math.max(0,
+        content.width - x - root.herdrRightChromeWidth - root.padding))
+      textFormat: Text.PlainText
+      text: root.herdrKindLabel
+      elide: Text.ElideNone
+      wrapMode: Text.NoWrap
+      maximumLineCount: 1
+      color: Color.muted
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      renderType: Text.NativeRendering
+      verticalAlignment: Text.AlignVCenter
+    }
+
+    // Parent status counters — full natural width, right-anchored to the fold.
+    // Never clip nonzero buckets; name/state icons yield instead.
+    Row {
+      id: herdrCounters
+      objectName: "sidebar-herdr-counters"
+      visible: root.herdrCountersVisible
+      spacing: Style.space(4)
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.right: herdrFold.visible ? herdrFold.left : parent.right
+      anchors.rightMargin: herdrFold.visible ? 0
+        : ((root.insideWorkspaceCard ? root.workspaceCardInset : 0)
+          + (tabsFold.visible ? tabsFold.width : 0)
+          + (fold.visible ? fold.width : 0))
+      height: Style.space(14)
+      // Width is the natural sum of children — do not clamp or clip.
+
+      Repeater {
+        model: root.herdrStatusCounters
+        delegate: Item {
+          id: counterItem
+          required property var modelData
+          width: counterRow.width
+          height: herdrCounters.height
+
+          Row {
+            id: counterRow
+            spacing: 2
+            height: parent.height
+            Rectangle {
+              width: 7
+              height: 7
+              radius: 4
+              anchors.verticalCenter: parent.verticalCenter
+              color: root.herdrStatusHollow(counterItem.modelData.status)
+                ? "transparent" : root.herdrStatusColor(counterItem.modelData.status)
+              border.width: root.herdrStatusHollow(counterItem.modelData.status) ? 1 : 0
+              border.color: Color.muted
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              textFormat: Text.PlainText
+              text: String(counterItem.modelData.count)
+              color: root.herdrStatusColor(counterItem.modelData.status)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              renderType: Text.NativeRendering
+            }
+          }
+          HoverHandler { id: counterHover }
+          DockToolTip {
+            anchorItem: counterItem
+            position: root.controller.edge
+            requestedVisible: counterHover.hovered
+            text: InteractionModel.herdrStatusAccessibleText(counterItem.modelData.status)
+              + " · " + String(counterItem.modelData.count)
+            fontFamily: Style.font.family
+            fontSize: Style.font.bodySmall
+          }
+        }
+      }
+    }
+
     // Expanded window state: fullscreen / pinned / minimized (informational).
     Row {
       id: stateStrip
       visible: !root.collapsed && root.kind === "window"
         && (root.windowState.fullscreen || root.windowState.pinned || root.windowState.minimized)
+        && root.herdrStateStripFits
       spacing: Style.space(4)
       anchors.verticalCenter: parent.verticalCenter
       x: label.x + Math.min(label.implicitWidth, label.width) + Style.space(6)
@@ -905,7 +1216,7 @@ Item {
       panelConnector: root.panelConnector
       workspaceHeader: root.kind === "workspace"
       viewport: root.viewport
-      enabled: root.navigable
+      enabled: root.navigable || root.herdrActionable
       onFocusRequested: root.forceActiveFocus(Qt.MouseFocusReason)
       onActivated: function(target, control, connector, modifiers) {
         if (root.viewport) root.viewport.activate(target, control, connector, modifiers)
@@ -976,6 +1287,40 @@ Item {
       }
     }
 
+    Ui.Button {
+      id: herdrFold
+      objectName: "sidebar-herdr-fold"
+      visible: root.herdrExpandable && !root.collapsed
+      anchors.right: parent.right
+      anchors.rightMargin: (root.insideWorkspaceCard ? root.workspaceCardInset : 0)
+        + (tabsFold.visible ? tabsFold.width : 0)
+      anchors.verticalCenter: parent.verticalCenter
+      width: Math.min(content.height, 28)
+      height: content.height
+      iconText: ""
+      tooltipText: root.herdrFolded
+        ? "Show agents for " + root.liveTitle
+        : "Hide agents for " + root.liveTitle
+      focusable: false
+      enabled: !root.controller.interactionBusy
+      onClicked: {
+        root.forceActiveFocus(Qt.MouseFocusReason)
+        root.controller.toggleHerdrAgents(root.rowKey)
+      }
+      Item {
+        anchors.centerIn: parent
+        width: 14
+        height: 14
+        rotation: root.herdrFolded ? 0 : 90
+        DockLucideIcon {
+          anchors.fill: parent
+          iconName: "chevron-right"
+          iconSize: 14
+          tint: root.focusedWindow && root.herdrFolded ? Color.accent : Color.foreground
+        }
+      }
+    }
+
     // Service-wide mute for alert-bearing tabs. Does not activate the tab or drag.
     Item {
       id: alertMute
@@ -989,6 +1334,7 @@ Item {
       anchors.right: parent.right
       anchors.rightMargin: (root.insideWorkspaceCard ? root.workspaceCardInset : 0)
         + (tabsFold.visible ? tabsFold.width : 0)
+        + (herdrFold.visible ? herdrFold.width : 0)
         + (fold.visible ? fold.width : 0)
       z: 3
       opacity: root.attention.muted || root.alertControlFocused ? 1 : 0.9

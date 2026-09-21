@@ -230,7 +230,7 @@ assert.ok(!railPins.rows.some(r => r.kind === 'launcher' || r.key === 'section:p
 assert.ok(railPins.launchers.length >= 2, 'rail retains strip pin discovery via launchers')
 assert.ok(Model.indexRowsByKey(railPins)[railPins.launchers[0].key])
 
-// Browser tabs nest under Chrome windows; default folded; expand via folds[tabsKey].
+// Browser tabs nest under Chrome windows; default expanded; fold via folds[tabsKey].
 f = sidebarFixture()
 registry = Model.reconcileHandles(null, f.toplevels)
 const soleChrome = findWindow(project(), 'c')
@@ -247,10 +247,11 @@ const withTabs = project({
 })
 const soleWithMeta = findWindow(withTabs, 'c')
 assert.equal(soleWithMeta.tabsExpandable, true)
-assert.equal(soleWithMeta.tabsFolded, true, 'tabs start folded')
-assert.ok(!withTabs.rows.some(r => r.kind === 'browser-tab'),
-  'folded tabs are not projected')
-const expandedTabs = project({
+assert.equal(soleWithMeta.tabsFolded, false, 'tabs start expanded')
+const defaultTabRows = withTabs.rows.filter(r => r.kind === 'browser-tab')
+assert.equal(defaultTabRows.length, 2, 'expanded tabs are projected by default')
+assert.deepEqual(Array.from(defaultTabRows, r => r.title), ['Inbox - Gmail', 'Linear'])
+const foldedTabs = project({
   browserTabs: {
     [String(soleChrome.address).toLowerCase()]: [
       { targetId: tabId, title: 'Inbox - Gmail', active: true },
@@ -258,6 +259,17 @@ const expandedTabs = project({
     ]
   },
   folds: { [soleWithMeta.tabsKey]: true }
+})
+assert.equal(findWindow(foldedTabs, 'c').tabsFolded, true)
+assert.ok(!foldedTabs.rows.some(r => r.kind === 'browser-tab'),
+  'folded tabs are not projected')
+const expandedTabs = project({
+  browserTabs: {
+    [String(soleChrome.address).toLowerCase()]: [
+      { targetId: tabId, title: 'Inbox - Gmail', active: true },
+      { targetId: tabId2, title: 'Linear', active: false }
+    ]
+  }
 })
 const tabRows = expandedTabs.rows.filter(r => r.kind === 'browser-tab')
 assert.equal(tabRows.length, 2)
@@ -268,13 +280,11 @@ assert.equal(tabRows[0].windowKey, soleWithMeta.key)
 assert.ok(!project({
   browserTabs: { [String(soleChrome.address).toLowerCase()]: [
     { targetId: tabId, title: 'Hidden', active: true }] },
-  sidebarBrowserTabsEnabled: false,
-  folds: { [soleWithMeta.tabsKey]: true }
+  sidebarBrowserTabsEnabled: false
 }).rows.some(r => r.kind === 'browser-tab'), 'setting disables tab children')
 assert.ok(!project({
   browserTabs: { [String(soleChrome.address).toLowerCase()]: [
     { targetId: tabId, title: 'Rail', active: true }] },
-  folds: { [soleWithMeta.tabsKey]: true },
   collapsed: true
 }).rows.some(r => r.kind === 'browser-tab'), 'collapsed rail omits tab children')
 
@@ -317,8 +327,7 @@ const tabProj = project({
       { targetId: tabId, title: 'Inbox - Gmail', active: true },
       { targetId: tabId2, title: 'Linear', active: false }
     ]
-  },
-  folds: { [soleWithMeta.tabsKey]: true }
+  }
 })
 const tabParent = tabProj.rows.find(r => r.key === soleWithMeta.key)
 const tabs = tabProj.rows.filter(r => r.kind === 'browser-tab')

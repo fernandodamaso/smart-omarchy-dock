@@ -16,11 +16,19 @@ Item {
   }
   readonly property bool hasView: loader.status === Loader.Ready && loader.item !== null
   readonly property var loadedItem: loader.item
-  readonly property var widgetContext: ({id:widgetId, status:snapshot ? snapshot.status : "unavailable",
-    revision:snapshot ? snapshot.revision : 0, data:snapshot ? snapshot.data : null,
-    provider:snapshot ? snapshot.provider : null, presentation:presentation,
-    openPopup:function() { return root.controller.openWidgetPopup(root.widgetId, root.popupAnchor) },
-    closePopup:function() { root.controller.closeWidgetPopup() }})
+  readonly property var widgetContext: ({
+    id: widgetId,
+    status: snapshot ? snapshot.status : "unavailable",
+    revision: snapshot ? snapshot.revision : 0,
+    data: snapshot ? snapshot.data : null,
+    provider: snapshot ? snapshot.provider : null,
+    presentation: presentation,
+    // Host-owned association map for filtering matched sessions out of the
+    // Herdr fallback view. Delegates must not acquire a second lease.
+    herdrAssociations: controller.herdrAssociations,
+    openPopup: function() { return root.controller.openWidgetPopup(root.widgetId, root.popupAnchor) },
+    closePopup: function() { root.controller.closeWidgetPopup() }
+  })
   implicitHeight: hasView && isFinite(loader.item.implicitHeight) ? Math.max(0, loader.item.implicitHeight) : 0
   clip: true
 

@@ -38,14 +38,24 @@ class ProtocolTests(unittest.TestCase):
 
     def test_projection_keeps_identity_but_drops_private_raw_fields(self):
         raw = {"panes": [{"pane_id": "w1:p1", "terminal_id": "t1", "cwd": "secret",
-                          "terminal_title_stripped": "secret", "agent": "opencode"}],
+                          "terminal_title_stripped": "secret", "agent": "opencode",
+                          "title": "Visible pane title"}],
                "agents": [{"pane_id": "w1:p1", "terminal_id": "t1", "agent_status": "done",
-                           "state_change_seq": 2 ** 64 - 1, "transcript": "secret"}],
+                           "state_change_seq": 2 ** 64 - 1, "transcript": "secret",
+                           "title": "Visible agent title", "terminal_title": "secret"}],
+               "tabs": [{"tab_id": "w1:t1", "label": "Tab Label", "cwd": "secret"}],
                "workspaces": [{"workspace_id": "w1", "label": "Fixture", "cwd": "secret"}]}
         result = self.module["project_snapshot"](raw)
         self.assertNotIn("secret", json.dumps(result))
         self.assertEqual(result["panes"][0]["terminal_id"], "t1")
+        self.assertEqual(result["panes"][0]["title"], "Visible pane title")
+        self.assertEqual(result["agents"][0]["title"], "Visible agent title")
         self.assertEqual(result["agents"][0]["state_change_seq"], str(2 ** 64 - 1))
+        self.assertEqual(result["tabs"][0]["label"], "Tab Label")
+        self.assertEqual(result["workspaces"][0]["label"], "Fixture")
+        self.assertNotIn("terminal_title", result["agents"][0])
+        self.assertNotIn("terminal_title_stripped", result["panes"][0])
+        self.assertNotIn("cwd", result["workspaces"][0])
 
     def test_missing_inventory_is_not_invented_as_an_empty_list(self):
         result = self.module["project_snapshot"]({"panes": []})

@@ -23,7 +23,7 @@ class SidebarWidgetConfigTests(unittest.TestCase):
         self.assertTrue(result['ok'], result)
         spec = result['data']['settings']['sidebarWidgets']
         self.assertEqual(spec['default'], [])
-        self.assertEqual(spec['registeredIds'], [])
+        self.assertEqual(spec['registeredIds'], ['herdr.agents'])
         self.assertEqual(spec['format'], 'sidebar-widget-ids')
         before = self.command('config get --json')['data']['settings']
         self.assertEqual(before['sidebarWidgets'], ['future.clock'])
@@ -60,6 +60,8 @@ class SidebarWidgetConfigTests(unittest.TestCase):
         with self.assertRaises(cli.CliError) as rejected:
             self.command("config set sidebarWidgets '[\"fixture.one\"]' --json")
         self.assertEqual(rejected.exception.code, 'E_VALIDATION')
+        accepted = self.command("config set sidebarWidgets '[\"herdr.agents\"]' --json")
+        self.assertTrue(accepted['ok'], accepted)
         spec = {'type':'array', 'format':'sidebar-widget-ids', 'registeredIds':['future.clock'],
                 'status':'unavailable'}
         self.assertEqual(cli.scalar_value('["future.clock"]', spec), ['future.clock'])
@@ -69,5 +71,5 @@ class SidebarWidgetConfigTests(unittest.TestCase):
 
     def test_bundled_schema_never_advertises_fixture_ids(self):
         result = cli.bundled_schema('sidebarWidgets')
-        self.assertEqual(result['data']['settings']['sidebarWidgets']['registeredIds'], [])
+        self.assertEqual(result['data']['settings']['sidebarWidgets']['registeredIds'], ['herdr.agents'])
         self.assertNotIn('fixture.', json.dumps(result))

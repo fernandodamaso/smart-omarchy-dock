@@ -23,6 +23,7 @@ DockHost {
     ? shell.serviceFor("io.github.fernandodamaso.smartdock") : null
   launcherBadgeService: pluginService
   browserProfileService: pluginService ? pluginService.browserProfileService : null
+  herdrService: pluginService ? pluginService.herdrService : null
 
   configPath: (Quickshell.env("XDG_CONFIG_HOME")
     || Quickshell.env("HOME") + "/.config")

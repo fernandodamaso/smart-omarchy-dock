@@ -164,10 +164,11 @@ does not own this provider and therefore remains dot-only. See
 [`docs/launcher-badge-counts.md`](docs/launcher-badge-counts.md) for architecture,
 compatibility, and local validation details.
 
-SmartDock does not invoke Herdr or any recurring agent-status CLI. Agent-status
-integration is intentionally excluded until a separate event-driven provider
-exists; numeric counts remain authoritative when published by LauncherEntry,
-with the optional Chrome activity provider supplying only its strict fallback.
+Launcher badge counts do not invoke Herdr or poll any recurring agent-status CLI.
+Herdr agent state is a separate, opt-in sidebar source: `herdr.agents` starts a
+SmartDock-owned local event provider only while the sidebar widget is active.
+LauncherEntry numeric counts remain authoritative for application badges, with
+the optional Chrome activity provider supplying only its strict fallback.
 
 ### Browser profile badges and activity
 
@@ -861,7 +862,8 @@ Classic preferences remain unchanged. This source slice is Draft, not a deployed
 or fully interactive sidebar release. [Implementation and qualification](docs/SIDEBAR.md).
 
 The SB-05 [internal widget foundation](docs/SIDEBAR_WIDGETS.md) adds bounded footer
-slots, host-owned leases and one inward popup. The production registry is empty: no
-clock/calendar, Herdr, Todoist or universal external plugin integration is claimed.
-Empty configuration adds no gap/work; unknown imported IDs are unavailable, never
-executed. Test providers exist only in fixtures. Full runtime acceptance is SB-06.
+slots, host-owned leases and one inward popup. The production registry currently
+contains only `herdr.agents`; clock/calendar, Todoist and a universal external
+plugin ABI are not claimed. `sidebarWidgets` still defaults to `[]`, so an empty
+configuration adds no gap or provider work. Unknown imported IDs are unavailable
+and never executed. Full sidebar runtime acceptance remains SB-06.

@@ -97,7 +97,12 @@ jobs:
         shell: bash
         run: python3 -m unittest discover -s provider/browser-profiles/tests -p 'test_*.py'
 
-      - name: Run Herdr transport scaffold tests
+      - name: Run Herdr lifecycle tests
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: python3 -B -m unittest discover -s tests -p 'test_herdr_*.py' -v
+
+      - name: Run Herdr provider tests
         if: ${{ !cancelled() }}
         shell: bash
         run: python3 -B -m unittest discover -s provider/herdr/tests -p 'test_*.py' -v

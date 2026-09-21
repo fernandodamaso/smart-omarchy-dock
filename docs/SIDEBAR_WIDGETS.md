@@ -1,10 +1,10 @@
 # SB-05 — Internal sidebar widget contract
 
-**FDM-967: unreleased source foundation, not a live provider or universal plugin ABI.**
+**FDM-967: internal widget foundation; it is not a universal plugin ABI.**
 Classic remains the default. `sidebarWidgets` defaults to `[]`; that starts no
-provider, loads no widget view and reserves zero footer height. The production
-registry is deliberately empty. Clock/calendar (FDM-969), Herdr (FDM-970) and
-Todoist (FDM-971) are independent follow-ups, not implementations bundled here.
+provider, loads no widget view and reserves zero footer height. FDM-970 now
+registers the source-owned `herdr.agents` adapter on top of this contract.
+Clock/calendar (FDM-969) and Todoist (FDM-971) remain independent follow-ups.
 No credential, stock topbar change, second host or notification daemon is needed.
 
 ## Registration and typed configuration
@@ -167,7 +167,9 @@ Then run the complete current Headless CI matrix on the exact final head.
 plus `tests/fixtures/SidebarWidgetFixture.qml`; it instruments acquire/release,
 backend start/stop/subscription/notification counts, errors, stale callbacks,
 mode/reflow cycles, popup routing/anchor destruction and an outside shared owner.
-The provider is synthetic and test-only, never registered/advertised by production.
+The `fixture.one` provider used by these SB-05 tests is synthetic and test-only.
+Production registration of `herdr.agents` is covered by FDM-970 lifecycle/provider
+tests; this foundation suite still does not count as live Herdr data evidence.
 
 `tests/runtime/sidebar.qml` additionally uses the real host, `DockSidebarWidgetArea`,
 native popup, footer/overflow, viewport/delegates and layers. It checks both edges,
