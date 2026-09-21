@@ -16,6 +16,14 @@ Item {
   readonly property string presentation: widgetContext && widgetContext.presentation
     ? String(widgetContext.presentation) : "expanded"
   readonly property bool compact: presentation === "compact"
+  readonly property bool interfaceAnimationsEnabled: widgetContext
+    && widgetContext.interfaceAnimationsEnabled !== false
+  readonly property bool presentationVisible: widgetContext
+    && widgetContext.presentationVisible !== false
+  readonly property var presentationClipItem: widgetContext
+    ? widgetContext.presentationClipItem : null
+  readonly property real presentationRevision: widgetContext
+    ? Number(widgetContext.presentationRevision || 0) : 0
   readonly property var associations: widgetContext && widgetContext.herdrAssociations
     ? widgetContext.herdrAssociations : ({ byWindowKey: ({}), unmatchedServerIds: [] })
   readonly property var matchedIdSet: {
@@ -115,6 +123,28 @@ Item {
       ? 1.0 : status === "done" ? 0.75 : 0.45
   }
 
+  function itemIntersectsClip(item, clipItem) {
+    if (!item || !clipItem || item.height <= 0 || item.width <= 0
+        || clipItem.height <= 0 || clipItem.width <= 0)
+      return false
+    // presentationRevision is presentation-only scroll metadata; reading it
+    // forces outer shared-scroll/popup clipping to re-evaluate.
+    var revision = root.presentationRevision
+    var point = clipItem.mapFromItem(item, 0, 0)
+    return point.x + item.width > 0 && point.x < clipItem.width
+      && point.y + item.height > 0 && point.y < clipItem.height
+  }
+
+  function workingAnimationActive(item, row) {
+    if (root.compact || !root.interfaceAnimationsEnabled || !root.presentationVisible
+        || !root.visible || !row || row.kind !== "agent"
+        || HerdrModel.normalizeStatus(row.status) !== "working")
+      return false
+    if (!root.itemIntersectsClip(item, detailFlick)) return false
+    return !root.presentationClipItem
+      || root.itemIntersectsClip(item, root.presentationClipItem)
+  }
+
   Item {
     anchors.fill: parent
     visible: root.compact && root.hasFallbackContent
@@ -143,6 +173,7 @@ Item {
   }
 
   Flickable {
+    id: detailFlick
     anchors.fill: parent
     visible: !root.compact && root.hasFallbackContent
     clip: true
@@ -177,11 +208,18 @@ Item {
         model: root.rows
 
         delegate: Item {
+          id: detailRow
           required property var modelData
+          readonly property string normalizedStatus: HerdrModel.normalizeStatus(modelData.status)
+          readonly property bool animatedWorking: root.workingAnimationActive(detailRow, modelData)
           width: detailColumn.width
           height: 38
 
+          // Preserve every existing static marker except the working agent,
+          // which receives the 10px trail slot. With animation disabled or
+          // clipped, the legacy 7px working dot is centered in that slot.
           Rectangle {
+            visible: !(modelData.kind === "agent" && detailRow.normalizedStatus === "working")
             x: modelData.kind === "agent" ? 20 : 10
             anchors.verticalCenter: parent.verticalCenter
             width: 7
@@ -189,6 +227,32 @@ Item {
             radius: 4
             color: Color.foreground
             opacity: root.dotOpacity(modelData.status)
+          }
+
+          Item {
+            visible: modelData.kind === "agent" && detailRow.normalizedStatus === "working"
+            x: 18.5
+            anchors.verticalCenter: parent.verticalCenter
+            width: 10
+            height: 10
+
+            DockHerdrWorkingIndicator {
+              objectName: "herdr-unmatched-working-indicator"
+              anchors.fill: parent
+              visible: detailRow.animatedWorking
+              active: visible
+              tint: Color.accent
+            }
+
+            Rectangle {
+              visible: !detailRow.animatedWorking
+              anchors.centerIn: parent
+              width: 7
+              height: 7
+              radius: 4
+              color: Color.foreground
+              opacity: root.dotOpacity(modelData.status)
+            }
           }
 
           Column {
