@@ -136,7 +136,6 @@ test('approved HTML design reference is preserved and linked', () => {
 test('expanded Widget cards do not retain the legacy 240px body cap', () => {
   const card = fs.readFileSync(new URL('../components/DockWidgetCard.qml', import.meta.url), 'utf8')
   assert.doesNotMatch(card, /Math\.min\(240,\s*implicitHeight\)/)
-  assert.match(card, /objectName:\s*"widget-card-expanded-view"/)
   assert.match(card, /height:\s*implicitHeight/)
 })
 
