@@ -71,8 +71,8 @@ TestCase {
   }
 
   function test_longAndNarrowInputsClampTogether() {
-    var long = probe("a-very-long-workspace-name")
-    compare(chipWidth(long.implicitWidth, available(280)), 64, "ceiling")
+    var longLabel = probe("a-very-long-workspace-name")
+    compare(chipWidth(longLabel.implicitWidth, available(280)), 64, "ceiling")
     compare(chipWidth(probe("Workspace").implicitWidth, available(105)), 28,
       "narrow content clamps every row to the same available slot")
     compare(chipWidth(0, 0), 24, "floor")
