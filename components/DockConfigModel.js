@@ -297,6 +297,104 @@ function iconKey(value) {
   return DockIconModel.normalizeOverrideKey(value)
 }
 
+
+
+function normalizedWindowRule(value) {
+  var rules = DockIconModel.normalizeWindowRules([value])
+  return rules.length === 1 ? rules[0] : null
+}
+
+function windowRulesEqual(left, right) {
+  var a = normalizedWindowRule(left)
+  var b = normalizedWindowRule(right)
+  return !!a && !!b
+    && DockIconModel.windowRuleKey(a.appId, a.titlePattern) === DockIconModel.windowRuleKey(b.appId, b.titlePattern)
+    && a.source === b.source
+}
+
+function windowRuleConflict(message) {
+  var result = rejectedIntent("windowIconOverrides", message)
+  result.errorCode = "E_CONFLICT"
+  return result
+}
+
+function windowIconsChanged(before, after) {
+  var previous = DockIconModel.normalizeWindowRules(before)
+  var next = DockIconModel.normalizeWindowRules(after)
+  return JSON.stringify(previous) !== JSON.stringify(next)
+}
+
+function windowIconIntent(current, action, args) {
+  args = args || {}
+  var original = own(current, "windowIconOverrides") ? current.windowIconOverrides : []
+  var existingError = DockIconModel.windowRulesError(original)
+  if (existingError)
+    return rejectedIntent("windowIconOverrides", "Repair windowIconOverrides first: " + existingError)
+
+  var list = original.map(function(rule) {
+    return { appId: rule.appId, titlePattern: rule.titlePattern, source: rule.source }
+  })
+  var appId = DockIconModel.normalizeWindowAppId(args.appId)
+  var titlePattern = DockIconModel.normalizeTitlePattern(args.titlePattern)
+  var key = DockIconModel.windowRuleKey(appId, titlePattern)
+  if (!appId) return rejectedIntent("appId", "Invalid raw Wayland application ID")
+  if (!titlePattern) return rejectedIntent("titlePattern",
+    "Title pattern must be 1-200 characters and contain no control characters")
+  if (!key) return rejectedIntent("titlePattern", "Invalid title pattern")
+
+  var source = action === "reset" ? null : DockIconModel.normalizeSource(args.source)
+  if (action !== "set" && action !== "reset")
+    return rejectedIntent("action", "Unsupported window icon intent")
+  if (action === "set" && !source)
+    return rejectedIntent("source", "Expected a local PNG or SVG source")
+
+  var mode = args.mode === "dialog" ? "dialog" : "cli"
+  var originalKey = String(args.originalKey || "")
+  var index = -1
+  for (var i = 0; i < list.length; ++i) {
+    if (DockIconModel.windowRuleKey(list[i].appId, list[i].titlePattern)
+        === (mode === "dialog" && originalKey ? originalKey : key)) {
+      index = i
+      break
+    }
+  }
+
+  if (mode === "dialog") {
+    if (originalKey) {
+      if (index < 0) return windowRuleConflict("The icon rule changed or was deleted while the dialog was open.")
+      if (!windowRulesEqual(list[index], args.expected))
+        return windowRuleConflict("The icon rule changed while the dialog was open.")
+      for (var d = 0; d < list.length; ++d) {
+        if (d !== index && DockIconModel.windowRuleKey(list[d].appId, list[d].titlePattern) === key)
+          return windowRuleConflict("Another rule already uses this application ID and title pattern.")
+      }
+      if (action === "reset") list.splice(index, 1)
+      else list[index] = { appId: appId, titlePattern: titlePattern, source: source }
+    } else {
+      for (var n = 0; n < list.length; ++n) {
+        if (DockIconModel.windowRuleKey(list[n].appId, list[n].titlePattern) === key)
+          return windowRuleConflict("A matching icon rule was created while the dialog was open.")
+      }
+      if (action === "reset") return withPatch(current, {})
+      list.push({ appId: appId, titlePattern: titlePattern, source: source })
+    }
+  } else {
+    if (action === "reset") {
+      if (index < 0) return withPatch(current, {})
+      list.splice(index, 1)
+    } else {
+      var nextRule = { appId: appId, titlePattern: titlePattern, source: source }
+      if (index < 0) list.push(nextRule)
+      else list[index] = nextRule
+    }
+  }
+
+  var error = DockIconModel.windowRulesError(list)
+  if (error) return rejectedIntent("windowIconOverrides", error)
+  if (JSON.stringify(original) === JSON.stringify(list)) return withPatch(current, {})
+  return withPatch(current, { windowIconOverrides: list })
+}
+
 function iconIntent(current, id, sourceOrNull) {
   var key = iconKey(id)
   if (!key) return rejectedIntent("id", "Invalid application ID")
