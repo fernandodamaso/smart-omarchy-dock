@@ -43,7 +43,12 @@ export function hostHarness(settings, applications = []) {
     },
     reload() { throw new Error('Unexpected fixture reload'); },
   };
-  host = functions('DockHost.qml', { ...shared, configFile, applications,
+  const demoIds = ['demo.display', 'demo.lists', 'demo.inputs', 'demo.actions-states'];
+  const sidebarWidgetRegistry = Object.fromEntries(demoIds.map(id => [id, {
+    id, label: id, available: true,
+    acquire() { return { setActive() {}, release() {} }; },
+  }]));
+  host = functions('DockHost.qml', { ...shared, configFile, applications, sidebarWidgetRegistry,
     Qt: { callLater() {} }, FileViewError: { FileNotFound: 2, toString: String },
     runtimeMode: 'plugin', configPath: '/fixture/dock.json',
     settings: plain(defaults), settingsLoaded: true, settingsRevision: 0, iconReloadRevision: 0,
