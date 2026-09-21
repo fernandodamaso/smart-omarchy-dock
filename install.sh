@@ -80,6 +80,7 @@ install_client_bundle() {
   if [[ "$source_dir" != "$destination" ]]; then
     install -m 0644 "$source_dir/scripts/smartdock_cli.py" "$destination/scripts/smartdock_cli.py"
     install -m 0644 "$source_dir/scripts/smartdock_dev.py" "$destination/scripts/smartdock_dev.py"
+    install -m 0755 "$source_dir/scripts/smartdock_seed_demo_widgets.py" "$destination/scripts/smartdock_seed_demo_widgets.py"
     install -m 0644 "$source_dir/config/settings-schema.json" "$destination/config/settings-schema.json"
     install -m 0644 "$source_dir/config/dock.json" "$destination/config/dock.json"
     local document
@@ -169,6 +170,16 @@ if [[ ! -f "$config_dir/dock.json" ]]; then
 else
   echo "Preserved configuration: $config_dir/dock.json"
 fi
+
+demo_widget_seed_marker="$config_dir/.demo-widgets-seeded-v2"
+demo_widget_seed_result="$(python3 "$source_dir/scripts/smartdock_seed_demo_widgets.py"   "$config_dir/dock.json" "$demo_widget_seed_marker")"
+case "$demo_widget_seed_result" in
+  seeded) echo "Enabled missing SmartDock demo Widgets for this branch." ;;
+  preserved) echo "Demo Widget selection already present." ;;
+  already) ;;
+  invalid) echo "Skipped demo Widget seeding because the existing Widget config needs repair." >&2 ;;
+esac
+
 if $install_autostart; then "$bin_home/smartdock" autostart enable; fi
 
 cat <<EOF

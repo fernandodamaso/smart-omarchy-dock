@@ -127,7 +127,21 @@ assert_file "$data_home/smartdock/assets/terminal-agents/ATTRIBUTIONS.md"
 diff -qr -- "$repo_dir/assets" "$data_home/smartdock/assets" \
   || fail "installed assets directory differs from bundled assets"
 assert_file "$config_file"
-assert_same_file "$config_file" <(printf '%s\n' '{"sentinel":"keep-me"}')
+python3 - "$config_file" <<'PY' || fail "full install did not preserve config while seeding demo Widgets"
+import json
+import sys
+
+with open(sys.argv[1]) as source:
+    config = json.load(source)
+
+assert config["sentinel"] == "keep-me"
+assert config["sidebarWidgets"] == [
+    "demo.display",
+    "demo.lists",
+    "demo.inputs",
+    "demo.actions-states",
+]
+PY
 assert_file "$config_home/autostart/smartdock.desktop"
 assert_file "$bin_home/smartdock"
 
