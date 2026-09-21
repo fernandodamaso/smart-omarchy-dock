@@ -481,9 +481,12 @@ Item {
         pinned: root.settings.pinned || [], hiddenApplications: DockModel.normalizeSetting(
           "hiddenApplications", root.settings.hiddenApplications), workspaceGroups: [],
         workspaceMonitorScope: "all", workspaceMonitorOrder: DockModel.normalizeSetting(
-          "workspaceMonitorOrder", root.settings.workspaceMonitorOrder), sortByWorkspace: false,
-        windowIconOverrides: root.windowIconOverrides
+          "workspaceMonitorOrder", root.settings.workspaceMonitorOrder), sortByWorkspace: false
       }, applications: root.applications, toplevels: root.toplevels,
+      windowRuleMatches: root.toplevels.map(function(toplevel) {
+        return DockIconModel.matchWindowRule(root.windowIconOverrides,
+          toplevel ? toplevel.appId : "", toplevel ? toplevel.title : "")
+      }),
       filteredToplevels: root.toplevels, hyprToplevels: root.hyprToplevels,
       hyprWorkspaces: root.workspaces, hyprMonitors: root.monitors,
       dockMonitor: WindowModel.monitorForScreen(nextPrimary, root.monitors),

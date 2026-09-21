@@ -173,19 +173,31 @@ function titlePatternMatches(titlePattern, title) {
   var text = String(title === undefined || title === null ? "" : title).toLowerCase()
   if (!pattern) return false
   if (pattern === "*") return true
+  if (pattern.indexOf("*") < 0) return text === pattern
+
   var leadingWildcard = pattern.charAt(0) === "*"
   var trailingWildcard = pattern.charAt(pattern.length - 1) === "*"
   var parts = pattern.split("*").filter(function(part) { return part !== "" })
   if (parts.length === 0) return true
+
   var cursor = 0
+  var limit = text.length
+  if (!leadingWildcard) {
+    var first = parts.shift()
+    if (text.slice(0, first.length) !== first) return false
+    cursor = first.length
+  }
+  if (!trailingWildcard) {
+    var last = parts.pop()
+    if (text.slice(text.length - last.length) !== last) return false
+    limit = text.length - last.length
+  }
   for (var i = 0; i < parts.length; ++i) {
     var position = text.indexOf(parts[i], cursor)
-    if (position < 0) return false
-    if (i === 0 && !leadingWildcard && position !== 0) return false
+    if (position < 0 || position + parts[i].length > limit) return false
     cursor = position + parts[i].length
   }
-  if (!trailingWildcard && cursor !== text.length) return false
-  return true
+  return cursor <= limit
 }
 
 function matchWindowRule(rules, appId, title) {

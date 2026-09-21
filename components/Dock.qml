@@ -608,11 +608,14 @@ PanelWindow {
         workspaceGroups: workspaceGroups,
         workspaceMonitorScope: workspaceMonitorScope,
         workspaceMonitorOrder: workspaceMonitorOrder,
-        sortByWorkspace: sortByWorkspace,
-        windowIconOverrides: windowIconOverrides
+        sortByWorkspace: sortByWorkspace
       },
       applications: applications,
       toplevels: toplevels,
+      windowRuleMatches: toplevels.map(function(toplevel) {
+        return DockIconModel.matchWindowRule(windowIconOverrides,
+          toplevel ? toplevel.appId : "", toplevel ? toplevel.title : "")
+      }),
       hyprToplevels: hyprToplevels,
       hyprWorkspaces: hyprWorkspaces,
       hyprMonitors: hyprMonitors,

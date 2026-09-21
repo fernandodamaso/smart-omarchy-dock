@@ -23,7 +23,7 @@ Item {
     DockIconModel.normalizeOverrideKey(desktopId)] || ""
   readonly property string profileOverrideSource: overrideKey
     ? (DockIconModel.normalizeOverrides(iconOverrides)[overrideKey] || "") : ""
-  readonly property string windowSource: DockIconModel.normalizeSource(windowOverrideSource)
+  readonly property string windowSource: String(windowOverrideSource || "")
   readonly property string desktopSource: resolveDesktopIcon(desktopIcon)
   readonly property var sourceCandidates: DockIconModel.candidates(windowSource,
     profileOverrideSource, overrideSource, desktopSource,

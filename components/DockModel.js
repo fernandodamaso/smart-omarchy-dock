@@ -1,6 +1,5 @@
 .pragma library
 .import "DockSidebarWidgetModel.js" as SidebarWidgetModel
-.import "DockIconModel.js" as DockIconModel
 
 function normalizedId(value) {
   return String(value || "").toLowerCase().replace(/\.desktop$/, "")
@@ -1252,7 +1251,7 @@ function visibleItemsEqual(current, next) {
 }
 
 function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspace,
-                           groupWindows, hiddenApplicationIds, windowIconOverrides) {
+                           groupWindows, hiddenApplicationIds, windowRuleMatches) {
   var items = []
   var runningByKey = {}
   var nextOriginalIndex = 0
@@ -1274,11 +1273,10 @@ function buildVisibleItems(pinnedIds, toplevels, entries, handles, sortByWorkspa
   for (var topIndex = 0; topIndex < toplevels.length; ++topIndex) {
     var toplevel = toplevels[topIndex]
     var matchedPinned = false
-    // Match the raw Wayland identity before terminal remapping, DesktopEntry
-    // resolution, or pin attachment.
-    var windowRule = DockIconModel.matchWindowRule(
-      windowIconOverrides || [], toplevel ? toplevel.appId : "",
-      toplevel ? toplevel.title : "")
+    // The host-facing surface matched raw Wayland appId/title before this
+    // desktop/pin resolution step and supplies the aligned result here.
+    var windowRule = Array.isArray(windowRuleMatches)
+      ? (windowRuleMatches[topIndex] || null) : null
     var windowRuleKey = windowRule ? windowRule.key : ""
     var windowOverrideSource = windowRule ? windowRule.source : ""
     // Terminal windows running a recognized CLI app (e.g. opencode)
