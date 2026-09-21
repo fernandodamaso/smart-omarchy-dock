@@ -9,6 +9,7 @@ import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
 import "DockMenuModel.js" as DockMenuModel
+import "DockIconModel.js" as DockIconModel
 import "DockFullscreenModel.js" as FullscreenModel
 import "DockWorkspaceGroupModel.js" as WorkspaceGroupModel
 
@@ -95,6 +96,13 @@ PopupWindow {
   DockContextActionController {
     id: contextActions
     windowActions: root.windowActions
+  }
+
+  DockWindowIconDialog {
+    id: windowIconDialog
+    anchorItem: root.anchorItem
+    mutationController: root.applicationMutationController
+    targetValidator: function(target) { return root.targetIsValid(target) }
   }
 
   onRunningToplevelsChanged: {
@@ -716,6 +724,45 @@ PopupWindow {
     return records
   }
 
+  function windowIconRuleForTarget(target) {
+    if (!target || !root.targetIsValid(target) || !root.applicationMutationController
+        || !root.applicationMutationController.settings) return null
+    var toplevel = target.toplevel
+    var appId = String(toplevel && (toplevel.appId || toplevel.app_id) || "")
+    var title = String(toplevel && toplevel.title || "")
+    return DockIconModel.matchWindowRule(
+      DockIconModel.normalizeWindowRules(
+        root.applicationMutationController.settings.windowIconOverrides || []),
+      appId, title)
+  }
+
+  function openWindowIconDialog(target) {
+    if (!target || !root.targetIsValid(target)) { root.dismiss(); return false }
+    return windowIconDialog.openFor(target)
+  }
+
+  function resetWindowIconRule(target) {
+    var rule = root.windowIconRuleForTarget(target)
+    if (!rule || !root.applicationMutationController || !root.targetIsValid(target))
+      return false
+    var reply = root.applicationMutationController.saveWindowIconOverride("reset", {
+      mode: "dialog",
+      originalKey: rule.key,
+      expected: { appId: rule.appId, titlePattern: rule.titlePattern, source: rule.source },
+      appId: rule.appId,
+      titlePattern: rule.titlePattern,
+      source: rule.source
+    })
+    if (reply && (reply.ok === true || (reply.data && reply.data.applied === true))) {
+      root.dismiss()
+      return true
+    }
+    root.feedbackTitle = "Reset Icon"
+    root.feedbackText = reply && reply.error ? String(reply.error.message || "Reset was not applied.")
+      : "Reset was not applied."
+    return false
+  }
+
   function windowPageActions() {
     var target = root.pageTarget
     var valid = root.targetIsValid(target)
@@ -770,6 +817,18 @@ PopupWindow {
       "window:fullscreen-hide-bars", "Fullscreen — Hide Bars", "maximize-2",
       addressValid, "fullscreen-hide-bars", target,
       { checked: fullscreenMode === "hide-bars" }))
+    var windowRule = root.windowIconRuleForTarget(target)
+    records.push(DockMenuModel.separatorRecord("window:icon-actions"))
+    records.push(DockMenuModel.actionRecord(
+      "window:change-icon", "Change Icon", "image",
+      valid && root.applicationMutationController !== null,
+      "change-window-icon", target))
+    if (windowRule) {
+      records.push(DockMenuModel.actionRecord(
+        "window:reset-icon", "Reset Icon", "rotate-ccw",
+        valid && root.applicationMutationController !== null,
+        "reset-window-icon", target))
+    }
     records.push(DockMenuModel.separatorRecord("window:application-actions"))
     records = records.concat(root.applicationActionRecords("window", target))
     records.push(DockMenuModel.separatorRecord("window:close-separator"))
@@ -1019,6 +1078,10 @@ PopupWindow {
       return root.setTargetFullscreenMode(targetContext, "keep-bars")
     case "fullscreen-hide-bars":
       return root.setTargetFullscreenMode(targetContext, "hide-bars")
+    case "change-window-icon":
+      return root.openWindowIconDialog(targetContext)
+    case "reset-window-icon":
+      return root.resetWindowIconRule(targetContext)
     case "minimize-visible": return root.representedAction("minimize-visible")
     case "restore-minimized": return root.representedAction("restore-minimized")
     case "close-represented": return root.representedAction("close-represented")
