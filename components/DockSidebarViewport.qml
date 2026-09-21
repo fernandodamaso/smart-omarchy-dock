@@ -60,12 +60,8 @@ FocusScope {
   FontMetrics { id: metrics; font.family: Style.font.family; font.pixelSize: Style.font.body }
 
   function rowIntersectsViewport(rowY, rowHeightValue) {
-    if (!root.presentationVisible || root.panelCollapsed || list.height <= 0) return false
-    var top = Number(rowY)
-    var bottom = top + Math.max(0, Number(rowHeightValue))
-    var viewportTop = list.contentY
-    var viewportBottom = viewportTop + list.height
-    return bottom > viewportTop && top < viewportBottom
+    return root.presentationVisible && !root.panelCollapsed
+      && InteractionModel.viewportIntersects(rowY, rowHeightValue, list.contentY, list.height)
   }
 
   function estimatedRowHeight(row) {
