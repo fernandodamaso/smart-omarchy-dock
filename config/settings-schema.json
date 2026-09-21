@@ -30,10 +30,10 @@
     "sidebarWidgets": {
       "type": "array",
       "format": "sidebar-widget-ids",
-      "registeredIds": [],
+      "registeredIds": ["demo.display", "demo.lists", "demo.inputs", "demo.actions-states"],
       "uniqueItems": true,
       "resetWithPreferences": true,
-      "description": "Ordered internal widget IDs. Runtime schema readback injects source-registered IDs available in this host. Unknown imported IDs are retained but unavailable."
+      "description": "Ordered internal widget IDs. Four bundled demo Widgets are source-registered; runtime schema readback injects the exact host registry."
     },
     "sidebarWidgetCollapsed": {
       "type": "object",

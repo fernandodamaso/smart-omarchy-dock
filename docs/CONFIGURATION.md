@@ -37,7 +37,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 52 rows 
 | `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
 | `sidebarCollapsed` | `false` | Default icon rail for monitors without a `sidebarCollapsedByMonitor` override. Expanded width and session app folds are retained. |
 | `sidebarCollapsedByMonitor` | `{}` | Object map of exact connector → boolean. Missing connectors follow `sidebarCollapsed`. Disconnected names retained; control characters and non-booleans rejected. |
-| `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. The array is both enabled state and card order. Runtime schema advertises source-registered IDs; unknown imports remain requested/unavailable. Add/remove/reorder use the host writer. |
+| `sidebarWidgets` | `["demo.display","demo.lists","demo.inputs","demo.actions-states"]` | Ordered unique registered internal widget IDs. Four synthetic Demo Widgets are enabled by default so the framework is immediately visible; Add/Manage can remove/re-add them and the existing host writer owns order. |
 | `sidebarWidgetCollapsed` | `{}` | Valid internal widget ID → boolean card-body state. Missing means expanded. Removing a widget keeps its collapse preference so re-adding restores it. Preference reset clears the map. |
 | `sidebarBrowserTabsEnabled` | `true` | When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of `browserActivityMutedServices`. See the [online browser-tabs guide](https://github.com/fernandodamaso/smart-omarchy-dock/blob/370585ccfaed98f1d04954d8598a868aef80a087/docs/browser-tabs.md); it is not part of the offline CLI documentation bundle. |
 | `position` | `"bottom"` | String: top, bottom, left, right. Vertical edges render workspaceLayout as flat. |
@@ -162,7 +162,7 @@ SB-05 owns the internal provider lifecycle and FDM-973 moves Widget cards into t
 hierarchy's shared scroll. Local compositor qualification follows in FDM-974 after
 the reusable UI-kit slice. See the source-only `docs/SIDEBAR.md` contract.
 
-`sidebarWidgets` uses the internal source registry, currently empty in production.
+`sidebarWidgets` uses the internal source registry; production includes four static `demo.*` Widgets.
 Runtime schema `registeredIds` is authoritative for new writes. Unknown imports are
 never executed; requested readback retains them and `data.presentation.widgets`
 reports unavailable state. `config get --effective` lists only registered IDs.

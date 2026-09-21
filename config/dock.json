@@ -26,7 +26,12 @@
   "sidebarExpandedWidth": 320,
   "sidebarCollapsed": false,
   "sidebarCollapsedByMonitor": {},
-  "sidebarWidgets": [],
+  "sidebarWidgets": [
+    "demo.display",
+    "demo.lists",
+    "demo.inputs",
+    "demo.actions-states"
+  ],
   "sidebarWidgetCollapsed": {},
   "sidebarBrowserTabsEnabled": true,
   "position": "bottom",

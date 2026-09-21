@@ -26,9 +26,9 @@ Item {
   readonly property var hyprWorkspaces: Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
   readonly property var desktopToplevels: ToplevelManager.toplevels.values || []
   readonly property var hyprToplevels: Hyprland.toplevels ? Hyprland.toplevels.values || [] : []
-  // Internal provider adapters register here in their own source slices. No
-  // external QML paths, configurable commands, test IDs or additional services.
-  readonly property var sidebarWidgetRegistry: ({})
+  // Trusted source-owned Widget descriptors only. Demo Widgets are static,
+  // synthetic fixtures; real service integrations register alongside them.
+  readonly property var sidebarWidgetRegistry: demoWidgetRegistry.descriptors
   readonly property var sidebarController: sidebarState
   readonly property var sidebarPanels: rendererMode === "sidebar" && presentationLoader.item
     ? presentationLoader.item.panels : []
@@ -393,6 +393,8 @@ Item {
   function emptyTrash() {
     if (!trashEmptyProcess.running) trashEmptyProcess.running = true
   }
+
+  DockDemoWidgetRegistry { id: demoWidgetRegistry }
 
   DockControl {
     id: dockControl
