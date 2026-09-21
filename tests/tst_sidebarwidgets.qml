@@ -111,15 +111,31 @@ TestCase {
   function test_production_views_load_all_factories_without_new_leases() {
     var p=createTemporaryObject(providerFactory,testCase)
     var c=build(p)
-    var view=createTemporaryObject(viewFactory,testCase,{controller:c,widgetId:"fixture.one",width:200,height:150})
-    verify(view !== null)
+    var clip=createTemporaryObject(anchorFactory,testCase,{width:180,height:120})
+    var view=createTemporaryObject(viewFactory,testCase,{
+      controller:c,widgetId:"fixture.one",width:200,height:150,
+      interfaceAnimationsEnabled:false,presentationVisible:false,presentationRevision:17
+    })
+    verify(view !== null && clip !== null)
+    view.presentationClipItem=clip
     for (var i=0;i<12;i++) {
       view.presentation=["compact","expanded","popup"][i%3]
       tryCompare(view,"hasView",true)
       compare(view.loadedItem.widgetContext.id,"fixture.one")
       compare(view.loadedItem.widgetContext.presentation,view.presentation)
       verify(view.loadedItem.widgetContext.provider === p)
+      compare(view.loadedItem.widgetContext.interfaceAnimationsEnabled,false)
+      compare(view.loadedItem.widgetContext.presentationVisible,false)
+      verify(view.loadedItem.widgetContext.presentationClipItem === clip)
+      compare(view.loadedItem.widgetContext.presentationRevision,17)
     }
+    // Presentation metadata is live and must not acquire/subscribe again.
+    view.interfaceAnimationsEnabled=true
+    view.presentationVisible=true
+    view.presentationRevision=18
+    compare(view.loadedItem.widgetContext.interfaceAnimationsEnabled,true)
+    compare(view.loadedItem.widgetContext.presentationVisible,true)
+    compare(view.loadedItem.widgetContext.presentationRevision,18)
     compare(p.acquisitions,1); compare(p.subscriptions,1); compare(p.releases,0)
     p.publish("error"); tryCompare(view,"hasView",false)
     p.publish("ready"); tryCompare(view,"hasView",true)
