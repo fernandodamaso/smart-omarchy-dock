@@ -3,13 +3,11 @@ import qs.Commons
 
 Item {
   id: root
+  WidgetSemanticPalette { id: semanticPalette }
   property string text: ""
   property string semantic: "neutral"
   property bool compact: false
-  readonly property color tone: root.semantic === "danger" ? "#ff6b7a"
-    : root.semantic === "warning" ? "#f5bd36"
-    : root.semantic === "success" ? "#48d5a4"
-    : root.semantic === "info" ? Color.accent : Color.foreground
+  readonly property color tone: semanticPalette.tone(root.semantic)
 
   implicitWidth: label.implicitWidth + (root.compact ? 10 : 14)
   implicitHeight: root.compact ? 18 : 22
