@@ -1,17 +1,114 @@
 # SPDX-License-Identifier: Apache-2.0
 import json
 import os
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
 import selectors
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 PROVIDER = ROOT / "bin" / "smartdock-herdr-provider"
 sys.path.insert(0, str(ROOT))
+
+
+class ProviderQueueTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.provider_mod = SourceFileLoader(
+            "smartdock_herdr_provider_queue", str(PROVIDER)
+        ).load_module()
+
+    def test_control_put_wait_backpressures_instead_of_dropping(self):
+        queue = self.provider_mod.BoundedQueue(max_bytes=16)
+        self.assertTrue(queue.put(("helper", "burst"), 16))
+        finished = threading.Event()
+        result = []
+
+        def writer():
+            result.append(queue.put_wait(("window-processes", 7), 8))
+            finished.set()
+
+        thread = threading.Thread(target=writer)
+        thread.start()
+        time.sleep(0.05)
+        self.assertFalse(finished.is_set(), "control writer must wait while queue is full")
+        self.assertEqual(queue.get_nowait(), ("helper", "burst"))
+        self.assertTrue(finished.wait(1), "control writer should resume when bounded space frees")
+        thread.join(timeout=1)
+        self.assertEqual(result, [True])
+        self.assertEqual(queue.get_nowait(), ("window-processes", 7))
+
+    def test_stdin_routes_all_control_events_through_lossless_enqueue(self):
+        recorded = []
+
+        class RecordingQueue:
+            def put_wait(self, value, size):
+                recorded.append((value, size))
+                return True
+
+            def put(self, *_args, **_kwargs):
+                raise AssertionError("stdin control event used lossy put()")
+
+        class FakeStdin:
+            buffer = [
+                b"refresh\n",
+                b'{"kind":"window-processes","revision":7,"pids":[123]}\n',
+                (
+                    b'{"kind":"focus-agent","requestId":"focus-1",'
+                    b'"providerEpoch":"epoch","serverId":"srv",'
+                    b'"connectionGeneration":1,"agentId":"srv:1:p",'
+                    b'"paneId":"p","terminalId":""}\n'
+                ),
+                b"quit\n",
+            ]
+
+        provider = self.provider_mod.Provider(Path("/tmp/helper"))
+        provider.events = RecordingQueue()
+        original_stdin = self.provider_mod.sys.stdin
+        try:
+            self.provider_mod.sys.stdin = FakeStdin()
+            provider._stdin()
+        finally:
+            self.provider_mod.sys.stdin = original_stdin
+
+        self.assertEqual(
+            [event[0][0] for event in recorded],
+            ["command", "window-processes", "focus-agent", "command"],
+        )
+        self.assertEqual(recorded[1][0][1]["revision"], 7)
+        self.assertEqual(recorded[2][0][1]["requestId"], "focus-1")
+
+    def test_helper_exit_uses_lossless_lifecycle_enqueue(self):
+        recorded = []
+
+        class RecordingQueue:
+            def put_wait(self, value, size):
+                recorded.append((value, size))
+                return True
+
+            def put(self, *_args, **_kwargs):
+                raise AssertionError("helper exit used lossy put()")
+
+        class EmptyStdout:
+            def readline(self, _limit):
+                return b""
+
+        class ExitedProcess:
+            stdout = EmptyStdout()
+
+            def wait(self):
+                return 17
+
+        helper = self.provider_mod.HelperProcess(
+            "srv", "/tmp/herdr.sock", 3, RecordingQueue(), Path("/tmp/helper")
+        )
+        helper._pump(ExitedProcess())
+        self.assertEqual(recorded, [(("exit", "srv", 3, 17, False), 128)])
 
 
 class ProviderProcessTests(unittest.TestCase):

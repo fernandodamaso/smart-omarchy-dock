@@ -30,6 +30,15 @@ class HerdrLifecycleContractTests(unittest.TestCase):
         self.assertIn("DockHerdrService {", standalone)
         self.assertIn("herdrService: herdrService", standalone)
 
+    def test_focus_deadline_scheduler_tracks_oldest_pending_request(self):
+        service = self.read("components/DockHerdrService.qml")
+        self.assertIn("function scheduleFocusDeadline()", service)
+        self.assertIn("HerdrModel.nextFocusDeadlineDelay", service)
+        self.assertIn("HerdrModel.expiredFocusRequestIds", service)
+        timer = service[service.index("id: focusDeadlineTimer"):]
+        self.assertIn("repeat: false", timer[:700])
+        self.assertIn("root.scheduleFocusDeadline()\n    return requestId", service)
+
     def test_sidebar_registry_delegates_to_the_shared_service(self):
         host = self.read("DockHost.qml")
         self.assertIn('"herdr.agents"', host)

@@ -715,6 +715,20 @@ console.log('herdr sidebar model projection: PASS')
   assert.ok(Model.statusLabel('done').indexOf('success') < 0,
     'done is Herdr state, not proven task success')
 
+  // Per-request deadlines: a newer request must not extend the oldest one.
+  const focusPending = {
+    'focus-a': { startedAt: 0 },
+    'focus-b': { startedAt: 4900 },
+  }
+  assert.equal(Model.nextFocusDeadlineDelay(focusPending, 4900, 5000), 100)
+  assert.deepEqual(
+    plain(Model.expiredFocusRequestIds(focusPending, 5000, 5000)),
+    ['focus-a'],
+  )
+  assert.equal(Model.nextFocusDeadlineDelay({ 'focus-b': { startedAt: 4900 } }, 5000, 5000), 4900)
+  assert.equal(Model.nextFocusDeadlineDelay({}, 5000, 5000), -1)
+  assert.equal(Model.nextFocusDeadlineDelay({ bad: { startedAt: 'nope' } }, 5000, 5000), 0)
+
   assert.equal(Model.displayAgentKind('codex'), 'Codex')
   assert.equal(Model.displayAgentKind('claude'), 'Claude')
   assert.equal(Model.displayAgentKind('cursor'), 'Cursor')

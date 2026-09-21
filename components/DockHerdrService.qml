@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "DockHerdrModel.js" as HerdrModel
 
 // One demand-driven Herdr owner for every SmartDock consumer. Merely loading
 // this component starts no process. Active leases share one provider process.
@@ -30,20 +31,34 @@ Item {
   }
 
   function settleFocus(requestId, ok, errorCode) {
-    var pending = root.pendingFocus || ({})
-    var entry = pending[requestId]
-    if (!entry) return
+    var pending = Object.assign({}, root.pendingFocus || ({}))
+    if (!pending[requestId]) return
     delete pending[requestId]
     root.pendingFocus = pending
+    root.scheduleFocusDeadline()
     root.focusAgentFinished(requestId, ok === true, String(errorCode || ""))
   }
 
   function settleAllFocus(errorCode) {
+    focusDeadlineTimer.stop()
     var pending = root.pendingFocus || ({})
     var ids = Object.keys(pending)
     root.pendingFocus = ({})
     for (var i = 0; i < ids.length; i++)
       root.focusAgentFinished(ids[i], false, String(errorCode || "provider_unavailable"))
+  }
+
+  function scheduleFocusDeadline() {
+    var delay = HerdrModel.nextFocusDeadlineDelay(
+      root.pendingFocus, Date.now(), root.focusDeadlineMs)
+    if (delay < 0) {
+      focusDeadlineTimer.stop()
+      return
+    }
+    // One-shot timer always tracks the oldest pending request. A newer focus
+    // request therefore cannot postpone an older request's deadline.
+    focusDeadlineTimer.interval = Math.max(1, delay)
+    focusDeadlineTimer.restart()
   }
 
   function focusAgent(target) {
@@ -82,7 +97,7 @@ Item {
     }
     root.pendingFocus = pending
     providerProcess.write(payload + "\n")
-    focusDeadlineTimer.restart()
+    root.scheduleFocusDeadline()
     return requestId
   }
 
@@ -287,30 +302,26 @@ Item {
 
   Timer {
     id: focusDeadlineTimer
-    interval: root.focusDeadlineMs
-    repeat: true
+    interval: 1
+    repeat: false
     onTriggered: {
       var pending = root.pendingFocus || ({})
-      var ids = Object.keys(pending)
-      if (!ids.length) {
-        focusDeadlineTimer.stop()
+      var now = Date.now()
+      var expired = HerdrModel.expiredFocusRequestIds(
+        pending, now, root.focusDeadlineMs)
+      if (!expired.length) {
+        root.scheduleFocusDeadline()
         return
       }
-      var now = Date.now()
       var next = Object.assign({}, pending)
-      var changed = false
-      for (var i = 0; i < ids.length; i++) {
-        var id = ids[i]
-        var entry = pending[id]
-        if (!entry || now - Number(entry.startedAt || 0) < root.focusDeadlineMs)
-          continue
-        delete next[id]
-        changed = true
-        root.focusAgentFinished(id, false, "timeout")
-      }
-      if (changed) root.pendingFocus = next
-      if (!Object.keys(root.pendingFocus || ({})).length)
-        focusDeadlineTimer.stop()
+      for (var i = 0; i < expired.length; i++)
+        delete next[expired[i]]
+      root.pendingFocus = next
+      // Publish after removing all expired entries so callbacks cannot observe
+      // already-dead requests or have a new request reschedule stale state.
+      for (var j = 0; j < expired.length; j++)
+        root.focusAgentFinished(expired[j], false, "timeout")
+      root.scheduleFocusDeadline()
     }
   }
 

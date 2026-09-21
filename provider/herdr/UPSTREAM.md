@@ -30,14 +30,17 @@ child branch was created.
 
 - SmartDock owns discovery, normalization and helper supervision. No omaherdr
   module, daemon, D-Bus service, state file or process is required at runtime.
-- The first milestone is local-only. The upstream remote/SSH bridge, focus
-  routing, notifier, attention-policy engine and persistence are not copied.
+- The first milestone is local-only. The upstream remote/SSH bridge, notifier,
+  attention-policy engine and persistence are not copied. Focus routing is
+  reimplemented only through SmartDock's bounded, identity-checked
+  `focus-agent` action; no generic upstream control surface is exposed.
 - Discovery resolves default/named/unattached local sessions and deduplicates
   canonical socket endpoints. A failed named-session lookup never resolves to
   the default socket.
 - The helper requires one explicit absolute socket and removes arbitrary `rpc`
-  forwarding. Stdin accepts only `snapshot` and `quit`; the only Herdr socket
-  requests are `session.snapshot` and `events.subscribe`.
+  forwarding. Stdin accepts `snapshot`, `quit` and bounded `focus-agent`
+  JSON; the only Herdr socket requests are `session.snapshot`,
+  `events.subscribe` and the allowlisted `agent.focus` action.
 - Frames, request deadlines, queue bytes, JSON shape, public rows and output
   writes are bounded. Oversize/invalid state fails explicitly instead of
   becoming a healthy empty inventory.

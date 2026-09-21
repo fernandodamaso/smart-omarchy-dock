@@ -49,17 +49,37 @@ class BoundedQueue:
         self.bytes = 0
         self.items: deque[tuple[object, int]] = deque()
         self.cv = threading.Condition()
+        self.control_waiters = 0
 
     def put(self, value: object, size: int) -> bool:
         if size < 0 or size > self.max_bytes:
             return False
         with self.cv:
-            if self.bytes + size > self.max_bytes:
+            # Once a control/lifecycle writer is waiting, helper data may no
+            # longer refill the queue ahead of it. Helper overflow is already a
+            # fail-closed reconnect path, while control delivery must be lossless.
+            if self.control_waiters > 0 or self.bytes + size > self.max_bytes:
                 return False
             self.items.append((value, size))
             self.bytes += size
             self.cv.notify()
             return True
+
+    def put_wait(self, value: object, size: int) -> bool:
+        """Bounded backpressure for non-lossy control/lifecycle events."""
+        if size < 0 or size > self.max_bytes:
+            return False
+        with self.cv:
+            self.control_waiters += 1
+            try:
+                while self.bytes + size > self.max_bytes:
+                    self.cv.wait()
+                self.items.append((value, size))
+                self.bytes += size
+                self.cv.notify()
+                return True
+            finally:
+                self.control_waiters -= 1
 
     def get(self, timeout: float | None = None) -> object:
         deadline = None if timeout is None else time.monotonic() + timeout
@@ -74,6 +94,7 @@ class BoundedQueue:
                     self.cv.wait(remaining)
             value, size = self.items.popleft()
             self.bytes -= size
+            self.cv.notify_all()
             return value
 
     def get_nowait(self) -> object:
@@ -136,7 +157,9 @@ class HelperProcess:
                 self._terminate(process)
                 break
         code = process.wait()
-        self.events.put(("exit", self.server_id, self.token, code, self.overflowed), 128)
+        # Helper death is lifecycle state, not telemetry: never lose it behind
+        # an event burst or the provider can retain stale state indefinitely.
+        self.events.put_wait(("exit", self.server_id, self.token, code, self.overflowed), 128)
 
     def send(self, command: str) -> bool:
         process = self.process
@@ -215,19 +238,19 @@ class Provider:
             if len(command) > 4096:
                 continue
             if command in (b"refresh", b"quit"):
-                self.events.put(("command", command.decode("ascii")), len(command) + 64)
+                self.events.put_wait(("command", command.decode("ascii")), len(command) + 64)
                 if command == b"quit":
                     return
                 continue
             parsed = parse_window_processes_command(command)
             if parsed is not None:
-                self.events.put(("window-processes", parsed), len(command) + 64)
+                self.events.put_wait(("window-processes", parsed), len(command) + 64)
                 continue
             focus = parse_provider_focus_agent_command(command)
             if focus is not None:
-                self.events.put(("focus-agent", focus), len(command) + 64)
+                self.events.put_wait(("focus-agent", focus), len(command) + 64)
                 continue
-        self.events.put(("command", "quit"), 64)
+        self.events.put_wait(("command", "quit"), 64)
 
     def scan(self) -> None:
         infos, error = self.discovery.scan()

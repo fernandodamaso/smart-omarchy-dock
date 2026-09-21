@@ -201,6 +201,39 @@ function resolveAssociations(request, snapshot) {
   return associateWindows(snapshot.servers, windows)
 }
 
+// Focus action deadlines are per request. Returning -1 means no pending request;
+// malformed timestamps fail closed as immediately due instead of lingering.
+function nextFocusDeadlineDelay(pending, now, deadlineMs) {
+  var source = pending && typeof pending === "object" ? pending : ({})
+  var ids = Object.keys(source)
+  if (!ids.length) return -1
+  var current = Number(now)
+  var timeout = Number(deadlineMs)
+  if (!isFinite(current) || !isFinite(timeout) || timeout <= 0) return 0
+  var earliest = Infinity
+  for (var i = 0; i < ids.length; i++) {
+    var entry = source[ids[i]]
+    var started = entry && Number(entry.startedAt)
+    if (!isFinite(started) || started < 0) return 0
+    earliest = Math.min(earliest, started + timeout)
+  }
+  return Math.max(0, Math.ceil(earliest - current))
+}
+
+function expiredFocusRequestIds(pending, now, deadlineMs) {
+  var source = pending && typeof pending === "object" ? pending : ({})
+  var current = Number(now)
+  var timeout = Number(deadlineMs)
+  if (!isFinite(current) || !isFinite(timeout) || timeout <= 0)
+    return Object.keys(source)
+  return Object.keys(source).filter(function(id) {
+    var entry = source[id]
+    var started = entry && Number(entry.startedAt)
+    if (!isFinite(started) || started < 0) return true
+    return current - started >= timeout
+  })
+}
+
 // Compact appearance: shared status normalization, unique-ID counts, color roles.
 // Display order for nonzero status counters and agent lists:
 // blocked → working → done → idle → unknown.
