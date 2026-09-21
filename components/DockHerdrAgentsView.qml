@@ -140,6 +140,9 @@ Item {
         || !root.visible || !row || row.kind !== "agent"
         || HerdrModel.normalizeStatus(row.status) !== "working")
       return false
+    // mapFromItem() does not itself expose the Flickable scroll offset as a
+    // binding dependency, so read contentY explicitly for inner-list updates.
+    var innerScrollRevision = detailFlick.contentY
     if (!root.itemIntersectsClip(item, detailFlick)) return false
     return !root.presentationClipItem
       || root.itemIntersectsClip(item, root.presentationClipItem)
