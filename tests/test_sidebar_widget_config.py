@@ -22,8 +22,8 @@ class SidebarWidgetConfigTests(unittest.TestCase):
         result = self.command('config schema sidebarWidgets --json')
         self.assertTrue(result['ok'], result)
         spec = result['data']['settings']['sidebarWidgets']
-        self.assertEqual(spec['default'], [])
-        self.assertEqual(spec['registeredIds'], [])
+        self.assertEqual(spec['default'], DEMO_WIDGET_IDS)
+        self.assertEqual(spec['registeredIds'], DEMO_WIDGET_IDS)
         self.assertEqual(spec['format'], 'sidebar-widget-ids')
         before = self.command('config get --json')['data']['settings']
         self.assertEqual(before['sidebarWidgets'], ['future.clock'])
