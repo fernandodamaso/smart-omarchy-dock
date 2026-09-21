@@ -4,7 +4,7 @@ import qs.Commons
 Item {
   id: root
   property var widgetContext: ({})
-  readonly property var data: widgetContext && widgetContext.data ? widgetContext.data : ({})
+  readonly property var snapshotData: widgetContext && widgetContext.data ? widgetContext.data : ({})
   implicitHeight: content.implicitHeight
 
   Column {
@@ -24,31 +24,31 @@ Item {
       width: parent.width
       label: "Search"
       helperText: "Search input"
-      WidgetSearchInput { width: parent.width; text: String(root.data.search || ""); placeholderText: "Filter widgets" }
+      WidgetSearchInput { width: parent.width; text: String(root.snapshotData.search || ""); placeholderText: "Filter widgets" }
     }
 
     WidgetFormField {
       width: parent.width
       label: "Text"
-      WidgetTextInput { width: parent.width; text: String(root.data.name || ""); placeholderText: "Widget name" }
+      WidgetTextInput { width: parent.width; text: String(root.snapshotData.name || ""); placeholderText: "Widget name" }
     }
 
     WidgetFormField {
       width: parent.width
       label: "Number"
-      WidgetNumberInput { width: parent.width; numericValue: Number(root.data.limit || 5); minimum: 1; maximum: 20 }
+      WidgetNumberInput { width: parent.width; numericValue: Number(root.snapshotData.limit || 5); minimum: 1; maximum: 20 }
     }
 
     WidgetFormField {
       width: parent.width
       label: "Select"
-      WidgetSelect { width: parent.width; model: root.data.refresh || ["Manual"]; accessibleName: "Refresh interval" }
+      WidgetSelect { width: parent.width; model: root.snapshotData.refresh || ["Manual"]; accessibleName: "Refresh interval" }
     }
 
     WidgetFormField {
       width: parent.width
       label: "Text area"
-      WidgetTextArea { width: parent.width; text: String(root.data.notes || ""); placeholderText: "Optional notes" }
+      WidgetTextArea { width: parent.width; text: String(root.snapshotData.notes || ""); placeholderText: "Optional notes" }
     }
 
     WidgetCheckbox { text: "Show completed"; checked: true }
