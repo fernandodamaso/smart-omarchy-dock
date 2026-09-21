@@ -644,8 +644,8 @@ function project(input) {
     window.tabs = tabs
     window.tabsKey = tabsKey
     window.tabsExpandable = tabs.length > 0
-    // Missing fold key => folded (default). folds[tabsKey] === true => expanded.
-    window.tabsFolded = !window.tabsExpandable || folds[tabsKey] !== true
+    // Missing fold key => expanded (default). folds[tabsKey] === true => folded.
+    window.tabsFolded = window.tabsExpandable && folds[tabsKey] === true
     return window
   }
   function attachHerdr(window) {

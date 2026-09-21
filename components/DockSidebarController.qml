@@ -1031,7 +1031,8 @@ Item {
     return true
   }
 
-  // Expand/fold Chrome tabs under a window row. folds[tabsKey] === true means expanded.
+  // Expand/fold Chrome tabs under a window row. Missing key => expanded;
+  // folds[tabsKey] === true => folded.
   function toggleWindowTabs(key) {
     if (root.interactionBusy) return false
     var row = root.rowsByKey[key]

@@ -667,7 +667,7 @@ console.log('herdr sidebar model association: PASS')
     pinned: f.settings.pinned,
     hiddenApplications: f.settings.hiddenApplications,
     registry,
-    folds: { ['tabs:' + chromeEntry.key]: true },
+    folds: ({}),
     collapsed: false,
     sidebarBrowserTabsEnabled: true,
     browserTabs: {
