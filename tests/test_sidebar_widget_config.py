@@ -64,7 +64,7 @@ class SidebarWidgetConfigTests(unittest.TestCase):
         self.assertEqual(self.command('config get sidebarWidgets --json')['data']['settings']['sidebarWidgets'], [])
 
     def test_cli_set_checks_registered_ids_not_transient_readiness(self):
-        self.assertTrue(self.command("config set sidebarWidgets '[\\\"demo.display\\\"]' --json")['ok'])
+        self.assertTrue(self.command("config set sidebarWidgets '[\"demo.display\"]' --json")['ok'])
         with self.assertRaises(cli.CliError) as rejected:
             self.command("config set sidebarWidgets '[\"fixture.one\"]' --json")
         self.assertEqual(rejected.exception.code, 'E_VALIDATION')
