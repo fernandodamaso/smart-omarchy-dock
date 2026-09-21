@@ -30,6 +30,7 @@ from discovery import Discovery  # noqa: E402
 from model import ServerState, normalized_snapshot  # noqa: E402
 from attachments import (  # noqa: E402
     discover_attachments,
+    parse_provider_focus_agent_command,
     parse_window_processes_command,
     resolve_window_identities,
 )
@@ -142,7 +143,11 @@ class HelperProcess:
         if not process or process.poll() is not None or process.stdin is None:
             return False
         try:
-            process.stdin.write(command.encode("ascii") + b"\n")
+            # ASCII for snapshot/quit; UTF-8 JSON for focus-agent (ids are ASCII).
+            payload = command if isinstance(command, (bytes, bytearray)) else command.encode("utf-8")
+            if not payload.endswith(b"\n"):
+                payload += b"\n"
+            process.stdin.write(payload)
             process.stdin.flush()
             return True
         except (OSError, ValueError, BrokenPipeError):
@@ -217,6 +222,11 @@ class Provider:
             parsed = parse_window_processes_command(command)
             if parsed is not None:
                 self.events.put(("window-processes", parsed), len(command) + 64)
+                continue
+            focus = parse_provider_focus_agent_command(command)
+            if focus is not None:
+                self.events.put(("focus-agent", focus), len(command) + 64)
+                continue
         self.events.put(("command", "quit"), 64)
 
     def scan(self) -> None:
@@ -287,6 +297,87 @@ class Provider:
         self.refresh_window_processes()
         self.dirty = True
 
+    def emit_action_result(self, request_id: str, ok: bool, error: str = "") -> None:
+        code = error if isinstance(error, str) and error else ""
+        if ok:
+            code = ""
+        elif code not in (
+            "invalid_request", "inventory_reconciling", "agent_gone", "identity_mismatch",
+            "server_unavailable", "timeout", "provider_unavailable", "unsupported",
+            "unsupported_command",
+        ):
+            code = "unsupported"
+        payload = {
+            "kind": "action-result",
+            "requestId": request_id,
+            "ok": ok is True,
+            "error": code,
+        }
+        frame = (
+            json.dumps(payload, separators=(",", ":"), ensure_ascii=True, allow_nan=False) + "\n"
+        ).encode("utf-8")
+        view = memoryview(frame)
+        deadline = time.monotonic() + OUTPUT_TIMEOUT
+        while view:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([], [sys.stdout], [], remaining)[1]:
+                raise BrokenPipeError("provider output unavailable")
+            written = os.write(sys.stdout.fileno(), view[:65536])
+            if written <= 0:
+                raise BrokenPipeError("provider output unavailable")
+            view = view[written:]
+
+    def apply_focus_agent(self, request: dict[str, object]) -> None:
+        request_id = str(request.get("requestId") or "")
+        if not request_id:
+            return
+        if request.get("providerEpoch") != self.epoch:
+            self.emit_action_result(request_id, False, "identity_mismatch")
+            return
+        server_id = str(request.get("serverId") or "")
+        state = self.states.get(server_id)
+        if not state or not state.live:
+            self.emit_action_result(request_id, False, "server_unavailable")
+            return
+        # Do not block on snapshot_due. Status and post-focus structural events
+        # set that flag constantly; agent/pane/terminal checks below already
+        # fail closed if inventory no longer contains the captured identity.
+        generation = request.get("connectionGeneration")
+        if generation != state.generation:
+            self.emit_action_result(request_id, False, "identity_mismatch")
+            return
+        agents = state.live_agents(time.monotonic())
+        if agents is None:
+            self.emit_action_result(request_id, False, "server_unavailable")
+            return
+        agent_id = str(request.get("agentId") or "")
+        pane_id = str(request.get("paneId") or "")
+        terminal_id = str(request.get("terminalId") or "")
+        match = None
+        for agent in agents:
+            if agent.get("id") != agent_id:
+                continue
+            if agent.get("paneId") != pane_id:
+                continue
+            if terminal_id and agent.get("terminalId", "") != terminal_id:
+                continue
+            match = agent
+            break
+        if match is None:
+            self.emit_action_result(request_id, False, "agent_gone")
+            return
+        helper = self.helpers.get(server_id)
+        if not helper:
+            self.emit_action_result(request_id, False, "server_unavailable")
+            return
+        command = json.dumps({
+            "kind": "focus-agent",
+            "requestId": request_id,
+            "pane_id": pane_id,
+        }, separators=(",", ":"), ensure_ascii=True)
+        if not helper.send(command):
+            self.emit_action_result(request_id, False, "server_unavailable")
+
     def start_helper(self, server_id: str, replace: bool = True) -> None:
         state = self.states.get(server_id)
         if not state:
@@ -334,6 +425,11 @@ class Provider:
             if isinstance(request, dict):
                 self.apply_window_processes(request)
             return
+        if kind == "focus-agent":
+            request = event[1]
+            if isinstance(request, dict):
+                self.apply_focus_agent(request)
+            return
         if kind not in ("helper", "exit"):
             return
 
@@ -356,6 +452,15 @@ class Provider:
         message = event[3]
         now = time.monotonic()
         message_kind = message.get("kind")
+        if message_kind == "action-result":
+            request_id = message.get("requestId")
+            if isinstance(request_id, str) and request_id:
+                self.emit_action_result(
+                    request_id,
+                    message.get("ok") is True,
+                    str(message.get("error") or ""),
+                )
+            return
         if message_kind == "snapshot":
             state.apply_snapshot(message, now)
         elif message_kind == "status":

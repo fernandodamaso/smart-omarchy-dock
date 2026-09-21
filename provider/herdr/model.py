@@ -374,7 +374,7 @@ def normalized_snapshot(
             "inventory": True,
             "attention": True,
             "remote": False,
-            "actions": False,
+            "actions": True,
             "desktopNotifications": False,
         },
         "servers": public_servers,

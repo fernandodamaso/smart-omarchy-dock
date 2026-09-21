@@ -569,6 +569,92 @@ def parse_window_processes_command(raw: bytes) -> dict[str, Any] | None:
     return {"revision": revision, "pids": normalized}
 
 
+def _bounded_id(value: object, *, max_len: int = 128) -> str | None:
+    if not isinstance(value, str) or not value or len(value) > max_len:
+        return None
+    if any(ord(char) < 32 or ord(char) == 127 or 0xD800 <= ord(char) <= 0xDFFF
+           for char in value):
+        return None
+    return value
+
+
+def parse_provider_focus_agent_command(raw: bytes) -> dict[str, Any] | None:
+    """Parse SmartDock→provider focus-agent stdin command.
+
+    Fail-closed: exact field set, bounded ids, positive generation. No socket
+    paths, methods, or free-form Herdr payloads.
+    """
+    if not isinstance(raw, (bytes, bytearray)) or len(raw) > MAX_STDIN_COMMAND:
+        return None
+    try:
+        message = json.loads(raw)
+    except (ValueError, UnicodeError, TypeError):
+        return None
+    if not isinstance(message, dict):
+        return None
+    allowed = {
+        "kind", "requestId", "providerEpoch", "serverId",
+        "connectionGeneration", "agentId", "paneId", "terminalId",
+    }
+    if set(message) - allowed:
+        return None
+    if message.get("kind") != "focus-agent":
+        return None
+    request_id = _bounded_id(message.get("requestId"), max_len=64)
+    epoch = _bounded_id(message.get("providerEpoch"), max_len=64)
+    server_id = _bounded_id(message.get("serverId"), max_len=128)
+    agent_id = _bounded_id(message.get("agentId"), max_len=192)
+    pane_id = _bounded_id(message.get("paneId"), max_len=128)
+    if not request_id or not epoch or not server_id or not agent_id or not pane_id:
+        return None
+    generation = message.get("connectionGeneration")
+    if isinstance(generation, bool):
+        return None
+    if isinstance(generation, float):
+        if not generation.is_integer() or generation <= 0:
+            return None
+        generation = int(generation)
+    elif not isinstance(generation, int) or generation <= 0:
+        return None
+    terminal_id = message.get("terminalId", "")
+    if terminal_id in ("", None):
+        terminal = ""
+    else:
+        terminal = _bounded_id(terminal_id, max_len=128)
+        if terminal is None:
+            return None
+    return {
+        "requestId": request_id,
+        "providerEpoch": epoch,
+        "serverId": server_id,
+        "connectionGeneration": generation,
+        "agentId": agent_id,
+        "paneId": pane_id,
+        "terminalId": terminal,
+    }
+
+
+def parse_helper_focus_agent_command(raw: bytes) -> dict[str, Any] | None:
+    """Parse provider→helper focus-agent stdin command (requestId + pane_id)."""
+    if not isinstance(raw, (bytes, bytearray)) or len(raw) > MAX_STDIN_COMMAND:
+        return None
+    try:
+        message = json.loads(raw)
+    except (ValueError, UnicodeError, TypeError):
+        return None
+    if not isinstance(message, dict):
+        return None
+    if set(message) - {"kind", "requestId", "pane_id"}:
+        return None
+    if message.get("kind") != "focus-agent":
+        return None
+    request_id = _bounded_id(message.get("requestId"), max_len=64)
+    pane_id = _bounded_id(message.get("pane_id"), max_len=128)
+    if not request_id or not pane_id:
+        return None
+    return {"requestId": request_id, "pane_id": pane_id}
+
+
 def resolve_window_identities(
     pids: list[int],
     *,

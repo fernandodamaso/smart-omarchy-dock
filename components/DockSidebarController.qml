@@ -103,6 +103,11 @@ Item {
   property var scrollStates: ({})
   property string focusedRowKey: ""
   property string mutationFeedback: ""
+  // Short-lived focus failure by row key (fixed error codes only).
+  property var herdrFocusErrors: ({})
+  property string latestFocusRequestId: ""
+  property var pendingFocusByRequest: ({})
+  property var pendingFocusByAgent: ({})
   // Intra-row keyboard focus for the browser-tab mute (eye) control.
   property string alertControlKey: ""
   readonly property var rowsByKey: SidebarModel.indexRowsByKey(projection, railProjection)
@@ -603,12 +608,73 @@ Item {
       target.targetId = String(row.targetId || "")
       target.windowAddress = String(row.windowAddress || "").toLowerCase()
       target.windowKey = String(row.windowKey || "")
+    } else if (row.kind === "herdr-agent" || (row.kind === "herdr-tab" && row.actionable === true)) {
+      if (!row.actionable || !row.paneId || !row.agentId || !row.serverId) return null
+      if (!root.windowActions.isAlive(row.toplevel)) return null
+      var generation = Number(row.connectionGeneration)
+      if (!isFinite(generation) || Math.floor(generation) !== generation || generation <= 0)
+        return null
+      target.toplevel = row.toplevel
+      target.address = String(row.address || root.windowActions.addressFor(row.toplevel) || "")
+      target.windowKey = String(row.windowKey || "")
+      target.providerEpoch = String(row.providerEpoch || "")
+      target.serverId = String(row.serverId || "")
+      target.connectionGeneration = generation
+      target.agentId = String(row.agentId || "")
+      target.paneId = String(row.paneId || "")
+      target.terminalId = String(row.terminalId || "")
+      if (!target.providerEpoch || !target.windowKey) return null
     } else if (row.kind === "workspace") {
       var destination = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
       if (!destination) return null
       target.monitorIdentity = destination.monitor
     } else if (row.kind !== "application" && row.kind !== "launcher") return null
     return target
+  }
+
+  function herdrAgentFocusKey(target) {
+    if (!target) return ""
+    return [
+      String(target.serverId || ""),
+      String(target.agentId || ""),
+      String(target.paneId || "")
+    ].join("\0")
+  }
+
+  function herdrProvider() {
+    // Prefer the host service directly; the widget lease provider is the same
+    // object when the lease is live, but host access does not depend on view().
+    if (root.host && root.host.herdrService
+        && typeof root.host.herdrService.focusAgent === "function")
+      return root.host.herdrService
+    var view = root.widgetView("herdr.agents")
+    return view && view.provider ? view.provider : null
+  }
+
+  function clearHerdrFocusError(key) {
+    if (!key || !root.herdrFocusErrors || !root.herdrFocusErrors[key]) return
+    var next = Object.assign({}, root.herdrFocusErrors)
+    delete next[key]
+    root.herdrFocusErrors = next
+  }
+
+  function setHerdrFocusError(key, errorCode) {
+    if (!key) return
+    var code = String(errorCode || "unsupported")
+    var next = Object.assign({}, root.herdrFocusErrors || ({}))
+    next[key] = { code: code, expiresAt: Date.now() + 4000 }
+    root.herdrFocusErrors = next
+    herdrFocusErrorTimer.restart()
+  }
+
+  function herdrFocusErrorFor(key) {
+    var entry = root.herdrFocusErrors && root.herdrFocusErrors[key]
+    if (!entry) return ""
+    if (Date.now() >= Number(entry.expiresAt || 0)) {
+      root.clearHerdrFocusError(key)
+      return ""
+    }
+    return String(entry.code || "")
   }
 
   function targetIsCurrent(target) {
@@ -629,6 +695,24 @@ Item {
         && root.windowActions.isAlive(target.toplevel)
         && String(row.windowAddress || "").toLowerCase() === target.windowAddress
     }
+    if (target.kind === "herdr-agent" || target.kind === "herdr-tab") {
+      if (row.actionable !== true) return false
+      if (String(row.windowKey || "") !== String(target.windowKey || "")) return false
+      if (String(row.providerEpoch || "") !== String(target.providerEpoch || "")) return false
+      if (String(row.serverId || "") !== String(target.serverId || "")) return false
+      if (String(row.agentId || "") !== String(target.agentId || "")) return false
+      if (String(row.paneId || "") !== String(target.paneId || "")) return false
+      if (String(row.terminalId || "") !== String(target.terminalId || "")) return false
+      if (Number(row.connectionGeneration) !== Number(target.connectionGeneration)) return false
+      if (!root.windowActions.isAlive(target.toplevel) || row.toplevel !== target.toplevel)
+        return false
+      if (String(row.address || root.windowActions.addressFor(target.toplevel) || "")
+          !== String(target.address || ""))
+        return false
+      var assoc = root.herdrAssociations && root.herdrAssociations.byWindowKey
+      if (!assoc || assoc[target.windowKey] !== target.serverId) return false
+      return true
+    }
     if (target.kind === "workspace") {
       var current = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
       return !!current && current.monitor === target.monitorIdentity
@@ -646,9 +730,14 @@ Item {
     })
   }
 
-  function activateTarget(target, control, clickedConnector) {
+  function activateTarget(target, control, clickedConnector, modifiers) {
     if (root.interactionBusy || !root.targetIsCurrent(target)) return false
     var accepted = false
+    if (target.kind === "herdr-agent" || target.kind === "herdr-tab") {
+      if (control === true) return false
+      if (Number(modifiers || 0) !== Number(Qt.NoModifier)) return false
+      return root.activateHerdrTarget(target)
+    }
     if (target.kind === "window") {
       // FDM-954's deliberate Ctrl route. Missing/untrusted modifier state cannot
       // authorize a move; no frozen workspace override and no focus-derived monitor.
@@ -703,6 +792,98 @@ Item {
     }
     if (accepted) root.focusReturnTarget = null
     return accepted
+  }
+
+  function activateHerdrTarget(target) {
+    root.clearHerdrFocusError(target.key)
+    var agentKey = root.herdrAgentFocusKey(target)
+    var existingId = root.pendingFocusByAgent && root.pendingFocusByAgent[agentKey]
+    if (existingId && root.pendingFocusByRequest && root.pendingFocusByRequest[existingId]) {
+      root.latestFocusRequestId = existingId
+      return true
+    }
+    var provider = root.herdrProvider()
+    if (!provider || typeof provider.focusAgent !== "function") {
+      root.setHerdrFocusError(target.key, "provider_unavailable")
+      return false
+    }
+    var requestId = root.enqueueHerdrFocus(provider, target, agentKey, false)
+    return !!requestId
+  }
+
+  function enqueueHerdrFocus(provider, target, agentKey, afterRaise) {
+    var requestId = provider.focusAgent({
+      providerEpoch: target.providerEpoch,
+      serverId: target.serverId,
+      connectionGeneration: Math.floor(Number(target.connectionGeneration)),
+      agentId: target.agentId,
+      paneId: target.paneId,
+      terminalId: target.terminalId
+    })
+    if (!requestId) {
+      if (!afterRaise) root.setHerdrFocusError(target.key, "provider_unavailable")
+      return ""
+    }
+    var byRequest = Object.assign({}, root.pendingFocusByRequest || ({}))
+    byRequest[requestId] = {
+      key: target.key,
+      kind: target.kind,
+      windowKey: target.windowKey,
+      toplevel: target.toplevel,
+      address: target.address,
+      providerEpoch: target.providerEpoch,
+      serverId: target.serverId,
+      connectionGeneration: Math.floor(Number(target.connectionGeneration)),
+      agentId: target.agentId,
+      paneId: target.paneId,
+      terminalId: target.terminalId,
+      agentKey: agentKey,
+      afterRaise: afterRaise === true
+    }
+    root.pendingFocusByRequest = byRequest
+    var byAgent = Object.assign({}, root.pendingFocusByAgent || ({}))
+    byAgent[agentKey] = requestId
+    root.pendingFocusByAgent = byAgent
+    root.latestFocusRequestId = requestId
+    return requestId
+  }
+
+  function onHerdrFocusFinished(requestId, ok, errorCode) {
+    var pending = root.pendingFocusByRequest && root.pendingFocusByRequest[requestId]
+    if (!pending) return
+    var byRequest = Object.assign({}, root.pendingFocusByRequest)
+    delete byRequest[requestId]
+    root.pendingFocusByRequest = byRequest
+    if (root.pendingFocusByAgent && root.pendingFocusByAgent[pending.agentKey] === requestId) {
+      var byAgent = Object.assign({}, root.pendingFocusByAgent)
+      delete byAgent[pending.agentKey]
+      root.pendingFocusByAgent = byAgent
+    }
+    var isLatest = root.latestFocusRequestId === requestId
+    if (!ok) {
+      if (isLatest) root.setHerdrFocusError(pending.key, errorCode || "unsupported")
+      return
+    }
+    if (!isLatest) return
+    if (!root.targetIsCurrent(pending)) return
+    if (String(pending.providerEpoch || "") !== String(
+          (root.rowsByKey[pending.key] && root.rowsByKey[pending.key].providerEpoch) || ""))
+      return
+    if (Number(pending.connectionGeneration)
+        !== Number((root.rowsByKey[pending.key]
+          && root.rowsByKey[pending.key].connectionGeneration) || 0))
+      return
+    // Confirm focus already applied after a window raise — done.
+    if (pending.afterRaise) return
+    // Raise the Herdr window, then re-assert pane focus. Window activation can
+    // restore the client's prior tab if it runs after the first agent.focus.
+    if (root.windowActions.isAlive(pending.toplevel)) {
+      root.windowActions.activateToplevel(pending.toplevel, true, "", true)
+      root.focusReturnTarget = null
+    }
+    var provider = root.herdrProvider()
+    if (!provider || typeof provider.focusAgent !== "function") return
+    root.enqueueHerdrFocus(provider, pending, pending.agentKey, true)
   }
 
   function rememberNavigationFocus() {
@@ -1104,6 +1285,44 @@ Item {
   onFocusedWorkspaceChanged: root.scheduleRefresh()
   onScopeRevisionChanged: root.scheduleRefresh()
   onInteractionBusyChanged: if (!interactionBusy) root.scheduleRefresh()
+  readonly property var herdrFocusService: {
+    var revision = root.widgetRevision
+    if (root.host && root.host.herdrService)
+      return root.host.herdrService
+    var view = root.widgetView("herdr.agents")
+    return view && view.provider ? view.provider : null
+  }
+  Connections {
+    target: root.herdrFocusService
+    function onFocusAgentFinished(requestId, ok, errorCode) {
+      root.onHerdrFocusFinished(requestId, ok, errorCode)
+    }
+  }
+  Timer {
+    id: herdrFocusErrorTimer
+    interval: 1000
+    repeat: true
+    onTriggered: {
+      var errors = root.herdrFocusErrors || ({})
+      var keys = Object.keys(errors)
+      if (!keys.length) {
+        herdrFocusErrorTimer.stop()
+        return
+      }
+      var now = Date.now()
+      var next = Object.assign({}, errors)
+      var changed = false
+      for (var i = 0; i < keys.length; i++) {
+        if (now >= Number(errors[keys[i]].expiresAt || 0)) {
+          delete next[keys[i]]
+          changed = true
+        }
+      }
+      if (changed) root.herdrFocusErrors = next
+      if (!Object.keys(root.herdrFocusErrors || ({})).length)
+        herdrFocusErrorTimer.stop()
+    }
+  }
   Connections {
     target: root.host && root.host.browserProfileService
       ? root.host.browserProfileService : null

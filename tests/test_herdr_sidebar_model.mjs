@@ -382,7 +382,10 @@ console.log('herdr sidebar model association: PASS')
 
   const multiTab = nested[1]
   assert.equal(multiTab.title, 'Shared multi tab')
-  assert.equal(multiTab.actionable, false)
+  assert.equal(multiTab.actionable, true)
+  assert.equal(multiTab.groupHeader, true)
+  assert.equal(multiTab.paneId, 'pane-a')
+  assert.equal(multiTab.agentId, 'local-matched:1:pane-a')
   assert.equal(multiTab.parentKey, windowKey)
 
   const agentRows = nested.filter(row => row.kind === 'herdr-agent')
@@ -466,9 +469,11 @@ console.log('herdr sidebar model association: PASS')
   const flippedAgents = statusFlip.rows.filter(row => row.kind === 'herdr-agent')
   const flippedTabs = statusFlip.rows.filter(row =>
     row.kind === 'herdr-tab' && row.windowKey === windowKey)
-  // After flip: blocked tab stays, multi-tab agents become done + idle.
-  assert.equal(flippedTabs.filter(row => row.actionable).length, 1)
-  assert.equal(flippedTabs.find(row => row.actionable).status, 'blocked')
+  // After flip: blocked sole tab + multi-panel header stay actionable;
+  // multi-tab agents become done + idle under the header.
+  assert.equal(flippedTabs.filter(row => row.actionable).length, 2)
+  assert.equal(flippedTabs.find(row => row.actionable && !row.groupHeader).status, 'blocked')
+  assert.equal(flippedTabs.find(row => row.groupHeader === true).paneId, 'pane-a')
   assert.equal(flippedAgents.length, 2)
   assert.equal(flippedAgents[0].status, 'done')
   assert.equal(flippedAgents[0].key, JSON.stringify(['herdr-agent', windowKey, 'local-matched:1:pane-a']))

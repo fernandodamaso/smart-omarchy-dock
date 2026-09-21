@@ -46,8 +46,10 @@ Item {
   readonly property bool nestedChild: nestedTab || nestedHerdr
   readonly property bool herdrActionable: (kind === "herdr-agent"
     || kind === "herdr-tab") && row.actionable === true
+  readonly property bool herdrGroupHeader: kind === "herdr-tab" && row.groupHeader === true
   readonly property bool herdrStatusDotVisible: !root.collapsed
-    && (kind === "herdr-agent" || (kind === "herdr-tab" && root.herdrActionable)
+    && (kind === "herdr-agent"
+      || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader)
       || kind === "herdr-state")
   readonly property string tabFaviconSource: nestedTab
     ? DockIconModel.faviconFileUrl(String(row.faviconPath || "")) : ""
@@ -72,13 +74,13 @@ Item {
   // Kind moves onto the two-line secondary row; do not reserve side kind width.
   readonly property bool herdrKindVisible: false
   readonly property string herdrAgentSubtitle: (kind === "herdr-agent"
-      || (kind === "herdr-tab" && root.herdrActionable))
+      || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader))
     ? String(row.subtitle || "")
     : ""
   readonly property bool herdrTwoLineLabels: !root.collapsed
-    && (kind === "herdr-agent" || (kind === "herdr-tab" && root.herdrActionable))
-  readonly property bool herdrGroupLabel: !root.collapsed
-    && kind === "herdr-tab" && !root.herdrActionable
+    && (kind === "herdr-agent"
+      || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader))
+  readonly property bool herdrGroupLabel: !root.collapsed && root.herdrGroupHeader
   readonly property int windowCount: kind === "application" ? Number(row.windowCount || row.windows && row.windows.length || 0) : 0
   readonly property int treeDepth: Number(row.treeDepth || 0)
   readonly property bool isLastSibling: row.isLastSibling !== false
@@ -197,12 +199,19 @@ Item {
     if (kind === "browser-tab")
       return (row.active === true ? "Active tab: " : "Tab: ") + liveTitle + alertBits
         + (attention.muted ? " · Alerts excluded from totals" : "")
-    if (kind === "herdr-agent" || (kind === "herdr-tab" && row.actionable === true))
+    if (kind === "herdr-agent"
+        || (kind === "herdr-tab" && row.actionable === true && row.groupHeader !== true))
       return "Herdr agent: " + liveTitle
         + (root.herdrAgentSubtitle ? " · " + root.herdrAgentSubtitle : "")
         + " · " + InteractionModel.herdrStatusAccessibleText(row.status)
+        + (root.controller.herdrFocusErrorFor(root.rowKey)
+          ? " · Focus failed (" + root.controller.herdrFocusErrorFor(root.rowKey) + ")"
+          : "")
     if (kind === "herdr-tab")
       return "Herdr tab: " + liveTitle
+        + (row.actionable === true && root.controller.herdrFocusErrorFor(root.rowKey)
+          ? " · Focus failed (" + root.controller.herdrFocusErrorFor(root.rowKey) + ")"
+          : "")
     if (kind === "herdr-state")
       return "Herdr: " + liveTitle
     var titleLabel = kind === "window"
@@ -1207,7 +1216,7 @@ Item {
       panelConnector: root.panelConnector
       workspaceHeader: root.kind === "workspace"
       viewport: root.viewport
-      enabled: root.navigable
+      enabled: root.navigable || root.herdrActionable
       onFocusRequested: root.forceActiveFocus(Qt.MouseFocusReason)
       onActivated: function(target, control, connector, modifiers) {
         if (root.viewport) root.viewport.activate(target, control, connector, modifiers)

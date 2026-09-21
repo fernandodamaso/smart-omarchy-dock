@@ -13,6 +13,8 @@ class HerdrLifecycleContractTests(unittest.TestCase):
         service = self.read("components/DockHerdrService.qml")
         self.assertIn("function acquire(owner)", service)
         self.assertIn("function setWindowProcesses(revision, pids)", service)
+        self.assertIn("function focusAgent(target)", service)
+        self.assertIn("signal focusAgentFinished", service)
         self.assertIn("property int activeCount: 0", service)
         self.assertIn("if (root.activeCount === 1) root.startProvider()", service)
         self.assertIn("if (root.activeCount === 0) root.stopProvider()", service)

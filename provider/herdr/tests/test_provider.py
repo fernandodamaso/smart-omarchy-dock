@@ -99,6 +99,7 @@ class ProviderProcessTests(unittest.TestCase):
             )
             self.assertEqual(ready["schemaVersion"], 1)
             self.assertFalse(ready["capabilities"]["remote"])
+            self.assertTrue(ready["capabilities"]["actions"])
             self.assertEqual(
                 ready["agents"][0]["stateChangeSeq"],
                 str(2 ** 64 - 1),

@@ -7,7 +7,8 @@
 # See ../UPSTREAM.md and ../LICENSE.omaherdr.
 """One explicitly selected Herdr server -> private JSON-lines transport.
 
-stdin: snapshot | quit. stdout: snapshot | event | status | error records.
+stdin: snapshot | quit | focus-agent JSON. stdout: snapshot | event | status |
+error | action-result records.
 The SmartDock-owned provider supervises this private transport; it is not a public RPC surface.
 """
 import argparse
@@ -34,10 +35,21 @@ STRUCTURAL = [
     "pane.agent_detected", "layout.updated",
 ]
 IDENTITIES = ("pane_id", "terminal_id", "tab_id", "workspace_id")
+FOCUS_ERROR_CODES = frozenset((
+    "invalid_request", "inventory_reconciling", "agent_gone", "identity_mismatch",
+    "server_unavailable", "timeout", "provider_unavailable", "unsupported",
+    "unsupported_command", "unsupported_method",
+))
 
 
 class ProtocolError(OSError):
     """A fixed diagnostic code, never source content or a raw exception."""
+
+
+def sanitize_focus_error(code):
+    if isinstance(code, str) and code in FOCUS_ERROR_CODES:
+        return code
+    return "unsupported"
 
 
 def decode_object(line):
@@ -165,8 +177,17 @@ def receive_line(connection, limit, deadline):
 
 
 def request(method, params, timeout=TIMEOUT):
-    """One read request, one connection; no general RPC forwarding."""
-    if method != "session.snapshot" or params != {}:
+    """Bounded Herdr socket request; only allowlisted methods."""
+    if method == "session.snapshot":
+        if params != {}:
+            raise ProtocolError("unsupported_method")
+    elif method == "agent.focus":
+        if not isinstance(params, dict) or set(params) != {"target"}:
+            raise ProtocolError("unsupported_method")
+        target = params.get("target")
+        if not identifier(target):
+            raise ProtocolError("invalid_request")
+    else:
         raise ProtocolError("unsupported_method")
     connection = socket.socket(socket.AF_UNIX)
     deadline = time.monotonic() + timeout
@@ -176,11 +197,69 @@ def request(method, params, timeout=TIMEOUT):
         connection.sendall((json.dumps({"id": "smartdock", "method": method, "params": params}) + "\n").encode())
         line, _ = receive_line(connection, MAX_SNAPSHOT_BYTES, deadline)
         response = decode_object(line)
-        if response.get("id") != "smartdock" or "error" in response:
-            raise ProtocolError("snapshot_unavailable")
+        if response.get("id") != "smartdock":
+            raise ProtocolError(
+                "snapshot_unavailable" if method == "session.snapshot" else "server_unavailable")
+        if "error" in response:
+            # Never forward raw Herdr error text; map to fixed codes only.
+            raise ProtocolError(
+                "snapshot_unavailable" if method == "session.snapshot" else "agent_gone")
         return response
+    except ProtocolError:
+        raise
+    except (TimeoutError, socket.timeout):
+        raise ProtocolError(
+            "read_timeout" if method == "session.snapshot" else "timeout") from None
+    except OSError:
+        raise ProtocolError(
+            "connection_unavailable" if method == "session.snapshot" else "server_unavailable"
+        ) from None
     finally:
         connection.close()
+
+
+def parse_focus_command(line):
+    """Parse provider→helper focus-agent stdin JSON."""
+    if not line or len(line) > MAX_COMMAND_BYTES:
+        return None
+    try:
+        message = json.loads(line)
+    except (ValueError, UnicodeError, TypeError):
+        return None
+    if not isinstance(message, dict):
+        return None
+    if set(message) - {"kind", "requestId", "pane_id"}:
+        return None
+    if message.get("kind") != "focus-agent":
+        return None
+    request_id = message.get("requestId")
+    pane_id = message.get("pane_id")
+    if not identifier(request_id) or len(request_id) > 64:
+        return None
+    if not identifier(pane_id):
+        return None
+    return {"requestId": request_id, "pane_id": pane_id}
+
+
+def run_focus_agent(command):
+    request_id = command["requestId"]
+    try:
+        request("agent.focus", {"target": command["pane_id"]})
+        emit({"kind": "action-result", "requestId": request_id, "ok": True, "error": ""})
+    except ProtocolError as error:
+        emit({
+            "kind": "action-result",
+            "requestId": request_id,
+            "ok": False,
+            "error": sanitize_focus_error(str(error) or "unsupported"),
+        })
+    except OSError:
+        emit({
+            "kind": "action-result",
+            "requestId": request_id,
+            "ok": False,
+            "error": "server_unavailable",
+        })
 
 
 class Subscription:
@@ -317,8 +396,12 @@ def run():
                         return
                     if command == b"snapshot":
                         snapshot(sub)
-                    else:
-                        emit({"kind": "error", "error": "unsupported_command"})
+                        continue
+                    focus = parse_focus_command(command)
+                    if focus is not None:
+                        run_focus_agent(focus)
+                        continue
+                    emit({"kind": "error", "error": "unsupported_command"})
                 if len(inbuf) > MAX_COMMAND_BYTES:
                     emit({"kind": "error", "error": "command_too_large"})
                     return

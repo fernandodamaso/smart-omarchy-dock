@@ -69,8 +69,16 @@ owned by this repository. It:
 5. forwards status and structural invalidations to the provider;
 6. reconnects with bounded backoff.
 
-Stdin accepts only `snapshot` and `quit`. There is no generic RPC surface,
-focus command, answer command, notification command or transcript access.
+Stdin accepts `snapshot`, `quit`, and one bounded JSON `focus-agent` command that
+calls only Herdr `agent.focus` with a pane id. The helper emits correlated
+`action-result` records with fixed error codes. There is no generic RPC surface,
+answer command, notification command or transcript access.
+
+Sidebar click-to-focus requires **Herdr 0.9.1+**. On 0.9.0, `agent.focus`
+updates server focus and marks agents seen, but does not move attached TUI
+clients to the target pane (fixed upstream in 0.9.1). Multi-panel tab headers
+focus that Herdr tab by targeting the first nested panel's pane id; single-panel
+tabs and agent rows target their own pane.
 
 Structural invalidations include the current Herdr workspace/tab/pane/layout
 event families, including `workspace.metadata_updated` and `pane.updated`.
@@ -141,9 +149,9 @@ git diff --check
 
 The provider tests cover socket bootstrap/events, discovery, endpoint
 deduplication, unavailable-vs-empty semantics, reconnect generations, status
-updates, truncation, process refresh and clean helper shutdown. The lifecycle
-tests lock the real source registry, shared service ownership, standalone/plugin
-wiring, schema registration and packaging.
+updates, truncation, process refresh, pane focus transport and clean helper
+shutdown. The lifecycle tests lock the real source registry, shared service
+ownership, standalone/plugin wiring, schema registration and packaging.
 
 These tests use controlled socket/provider fixtures. They establish source and
 protocol behavior but are not a substitute for the separate native

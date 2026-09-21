@@ -52,6 +52,11 @@ grep -Fq 'SAFETY_SNAPSHOT_EVERY = 60.0' "$provider"   || fail 'safety snapshot c
 grep -Fq 'MAX_SERVERS = 64' provider/herdr/model.py   || fail 'server cap missing'
 grep -Fq 'MAX_AGENTS = 256' provider/herdr/model.py   || fail 'agent cap missing'
 grep -Fq '"remote": False' provider/herdr/model.py   || fail 'local-only capability must be explicit'
+grep -Fq '"actions": True' provider/herdr/model.py   || fail 'navigate capability must advertise actions'
+grep -Fq 'function focusAgent' components/DockHerdrService.qml   || fail 'service missing focusAgent'
+grep -Fq 'focus-agent' "$helper"   || fail 'helper missing focus-agent command'
+grep -Fq 'agent.focus' "$helper"   || fail 'helper must call only agent.focus'
+grep -Fq 'inventory_reconciling' "$provider"   || fail 'provider must keep inventory_reconciling error code'
 
 # The helper is socket-only; discovery/provider may supervise fixed local
 # subprocesses but neither path may regain omaherdr coupling or agent-list polling.

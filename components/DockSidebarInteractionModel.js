@@ -193,8 +193,8 @@ function composeRowFill(state) {
   return s.persistentFill
 }
 
-// Hover fill for navigable rows plus actionable Herdr agents/tabs.
-// Workspace headers and multi-panel tab headers stay passive.
+// Hover fill for navigable rows plus actionable Herdr agents/tabs
+// (including multi-panel tab headers that focus the Herdr tab).
 function rowHoverFillEligible(kind, actionable) {
   if (kind === "herdr-tab") return actionable === true
   return ["window", "workspace", "application", "launcher", "browser-tab",
@@ -290,7 +290,8 @@ function sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert) {
     baseline = sp(22)
   } else if (kind === "workspace") {
     baseline = sp(30)
-  } else if (kind === "herdr-tab" && row && row.actionable === true) {
+  } else if (kind === "herdr-tab" && row && row.actionable === true
+      && row.groupHeader !== true) {
     baseline = sp(36)
   } else if (kind === "herdr-agent") {
     // Two-line title + workspace/kind secondary; keep compact vs window rows.

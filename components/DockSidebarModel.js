@@ -752,15 +752,41 @@ function project(input) {
               workspaceLabel: solePayload.workspaceLabel,
               tabTitle: tab.title || "",
               status: HerdrModel.normalizeStatus(sole.status),
-              actionable: true
+              actionable: true,
+              groupHeader: false
             }))
             return
           }
-          row(Object.assign({}, shared, {
-            title: tab.title || "Tab",
-            subtitle: "",
-            actionable: false
-          }))
+          // Multi-panel tab header: keep group styling, but focus the tab via
+          // the first panel's pane (agent.focus moves the client onto that tab).
+          var focusPane = null
+          for (var fi = 0; fi < tab.agents.length; fi++) {
+            var candidate = tab.agents[fi]
+            if (candidate && String(candidate.id || "") && candidate.paneId) {
+              focusPane = candidate
+              break
+            }
+          }
+          if (focusPane) {
+            row(Object.assign({}, shared, {
+              title: tab.title || "Tab",
+              subtitle: "",
+              agentId: String(focusPane.id || ""),
+              connectionGeneration: focusPane.connectionGeneration,
+              paneId: focusPane.paneId,
+              terminalId: focusPane.terminalId || "",
+              tabTitle: tab.title || "",
+              actionable: true,
+              groupHeader: true
+            }))
+          } else {
+            row(Object.assign({}, shared, {
+              title: tab.title || "Tab",
+              subtitle: "",
+              actionable: false,
+              groupHeader: true
+            }))
+          }
           tab.agents.forEach(function(agent) {
             var agentId = String(agent.id || "")
             if (!agentId) return

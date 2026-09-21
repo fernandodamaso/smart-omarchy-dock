@@ -15,6 +15,10 @@ Item {
   property int sourceRevision: -1
   property int restartDelay: 1000
   property bool stoppingForIdle: false
+  property var pendingFocus: ({})
+  property int focusSeq: 0
+  readonly property int focusDeadlineMs: 5000
+  signal focusAgentFinished(string requestId, bool ok, string errorCode)
   readonly property bool running: providerProcess.running
   readonly property bool available: providerPath.length > 0
   readonly property string providerPath: localPath(
@@ -23,6 +27,63 @@ Item {
   function localPath(url) {
     var value = String(url || "")
     return value.indexOf("file://") === 0 ? decodeURIComponent(value.slice(7)) : value
+  }
+
+  function settleFocus(requestId, ok, errorCode) {
+    var pending = root.pendingFocus || ({})
+    var entry = pending[requestId]
+    if (!entry) return
+    delete pending[requestId]
+    root.pendingFocus = pending
+    root.focusAgentFinished(requestId, ok === true, String(errorCode || ""))
+  }
+
+  function settleAllFocus(errorCode) {
+    var pending = root.pendingFocus || ({})
+    var ids = Object.keys(pending)
+    root.pendingFocus = ({})
+    for (var i = 0; i < ids.length; i++)
+      root.focusAgentFinished(ids[i], false, String(errorCode || "provider_unavailable"))
+  }
+
+  function focusAgent(target) {
+    if (root.activeCount <= 0 || !providerProcess.running) return ""
+    if (!target || typeof target !== "object") return ""
+    var epoch = String(target.providerEpoch || "")
+    var serverId = String(target.serverId || "")
+    var agentId = String(target.agentId || "")
+    var paneId = String(target.paneId || "")
+    var generation = Math.floor(Number(target.connectionGeneration))
+    if (!epoch || !serverId || !agentId || !paneId) return ""
+    if (!isFinite(generation) || generation <= 0) return ""
+    var terminalId = String(target.terminalId || "")
+    root.focusSeq += 1
+    var requestId = "focus-" + String(root.focusSeq)
+    var payload = JSON.stringify({
+      kind: "focus-agent",
+      requestId: requestId,
+      providerEpoch: epoch,
+      serverId: serverId,
+      connectionGeneration: generation,
+      agentId: agentId,
+      paneId: paneId,
+      terminalId: terminalId
+    })
+    if (payload.length > 4096) return ""
+    var pending = Object.assign({}, root.pendingFocus || ({}))
+    pending[requestId] = {
+      providerEpoch: epoch,
+      serverId: serverId,
+      connectionGeneration: generation,
+      agentId: agentId,
+      paneId: paneId,
+      terminalId: terminalId,
+      startedAt: Date.now()
+    }
+    root.pendingFocus = pending
+    providerProcess.write(payload + "\n")
+    focusDeadlineTimer.restart()
+    return requestId
   }
 
   function publishLease(lease, status, data) {
@@ -97,6 +158,8 @@ Item {
     shutdownTimer.stop()
     if (providerProcess.running) return
     restartTimer.stop()
+    focusDeadlineTimer.stop()
+    root.settleAllFocus("provider_unavailable")
     root.latestSnapshot = null
     root.sourceEpoch = ""
     root.sourceRevision = -1
@@ -109,11 +172,13 @@ Item {
   function stopProvider() {
     restartTimer.stop()
     startupTimer.stop()
+    focusDeadlineTimer.stop()
     root.stoppingForIdle = true
     root.latestSnapshot = null
     root.sourceEpoch = ""
     root.sourceRevision = -1
     root.restartDelay = 1000
+    root.settleAllFocus("provider_unavailable")
     if (providerProcess.running) {
       providerProcess.write("quit\n")
       shutdownTimer.restart()
@@ -161,6 +226,14 @@ Item {
       root.broadcast("error", null)
       return
     }
+    if (value && value.kind === "action-result") {
+      var requestId = String(value.requestId || "")
+      if (!requestId || !(root.pendingFocus && root.pendingFocus[requestId])) return
+      var ok = value.ok === true
+      var errorCode = ok ? "" : String(value.error || "unsupported")
+      root.settleFocus(requestId, ok, errorCode)
+      return
+    }
     if (!value || value.schemaVersion !== 1
         || typeof value.providerEpoch !== "string"
         || typeof value.revision !== "number"
@@ -182,6 +255,8 @@ Item {
   function providerStopped(exitCode) {
     startupTimer.stop()
     shutdownTimer.stop()
+    focusDeadlineTimer.stop()
+    root.settleAllFocus("provider_unavailable")
     if (root.stoppingForIdle || root.activeCount <= 0) return
     root.latestSnapshot = null
     root.sourceEpoch = ""
@@ -207,6 +282,35 @@ Item {
     }
     onExited: function(exitCode) {
       root.providerStopped(exitCode)
+    }
+  }
+
+  Timer {
+    id: focusDeadlineTimer
+    interval: root.focusDeadlineMs
+    repeat: true
+    onTriggered: {
+      var pending = root.pendingFocus || ({})
+      var ids = Object.keys(pending)
+      if (!ids.length) {
+        focusDeadlineTimer.stop()
+        return
+      }
+      var now = Date.now()
+      var next = Object.assign({}, pending)
+      var changed = false
+      for (var i = 0; i < ids.length; i++) {
+        var id = ids[i]
+        var entry = pending[id]
+        if (!entry || now - Number(entry.startedAt || 0) < root.focusDeadlineMs)
+          continue
+        delete next[id]
+        changed = true
+        root.focusAgentFinished(id, false, "timeout")
+      }
+      if (changed) root.pendingFocus = next
+      if (!Object.keys(root.pendingFocus || ({})).length)
+        focusDeadlineTimer.stop()
     }
   }
 
