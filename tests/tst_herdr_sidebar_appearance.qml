@@ -329,6 +329,16 @@ TestCase {
     compare(test.subscriptionCount, 0)
   }
 
+  function test_viewport_intersection_boundaries() {
+    compare(InteractionModel.viewportIntersects(100, 40, 100, 200), true)
+    compare(InteractionModel.viewportIntersects(60, 40, 100, 200), false)
+    compare(InteractionModel.viewportIntersects(300, 40, 100, 200), false)
+    compare(InteractionModel.viewportIntersects(299, 40, 100, 200), true)
+    compare(InteractionModel.viewportIntersects(90, 20, 100, 200), true)
+    compare(InteractionModel.viewportIntersects(100, 0, 100, 200), false)
+    compare(InteractionModel.viewportIntersects(100, 40, 100, 0), false)
+  }
+
   function test_working_counter_reserves_slot_and_static_fallback() {
     var chrome = createTemporaryObject(chromeFactory, test, {
       width: 240,
