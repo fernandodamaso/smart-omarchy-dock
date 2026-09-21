@@ -17,6 +17,46 @@ TestCase {
     Item { width: 136; height: 500 }
   }
 
+  Component {
+    id: tallWidgetBody
+    Item {
+      property var widgetContext: ({})
+      implicitHeight: 420
+    }
+  }
+
+  QtObject {
+    id: tallWidgetController
+    function widgetView(id) {
+      return {
+        active: true,
+        status: "ready",
+        revision: 1,
+        data: {count: 0},
+        provider: null,
+        descriptor: {
+          id: id,
+          label: "Tall fixture",
+          iconName: "layout-grid",
+          expandedView: tallWidgetBody
+        }
+      }
+    }
+    function openWidgetPopup(id, anchor) { return true }
+    function closeWidgetPopup() {}
+    function widgetViewFailed(id, expected) {}
+  }
+
+  Component {
+    id: narrowActionsFactory
+    WidgetButtonGroup {
+      width: 136
+      WidgetButton { text: "Primary action"; variant: "primary" }
+      WidgetButton { text: "Secondary action"; variant: "secondary" }
+      WidgetButton { text: "Remove"; variant: "danger" }
+    }
+  }
+
   function make(name, properties) {
     var component = Qt.createComponent(Qt.resolvedUrl("../components/widgets/" + name + ".qml"))
     compare(component.status, Component.Ready, component.errorString())
@@ -153,4 +193,50 @@ TestCase {
     gallery.reducedMotion = true
     compare(gallery.reducedMotion, true)
   }
+
+  function test_tall_widget_body_is_not_clipped_to_240px() {
+    var component = Qt.createComponent(Qt.resolvedUrl("../components/DockWidgetCard.qml"))
+    compare(component.status, Component.Ready, component.errorString())
+    var card = createTemporaryObject(component, testCase, {
+      width: 220,
+      controller: tallWidgetController,
+      widgetId: "fixture.tall",
+      collapsed: false
+    })
+    verify(card !== null)
+    var view = findChild(card, "widget-card-expanded-view")
+    verify(view !== null)
+    tryVerify(function() { return view.hasView }, 2000)
+    compare(view.implicitHeight, 420)
+    compare(view.height, 420)
+  }
+
+  function test_semantic_palette_adapts_and_keeps_meanings_distinct() {
+    var component = Qt.createComponent(Qt.resolvedUrl("../components/widgets/WidgetSemanticPalette.qml"))
+    compare(component.status, Component.Ready, component.errorString())
+    var palette = createTemporaryObject(component, testCase)
+    verify(palette !== null)
+    verify(String(palette.danger) !== String(palette.warning))
+    verify(String(palette.warning) !== String(palette.success))
+    verify(String(palette.info) !== "")
+  }
+
+  function test_button_group_wraps_inside_narrow_widget_width() {
+    var group = createTemporaryObject(narrowActionsFactory, testCase)
+    verify(group !== null)
+    wait(0)
+    verify(group.implicitHeight > 32, "narrow populated action group should wrap")
+    var flow = group.children[0]
+    verify(flow !== null)
+    var wrapped = false
+    for (var i = 0; i < flow.children.length; ++i) {
+      var child = flow.children[i]
+      if (!child.visible) continue
+      verify(child.x + child.width <= flow.width + 0.5,
+        "action must stay inside bounded width")
+      if (child.y > 0.5) wrapped = true
+    }
+    verify(wrapped, "at least one action should wrap onto another row")
+  }
+
 }
