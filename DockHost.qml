@@ -232,6 +232,17 @@ Item {
     return iconResult(reply, iconReloadRevision !== revision)
   }
 
+  function saveWindowIconOverride(action, args) {
+    var blocked = mutationBlocked()
+    if (blocked) return iconResult(blocked, false)
+    var result = ConfigModel.windowIconIntent(settings, action, args)
+    var revision = iconReloadRevision
+    var reply = commitSettings(result, false)
+    // A same-source set is an explicit byte reload without a redundant settings write.
+    if (result.ok && action === "set" && iconReloadRevision === revision) iconReloadRevision++
+    return iconResult(reply, iconReloadRevision !== revision)
+  }
+
   function reloadIcon(desktopId) {
     var blocked = mutationBlocked()
     if (blocked) return iconResult(blocked, false)
@@ -308,7 +319,10 @@ Item {
     if (!result.ok) {
       var rejected = dockControl.mutationData(before, before, [], false, false)
       rejected.validationErrors = result.errors
-      return dockControl.failure("E_VALIDATION", "Patch rejected; no values were changed.", rejected)
+      return dockControl.failure(result.errorCode || "E_VALIDATION",
+        result.errorCode === "E_CONFLICT"
+          ? "Window icon rule changed while the edit was open; refresh before retrying."
+          : "Patch rejected; no values were changed.", rejected)
     }
     if (dryRun === true)
       return dockControl.success(dockControl.mutationData(before, result.settings, result.changedKeys, true, false),
@@ -316,7 +330,9 @@ Item {
     if (result.changedKeys.length === 0)
       return mutationOutcome(dockControl.mutationData(before, before, [], false, false))
     showTrashSetting = TrashModel.normalizeShowTrash(result.settings.showTrash)
-    if (ConfigModel.iconsChanged(before.iconOverrides, result.settings.iconOverrides)) iconReloadRevision++
+    if (ConfigModel.iconsChanged(before.iconOverrides, result.settings.iconOverrides)
+        || ConfigModel.windowIconsChanged(before.windowIconOverrides, result.settings.windowIconOverrides))
+      iconReloadRevision++
     settings = result.settings
     settingsRevision++
     settingsDefaultsInUse = false
