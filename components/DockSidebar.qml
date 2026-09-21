@@ -338,6 +338,7 @@ PanelWindow {
       appearance: root.sidebarAppearance
       panelConnector: String(root.screen && root.screen.name || "")
       panelCollapsed: root.panelCollapsed
+      presentationVisible: root.visible
       onContextRequested: (target, anchorItem) => root.openContext(target, anchorItem)
       onDismissContextRequested: sidebarContext.dismiss()
       contentTail: Component {

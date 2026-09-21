@@ -12,6 +12,10 @@ Item {
   property bool collapsed: false
   property bool dropBefore: false
   property bool dropAfter: false
+  property bool interfaceAnimationsEnabled: true
+  property bool presentationVisible: true
+  property Item presentationClipItem: null
+  property real presentationRevision: 0
   readonly property var snapshot: controller.widgetView(widgetId)
   readonly property var descriptor: snapshot ? snapshot.descriptor : null
   readonly property string title: descriptor && descriptor.label ? String(descriptor.label) : widgetId
@@ -230,6 +234,10 @@ Item {
       presentation: "expanded"
       popupAnchor: header
       viewEnabled: !root.collapsed
+      interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
+      presentationVisible: root.presentationVisible && !root.collapsed && root.visible
+      presentationClipItem: root.presentationClipItem
+      presentationRevision: root.presentationRevision
       x: Style.space(9)
       y: Style.space(7)
       width: Math.max(0, parent.width - Style.space(18))
