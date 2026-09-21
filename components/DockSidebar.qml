@@ -194,6 +194,23 @@ PanelWindow {
     color: Util.alpha(Color.background, 0.85)
     borderSpec: Border.none()
     clip: true
+    // Empty-background gesture: drag downward to switch back to the bottom
+    // dock mode. Rows, cards, buttons and strips above keep their own input;
+    // only genuinely empty background reaches this surface.
+    DockPositionDragSurface {
+      id: positionDragSurface
+
+      anchors.fill: parent
+      dockPosition: "left"
+      requestedPosition: "left"
+      switchThreshold: 48
+      interactionAllowed: !root.controller.interactionBusy
+      onPositionRequested: (position, expectedPosition) => {
+        if (position === "bottom" && root.host)
+          root.host.saveSettingIntent("presentationMode", "classic",
+            root.host.settings.presentationMode)
+      }
+    }
     // Subtle desktop-facing divider instead of a full bright panel outline.
     Rectangle {
       width: 1
