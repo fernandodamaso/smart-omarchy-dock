@@ -104,6 +104,7 @@ function functions(name, state) {
   return context;
 }
 const shared = { console: { warn() {} }, ConfigModel: model,
+  DockIconModel: loadModel('DockIconModel.js'),
   DockModel: loadModel('DockModel.js'), DockWindowModel: loadModel('DockWindowModel.js'),
   WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js'),
   SidebarModel: loadModel('DockSidebarModel.js'),
