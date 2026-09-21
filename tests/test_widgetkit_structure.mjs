@@ -172,9 +172,9 @@ test('Widget card header toggle stays passive and reorder remains on the drag ha
   const card = fs.readFileSync(new URL('../components/DockWidgetCard.qml', import.meta.url), 'utf8')
   assert.match(card, /id:\s*headerToggle/)
   assert.match(card, /objectName:\s*"widget-card-header-toggle"/)
-  assert.match(card, /gesturePolicy:\s*TapHandler\.DragThreshold/,
-    'header double-click detection must stay passive so Flickable/ListView can steal drags')
-  assert.match(card, /onDoubleTapped:[\s\S]*toggleRequested/)
+  assert.match(card, /id:\s*headerToggle[\s\S]*?preventStealing:\s*false/,
+    'header double-click area must allow Flickable/ListView to steal vertical drags')
+  assert.match(card, /id:\s*headerToggle[\s\S]*?onDoubleClicked:\s*root\.toggleRequested\(\)/)
   assert.match(card, /id:\s*dragMouse/)
   assert.match(card, /objectName:\s*"widget-card-drag-handle"/)
   assert.match(card, /id:\s*dragHandle[\s\S]*?MouseArea\s*\{[\s\S]*?preventStealing:\s*true/,

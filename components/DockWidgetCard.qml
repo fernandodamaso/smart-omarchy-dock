@@ -77,18 +77,19 @@ Item {
     width: parent.width
     height: Style.space(34)
 
-    // Header double-click is a passive tap gesture so the parent ListView can
-    // still take vertical drags for scrolling. Reorder stays on the explicit
-    // drag handle below, where stealing is intentional.
-    TapHandler {
+    // Header double-click keeps ordinary pointer ownership stealable so the
+    // parent ListView can still take vertical drags for scrolling. Reorder
+    // stays on the explicit drag handle below, where stealing is intentional.
+    MouseArea {
       id: headerToggle
       objectName: "widget-card-header-toggle"
+      anchors.left: parent.left
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      anchors.right: dragHandle.left
       acceptedButtons: Qt.LeftButton
-      gesturePolicy: TapHandler.DragThreshold
-      onDoubleTapped: function(eventPoint, button) {
-        if (eventPoint.position.x < dragHandle.x)
-          root.toggleRequested()
-      }
+      preventStealing: false
+      onDoubleClicked: root.toggleRequested()
     }
 
     Item {
