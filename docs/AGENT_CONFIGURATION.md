@@ -118,7 +118,26 @@ smartdock icons reset code --json
 
 The client resolves an ordinary relative path against its current directory; the shared host model validates absolute paths and supported local file URLs, preserving spaces/Unicode. Remote URLs, unsupported formats and invalid local URLs are rejected. Files are referenced in place, not downloaded/copied/imported; no `.desktop` or system theme edits occur. Shell expansion of an unquoted tilde or `$HOME` is distinct from file-URL parsing.
 
-Set/reset updates only one canonical key against the latest map, preserving other entries and untouched legacy values. Preference reset preserves `iconOverrides`. Bulk map replacement validates the entire map and rejects canonical duplicates. Missing/unreadable/corrupt files retain the requested mapping and fall back: custom → original desktop icon → generic executable → bundled theme-tinted `app-window` glyph. Custom artwork is not tinted. Main icons, preview metadata and picker rows share the mapping; identity, launch commands, screenshots, grouping, badges, Trash and action glyphs do not change.
+Set/reset updates only one canonical key against the latest map, preserving other entries and untouched legacy values. Preference reset preserves `iconOverrides` and `windowIconOverrides`. Bulk map replacement validates the entire map and rejects canonical duplicates. Missing/unreadable/corrupt files retain the requested mapping and fall back: custom → original desktop icon → generic executable → bundled theme-tinted `app-window` glyph. Custom artwork is not tinted. Main icons, preview metadata and picker rows share the mapping; identity, launch commands, screenshots, grouping, badges, Trash and action glyphs do not change.
+
+For a per-window rule, first confirm the raw Wayland app ID from the live compositor.
+Ghostty's raw app ID in the supported Omarchy environment is
+`com.mitchellh.ghostty`. Run this only against the selected isolated SmartDock host:
+
+<!-- recipe: window-icons -->
+
+```sh
+smartdock icons list --json
+smartdock icons set com.mitchellh.ghostty './Pictures/solar.svg' --title-pattern '*solar*' --json
+smartdock icons list --json
+smartdock icons reset com.mitchellh.ghostty --title-pattern '*solar*' --json
+```
+
+The title rule affects every current/future Ghostty window whose full title matches
+`*solar*`; it is not an identity for one window instance. Reset removes only that
+rule and may reveal another matching rule or a lower-priority icon candidate. Do not
+replace invalid/empty/oversized captured titles with broad `*`; the selected-window
+dialog must surface validation instead.
 
 After replacing bytes at the same path, explicit reload advances the shared artwork revision without saving settings. Other mapped icons can refresh too. Same-source set also requests fresh bytes without a redundant settings write; repeated reset is a true no-op. `reloaded: true` means requested, not decoded; `applied`/`noop` describe settings, so reload can report `applied: false`, `noop: true`, `reloaded: true`. Every successful icon response has `renderVerified: false`. Real cache invalidation, image decoding and multi-monitor redraw remain local qualification, not headless-test claims.
 
