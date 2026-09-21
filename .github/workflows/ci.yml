@@ -103,6 +103,11 @@ jobs:
         shell: bash
         run: python3 -m unittest discover -s provider/browser-profiles/tests -p 'test_*.py'
 
+      - name: Run Herdr transport scaffold tests
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: python3 -B -m unittest discover -s provider/herdr/tests -p 'test_*.py' -v
+
       - name: Run pure QML tests
         if: ${{ !cancelled() }}
         shell: bash

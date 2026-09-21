@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Derived from njpatel/omaherdr bin/omaherdr-helper at
+# c20d9b0db3a65b5a7590876c56026bc906306e04 (Neil Jagdish Patel and contributors).
+# Modified for SmartDock, 2026-09-18: explicit socket, read-only commands,
+# bounded framing/deadlines, metadata projection, sanitized failures and cleanup.
+# See ../UPSTREAM.md and ../LICENSE.omaherdr.
+"""One explicitly selected Herdr server -> private JSON-lines transport.
+
+stdin: snapshot | quit. stdout: snapshot | event | status | error records.
+This is an inactive transport scaffold, not the shared SmartDock provider.
+"""
+import argparse
+import json
+import math
+import os
+import select
+import signal
+import socket
+import sys
+import time
+
+SOCK = ""
+TIMEOUT = 2.0
+MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
+MAX_EVENT_BYTES = 1024 * 1024
+MAX_COMMAND_BYTES = 4096
+STATUSES = frozenset(("blocked", "done", "working", "idle", "unknown"))
+STRUCTURAL = [
+    "workspace.created", "workspace.updated", "workspace.renamed", "workspace.moved",
+    "workspace.reordered", "workspace.closed", "workspace.focused",
+    "tab.created", "tab.closed", "tab.focused", "tab.renamed", "tab.moved",
+    "pane.created", "pane.closed", "pane.focused", "pane.moved", "pane.exited",
+    "pane.agent_detected", "layout.updated",
+]
+IDENTITIES = ("pane_id", "terminal_id", "tab_id", "workspace_id")
+
+
+class ProtocolError(OSError):
+    """A fixed diagnostic code, never source content or a raw exception."""
+
+
+def decode_object(line):
+    try:
+        obj = json.loads(line)
+        if not isinstance(obj, dict):
+            raise ValueError()
+        stack, count = [(obj, 0)], 0
+        while stack:
+            value, depth = stack.pop()
+            count += 1
+            if depth > 32 or count > 100000:
+                raise ValueError()
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError()
+            if isinstance(value, dict):
+                stack.extend((child, depth + 1) for child in value.values())
+            elif isinstance(value, list):
+                stack.extend((child, depth + 1) for child in value)
+        return obj
+    except (ValueError, UnicodeError, RecursionError):
+        raise ProtocolError("invalid_json") from None
+
+
+def identifier(value):
+    return isinstance(value, str) and 0 < len(value) <= 128 and all(
+        ord(char) >= 32 and ord(char) != 127 and not char.isspace()
+        and not 0xD800 <= ord(char) <= 0xDFFF for char in value)
+
+
+def project_record(row):
+    if not isinstance(row, dict):
+        raise ProtocolError("invalid_snapshot")
+    out = {key: row[key] for key in IDENTITIES if identifier(row.get(key))}
+    for key in ("label", "name", "agent"):
+        value = row.get(key)
+        if isinstance(value, str):
+            out[key] = "".join(char for char in value[:256]
+                               if ord(char) >= 32 and ord(char) != 127
+                               and not 0xD800 <= ord(char) <= 0xDFFF)
+    if "agent_status" in row:
+        status = row["agent_status"]
+        out["agent_status"] = status if isinstance(status, str) and status in STATUSES else "unknown"
+    if isinstance(row.get("focused"), bool):
+        out["focused"] = row["focused"]
+    sequence = row.get("state_change_seq")
+    if isinstance(sequence, int) and not isinstance(sequence, bool) and 0 <= sequence < 2 ** 64:
+        out["state_change_seq"] = str(sequence)
+    return out
+
+
+def project_snapshot(snap):
+    if not isinstance(snap, dict) or not isinstance(snap.get("panes"), list):
+        raise ProtocolError("invalid_snapshot")
+    out = {}
+    for collection, identity in (("workspaces", "workspace_id"), ("tabs", "tab_id"),
+                                 ("panes", "pane_id"), ("agents", "pane_id")):
+        if collection not in snap:
+            continue  # Missing inventory is unknown, not an observed empty list.
+        rows = snap[collection]
+        if not isinstance(rows, list) or len(rows) > 16384:
+            raise ProtocolError("invalid_snapshot")
+        projected = []
+        for row in rows:
+            item = project_record(row)
+            if identity not in item:
+                raise ProtocolError("invalid_snapshot")
+            projected.append(item)
+        out[collection] = projected
+    for key in ("focused_workspace_id", "focused_tab_id", "focused_pane_id"):
+        if identifier(snap.get(key)):
+            out[key] = snap[key]
+    version = snap.get("version")
+    if type(version) is int or (isinstance(version, str) and len(version) <= 128):
+        out["version"] = version
+    return out
+
+
+def encode_message(obj):
+    try:
+        frame = (json.dumps(obj, separators=(",", ":"), allow_nan=False) + "\n").encode()
+    except (ValueError, UnicodeError, RecursionError):
+        raise ProtocolError("invalid_output") from None
+    if len(frame) > MAX_EVENT_BYTES:
+        raise ProtocolError("output_too_large")
+    return frame
+
+
+def emit(obj):
+    frame = memoryview(encode_message(obj))
+    deadline = time.monotonic() + TIMEOUT
+    while frame:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or not select.select([], [sys.stdout], [], remaining)[1]:
+            raise BrokenPipeError("output_unavailable")
+        try:
+            written = os.write(sys.stdout.fileno(), frame[:65536])
+        except BlockingIOError:
+            continue
+        if written <= 0:
+            raise BrokenPipeError("output_unavailable")
+        frame = frame[written:]
+
+
+def receive_line(connection, limit, deadline):
+    buf = b""
+    while True:
+        if b"\n" in buf:
+            line, rest = buf.split(b"\n", 1)
+            if len(line) > limit:
+                raise ProtocolError("frame_too_large")
+            return line, rest
+        if len(buf) > limit:
+            raise ProtocolError("frame_too_large")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ProtocolError("read_timeout")
+        connection.settimeout(remaining)
+        chunk = connection.recv(min(65536, limit + 1 - len(buf)))
+        if not chunk:
+            raise ProtocolError("connection_closed")
+        buf += chunk
+
+
+def request(method, params, timeout=TIMEOUT):
+    """One read request, one connection; no general RPC forwarding."""
+    if method != "session.snapshot" or params != {}:
+        raise ProtocolError("unsupported_method")
+    connection = socket.socket(socket.AF_UNIX)
+    deadline = time.monotonic() + timeout
+    connection.settimeout(timeout)
+    try:
+        connection.connect(SOCK)
+        connection.sendall((json.dumps({"id": "smartdock", "method": method, "params": params}) + "\n").encode())
+        line, _ = receive_line(connection, MAX_SNAPSHOT_BYTES, deadline)
+        response = decode_object(line)
+        if response.get("id") != "smartdock" or "error" in response:
+            raise ProtocolError("snapshot_unavailable")
+        return response
+    finally:
+        connection.close()
+
+
+class Subscription:
+    def __init__(self):
+        self.sock = None
+        self.buf = b""
+        self.panes = set()
+        self.retry_at = 0.0
+        self.backoff = 1.0
+        self.snapshot_pending = False
+
+    def open(self, panes):
+        self.close()
+        subs = [{"type": event} for event in STRUCTURAL] + [
+            {"type": "pane.agent_status_changed", "pane_id": pane} for pane in sorted(panes)]
+        connection = socket.socket(socket.AF_UNIX)
+        try:
+            deadline = time.monotonic() + TIMEOUT
+            connection.settimeout(TIMEOUT)
+            connection.connect(SOCK)
+            connection.sendall((json.dumps({"id": "sub", "method": "events.subscribe",
+                                            "params": {"subscriptions": subs}}) + "\n").encode())
+            line, buf = receive_line(connection, MAX_EVENT_BYTES, deadline)
+            reply = decode_object(line)
+            result = reply.get("result")
+            if reply.get("id") != "sub" or not isinstance(result, dict) or result.get("type") != "subscription_started":
+                raise ProtocolError("subscription_unavailable")
+            connection.setblocking(False)
+        except BaseException:
+            connection.close()
+            raise
+        self.sock = connection
+        self.buf = buf
+        self.panes = set(panes)
+        # Herdr streams are live-only. Every replacement gets another baseline.
+        self.snapshot_pending = True
+
+    def close(self):
+        if self.sock:
+            self.sock.close()
+        self.sock = None
+        self.buf = b""
+        self.snapshot_pending = False
+
+    def failed(self):
+        self.close()
+        self.retry_at = time.monotonic() + self.backoff
+        self.backoff = min(30.0, self.backoff * 2)
+
+    def read(self):
+        if b"\n" not in self.buf:
+            try:
+                chunk = self.sock.recv(65536)
+            except (BlockingIOError, InterruptedError):
+                return
+            if not chunk:
+                raise ProtocolError("connection_closed")
+            self.buf += chunk
+        # Bound one turn so stdin cancellation is not starved by event bursts.
+        for _ in range(64):
+            if b"\n" not in self.buf:
+                break
+            line, self.buf = self.buf.split(b"\n", 1)
+            if len(line) > MAX_EVENT_BYTES:
+                raise ProtocolError("frame_too_large")
+            obj = decode_object(line)
+            event, data = obj.get("event"), obj.get("data")
+            if not identifier(event) or not isinstance(data, dict):
+                raise ProtocolError("invalid_event")
+            emit({"kind": "event", "event": event, "data": project_record(data)})
+        if b"\n" not in self.buf and len(self.buf) > MAX_EVENT_BYTES:
+            raise ProtocolError("frame_too_large")
+
+
+def snapshot(sub):
+    try:
+        # Acknowledge the subscription before requesting a bootstrap snapshot.
+        if sub.sock is None:
+            sub.open(set())
+        sub.snapshot_pending = False
+        response = request("session.snapshot", {})
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise ProtocolError("invalid_snapshot")
+        snap = project_snapshot(result.get("snapshot"))
+        emit({"kind": "snapshot", "ok": True, "snapshot": snap})
+        panes = {pane["pane_id"] for pane in snap["panes"]}
+        if panes != sub.panes:
+            sub.open(panes)
+        sub.backoff = 1.0
+        emit({"kind": "status", "connected": True})
+        return snap
+    except BrokenPipeError:
+        raise
+    except OSError as error:
+        sub.failed()
+        code = str(error) if isinstance(error, ProtocolError) else "connection_unavailable"
+        emit({"kind": "snapshot", "ok": False, "error": code})
+        emit({"kind": "status", "connected": False})
+        return None
+
+
+def run():
+    sub = Subscription()
+    stdin = sys.stdin.buffer
+    inbuf = b""
+    os.set_blocking(sys.stdout.fileno(), False)
+    try:
+        snapshot(sub)
+        while True:
+            if sub.snapshot_pending:
+                snapshot(sub)
+            fds = [stdin] + ([sub.sock] if sub.sock else [])
+            buffered = sub.sock is not None and b"\n" in sub.buf
+            timeout = 0.0 if buffered or sub.snapshot_pending else (
+                2.0 if sub.sock else max(0.0, sub.retry_at - time.monotonic()))
+            try:
+                ready, _, _ = select.select(fds, [], [], timeout)
+            except InterruptedError:
+                continue
+            # Process ownership loss before any further source reads.
+            if stdin in ready:
+                chunk = os.read(stdin.fileno(), MAX_COMMAND_BYTES)
+                if not chunk:
+                    return
+                inbuf += chunk
+                while b"\n" in inbuf:
+                    line, inbuf = inbuf.split(b"\n", 1)
+                    if len(line) > MAX_COMMAND_BYTES:
+                        emit({"kind": "error", "error": "command_too_large"})
+                        return
+                    command = line.strip()
+                    if command == b"quit":
+                        return
+                    if command == b"snapshot":
+                        snapshot(sub)
+                    else:
+                        emit({"kind": "error", "error": "unsupported_command"})
+                if len(inbuf) > MAX_COMMAND_BYTES:
+                    emit({"kind": "error", "error": "command_too_large"})
+                    return
+            if sub.sock and (buffered or sub.sock in ready):
+                try:
+                    sub.read()
+                except BrokenPipeError:
+                    raise
+                except OSError:
+                    sub.failed()
+                    emit({"kind": "status", "connected": False})
+            if sub.sock is None and time.monotonic() >= sub.retry_at:
+                snapshot(sub)
+    finally:
+        sub.close()
+
+
+def main():
+    global SOCK
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("socket", help="Explicit absolute Herdr Unix-socket path")
+    args = parser.parse_args()
+    SOCK = os.path.expanduser(args.socket)
+    if not os.path.isabs(SOCK):
+        parser.error("socket path must be absolute")
+
+    def stop(_signum, _frame):
+        raise KeyboardInterrupt()
+
+    signal.signal(signal.SIGTERM, stop)
+    try:
+        run()
+    except (KeyboardInterrupt, BrokenPipeError):
+        pass
+
+
+if __name__ == "__main__":
+    main()
