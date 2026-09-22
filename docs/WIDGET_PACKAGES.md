@@ -63,10 +63,14 @@ Fields are deliberately small and closed in v1:
   traversal are rejected.
 - `icon` -- Lucide-style lower-case icon name.
 
-Package trees are bounded and may not contain symlinked files/directories. A
-validated package is copied into SmartDock-owned data before its package-relative entry path is
-added to SmartDock-owned registry metadata. The host constructs the file URL from
-that trusted package root; `dock.json` never receives the path or URL.
+Package trees are bounded and may not contain symlinked files/directories. The
+top-level `SmartDock/` directory is reserved for host-owned runtime files and
+is rejected in developer source packages. A validated package is copied into
+SmartDock-owned data, then SmartDock materializes the public
+`SmartDock.WidgetKit 1.0` module beside the installed entry so external QML can
+resolve the versioned kit without depending on a global SmartDock import path.
+The host constructs the file URL from that trusted package root; `dock.json`
+never receives the path or URL.
 
 > External Widget packages are trusted local code. Installation is explicit;
 > SmartDock does not auto-execute arbitrary repositories or marketplace entries.
@@ -198,10 +202,10 @@ After editing source:
 smartdock widget dev reload
 ```
 
-Reload validates and snapshots the candidate first. Registry metadata switches
-only after success; a failed reload retains the previous working snapshot. The
-existing host observes the package registry change, so no second SmartDock or
-Quickshell process is started.
+Reload validates and snapshots the candidate first, including QML syntax and
+import resolution before registry metadata switches. A failed reload retains
+the previous working snapshot. The existing host observes the package registry
+change, so no second SmartDock or Quickshell process is started.
 
 Return to the installed package:
 
