@@ -277,7 +277,7 @@ class WidgetPackagesTest(unittest.TestCase):
 
         test_root = self.base / "qml-runtime-test"
         test_root.mkdir()
-        entry_url = (package_root / "Widget.qml").as_uri()
+        entry_url = (package_root / "Widget.qml").as_uri() + "?smartdockRev=deadbeefdeadbeef"
         (test_root / "tst_external_widget_runtime.qml").write_text(
             "import QtQuick\n"
             "import QtTest\n\n"
