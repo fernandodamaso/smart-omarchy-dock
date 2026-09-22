@@ -89,6 +89,18 @@ TestCase {
       }
       readonly property real herdrFoldLeft: Math.max(0, width - herdrRightChromeWidth)
       readonly property bool herdrCountersVisible: !agentMode && herdrStatusCounters.length > 0
+      readonly property bool hasWorkingCounter: {
+        for (var i = 0; i < herdrStatusCounters.length; ++i) {
+          if (HerdrModel.normalizeStatus(herdrStatusCounters[i].status) === "working")
+            return true
+        }
+        return false
+      }
+      readonly property bool windowWorkingAnimationActive: !agentMode && hasWorkingCounter
+        && interfaceAnimationsEnabled && animationEligible
+      readonly property real windowWorkingIndicatorGap: 5
+      readonly property real windowWorkingIndicatorReservation:
+        windowWorkingAnimationActive ? 10 + windowWorkingIndicatorGap : 0
       readonly property real herdrCountersNaturalWidth: herdrCountersVisible
         ? counters.implicitWidth : 0
       readonly property bool herdrStateStripFits: {
@@ -137,7 +149,7 @@ TestCase {
           objectName: "sidebar-label"
           visible: true
           anchors.verticalCenter: parent.verticalCenter
-          x: chrome.labelX
+          x: chrome.labelX + chrome.windowWorkingIndicatorReservation
           width: {
             var available = Math.max(0, content.width - x - chrome.herdrRightChromeWidth)
             return InteractionModel.herdrCompactLabelWidths({
@@ -154,6 +166,16 @@ TestCase {
           wrapMode: Text.NoWrap
           maximumLineCount: 1
           font.pixelSize: 12
+        }
+
+        DockHerdrWorkingIndicator {
+          id: windowWorkingIndicator
+          objectName: "sidebar-herdr-window-working-indicator"
+          visible: chrome.windowWorkingAnimationActive
+          active: visible
+          x: chrome.labelX
+          anchors.verticalCenter: parent.verticalCenter
+          tint: "#7aa2f7"
         }
 
         Row {
@@ -201,8 +223,6 @@ TestCase {
               required property var modelData
               readonly property string normalizedStatus: HerdrModel.normalizeStatus(modelData.status)
               readonly property bool working: normalizedStatus === "working"
-              readonly property bool workingAnimationActive: working
-                && chrome.interfaceAnimationsEnabled && chrome.animationEligible
               width: counterRow.width
               height: counters.height
               Row {
@@ -211,19 +231,11 @@ TestCase {
                 height: parent.height
                 Item {
                   objectName: "sidebar-herdr-counter-marker"
-                  width: counterItem.working ? 10 : 7
-                  height: counterItem.working ? 10 : 7
+                  width: 7
+                  height: 7
                   anchors.verticalCenter: parent.verticalCenter
-                  DockHerdrWorkingIndicator {
-                    objectName: "sidebar-herdr-counter-working-indicator"
-                    anchors.centerIn: parent
-                    visible: counterItem.workingAnimationActive
-                    active: visible
-                    tint: "#7aa2f7"
-                  }
                   Rectangle {
                     objectName: "sidebar-herdr-counter-static-dot"
-                    visible: !counterItem.workingAnimationActive
                     anchors.centerIn: parent
                     width: 7; height: 7; radius: 4
                     color: counterItem.modelData.status === "unknown" ? "transparent" : "#7aa2f7"
@@ -339,11 +351,11 @@ TestCase {
     compare(InteractionModel.viewportIntersects(100, 40, 100, 0), false)
   }
 
-  function test_working_counter_reserves_slot_and_static_fallback() {
+  function test_working_animation_sits_before_name_and_counter_stays_static() {
     var chrome = createTemporaryObject(chromeFactory, test, {
       width: 240,
       visible: true,
-      interfaceAnimationsEnabled: false,
+      interfaceAnimationsEnabled: true,
       animationEligible: true,
       herdrStatusCounters: [{ status: "working", count: 2 }]
     })
@@ -353,19 +365,23 @@ TestCase {
     var delegates = counterDelegates(counters)
     compare(delegates.length, 1)
     var marker = findByName(delegates[0], "sidebar-herdr-counter-marker")
-    var indicator = findByName(delegates[0], "sidebar-herdr-counter-working-indicator")
     var staticDot = findByName(delegates[0], "sidebar-herdr-counter-static-dot")
-    verify(marker !== null && indicator !== null && staticDot !== null)
-    compare(marker.width, 10)
+    var label = findByName(chrome, "sidebar-label")
+    var indicator = findByName(chrome, "sidebar-herdr-window-working-indicator")
+    verify(marker !== null && staticDot !== null && label !== null && indicator !== null)
+    compare(marker.width, 7)
     compare(staticDot.visible, true)
-    compare(indicator.visible, false)
-    verify(chrome.accessibleLabel.indexOf("Working 2") >= 0)
-
-    chrome.interfaceAnimationsEnabled = true
-    wait(0)
     compare(indicator.visible, true)
     compare(indicator.active, true)
-    compare(staticDot.visible, false)
+    compare(indicator.x, chrome.labelX)
+    compare(label.x, indicator.x + indicator.width + chrome.windowWorkingIndicatorGap)
+    verify(label.x + label.width <= counters.x + 0.5)
+    verify(chrome.accessibleLabel.indexOf("Working 2") >= 0)
+
+    chrome.interfaceAnimationsEnabled = false
+    wait(0)
+    compare(indicator.visible, false)
+    compare(staticDot.visible, true)
 
     chrome.animationEligible = false
     wait(0)

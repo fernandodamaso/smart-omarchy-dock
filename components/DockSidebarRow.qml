@@ -82,6 +82,18 @@ Item {
   }
   readonly property bool herdrCountersVisible: !root.collapsed && herdrAssociated
     && herdrStatusCounters.length > 0
+  readonly property bool herdrWorkingCounter: {
+    for (var i = 0; i < herdrStatusCounters.length; ++i) {
+      if (HerdrModel.normalizeStatus(herdrStatusCounters[i].status) === "working")
+        return true
+    }
+    return false
+  }
+  readonly property bool herdrWindowWorkingAnimationActive: herdrAssociated
+    && herdrWorkingCounter && root.animationsEnabled && root.herdrAnimationEligible
+  readonly property real herdrWindowWorkingIndicatorGap: Style.space(5)
+  readonly property real herdrWindowWorkingIndicatorReservation:
+    herdrWindowWorkingAnimationActive ? 10 + herdrWindowWorkingIndicatorGap : 0
   readonly property string herdrKindLabel: kind === "herdr-agent" || kind === "herdr-tab"
     ? InteractionModel.herdrAgentKindLabel({ agentKind: row.agentKind || "" })
     : ""
@@ -1016,7 +1028,7 @@ Item {
       visible: !root.collapsed && root.kind !== "monitor" && root.kind !== "workspace"
         && root.kind !== "herdr-agent" && root.kind !== "herdr-tab"
       x: {
-        return root.baseLabelX
+        return root.baseLabelX + root.herdrWindowWorkingIndicatorReservation
       }
       width: {
         // Herdr: reserve fold + full natural counter/kind width first so every
@@ -1066,6 +1078,18 @@ Item {
       renderType: Text.NativeRendering
       verticalAlignment: Text.AlignVCenter
       transform: Translate { x: root.attentionNudgeX }
+    }
+
+    // Working Herdr parents place the motion before their name, rather than
+    // beside the numeric status counter. The label reserves its width above.
+    DockHerdrWorkingIndicator {
+      id: herdrWindowWorkingIndicator
+      objectName: "sidebar-herdr-window-working-indicator"
+      visible: root.herdrWindowWorkingAnimationActive
+      active: visible
+      x: root.baseLabelX
+      anchors.verticalCenter: parent.verticalCenter
+      tint: Color.accent
     }
 
     // Two-line Herdr agent / actionable single-panel tab identity.
@@ -1182,8 +1206,6 @@ Item {
           required property var modelData
           readonly property string normalizedStatus: HerdrModel.normalizeStatus(modelData.status)
           readonly property bool working: normalizedStatus === "working"
-          readonly property bool workingAnimationActive: working
-            && root.animationsEnabled && root.herdrAnimationEligible
           width: counterRow.width
           height: herdrCounters.height
 
@@ -1193,21 +1215,12 @@ Item {
             height: parent.height
             Item {
               objectName: "sidebar-herdr-counter-marker"
-              width: counterItem.working ? 10 : 7
-              height: counterItem.working ? 10 : 7
+              width: 7
+              height: 7
               anchors.verticalCenter: parent.verticalCenter
-
-              DockHerdrWorkingIndicator {
-                objectName: "sidebar-herdr-counter-working-indicator"
-                anchors.centerIn: parent
-                visible: counterItem.workingAnimationActive
-                active: visible
-                tint: Color.accent
-              }
 
               Rectangle {
                 objectName: "sidebar-herdr-counter-static-dot"
-                visible: !counterItem.workingAnimationActive
                 anchors.centerIn: parent
                 width: 7
                 height: 7
@@ -1260,7 +1273,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         iconName: "maximize-2"
         iconSize: 12
-        tint: Color.muted
+        tint: Color.accent
       }
       DockLucideIcon {
         visible: root.windowState.pinned
