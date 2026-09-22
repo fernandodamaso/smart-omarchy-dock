@@ -4,6 +4,9 @@ This directory is the source-owned boilerplate for future SmartDock Widget bodie
 
 - `../../components/widgets/` contains the reusable body primitives, forms,
   actions, icon renderer and framework state surface.
+- [`../WIDGET_COMPONENTS.md`](../WIDGET_COMPONENTS.md) is the coding-agent API
+  reference for those primitives, including properties, signals, value contracts
+  and model shapes.
 - `../../components/DockWidgetCard.qml` remains the framework-owned card shell.
 - `../../tests/widget-gallery/WidgetGallery.qml` is the executable synthetic-data
   gallery used by tests and coding agents.
