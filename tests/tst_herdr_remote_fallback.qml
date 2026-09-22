@@ -133,8 +133,11 @@ TestCase {
     var next = context([remote], [agent])
     next.interfaceAnimationsEnabled = false
     view.widgetContext = next
+    // Replacing the snapshot can recreate the delegates; inspect current items.
     tryVerify(function() {
-      return indicators.every(function(item) { return !item.active })
+      var current = findAll(view, "herdr-unmatched-working-indicator")
+      return current.length === view.rows.length
+        && current.every(function(item) { return !item.active })
     })
     compare(view.rows[1].status, "working")
   }
