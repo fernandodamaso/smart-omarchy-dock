@@ -380,12 +380,15 @@ class Store:
                 raise WidgetError("E_VALIDATION", "Could not validate Widget QML imports.") from error
             diagnostics = (result.stdout or "") + "\n" + (result.stderr or "")
             import_failure = re.search(
-                r"failed to import|warnings occurred while importing|module .+ is not installed|\[import\]|\[syntax\]",
+                r"failed to import\s+[A-Za-z0-9_.]+|module\s+[\"']?[A-Za-z0-9_.]+[\"']?\s+is not installed",
                 diagnostics,
                 re.IGNORECASE,
             )
             if import_failure:
-                raise WidgetError("E_VALIDATION", "Widget entry QML import validation failed; previous Widget state was preserved.")
+                raise WidgetError(
+                    "E_VALIDATION",
+                    "Widget entry QML import validation failed; previous Widget state was preserved."
+                )
 
     def _validate_installed(self, package_dir: Path):
         if package_dir.is_symlink():
