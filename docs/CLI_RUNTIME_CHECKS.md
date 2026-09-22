@@ -105,7 +105,7 @@ for script in install.sh uninstall.sh scripts/smartdock scripts/run tests/check_
 for script in tests/check_*.sh; do bash "$script" || exit; done
 for script in tests/test_*.mjs; do node "$script" || exit; done
 python3 -m unittest discover -s tests -p 'test_*.py'
-QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
 git diff --check "$BASE_SHA...HEAD"
 ```
 

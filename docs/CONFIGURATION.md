@@ -32,7 +32,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 56 rows 
 | `workspaceBadgeTextColor` | `""` | Color string; requires workspaceBadgeTextColorEnabled. |
 | `borderWidthEnabled` | `false` | Boolean; enables a fixed width instead of theme-owned widths. |
 | `borderWidth` | `2` | Integer 0–8 logical pixels; relevant only with borderWidthEnabled. |
-| `presentationMode` | `"classic"` | Classic bottom dock or mirrored sidebar panels (the dock's vertical presentation). Drag empty dock background left to switch to the sidebar, or empty sidebar background down to return. |
+| `presentationMode` | `"classic"` | Classic bottom dock or mirrored sidebar panels (the dock's vertical presentation). Drag empty dock background left past the 48 px threshold to switch to the sidebar, or empty sidebar background down to return; release commits once, an early release, Escape or an interrupted drag writes nothing. |
 | `sidebarEdge` | `"left"` | Sidebar panel edge; leaves classic position unchanged. |
 | `sidebarMonitor` | `""` | Empty maps a mirrored panel on every connected screen. A connected connector maps only that output. Disconnected preferences are retained and fall back to all connected screens; control characters are rejected. |
 | `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
@@ -42,7 +42,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 56 rows 
 | `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. The array is both enabled state and card order. Runtime schema advertises source-registered IDs; unknown imports remain requested/unavailable. Add/remove/reorder use the host writer. |
 | `sidebarWidgetCollapsed` | `{}` | Valid internal widget ID → boolean card-body state. Missing means expanded. Removing a widget keeps its collapse preference so re-adding restores it. Preference reset clears the map. |
 | `sidebarBrowserTabsEnabled` | `true` | When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of `browserActivityMutedServices`. See the [online browser-tabs guide](https://github.com/fernandodamaso/smart-omarchy-dock/blob/370585ccfaed98f1d04954d8598a868aef80a087/docs/browser-tabs.md); it is not part of the offline CLI documentation bundle. |
-| `position` | `"bottom"` | Classic dock edge; the classic dock renders on the bottom only and the left vertical presentation is the sidebar mode. Drag empty dock background left to switch to the sidebar, or empty sidebar background down to return. Legacy left, right and top read as bottom. |
+| `position` | `"bottom"` | Classic dock edge; the classic dock renders on the bottom only and the left vertical presentation is the sidebar mode. Drag empty dock background left to switch to the sidebar, or empty sidebar background down to return; the gesture writes `presentationMode`, never `position`. Legacy left, right and top read as bottom. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
 | `reserveSpace` | `true` | Boolean; effective false while autoHide is enabled, without erasing this request. |
 | `autoHide` | `false` | Boolean; existing edge-reveal auto-hide, not a new hide-mode enum. |
@@ -174,6 +174,17 @@ rather than replayed; an accepted write may report persistence pending without
 becoming a rejected intent. Persistence failure keeps the accepted live value and
 retry persists the latest complete host snapshot. See `SIDEBAR_RESIZE.md` for the
 exact geometry, cancellation, writer-count and deferred runtime contracts.
+
+The background mode gesture follows the same contract. Only empty background is
+eligible: dock rows, widgets, headers, pinned strips, controls and the sidebar's
+list content keep their own input, and the sidebar gesture's blank tail
+disappears once content overflows or scrolls. Dragging left on the bottom dock or
+down on the sidebar arms after 48 px of directional travel, shows a hint pill and
+then a destination silhouette on the configured edge, and commits exactly one
+`presentationMode` intent on release. Release below the threshold, Escape, an
+open menu/popup, a resize or row drag, or a presentation change during the press
+cancels without any write. Rejected intents and persistence failures are reported
+by whichever renderer survives the switch, using the shared wording above.
 
 This is an **unreleased Draft foundation**, not integrated sidebar acceptance.
 SB-03 owns resize gestures, SB-04 owns full navigation/menus/keyboard/drag,

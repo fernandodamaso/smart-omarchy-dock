@@ -472,6 +472,116 @@ function dockPositionDragTarget(position, deltaX, deltaY, threshold) {
   return current
 }
 
+// Mode-switch feedback copy. `edge` is the gesture edge the press started from,
+// so every label names the destination it would commit to: the classic dock
+// lives on the bottom edge, the sidebar on its configured left/right edge.
+function modeDragHint(edge) {
+  return dockGestureEdge(edge) === "left"
+    ? "Drag down to switch to dock" : "Drag left to switch to sidebar"
+}
+
+function modeDragArmedLabel(edge) {
+  return dockGestureEdge(edge) === "left"
+    ? "Release to switch to dock" : "Release to switch to sidebar"
+}
+
+function modeDragDestination(edge) {
+  return dockGestureEdge(edge) === "left" ? "classic" : "sidebar"
+}
+
+// Edge the destination renders on. Always derived from the configured
+// sidebarEdge so the silhouette is never drawn on one edge and rendered on
+// another.
+function modeDragDestinationEdge(edge, sidebarEdge) {
+  if (dockGestureEdge(edge) === "left") return "bottom"
+  return sidebarEdge === "right" ? "right" : "left"
+}
+
+// Small movement dead zone before the directional hint appears. Wrong-direction
+// movement never arms a switch, so this only gates the hint, never the commit.
+function modeDragHintVisible(deltaX, deltaY, deadZone) {
+  var x = Number(deltaX)
+  var y = Number(deltaY)
+  if (!isFinite(x)) x = 0
+  if (!isFinite(y)) y = 0
+  var distance = Number(deadZone)
+  if (!isFinite(distance) || distance < 0) distance = 6
+  return x * x + y * y >= distance * distance
+}
+
+// Destination silhouette bounds in screen-local logical pixels. Shared by both
+// presentations so neither duplicates the other renderer's layout math.
+// `edgeInset` is the classic dock's bottom margin; side panels sit flush.
+function modeDragPreviewRect(edge, screenWidth, screenHeight, bandExtent, edgeInset) {
+  var sw = Math.max(0, Number(screenWidth) || 0)
+  var sh = Math.max(0, Number(screenHeight) || 0)
+  var band = Math.min(Math.max(0, Number(bandExtent) || 0), edge === "bottom" ? sh : sw)
+  var inset = Math.max(0, Number(edgeInset) || 0)
+  if (edge === "left" || edge === "right")
+    return { edge: edge, x: edge === "right" ? Math.max(0, sw - band) : 0,
+      y: 0, width: band, height: sh }
+  var y = Math.max(0, sh - inset - band)
+  return { edge: "bottom", x: 0, y: y, width: sw, height: Math.min(band, sh - y) }
+}
+
+// Visible classic bottom-dock band, mirroring Dock.qml's dockBackground sizing.
+function classicBandExtent(iconSize, grouped) {
+  var size = Number(iconSize)
+  if (!isFinite(size) || size <= 0) size = 42
+  return Math.round(size) + (grouped === true ? 32 : 44)
+}
+
+// The only background the sidebar ListView exposes: the tail below its content
+// while that content is shorter than the viewport. Empty as soon as the content
+// overflows or the list has scrolled, because then every pixel belongs to a
+// delegate. Both the panel binding and the hit-region fixture use this, so the
+// gesture surface and its tested geometry can never drift apart.
+function sidebarBlankRegion(contentHeight, viewportHeight, contentY, viewportWidth) {
+  var h = Number(viewportHeight)
+  var ch = Number(contentHeight)
+  var cy = Number(contentY)
+  var w = Number(viewportWidth)
+  if (!(h > 0) || !isFinite(ch) || !isFinite(cy)) return emptySidebarBlankRegion()
+  if (ch >= h || cy > 0) return emptySidebarBlankRegion()
+  var top = Math.max(0, ch - cy)
+  var height = h - top
+  if (!(height > 0)) return emptySidebarBlankRegion()
+  return { x: 0, y: top, width: isFinite(w) ? Math.max(0, w) : 0, height: height }
+}
+
+function emptySidebarBlankRegion() {
+  return { x: 0, y: 0, width: 0, height: 0 }
+}
+
+// Shared wording for a host persistence failure. Both presentations read the
+// same host state, so whichever renderer survives the failed write reports it
+// identically instead of inventing its own copy.
+function persistenceFeedback(settingsWriteError) {
+  return "Unsaved preferences: " + String(settingsWriteError || "Persistence failed")
+}
+
+// Feedback text for a completed background gesture's writer result. An accepted
+// write returns "" so the renderer clears any earlier message; a rejected
+// preflight intent (stale, busy, invalid config) surfaces its own reason
+// instead of being silently discarded. Shared so both presentations word a
+// failed mode switch identically.
+function modeDragWriteError(result) {
+  if (result && result.accepted) return ""
+  var error = result && result.reply && result.reply.error ? result.reply.error : null
+  return "Preferences were not saved: "
+    + String(error && (error.message || error.code) || "request rejected")
+}
+
+// Per-connector sidebar collapse lookup, shared by the live controller and the
+// classic dock's preview so both resolve the same destination width.
+function sidebarCollapsedForScreen(collapsedByMonitor, collapsedDefault, screenName) {
+  var name = screenName ? String(screenName) : ""
+  var map = collapsedByMonitor
+  if (name && map && Object.prototype.hasOwnProperty.call(map, name))
+    return map[name] === true
+  return collapsedDefault === true
+}
+
 function applicationStateIndicatorGeometry(position, iconWidth, iconHeight,
                                            running, focused) {
   var edge = ["top", "bottom", "left", "right"].indexOf(position) >= 0

@@ -87,12 +87,12 @@ Item {
   property bool projecting: false
 
   // Map override when present; otherwise the global sidebarCollapsed default.
+  // The lookup is shared with the classic dock's destination preview so both
+  // resolve the same collapsed width.
   function collapsedFor(screen) {
     var name = screen && screen.name ? String(screen.name) : ""
-    var map = root.collapsedByMonitor
-    if (name && map && Object.prototype.hasOwnProperty.call(map, name))
-      return map[name] === true
-    return root.collapsed
+    return DockModel.sidebarCollapsedForScreen(
+      root.collapsedByMonitor, root.collapsed, name)
   }
 
   // Shared expanded-width preference, clamped per output so each panel fits its screen.

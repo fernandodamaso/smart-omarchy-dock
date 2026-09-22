@@ -103,6 +103,12 @@ Item {
   property bool settingsPersisted: false
   property string settingsWriteState: "idle"
   property string settingsWriteError: ""
+  // Background mode-switch feedback visible to renderers that have no other
+  // feedback surface. Carries a rejected mode intent and, once a write was
+  // accepted, any later persistence failure — the renderer that survived the
+  // mode switch is the one that has to report it. Cleared when settings are
+  // actually reloaded or saved again.
+  property string modeGestureFeedback: ""
   property bool settingsReloadPending: false
   property string settingsLoadedText: ""
   property string settingsWriteBaseText: ""
@@ -137,6 +143,7 @@ Item {
           || ConfigModel.windowIconsChanged(settings.windowIconOverrides, requested.windowIconOverrides))
         iconReloadRevision++
       if (JSON.stringify(settings) !== JSON.stringify(requested)) settingsRevision++
+      modeGestureFeedback = ""
       settings = requested
       settingsLoadState = "loaded"
       settingsLoadError = ""
@@ -294,6 +301,27 @@ Item {
     return { accepted: accepted, pending: pending, reply: reply }
   }
 
+  // A completed background mode gesture, routed through the same sole writer.
+  // Exactly one intent per gesture; the returned text is "" when the request
+  // was accepted and clears any earlier message, otherwise it explains why the
+  // mode did not change. Stored on the host because the gesture's own renderer
+  // may be the one torn down by a successful switch.
+  function commitModeGesture(value, expectedValue) {
+    var feedback = DockModel.modeDragWriteError(
+      saveSettingIntent("presentationMode", value, expectedValue))
+    modeGestureFeedback = feedback
+    return feedback
+  }
+
+  // One position request from either renderer. Dragging the bottom dock's empty
+  // background left switches presentation to the sidebar; the classic dock is
+  // bottom-only, so any other edge keeps the stale-protected position writer.
+  function handlePositionRequest(position, expectedPosition, expectedPresentation) {
+    if (position === "left")
+      return commitModeGesture("sidebar", expectedPresentation)
+    return saveSettingIntent("position", position, expectedPosition)
+  }
+
   function mutationBlocked() {
     var data = dockControl.mutationData(settings, settings, [], false, false)
     if (!settingsLoaded || settingsReloadPending || settingsWriteState === "saving")
@@ -391,6 +419,7 @@ Item {
   function settingsSaved() {
     settingsWriteError = ""
     settingsWriteState = "saved"
+    modeGestureFeedback = ""
     settingsLoadedText = settingsWriteText
     settingsLoadState = "loaded"
     settingsLoadError = ""
@@ -404,6 +433,9 @@ Item {
       + "Retry before restarting. " + FileViewError.toString(error)
     settingsWriteState = "error"
     settingsPersisted = false
+    // The renderer that requested the switch may already be gone; the one that
+    // replaced it inherits the report.
+    modeGestureFeedback = DockModel.persistenceFeedback(settingsWriteError)
     console.warn("Dock: could not save " + configPath + ":", error)
     reloadSettingsIfPending()
   }
@@ -665,21 +697,16 @@ Item {
             workspaceCountsReady: root.workspaceCountsReady
             workspaceCountsRevision: root.workspaceCountsRevision
             scopeRevision: root.scopeRevision
+            modeGestureFeedback: root.modeGestureFeedback
             onReorderRequested: (sourceDesktopId, targetDesktopId) => root.reorderPinned(sourceDesktopId, targetDesktopId)
             onPinRequested: desktopId => root.pinApplication(desktopId)
             onUnpinRequested: desktopId => root.unpinApplication(desktopId)
             onHideRequested: desktopId => root.hideApplication(desktopId)
             onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
             onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
-            onPositionRequested: (position, expectedPosition) => {
-              // Dragging the bottom dock's empty background left switches to
-              // the sidebar mode; the classic dock itself is bottom-only.
-              if (position === "left")
-                root.saveSettingIntent("presentationMode", "sidebar",
-                  root.settings.presentationMode)
-              else
-                root.saveSettingIntent("position", position, expectedPosition)
-            }
+            onPositionRequested: (position, expectedPosition, expectedPresentation) =>
+              root.handlePositionRequest(position, expectedPosition,
+                expectedPresentation)
             onOpenTrashRequested: root.openTrash()
             onEmptyTrashRequested: root.emptyTrash()
           }

@@ -21,9 +21,23 @@ PanelWindow {
   property var menuAnchor: null
   property var menuMembers: []
   property var menuEntry: null
-  readonly property string preferenceFeedback: !host ? "" : host.settingsWriteState === "error"
-    ? "Unsaved preferences: " + String(host.settingsWriteError || "Persistence failed")
+  readonly property string preferenceFeedback: root.modeDragError !== ""
+    ? root.modeDragError
+    : !host ? "" : host.settingsWriteState === "error"
+    ? DockModel.persistenceFeedback(host.settingsWriteError)
     : host.settingsWriteState === "saving" ? "Saving preferences" : controller.mutationFeedback
+  // Rejected or persistence-pending mode writes from the background gesture.
+  // Kept out of controller.mutationFeedback so it never overlaps a row/menu
+  // message, and cleared as soon as settings actually change.
+  property string modeDragError: ""
+  readonly property string presentationMode: DockModel.normalizeSetting(
+    "presentationMode", host ? host.settings.presentationMode : "sidebar")
+  readonly property string sidebarEdge: DockModel.normalizeSetting(
+    "sidebarEdge", host ? host.settings.sidebarEdge : "left")
+  // Mirrors the existing interface-animation preference; owned by the panel so
+  // neither drag surface nor preview re-reads settings on its own.
+  readonly property bool animationsEnabled: controller
+    && controller.settings.interfaceAnimationsEnabled !== false
   readonly property string badgeScopeOwner: "smartdock-sidebar:" + String(screen && screen.name || "")
   // Per-panel collapse; other mirrored panels keep their own override.
   readonly property bool panelCollapsed: controller.collapsedFor(screen)
@@ -71,11 +85,43 @@ PanelWindow {
       root.visible ? root.controller.projectionFor(root.panelCollapsed).badgeItems : [])
   }
 
+  // Exactly one host-owned write per completed background gesture, through the
+  // sole settings writer. A stale or busy rejection is surfaced but never
+  // retried silently; an accepted write clears local error state and lets the
+  // host's own saving/persistence feedback take over.
+  function commitModeSwitch(position, expectedPresentation) {
+    if (!host || position !== "bottom") return
+    root.modeDragError = host.commitModeGesture("classic", expectedPresentation)
+  }
+
+  // The panel-level surface owns header, margin, pin-shelf and utility gaps;
+  // the viewport surface owns only the list's blank tail. Only one can be
+  // pressed at a time, so feedback and the silhouette follow the live one.
+  readonly property var activeModeDrag: positionDragSurface.gestureActive
+    ? positionDragSurface
+    : viewportDragSurface.gestureActive ? viewportDragSurface : null
+  readonly property bool modeDragArmed: activeModeDrag !== null && activeModeDrag.armed
+  readonly property string modeDragDestinationEdge: activeModeDrag !== null
+    ? activeModeDrag.destinationEdge : ""
+  // Destination geometry for the classic dock the sidebar would switch to,
+  // mirroring Dock.qml's dockBackground sizing and bottom margin.
+  readonly property bool classicPreviewGrouped: DockModel.normalizeSetting(
+    "workspaceLayout", host ? host.settings.workspaceLayout : "") === "grouped"
+  readonly property real classicPreviewBand: DockModel.classicBandExtent(
+    DockModel.normalizeSetting("iconSize", host ? host.settings.iconSize : undefined),
+    classicPreviewGrouped)
+  readonly property real classicPreviewMargin: host && host.settings.margin !== undefined
+    ? host.settings.margin : 10
+
   function closeSurfaces() {
     sidebarContext.dismiss()
     picker.visible = false
     sidebarViewport.cancelInputs("surface-close")
     root.controller.cancelResize("surface-close")
+    // A dying or hidden panel must not carry a half-finished mode gesture.
+    positionDragSurface.cancelGesture("surface-close")
+    viewportDragSurface.cancelGesture("surface-close")
+    root.modeDragError = ""
     if (root.widgetArea) {
       if (root.widgetArea.dragWidgetId) root.widgetArea.finishDrag(0, 0, true)
       root.widgetArea.closeManager()
@@ -201,15 +247,15 @@ PanelWindow {
       id: positionDragSurface
 
       anchors.fill: parent
-      dockPosition: "left"
-      requestedPosition: "left"
+      dockPosition: root.sidebarEdge
+      requestedPosition: root.sidebarEdge
       switchThreshold: 48
+      presentationMode: root.presentationMode
+      sidebarEdge: root.sidebarEdge
+      animationsEnabled: root.animationsEnabled
       interactionAllowed: !root.controller.interactionBusy
-      onPositionRequested: (position, expectedPosition) => {
-        if (position === "bottom" && root.host)
-          root.host.saveSettingIntent("presentationMode", "classic",
-            root.host.settings.presentationMode)
-      }
+      onPositionRequested: (position, expectedPosition, expectedPresentation) =>
+        root.commitModeSwitch(position, expectedPresentation)
     }
     // Subtle desktop-facing divider instead of a full bright panel outline.
     Rectangle {
@@ -357,6 +403,28 @@ PanelWindow {
       anchors.right: parent.right
       anchors.leftMargin: Style.space(6) + (!root.panelCollapsed && root.controller.edge === "right" ? 8 : 0)
       anchors.rightMargin: Style.space(6) + (!root.panelCollapsed && root.controller.edge === "left" ? 8 : 0)
+    }
+    // The ListView owns every pixel its delegates and widget tail cover; only
+    // the blank tail below the last row is background. This surface sits above
+    // the list and covers exactly that region, so a press on a row or on the
+    // scrolling content still belongs to the list.
+    DockPositionDragSurface {
+      id: viewportDragSurface
+
+      x: sidebarViewport.x + sidebarViewport.blankRegion.x
+      y: sidebarViewport.y + sidebarViewport.blankRegion.y
+      width: sidebarViewport.blankRegion.width
+      height: sidebarViewport.blankRegion.height
+      visible: width > 0 && height > 0
+      dockPosition: root.sidebarEdge
+      requestedPosition: root.sidebarEdge
+      switchThreshold: 48
+      presentationMode: root.presentationMode
+      sidebarEdge: root.sidebarEdge
+      animationsEnabled: root.animationsEnabled
+      interactionAllowed: visible && !root.controller.interactionBusy
+      onPositionRequested: (position, expectedPosition, expectedPresentation) =>
+        root.commitModeSwitch(position, expectedPresentation)
     }
     DockSidebarPinnedStrip {
       id: pinnedStrip
@@ -520,6 +588,17 @@ PanelWindow {
     onActivated: root.controller.cancelResize("escape")
   }
 
+  // Destination silhouette for this panel's only mode destination: the classic
+  // bottom dock. Inert, non-reserving and owned by this Quickshell process.
+  DockModeDragPreview {
+    requestedVisible: root.modeDragArmed
+    edge: root.modeDragDestinationEdge
+    bandExtent: root.classicPreviewBand
+    edgeInset: root.classicPreviewMargin
+    animationsEnabled: root.animationsEnabled
+    screen: root.screen
+  }
+
   DockContextMenu {
     id: sidebarContext
     anchorItem: root.menuAnchor
@@ -577,7 +656,11 @@ PanelWindow {
     function onWorkspacesChanged() { Qt.callLater(root.refreshContext) }
     function onMonitorsChanged() { Qt.callLater(root.refreshContext) }
     function onMinimizedOriginsChanged() { Qt.callLater(root.refreshContext) }
-    function onSettingsChanged() { Qt.callLater(root.refreshContext) }
+    function onSettingsChanged() {
+      // A settings change supersedes any stale/pending gesture error.
+      root.modeDragError = ""
+      Qt.callLater(root.refreshContext)
+    }
     function onSurfaceInvalidated() { root.closeSurfaces() }
   }
   onVisibleChanged: { root.syncBadges(); if (!visible) root.closeSurfaces() }

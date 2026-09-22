@@ -135,6 +135,17 @@ accepted if FileView persistence is temporarily `E_BUSY` or later fails; retry u
 the latest host snapshot and never replays the drag-start snapshot. The UI surfaces
 the host's persistence state and does not claim early durability.
 
+The background mode gesture is a sibling of that writer contract: a press on
+eligible empty sidebar background (the panel surface, or the list's blank tail
+while it exists) dragged down past the same 48 px threshold arms a switch back to
+the classic dock, showing a direction hint pill and then a bottom-edge
+silhouette. Release commits exactly one `presentationMode` intent through
+`DockHost.commitModeGesture`; release below threshold, Escape, grab loss, an open
+menu/popup, resize, row/widget drag or a presentation change during the press
+cancels with no write. The gesture yields whenever
+`controller.interactionBusy` becomes true, is cancelled by panel closure, and
+its stale/busy/persistence failures use the shared host feedback wording.
+
 For unreserved logical screen width W, rail = min(72, W); expanded maximum =
 min(W, max(72, min(480, floor(0.40 × W)))); minimum = min(240, maximum).
 Clamp the requested expanded width to those runtime bounds, never back into the
@@ -174,7 +185,7 @@ node tests/test_sidebar_drag.mjs
 node tests/test_desktop_model.mjs
 python3 -m unittest discover -s tests -p 'test_sidebar_config.py'
 python3 -m unittest discover -s tests -p 'test_sidebar_qml_syntax.py'
-QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
 ```
 
 Then run the complete current `.github/workflows/ci.yml` matrix and

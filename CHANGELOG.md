@@ -26,7 +26,10 @@
 - Dock presentation has two modes: the classic bottom dock and the sidebar
   (the dock's left vertical presentation). Drag empty dock background left to
   switch to the sidebar, or drag empty sidebar background down to return to
-  the dock; legacy top/right/left classic values remain readable as bottom
+  the dock; the gesture shows a direction hint and a destination silhouette,
+  commits one `presentationMode` write only on release past the threshold, and
+  cancels without a write on early release, Escape or an interrupted drag.
+  Legacy top/right/left classic values remain readable as bottom
   compatibility values.
 - Removed the graphical Dock Settings page, its menu route, temporary preference
   previews, exclusive controls and editor-only helpers. Configuration and icon

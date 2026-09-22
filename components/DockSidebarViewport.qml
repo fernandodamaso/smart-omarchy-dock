@@ -7,6 +7,7 @@ import qs.Ui as Ui
 import "DockSidebarModel.js" as SidebarModel
 import "DockSidebarInteractionModel.js" as InteractionModel
 import "DockIconModel.js" as DockIconModel
+import "DockModel.js" as DockModel
 
 FocusScope {
   id: root
@@ -24,6 +25,14 @@ FocusScope {
   readonly property var visibleRows: viewProjection.rows
   readonly property var sectionSpans: viewProjection.sectionSpans || []
   readonly property var listView: list
+  // The ListView fills this viewport and accepts input over all of it, so it
+  // owns every pixel except this region: the part of the viewport that belongs
+  // to no delegate and no widget tail. It is only ever the tail below the
+  // content, because the list clamps contentY to the origin while content is
+  // shorter than the viewport, and it is empty whenever the content overflows —
+  // then every pixel is occupied and there is no blank space to claim.
+  readonly property var blankRegion: DockModel.sidebarBlankRegion(
+    list.contentHeight, list.height, list.contentY, list.width)
   property Component contentTail: null
   readonly property var contentTailItem: contentTailLoader.item
   property var contentTailDragPoint: null
