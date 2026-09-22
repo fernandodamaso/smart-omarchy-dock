@@ -529,3 +529,19 @@ git diff --check
 Then run the complete current Headless CI matrix on the exact final head. Runtime
 pointer/theme/font qualification still follows the gates in
 `docs/SIDEBAR_WIDGETS.md`.
+
+
+## External package import surface
+
+Widget package API v1 exposes this kit to separately owned external packages as
+a versioned QML module:
+
+```qml
+import SmartDock.WidgetKit 1.0
+```
+
+External packages should compose the exported `Widget*` primitives rather than
+importing SmartDock implementation files by relative path. The module is shipped
+with standalone SmartDock installations and is resolved by the host when an
+external package entry is loaded. Package manifests, source/deployment
+boundaries, and CLI workflow are documented in `docs/WIDGET_PACKAGES.md`.

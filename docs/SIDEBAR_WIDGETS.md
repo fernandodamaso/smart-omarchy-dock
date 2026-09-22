@@ -278,3 +278,24 @@ python3 -m unittest tests.test_sidebar_qml_syntax
 
 Real compositor/pointer/theme/font qualification remains FDM-974 after this
 source slice is accepted.
+
+
+## External package discovery (Widget package API v1)
+
+Installed external Widget packages join the same host registry and lease lifecycle
+described above. `DockExternalWidgetRegistry` consumes only validated registry
+metadata generated under the SmartDock XDG package store and contributes descriptors
+to the existing `sidebarWidgetRegistry`; there is no second card, provider,
+persistence, popup, or Widget-manager system.
+
+Runtime configuration remains ID-only. An external descriptor may provide a
+host-constructed `<presentation>Source` URL, but no executable path is accepted
+from `dock.json` or `sidebarWidgets`. Invalid or incompatible packages are
+isolated and omitted from executable descriptors, and external IDs cannot replace
+built-in/demo or integration-owned IDs.
+
+Source-owned integrations can opt out of Add/Manage with `manageable: false`.
+`herdr.agents` remains source-owned and uses that flag while staying registered
+for runtime features. External packages are manageable by default. See
+[`WIDGET_PACKAGES.md`](WIDGET_PACKAGES.md) for package validation, install/update,
+development, and source-location rules.
