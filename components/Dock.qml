@@ -15,6 +15,7 @@ import "DockWorkspaceModel.js" as WorkspaceModel
 import "DockWorkspaceGroupModel.js" as WorkspaceGroupModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockTrashModel.js" as TrashModel
+import "DockSidebarModel.js" as SidebarModel
 
 PanelWindow {
   id: root
@@ -42,7 +43,7 @@ PanelWindow {
   signal hideRequested(string desktopId)
   signal browserActivityMuteToggled(string serviceId)
   signal autoHideRequested(bool enabled)
-  signal positionRequested(string position, var expectedPosition)
+  signal positionRequested(string position, var expectedPosition, var gestureToken)
   signal openTrashRequested()
   signal emptyTrashRequested()
 
@@ -435,6 +436,31 @@ PanelWindow {
       ? settings.urgentWindowAnimationEnabled : true
   readonly property bool interfaceAnimationsEnabled: DockModel.normalizeSetting(
     "interfaceAnimationsEnabled", settings.interfaceAnimationsEnabled)
+  // Background mode gesture state. The host reports a rejected or still-pending
+  // mode write back through modeGestureFeedback, keyed to this dock's output;
+  // the rest drives the sidebar destination silhouette this dock would switch to.
+  property string modeGestureFeedback: ""
+  // Presentation mode this dock's output actually renders, injected by its
+  // screen owner in a mixed layout; falls back to the global default when the
+  // dock is instantiated without an owner (isolated tests).
+  property string presentationMode: DockModel.normalizeSetting(
+    "presentationMode", settings.presentationMode)
+  // Press-time presentation token for this dock's output, injected by its
+  // screen owner and captured by the drag surface when the pointer goes down.
+  property var modeGestureToken: null
+  readonly property string sidebarPreviewEdge: DockModel.normalizeSetting(
+    "sidebarEdge", settings.sidebarEdge)
+  readonly property bool sidebarPreviewCollapsed: DockModel.sidebarCollapsedForScreen(
+    DockModel.normalizeSetting("sidebarCollapsedByMonitor",
+      settings.sidebarCollapsedByMonitor),
+    DockModel.normalizeSetting("sidebarCollapsed", settings.sidebarCollapsed),
+    screen && screen.name)
+  readonly property real sidebarPreviewBand: SidebarModel.screenGeometry(
+    screen, settings.sidebarExpandedWidth, sidebarPreviewCollapsed).width
+  readonly property bool modeDragArmed: positionDragSurface.gestureActive
+    && positionDragSurface.armed
+  readonly property string modeDragDestinationEdge: modeDragArmed
+    ? positionDragSurface.destinationEdge : ""
   readonly property var pinned: settings.pinned || []
   readonly property var hiddenApplications: DockModel.normalizeSetting(
     "hiddenApplications", settings.hiddenApplications)
@@ -1065,6 +1091,10 @@ PanelWindow {
       dockPosition: root.position
       requestedPosition: root.settings.position
       switchThreshold: 48
+      presentationMode: root.presentationMode
+      gestureToken: root.modeGestureToken
+      sidebarEdge: root.sidebarPreviewEdge
+      animationsEnabled: root.interfaceAnimationsEnabled
       interactionAllowed: root.dockShown
         && root.dragSource < 0
         && !root.workspaceDragActive
@@ -1072,8 +1102,8 @@ PanelWindow {
         && root.openMenuCount === 0
         && !windowPreview.interactionActive
         && !appPicker.visible
-      onPositionRequested: (position, expectedPosition) =>
-        root.positionRequested(position, expectedPosition)
+      onPositionRequested: (position, expectedPosition, gestureToken) =>
+        root.positionRequested(position, expectedPosition, gestureToken)
     }
 
     Item {
@@ -1591,6 +1621,28 @@ PanelWindow {
     iconOverrides: root.iconOverrides
     iconReloadRevision: root.iconReloadRevision
     onApplicationSelected: desktopId => root.pinRequested(desktopId)
+  }
+
+  // Destination silhouette for this renderer's only mode destination: the
+  // configured sidebar edge on this dock's own monitor. Inert, non-reserving
+  // and never focusable.
+  DockModeDragPreview {
+    requestedVisible: root.modeDragArmed
+    edge: root.modeDragDestinationEdge
+    bandExtent: root.sidebarPreviewBand
+    edgeInset: 0
+    animationsEnabled: root.interfaceAnimationsEnabled
+    screen: root.screen
+  }
+
+  // Rejected or persistence-pending mode write from this dock's own background
+  // gesture, shown with the same non-interactive pill the sidebar gesture uses.
+  DockModeDragFeedback {
+    text: root.modeGestureFeedback
+    animationsEnabled: root.interfaceAnimationsEnabled
+    anchors.horizontalCenter: dockBackground.horizontalCenter
+    anchors.bottom: dockBackground.top
+    anchors.bottomMargin: Style.space(8)
   }
 
   HoverHandler {

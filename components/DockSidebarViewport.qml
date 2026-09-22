@@ -7,6 +7,7 @@ import qs.Ui as Ui
 import "DockSidebarModel.js" as SidebarModel
 import "DockSidebarInteractionModel.js" as InteractionModel
 import "DockIconModel.js" as DockIconModel
+import "DockModel.js" as DockModel
 
 FocusScope {
   id: root
@@ -24,6 +25,14 @@ FocusScope {
   readonly property var visibleRows: viewProjection.rows
   readonly property var sectionSpans: viewProjection.sectionSpans || []
   readonly property var listView: list
+  // The ListView fills this viewport and accepts input over all of it, so it
+  // owns every pixel except this region: the part of the viewport that belongs
+  // to no delegate and no widget tail. It is only ever the tail below the
+  // content, because the list clamps contentY to the origin while content is
+  // shorter than the viewport, and it is empty whenever the content overflows —
+  // then every pixel is occupied and there is no blank space to claim.
+  readonly property var blankRegion: DockModel.sidebarBlankRegion(
+    list.contentHeight, list.height, list.contentY, list.width)
   property Component contentTail: null
   readonly property var contentTailItem: contentTailLoader.item
   property var contentTailDragPoint: null
@@ -31,7 +40,13 @@ FocusScope {
   readonly property int rowCount: visibleRows.length
   readonly property real rowHeight: Math.max(34, Math.ceil(metrics.height + Style.space(12)))
   readonly property real workspaceCardInset: Style.space(5)
+  // Scrollbar thickness only; the list reserves no gutter. The bar sits
+  // scrollBarOutset past the viewport edge, inside the symmetric outer inset.
   readonly property real scrollGutter: 6
+  // Nudges the bar past the viewport's right edge toward the panel edge.
+  // The left sidebar's right edge also owns the 8px resize handle, so keep
+  // the bar inside that hit area; the collapsed rail has only a 6px outer inset.
+  readonly property real scrollBarOutset: root.panelCollapsed ? 4 : (root.controller && root.controller.edge === "left" ? 4 : 10)
   readonly property real cardRadius: appearance && appearance.cardRadius !== undefined
     ? appearance.cardRadius : Math.min(3, Style.cornerRadius)
   readonly property color monitorFill: appearance ? appearance.monitorFill
@@ -59,6 +74,43 @@ FocusScope {
   // Bump when list geometry/model changes so offscreen span estimates refresh.
   property int sectionChromeRevision: 0
   FontMetrics { id: metrics; font.family: Style.font.family; font.pixelSize: Style.font.body }
+
+  // Inline workspace chips are measured here, once per workspace, so every row
+  // of that workspace renders the same badge width and therefore the same
+  // artwork/label/hover/selection/guide geometry — including rows whose
+  // leading delegate is scrolled out of view. The probes are invisible Text
+  // nodes that exist only to measure the production badge font; nothing paints
+  // them and they never join the hierarchy list.
+  readonly property var inlineWorkspaceTargets: root.panelCollapsed
+    ? [] : (root.viewProjection.workspaceTargets || [])
+  readonly property real inlineWorkspaceBadgeAvailable: InteractionModel
+    .sidebarInlineWorkspaceBadgeAvailableWidth(list.width, root.workspaceCardInset, Style.space)
+  readonly property var inlineWorkspaceBadgeWidths: {
+    var widths = {}
+    for (var i = 0; i < inlineBadgeProbe.count; ++i) {
+      var probe = inlineBadgeProbe.itemAt(i)
+      if (probe) widths[probe.workspaceKey] = probe.layoutWidth
+    }
+    return widths
+  }
+
+  Repeater {
+    id: inlineBadgeProbe
+    model: ScriptModel { objectProp: "key"; values: root.inlineWorkspaceTargets }
+    delegate: Text {
+      required property var modelData
+      visible: false
+      text: InteractionModel.workspaceBadgeLabel(modelData.workspaceIdentity, modelData.label)
+      textFormat: Text.PlainText
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      font.bold: true
+      renderType: Text.NativeRendering
+      readonly property string workspaceKey: String(modelData.key)
+      readonly property real layoutWidth: InteractionModel.sidebarInlineWorkspaceBadgeLayoutWidth(
+        implicitWidth, root.inlineWorkspaceBadgeAvailable, Style.space)
+    }
+  }
 
   function rowIntersectsViewport(rowY, rowHeightValue) {
     return root.presentationVisible && !root.panelCollapsed
@@ -294,7 +346,7 @@ FocusScope {
     return accepted
   }
 
-  function focusRow(key) {
+  function focusRow(key, preferInlineWorkspaceBadge) {
     var rows = root.visibleRows
     var index = rows.findIndex(function(row) { return row.key === key })
     if (index < 0 || !InteractionModel.focusable(rows[index])) return false
@@ -305,7 +357,14 @@ FocusScope {
     list.positionViewAtIndex(index, ListView.Contain)
     list.forceLayout()
     var item = list.itemAtIndex(index)
-    if (item) item.forceActiveFocus(Qt.TabFocusReason)
+    if (item) {
+      if (preferInlineWorkspaceBadge === true
+          && item.leadingWorkspaceBadgeVisible === true
+          && typeof item.focusInlineWorkspaceBadge === "function")
+        item.focusInlineWorkspaceBadge(Qt.TabFocusReason)
+      else
+        item.forceActiveFocus(Qt.TabFocusReason)
+    }
     return item !== null
   }
 
@@ -525,7 +584,6 @@ FocusScope {
     anchors.top: parent.top
     anchors.bottom: parent.bottom
     anchors.right: parent.right
-    anchors.rightMargin: root.scrollGutter
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     flickableDirection: Flickable.VerticalFlick
@@ -594,10 +652,14 @@ FocusScope {
     Controls.ScrollBar.vertical: Controls.ScrollBar {
       id: verticalScrollBar
       parent: root
-      anchors.top: list.top
-      anchors.bottom: list.bottom
-      anchors.right: root.right
+      // Under pragma ComponentBehavior: Bound this inline attached component
+      // evaluates anchor bindings without a valid parent/sibling context, so
+      // Qt drops them ("Cannot anchor to an item that isn't a parent or
+      // sibling") and the bar parks at x=0. Bind geometry explicitly instead.
+      x: root.width - width + root.scrollBarOutset
+      y: list.y
       width: root.scrollGutter
+      height: list.height
       padding: 0
       policy: list.contentHeight > list.height
         ? Controls.ScrollBar.AsNeeded : Controls.ScrollBar.AlwaysOff

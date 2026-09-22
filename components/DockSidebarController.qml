@@ -4,6 +4,7 @@ import "DockIconModel.js" as DockIconModel
 import "DockWindowModel.js" as WindowModel
 import "DockDesktopModel.js" as DesktopModel
 import "DockSidebarModel.js" as SidebarModel
+import "DockScreenPresentationModel.js" as ScreenPresentationModel
 import "DockSidebarInteractionModel.js" as InteractionModel
 import "DockSidebarWidgetModel.js" as SidebarWidgetModel
 import "DockBadgeModel.js" as BadgeModel
@@ -42,9 +43,13 @@ Item {
   property var mappedScreens: []
   property var selectedScreen: null
   readonly property string selectedConnector: selectedScreen ? selectedScreen.name : ""
-  readonly property string mode: DockModel.normalizeSetting("presentationMode", settings.presentationMode)
   readonly property string edge: DockModel.normalizeSetting("sidebarEdge", settings.sidebarEdge)
-  readonly property string preferredConnector: DockModel.normalizeSetting("sidebarMonitor", settings.sidebarMonitor)
+  // Explicit monitor pin, watched so a change can cancel in-flight gestures:
+  // selectScreens preserves the previous mapping while an interaction is busy,
+  // so refreshBody alone cannot see that the host mapping moved underneath a
+  // captured gesture.
+  readonly property string sidebarMonitorPin: DockModel.normalizeSetting(
+    "sidebarMonitor", settings.sidebarMonitor)
   readonly property bool collapsed: DockModel.normalizeSetting("sidebarCollapsed", settings.sidebarCollapsed)
   readonly property var collapsedByMonitor: DockModel.normalizeSetting(
     "sidebarCollapsedByMonitor", settings.sidebarCollapsedByMonitor)
@@ -70,7 +75,9 @@ Item {
   property Item widgetPopupAnchor: null
   property string widgetDragId: ""
   readonly property bool widgetReorderActive: widgetDragId !== ""
-  readonly property bool widgetWorkActive: mode === "sidebar" && mappedScreens.length > 0
+  // Widget work follows actual sidebar membership, never the global default:
+  // in a mixed layout only the outputs showing a sidebar may lease widgets.
+  readonly property bool widgetWorkActive: mappedScreens.length > 0
   readonly property var widgetCollapsed: SidebarWidgetModel.collapsedMap(
     settings.sidebarWidgetCollapsed)
   // Herdr window↔session association bridge (process identity only).
@@ -87,12 +94,12 @@ Item {
   property bool projecting: false
 
   // Map override when present; otherwise the global sidebarCollapsed default.
+  // The lookup is shared with the classic dock's destination preview so both
+  // resolve the same collapsed width.
   function collapsedFor(screen) {
     var name = screen && screen.name ? String(screen.name) : ""
-    var map = root.collapsedByMonitor
-    if (name && map && Object.prototype.hasOwnProperty.call(map, name))
-      return map[name] === true
-    return root.collapsed
+    return DockModel.sidebarCollapsedForScreen(
+      root.collapsedByMonitor, root.collapsed, name)
   }
 
   // Shared expanded-width preference, clamped per output so each panel fits its screen.
@@ -352,9 +359,11 @@ Item {
   }
 
   // screen is the panel output initiating the gesture; shared width still commits once.
+  // Eligibility is this output's sidebar membership, so a classic output in a
+  // mixed layout can never start a sidebar resize.
   function beginResize(globalX, screen) {
     var target = screen || root.selectedScreen
-    if (root.mode !== "sidebar" || root.collapsedFor(target) || !target
+    if (!target || !root.connectorIsMapped(target.name) || root.collapsedFor(target)
         || !root.geometryFor(target).mapped || root.interactionBusy || root.resizeActive)
       return false
     var pointer = Number(globalX)
@@ -442,9 +451,20 @@ Item {
   function refreshBody() {
     if (root.dragSession && !root.rowDragIsCurrent()) root.cancelRowDrag("source-or-topology-changed")
     root.registry = SidebarModel.reconcileHandles(root.registry, root.toplevels)
-    var nextMapped = root.mode === "sidebar" ? SidebarModel.selectScreens(root.screens, root.monitors,
-      root.settings.workspaceMonitorOrder || [], root.preferredConnector,
-      root.mappedScreens, root.interactionBusy) : []
+    // Sidebar membership comes from the shared per-screen resolver, the same
+    // pure function the host owners and CLI diagnostics use, so every surface
+    // and gate agrees on which outputs actually show a sidebar.
+    var presentation = ScreenPresentationModel.resolve({
+      presentationMode: root.settings.presentationMode,
+      presentationModeByMonitor: root.settings.presentationModeByMonitor,
+      sidebarMonitor: root.settings.sidebarMonitor,
+      workspaceMonitorOrder: root.settings.workspaceMonitorOrder || [],
+      screens: root.screens,
+      monitors: root.monitors,
+      previousSidebarScreens: root.mappedScreens,
+      busy: root.interactionBusy === true
+    })
+    var nextMapped = presentation.sidebarScreens
     var nextPrimary = nextMapped.length ? nextMapped[0] : null
     var mappedChanged = nextMapped.length !== root.mappedScreens.length
       || nextMapped.some(function(screen, index) {
@@ -471,7 +491,7 @@ Item {
     root.aboutToRefresh()
     var previous = SidebarModel.unionProjectionRows(root.projection, root.railProjection)
       .map(function(row) { return row.key })
-    if (root.mode !== "sidebar" || !nextPrimary) {
+    if (!nextPrimary) {
       root.projection = SidebarModel.emptyProjection()
       root.railProjection = SidebarModel.emptyProjection()
       root.syncHerdrWindowProcesses()
@@ -519,6 +539,8 @@ Item {
       folds: root.folds,
       sidebarBrowserTabsEnabled: DockModel.normalizeSetting(
         "sidebarBrowserTabsEnabled", root.settings.sidebarBrowserTabsEnabled),
+      sidebarInlineSoloWorkspace: DockModel.normalizeSetting(
+        "sidebarInlineSoloWorkspace", root.settings.sidebarInlineSoloWorkspace),
       browserTabs: browserTabs,
       herdrSnapshot: herdrSnapshot,
       herdrAssociations: root.herdrAssociations,
@@ -793,7 +815,9 @@ Item {
   }
 
   function targetIsCurrent(target) {
-    if (!target || !root.windowActions || root.mode !== "sidebar") return false
+    // Rows only exist while some output shows a sidebar; with none mapped the
+    // projection is empty and no target can be current.
+    if (!target || !root.windowActions || !root.mappedScreens.length) return false
     var row = root.rowsByKey[target.key]
     if (target.desktopId && DockModel.normalizeSetting("hiddenApplications", root.settings.hiddenApplications)
         .map(DockModel.normalizedId).indexOf(DockModel.normalizedId(target.desktopId)) >= 0) return false
@@ -1199,7 +1223,7 @@ Item {
   function requestCollapse(screen) {
     var target = screen || root.selectedScreen
     var connector = target && target.name ? String(target.name) : ""
-    if (!connector)
+    if (!connector || !root.connectorIsMapped(connector))
       return {ok:false,error:{code:"E_STATE",message:"No sidebar output to collapse."},data:{applied:false}}
     if (root.resizeActive) root.cancelResize("collapse")
     if (root.interactionBusy)
@@ -1372,7 +1396,9 @@ Item {
     root.syncWidgets()
     root.scheduleRefresh()
   }
-  onModeChanged: root.invalidateSurface()
+  // Presentation mode and per-monitor overrides never invalidate here: owners
+  // recreate only the affected surface, and refreshBody cancels in-flight
+  // gestures when sidebar membership itself changes.
   onEdgeChanged: root.invalidateSurface()
   // Per-panel collapse updates geometry bindings; do not tear the Loader down.
   onCollapsedChanged: {
@@ -1385,9 +1411,10 @@ Item {
     if (root.resizePreferenceConflict()) root.cancelResize("preference-conflict")
     root.scheduleRefresh()
   }
-  // Preference remaps Variants without tearing the Loader; cancel in-flight
-  // gestures that captured a different host mapping.
-  onPreferredConnectorChanged: {
+  // The pin moves this panel to another output; cancel in-flight gestures that
+  // captured the previous host mapping, then refresh with the busy flag cleared
+  // so selectScreens resolves the new pin instead of preserving the old set.
+  onSidebarMonitorPinChanged: {
     root.cancelResize("host-changed")
     root.cancelRowDrag("host-changed")
     root.scheduleRefresh()

@@ -79,7 +79,7 @@ node tests/test_workspace_monitor_order.mjs
 node tests/test_workspace_monitor_sections.mjs
 node tests/test_presentation_model.mjs
 node tests/test_badge_model.mjs
-QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
 ```
 
 `tests/tst_desktopmodel.qml` additionally imports the actual `.pragma`/`.import`

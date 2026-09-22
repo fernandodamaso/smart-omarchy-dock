@@ -27,6 +27,11 @@ Item {
     var focusedKey = controller.focusedRowKey
     var alertOn = controller.alertControlKey !== ""
       && controller.alertControlKey === focusedKey
+    var focusedItem = root.viewport.currentDelegate()
+    var inlineWorkspaceFocused = !!(focusedItem
+      && focusedItem.inlineWorkspaceBadgeFocused === true)
+    var actionKey = inlineWorkspaceFocused && focusedItem.inlineWorkspaceBadgeKey
+      ? focusedItem.inlineWorkspaceBadgeKey : focusedKey
 
     if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter
           || event.key === Qt.Key_Space) && alertOn) {
@@ -42,6 +47,11 @@ Item {
     if (direction === 1 || direction === -1) {
       var isTab = event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab
       var row = root.focusedRow()
+      if (isTab && direction === 1 && inlineWorkspaceFocused) {
+        focusedItem.forceActiveFocus(Qt.TabFocusReason)
+        event.accepted = true
+        return
+      }
       if (isTab && direction === 1 && row && controller.rowHasAlertControl(row)
           && !alertOn) {
         controller.alertControlKey = focusedKey
@@ -51,6 +61,12 @@ Item {
       if (isTab && direction === -1 && alertOn) {
         controller.clearAlertControl()
         event.accepted = true
+        return
+      }
+      if (isTab && direction === -1 && focusedItem
+          && focusedItem.leadingWorkspaceBadgeVisible === true
+          && !inlineWorkspaceFocused) {
+        event.accepted = focusedItem.focusInlineWorkspaceBadge(Qt.BacktabFocusReason)
         return
       }
 
@@ -64,7 +80,7 @@ Item {
         if (prevRow && controller.rowHasAlertControl(prevRow))
           controller.alertControlKey = next
       }
-      event.accepted = root.viewport.focusRow(next)
+      event.accepted = root.viewport.focusRow(next, isTab && direction === 1)
       return
     }
 
@@ -78,13 +94,22 @@ Item {
 
     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
       event.accepted = root.viewport.activate(
-        controller.captureTarget(focusedKey), false, "", Number(event.modifiers))
+        controller.captureTarget(actionKey), false, "", Number(event.modifiers))
     } else if (event.key === Qt.Key_Space) {
-      event.accepted = controller.toggleApplication(focusedKey)
+      if (inlineWorkspaceFocused)
+        event.accepted = root.viewport.activate(
+          controller.captureTarget(actionKey), false, "", Number(event.modifiers))
+      else
+        event.accepted = controller.toggleApplication(focusedKey)
     } else if (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier)) {
-      var target = controller.captureTarget(focusedKey)
-      var item = root.viewport.currentDelegate()
-      if (target && item) { root.viewport.contextRequested(target, item); event.accepted = true }
+      var target = controller.captureTarget(actionKey)
+      var anchor = inlineWorkspaceFocused && focusedItem
+        && focusedItem.inlineWorkspaceBadgeAnchor
+        ? focusedItem.inlineWorkspaceBadgeAnchor : focusedItem
+      if (target && anchor) {
+        root.viewport.contextRequested(target, anchor)
+        event.accepted = true
+      }
     }
   }
 

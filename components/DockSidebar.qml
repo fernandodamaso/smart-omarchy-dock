@@ -21,25 +21,42 @@ PanelWindow {
   property var menuAnchor: null
   property var menuMembers: []
   property var menuEntry: null
-  readonly property string preferenceFeedback: !host ? "" : host.settingsWriteState === "error"
-    ? "Unsaved preferences: " + String(host.settingsWriteError || "Persistence failed")
+  readonly property string preferenceFeedback: root.modeDragError !== ""
+    ? root.modeDragError
+    : !host ? "" : host.settingsWriteState === "error"
+    ? DockModel.persistenceFeedback(host.settingsWriteError)
     : host.settingsWriteState === "saving" ? "Saving preferences" : controller.mutationFeedback
+  // Host-owned, per-connector gesture feedback for this panel's output. The
+  // host keys it by connector, so a stale gesture on another monitor can never
+  // display here, and a persistence failure stays visible host-wide. Derived:
+  // the host clears it on save/reload and on the next gesture.
+  readonly property string modeDragError: !host || !screen ? ""
+    : host.modeGestureDisplayFor(screen.name)
+  property string presentationMode: DockModel.normalizeSetting(
+    "presentationMode", host ? host.settings.presentationMode : "sidebar")
+  // Press-time mode-switch token for this panel's connector, injected by the
+  // screen owner so a gesture commits against the state it started from.
+  property var modeGestureToken: null
+  readonly property string sidebarEdge: DockModel.normalizeSetting(
+    "sidebarEdge", host ? host.settings.sidebarEdge : "left")
+  // Mirrors the existing interface-animation preference; owned by the panel so
+  // neither drag surface nor preview re-reads settings on its own.
+  readonly property bool animationsEnabled: controller
+    && controller.settings.interfaceAnimationsEnabled !== false
   readonly property string badgeScopeOwner: "smartdock-sidebar:" + String(screen && screen.name || "")
   // Per-panel collapse; other mirrored panels keep their own override.
   readonly property bool panelCollapsed: controller.collapsedFor(screen)
   // Official Lucide panel icons; edge does not flip these names.
   readonly property string collapseIcon: root.panelCollapsed
     ? "panel-left-open" : "panel-left-close"
-  // Match viewport inner pad + resize-edge allowance + list scroll gutter so the
-  // expanded collapse control shares the monitor/workspace card right edge.
+  // Match viewport inner pad + resize-edge allowance on both sides so the
+  // expanded header shares the monitor/workspace card edges symmetrically.
   readonly property real panelInnerPad: Style.space(6)
   readonly property real resizeEdgeAllowance: 8
-  readonly property real scrollGutter: 6
   readonly property real expandedHeaderLeftInset: root.panelInnerPad
-    + (!root.panelCollapsed && root.controller.edge === "right" ? root.resizeEdgeAllowance : 0)
+    + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
   readonly property real expandedHeaderRightInset: root.panelInnerPad
-    + (!root.panelCollapsed && root.controller.edge === "left" ? root.resizeEdgeAllowance : 0)
-    + (!root.panelCollapsed ? root.scrollGutter : 0)
+    + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
   readonly property var pinStripAdd: pinnedStrip.addPinButton
   // Per-output clamp of the shared expanded-width preference.
   readonly property var panelGeometry: controller.geometryFor(screen)
@@ -71,11 +88,43 @@ PanelWindow {
       root.visible ? root.controller.projectionFor(root.panelCollapsed).badgeItems : [])
   }
 
+  // Exactly one host-owned write per completed background gesture, through the
+  // sole settings writer and scoped to this panel's connector. A stale, busy or
+  // disconnected gesture is surfaced but never retried silently; an accepted
+  // write clears feedback and lets the host's own saving/persistence state take
+  // over.
+  function commitModeSwitch(position, gestureToken) {
+    if (!host || position !== "bottom" || !root.screen) return
+    host.commitMonitorModeGesture(root.screen.name, "classic", gestureToken)
+  }
+
+  // The panel-level surface owns header, margin, pin-shelf and utility gaps;
+  // the viewport surface owns only the list's blank tail. Only one can be
+  // pressed at a time, so feedback and the silhouette follow the live one.
+  readonly property var activeModeDrag: positionDragSurface.gestureActive
+    ? positionDragSurface
+    : viewportDragSurface.gestureActive ? viewportDragSurface : null
+  readonly property bool modeDragArmed: activeModeDrag !== null && activeModeDrag.armed
+  readonly property string modeDragDestinationEdge: activeModeDrag !== null
+    ? activeModeDrag.destinationEdge : ""
+  // Destination geometry for the classic dock the sidebar would switch to,
+  // mirroring Dock.qml's dockBackground sizing and bottom margin.
+  readonly property bool classicPreviewGrouped: DockModel.normalizeSetting(
+    "workspaceLayout", host ? host.settings.workspaceLayout : "") === "grouped"
+  readonly property real classicPreviewBand: DockModel.classicBandExtent(
+    DockModel.normalizeSetting("iconSize", host ? host.settings.iconSize : undefined),
+    classicPreviewGrouped)
+  readonly property real classicPreviewMargin: host && host.settings.margin !== undefined
+    ? host.settings.margin : 10
+
   function closeSurfaces() {
     sidebarContext.dismiss()
     picker.visible = false
     sidebarViewport.cancelInputs("surface-close")
     root.controller.cancelResize("surface-close")
+    // A dying or hidden panel must not carry a half-finished mode gesture.
+    positionDragSurface.cancelGesture("surface-close")
+    viewportDragSurface.cancelGesture("surface-close")
     if (root.widgetArea) {
       if (root.widgetArea.dragWidgetId) root.widgetArea.finishDrag(0, 0, true)
       root.widgetArea.closeManager()
@@ -201,15 +250,16 @@ PanelWindow {
       id: positionDragSurface
 
       anchors.fill: parent
-      dockPosition: "left"
-      requestedPosition: "left"
+      dockPosition: root.sidebarEdge
+      requestedPosition: root.sidebarEdge
       switchThreshold: 48
+      presentationMode: root.presentationMode
+      gestureToken: root.modeGestureToken
+      sidebarEdge: root.sidebarEdge
+      animationsEnabled: root.animationsEnabled
       interactionAllowed: !root.controller.interactionBusy
-      onPositionRequested: (position, expectedPosition) => {
-        if (position === "bottom" && root.host)
-          root.host.saveSettingIntent("presentationMode", "classic",
-            root.host.settings.presentationMode)
-      }
+      onPositionRequested: (position, expectedPosition, gestureToken) =>
+        root.commitModeSwitch(position, gestureToken)
     }
     // Subtle desktop-facing divider instead of a full bright panel outline.
     Rectangle {
@@ -355,8 +405,31 @@ PanelWindow {
       anchors.bottomMargin: root.panelCollapsed ? 0 : Style.space(8)
       anchors.left: parent.left
       anchors.right: parent.right
-      anchors.leftMargin: Style.space(6) + (!root.panelCollapsed && root.controller.edge === "right" ? 8 : 0)
-      anchors.rightMargin: Style.space(6) + (!root.panelCollapsed && root.controller.edge === "left" ? 8 : 0)
+      anchors.leftMargin: Style.space(6) + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
+      anchors.rightMargin: Style.space(6) + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
+    }
+    // The ListView owns every pixel its delegates and widget tail cover; only
+    // the blank tail below the last row is background. This surface sits above
+    // the list and covers exactly that region, so a press on a row or on the
+    // scrolling content still belongs to the list.
+    DockPositionDragSurface {
+      id: viewportDragSurface
+
+      x: sidebarViewport.x + sidebarViewport.blankRegion.x
+      y: sidebarViewport.y + sidebarViewport.blankRegion.y
+      width: sidebarViewport.blankRegion.width
+      height: sidebarViewport.blankRegion.height
+      visible: width > 0 && height > 0
+      dockPosition: root.sidebarEdge
+      requestedPosition: root.sidebarEdge
+      switchThreshold: 48
+      presentationMode: root.presentationMode
+      gestureToken: root.modeGestureToken
+      sidebarEdge: root.sidebarEdge
+      animationsEnabled: root.animationsEnabled
+      interactionAllowed: visible && !root.controller.interactionBusy
+      onPositionRequested: (position, expectedPosition, gestureToken) =>
+        root.commitModeSwitch(position, gestureToken)
     }
     DockSidebarPinnedStrip {
       id: pinnedStrip
@@ -371,7 +444,7 @@ PanelWindow {
       anchors.leftMargin: Style.space(10)
       anchors.rightMargin: Style.space(10) + (!root.panelCollapsed && root.controller.edge === "left" ? 8 : 0)
     }
-    Column {
+    Row {
       id: utilities
       x: root.panelCollapsed ? Style.space(6) : Style.space(10)
       width: Math.max(0, surface.width - (root.panelCollapsed ? Style.space(12) : Style.space(20)))
@@ -380,7 +453,8 @@ PanelWindow {
       spacing: Style.space(6)
       Item {
         id: launcher
-        width: parent.width
+        width: Math.max(0, parent.width - trashButton.width
+          - (trashButton.visible ? parent.spacing : 0))
         height: Style.space(36)
         focus: true
         activeFocusOnTab: true
@@ -472,12 +546,11 @@ PanelWindow {
       Ui.Button {
         id: trashButton
         visible: root.host.showTrash
-        width: parent.width
+        width: visible ? Style.space(36) : 0
         height: visible ? Style.space(36) : 0
-        text: root.panelCollapsed ? "" : "Trash"
+        text: ""
         iconText: ""
-        leftAlign: !root.panelCollapsed
-        horizontalPadding: root.panelCollapsed ? Style.spacing.controlPaddingX : Style.space(28)
+        horizontalPadding: 0
         tooltipText: "Open Trash"
         Accessible.role: Accessible.Button
         Accessible.name: "Open Trash"
@@ -485,7 +558,7 @@ PanelWindow {
         onClicked: root.host.openTrash()
         DockLucideIcon {
           anchors.verticalCenter: parent.verticalCenter
-          x: root.panelCollapsed ? (parent.width - width) / 2 : Style.space(8)
+          anchors.horizontalCenter: parent.horizontalCenter
           width: 14
           height: 14
           iconName: "trash-2"
@@ -518,6 +591,17 @@ PanelWindow {
     sequence: "Escape"
     enabled: root.visible && root.controller.resizeActive
     onActivated: root.controller.cancelResize("escape")
+  }
+
+  // Destination silhouette for this panel's only mode destination: the classic
+  // bottom dock. Inert, non-reserving and owned by this Quickshell process.
+  DockModeDragPreview {
+    requestedVisible: root.modeDragArmed
+    edge: root.modeDragDestinationEdge
+    bandExtent: root.classicPreviewBand
+    edgeInset: root.classicPreviewMargin
+    animationsEnabled: root.animationsEnabled
+    screen: root.screen
   }
 
   DockContextMenu {
@@ -577,7 +661,9 @@ PanelWindow {
     function onWorkspacesChanged() { Qt.callLater(root.refreshContext) }
     function onMonitorsChanged() { Qt.callLater(root.refreshContext) }
     function onMinimizedOriginsChanged() { Qt.callLater(root.refreshContext) }
-    function onSettingsChanged() { Qt.callLater(root.refreshContext) }
+    function onSettingsChanged() {
+      Qt.callLater(root.refreshContext)
+    }
     function onSurfaceInvalidated() { root.closeSurfaces() }
   }
   onVisibleChanged: { root.syncBadges(); if (!visible) root.closeSurfaces() }

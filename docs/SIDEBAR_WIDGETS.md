@@ -179,7 +179,8 @@ node tests/test_sidebar_widgets.mjs
 python3 -m unittest discover -s tests -p 'test_sidebar_widget_config.py'
 node tests/test_sidebar_host.mjs
 python3 -m unittest discover -s tests -p 'test_cli_docs.py'
-QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
+
 ```
 
 Then run the complete current Headless CI matrix on the exact final head.
@@ -258,7 +259,8 @@ Focused source checks:
 
 ```sh
 node tests/test_widgetkit_structure.mjs
-QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
+
 python3 -m unittest tests.test_sidebar_qml_syntax
 ```
 

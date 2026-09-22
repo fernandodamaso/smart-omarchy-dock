@@ -6,7 +6,7 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 55 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 57 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
@@ -32,16 +32,18 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 55 rows 
 | `workspaceBadgeTextColor` | `""` | Color string; requires workspaceBadgeTextColorEnabled. |
 | `borderWidthEnabled` | `false` | Boolean; enables a fixed width instead of theme-owned widths. |
 | `borderWidth` | `2` | Integer 0–8 logical pixels; relevant only with borderWidthEnabled. |
-| `presentationMode` | `"classic"` | Classic bottom dock or mirrored sidebar panels (the dock's vertical presentation). Drag empty dock background left to switch to the sidebar, or empty sidebar background down to return. |
+| `presentationMode` | `"classic"` | Classic bottom dock or mirrored sidebar panels (the dock's vertical presentation) for connectors without a `presentationModeByMonitor` entry. Drag empty dock background left past the 48 px threshold to switch that monitor to the sidebar, or empty sidebar background down to return; release commits one `presentationModeByMonitor` entry for the source connector, and an early release, Escape or an interrupted drag writes nothing. |
+| `presentationModeByMonitor` | `{}` | Object map of exact connector → `classic` or `sidebar`. A listed connector ignores `presentationMode` and `sidebarMonitor`; missing connectors inherit the effective default. Disconnected names retained; control characters and non-mode values rejected. |
 | `sidebarEdge` | `"left"` | Sidebar panel edge; leaves classic position unchanged. |
 | `sidebarMonitor` | `""` | Empty maps a mirrored panel on every connected screen. A connected connector maps only that output. Disconnected preferences are retained and fall back to all connected screens; control characters are rejected. |
 | `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |
 | `sidebarCollapsed` | `false` | Default icon rail for monitors without a `sidebarCollapsedByMonitor` override. Expanded width and session app folds are retained. |
 | `sidebarCollapsedByMonitor` | `{}` | Object map of exact connector → boolean. Missing connectors follow `sidebarCollapsed`. Disconnected names retained; control characters and non-booleans rejected. |
+| `sidebarInlineSoloWorkspace` | `true` | Boolean; when enabled, populated workspace names share the first application/window row instead of emitting a separate workspace row. Empty workspaces remain dedicated rows. |
 | `sidebarWidgets` | `[]` | Ordered unique registered internal widget IDs. The array is both enabled state and card order. Runtime schema advertises source-registered IDs; unknown imports remain requested/unavailable. Add/remove/reorder use the host writer. |
 | `sidebarWidgetCollapsed` | `{}` | Valid internal widget ID → boolean card-body state. Missing means expanded. Removing a widget keeps its collapse preference so re-adding restores it. Preference reset clears the map. |
 | `sidebarBrowserTabsEnabled` | `true` | When true and the browser-profile provider is available, sidebar Chrome window rows can expand to list open page tabs (titles only, no URLs). Independent of `browserActivityMutedServices`. See the [online browser-tabs guide](https://github.com/fernandodamaso/smart-omarchy-dock/blob/370585ccfaed98f1d04954d8598a868aef80a087/docs/browser-tabs.md); it is not part of the offline CLI documentation bundle. |
-| `position` | `"bottom"` | Classic dock edge; the classic dock renders on the bottom only and the left vertical presentation is the sidebar mode. Drag empty dock background left to switch to the sidebar, or empty sidebar background down to return. Legacy left, right and top read as bottom. |
+| `position` | `"bottom"` | Classic dock edge; the classic dock renders on the bottom only and the left vertical presentation is the sidebar mode. Drag empty dock background left to switch to the sidebar, or empty sidebar background down to return; the gesture writes the source connector's `presentationModeByMonitor` entry, never `position`. Legacy left, right and top read as bottom. |
 | `fullLength` | `false` | Boolean; extend along the available edge. |
 | `reserveSpace` | `true` | Boolean; effective false while autoHide is enabled, without erasing this request. |
 | `autoHide` | `false` | Boolean; existing edge-reveal auto-hide, not a new hide-mode enum. |
@@ -146,17 +148,40 @@ back. Empty `sidebarMonitor` means every connected monitor; a set connector maps
 only that output. Disconnected names remain saved and fall back to all connected
 screens. Placement does not filter the window inventory.
 
+`presentationModeByMonitor` resolves each connected connector independently: an
+explicit `classic`/`sidebar` entry beats both the global `presentationMode` and
+the legacy `sidebarMonitor` selection, while unlisted connectors inherit the
+effective default. An empty map reproduces pre-override behavior exactly.
+Overrides for disconnected connectors stay saved, and changing `presentationMode`
+never removes them. An explicit object patch replaces the whole map, so dropping
+one connector's key (or `config reset presentationModeByMonitor` for the whole
+map) restores inheritance. Classic and sidebar surfaces coexist: every connected
+output renders its own resolved mode, so one monitor can show the bottom dock
+while another shows the sidebar at the same time.
+
 Sidebar effective output uses all monitors, structural workspace-local application
 groups, persistent reservation, icons capped at 32, and no previews or auto-hide.
 Classic click/middle-click/scroll actions are reported as `null` (inactive).
+`config get --effective` applies those sidebar rewrites only when the inherited
+default is `sidebar` and no connected output resolves `classic`; in a mixed
+layout the classic outputs keep their own effective values for those keys, and
+`inactiveClassicSettings` lists exactly the keys the sidebar outputs ignore.
 The `presentation` diagnostic lists inactive classic settings, primary connector,
-full `screens` list, effective persistent width and whether that geometry can map.
-These are source projections, not proof that the compositor mapped a surface. No
-screen means zero width and `mapped: false`. Width uses unreserved logical screen
-geometry. Each output reserves its own exclusive zone from its clamped width.
+full `screens` list, effective persistent width and whether that geometry can
+map, plus the per-monitor resolution: `defaultMode`, `perMonitor` entries of
+`{connector, mode, source, mapped, sidebarSelected}`, keyed `modeByMonitor`,
+`sourceByMonitor` and `mappedByMonitor`, the `classicScreens` list, and `mixed`
+when classic and sidebar outputs coexist. `source` is `override` for an explicit
+entry and `inherited` otherwise. In a mixed layout the legacy summary fields keep
+their historical meaning: `mode` reports the inherited default, while `screen`,
+`screens`, `width` and `mapped` describe the sidebar that actually renders — use
+`perMonitor` for the per-connector truth. These are source projections, not proof
+that the compositor mapped a surface. No screen means zero width and
+`mapped: false`. Width uses unreserved logical screen geometry. Each output
+reserves its own exclusive zone from its clamped width.
 
-The seven sidebar settings support the existing typed set/apply/reset/schema/get
-commands. Width writes accept integers 240–480; the runtime may clamp the effective
+These sidebar and per-monitor presentation settings support the existing typed
+set/apply/reset/schema/get commands. Width writes accept integers 240–480; the runtime may clamp the effective
 width below 240 on narrow screens without rewriting the requested value. The
 expanded resize handle lives inside the reserved width. Pointer motion changes only
 temporary effective geometry; a changed release submits one `sidebarExpandedWidth`
@@ -173,6 +198,22 @@ rather than replayed; an accepted write may report persistence pending without
 becoming a rejected intent. Persistence failure keeps the accepted live value and
 retry persists the latest complete host snapshot. See `SIDEBAR_RESIZE.md` for the
 exact geometry, cancellation, writer-count and deferred runtime contracts.
+
+The background mode gesture follows the same contract. Only empty background is
+eligible: dock rows, widgets, headers, pinned strips, controls and the sidebar's
+list content keep their own input, and the sidebar gesture's blank tail
+disappears once content overflows or scrolls. Dragging left on the bottom dock or
+down on the sidebar arms after 48 px of directional travel, shows a hint pill and
+then a destination silhouette on the configured edge — both staying on the source
+monitor — and commits exactly one `presentationModeByMonitor` entry for the
+source connector on release; other connectors keep their own modes. The press
+captures that connector's presentation token, which the host revalidates at
+release, so a presentation or topology change during the press, a release below
+the threshold, Escape, an open menu/popup, a resize or row drag, or a disconnected
+source cancels without any write. Rejected intents and persistence failures are
+reported on the source monitor only, through host feedback keyed by connector,
+using the shared wording above; a stale gesture's message can never appear on
+another monitor.
 
 This is an **unreleased Draft foundation**, not integrated sidebar acceptance.
 SB-03 owns resize gestures, SB-04 owns full navigation/menus/keyboard/drag,

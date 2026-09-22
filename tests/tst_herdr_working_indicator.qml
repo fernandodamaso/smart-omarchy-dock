@@ -65,9 +65,11 @@ TestCase {
     }
   }
 
-  function test_phase_wrap_stop_reset_restart_and_tint() {
+  function test_shared_clock_stop_reset_restart_and_tint() {
     var indicator = createTemporaryObject(indicatorFactory, test)
+    var sibling = createTemporaryObject(indicatorFactory, test)
     verify(indicator !== null)
+    verify(sibling !== null)
     compare(indicator.timerRunning, false)
     compare(indicator.phase, 0)
 
@@ -76,13 +78,14 @@ TestCase {
     verify(firstDot !== null)
     compare(firstDot.color, indicator.tint)
 
-    // Start from the last phase so the next 110ms tick proves wrap to zero.
-    indicator.phase = 7
     indicator.active = true
+    sibling.active = true
     compare(indicator.timerRunning, true)
-    tryCompare(indicator, "phase", 0, 300)
-
-    tryVerify(function() { return indicator.phase !== 0 }, 300)
+    compare(sibling.timerRunning, true)
+    tryVerify(function() {
+      return indicator.phase === sibling.phase
+        && indicator.phase === indicator.synchronizedPhase()
+    }, 300)
     indicator.active = false
     compare(indicator.timerRunning, false)
     compare(indicator.phase, 0)
@@ -94,6 +97,9 @@ TestCase {
 
     indicator.active = true
     compare(indicator.timerRunning, true)
-    tryVerify(function() { return indicator.phase !== 0 }, 300)
+    tryVerify(function() {
+      return indicator.phase === sibling.phase
+        && indicator.phase === indicator.synchronizedPhase()
+    }, 300)
   }
 }

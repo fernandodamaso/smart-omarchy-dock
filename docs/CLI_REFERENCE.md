@@ -132,7 +132,8 @@ Full `install.sh` is an explicit standalone installation with separate lifecycle
 
 ## Sidebar configuration and diagnostics
 
-The SB-02 candidate adds `presentationMode`, `sidebarEdge`, `sidebarMonitor`,
+The SB-02 candidate adds `presentationMode`, `presentationModeByMonitor`,
+`sidebarEdge`, `sidebarMonitor`,
 `sidebarExpandedWidth`, `sidebarCollapsed`, `sidebarCollapsedByMonitor`,
 `sidebarBrowserTabsEnabled`, `sidebarWidgets` and `sidebarWidgetCollapsed`.
 Discover these keys on the selected
@@ -142,6 +143,7 @@ In an isolated candidate session only:
 
 ```sh
 smartdock config set presentationMode sidebar --json
+smartdock config set presentationModeByMonitor '{"DP-1":"classic"}' --json
 smartdock config set sidebarEdge right --json
 smartdock config set sidebarMonitor DP-1 --json
 smartdock config set sidebarExpandedWidth 320 --json
@@ -149,17 +151,33 @@ smartdock config set sidebarCollapsed true --json
 smartdock config apply --json '{"sidebarCollapsedByMonitor":{"DP-1":true,"HDMI-A-1":false}}'
 smartdock config get --effective --json
 smartdock config set presentationMode classic --json
+smartdock config reset presentationModeByMonitor --json
 ```
 
 `data.presentation` reports the primary screen, full `screens` list for mirrored
 panels, per-screen `collapsedByScreen`, effective width, geometry mapping
-eligibility, and inactive classic settings. Saved disconnected monitor preferences
-remain visible in requested output; effective `sidebarMonitor` names the primary
-mapped connector or is null with no screens. Empty preference maps every connected
-output. Global `sidebarCollapsed` is the default rail when a connector has no map
-entry. `sidebarExpandedWidth`
+eligibility, and inactive classic settings. It also reports the per-monitor
+resolution: `defaultMode`, `perMonitor` (each connected connector's
+`{connector, mode, source, mapped, sidebarSelected}`), keyed `modeByMonitor`,
+`sourceByMonitor` and `mappedByMonitor`, the `classicScreens` list, and `mixed`
+when classic and sidebar outputs coexist. `source` is `override` for an explicit
+`presentationModeByMonitor` entry and `inherited` otherwise. In a mixed layout
+the legacy summary fields stay historical — `mode` is the inherited default and
+`screen`, `screens`, `width` and `mapped` describe the rendering sidebar — so
+use `perMonitor` for the per-connector truth. Saved disconnected monitor
+preferences remain visible in requested output; in a sidebar-only layout
+effective `sidebarMonitor` names the primary mapped connector or is null with no
+screens. Empty preference maps every connected output. Global
+`sidebarCollapsed` is the default rail when a connector has no map entry.
+`presentationModeByMonitor` follows the same explicit object-patch rule as
+`sidebarCollapsedByMonitor`: set/apply replaces the whole map, dropping one
+connector's key restores inheritance for it,
+`config reset presentationModeByMonitor` restores `{}`, and a
+`presentationMode` write changes only the default, never the overrides.
+Connector keys are exact case-sensitive names; control characters or values
+other than `classic`/`sidebar` fail with `E_VALIDATION`. `sidebarExpandedWidth`
 is the effective expanded width, while `presentation.width` is the current
-rail/expanded width on the primary screen.
+rail/expanded width on the primary sidebar screen.
 A successful model projection is not live rendering evidence. Existing persistence
 flags remain authoritative: accepted-but-saving (`data.applied: true`) must not be
 replayed as though rejected. `config retry` uses the latest host snapshot.
