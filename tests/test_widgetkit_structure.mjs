@@ -36,7 +36,7 @@ test('Widget component API documents the complete kit and is discoverable to age
   assert.equal(fs.existsSync(apiPath), true, 'Widget component API reference missing')
   const api = fs.readFileSync(apiPath, 'utf8')
   for (const name of all)
-    assert.match(api, new RegExp('\\`' + name + '\\`'), `${name} missing from API reference`)
+    assert.match(api, new RegExp('`' + name + '`'), `${name} missing from API reference`)
   assert.match(api, /WidgetSemanticPalette/)
   for (const value of [
     'neutral', 'info', 'success', 'warning', 'danger',
