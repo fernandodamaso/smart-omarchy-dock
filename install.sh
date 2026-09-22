@@ -78,6 +78,10 @@ install_client_bundle() {
   local destination="$1"
   install -d "$destination/scripts" "$destination/config" "$destination/docs" "$bin_home"
   if [[ "$source_dir" != "$destination" ]]; then
+    rm -rf -- "$destination/components/widgets" "$destination/SmartDock"
+    install -d "$destination/components"
+    cp -R -- "$source_dir/components/widgets" "$destination/components/widgets"
+    cp -R -- "$source_dir/SmartDock" "$destination/SmartDock"
     install -m 0644 "$source_dir/scripts/smartdock_cli.py" "$destination/scripts/smartdock_cli.py"
     install -m 0644 "$source_dir/scripts/smartdock_dev.py" "$destination/scripts/smartdock_dev.py"
     install -m 0644 "$source_dir/scripts/smartdock_widget.py" "$destination/scripts/smartdock_widget.py"
