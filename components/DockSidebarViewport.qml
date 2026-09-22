@@ -43,10 +43,10 @@ FocusScope {
   // Scrollbar thickness only; the list reserves no gutter. The bar sits
   // scrollBarOutset past the viewport edge, inside the symmetric outer inset.
   readonly property real scrollGutter: 6
-  // Nudges the bar this far past the viewport's right edge toward the
-  // panel's outer edge. The symmetric outer inset keeps it on-panel and
-  // clear of the content.
-  readonly property real scrollBarOutset: 10
+  // Nudges the bar past the viewport's right edge toward the panel edge.
+  // The left sidebar's right edge also owns the 8px resize handle, so keep
+  // the bar inside that hit area; the collapsed rail has only a 6px outer inset.
+  readonly property real scrollBarOutset: root.panelCollapsed ? 4 : (root.controller && root.controller.edge === "left" ? 4 : 10)
   readonly property real cardRadius: appearance && appearance.cardRadius !== undefined
     ? appearance.cardRadius : Math.min(3, Style.cornerRadius)
   readonly property color monitorFill: appearance ? appearance.monitorFill
