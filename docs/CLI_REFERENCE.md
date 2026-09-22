@@ -216,12 +216,12 @@ Widget package management is a top-level local CLI surface and does not mutate
 SmartDock configuration directly:
 
 ```bash
-smartdock widget create <id> [--name <name>] [--destination <dir>]
-smartdock widget install <source>
-smartdock widget remove <id>
-smartdock widget list [--json]
-smartdock widget update [<id>]
-smartdock widget dev use <local-source>
+smartdock widget create io.example.weather --name "Weather" --destination "$HOME/Projects/weather-widget"
+smartdock widget install "$HOME/Projects/weather-widget"
+smartdock widget remove io.example.weather
+smartdock widget list --json
+smartdock widget update io.example.weather
+smartdock widget dev use "$HOME/Projects/weather-widget"
 smartdock widget dev reload
 smartdock widget dev reset
 ```
