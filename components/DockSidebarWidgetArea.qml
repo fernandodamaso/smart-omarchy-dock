@@ -33,9 +33,6 @@ Item {
 
   readonly property bool sectionVisible: !panel.panelCollapsed && root.presentationWidgetIds.length > 0
   readonly property var registeredRows: WidgetModel.registeredRows(controller.widgetRegistry)
-  readonly property int availableTypeCount: registeredRows.filter(function(row) {
-    return row.available
-  }).length
   readonly property var popupWindow: popup
   readonly property var managerWindow: managerPopup
   readonly property var cards: cardRepeater
@@ -96,11 +93,6 @@ Item {
       ? root.controller.widgetPopupAnchor : null, 320, 400)
   }
 
-  readonly property var managerGeometry: {
-    var revision = root.managerAnchorRevision
-    return root.popupGeometryFor(root.managerAnchor, 360, 420)
-  }
-
   function closePopup() {
     if (root.ownsPopupAnchor()) root.controller.closeWidgetPopup()
   }
@@ -115,6 +107,10 @@ Item {
 
   function openManager(anchor) {
     if (root.panel.panelCollapsed || !anchor || !anchor.visible) return false
+    if (root.managerOpen && root.managerAnchor === anchor) {
+      root.closeManager()
+      return true
+    }
     root.closePopup()
     root.managerAnchor = anchor
     root.managerOpen = true
@@ -125,6 +121,13 @@ Item {
   function closeManager() {
     root.managerOpen = false
     root.managerAnchor = null
+  }
+
+  // Ui.PopupCard calls owner.close() when it owns dismissal. The Widget manager
+  // intentionally stays non-grabbing, but exposing the native owner contract
+  // keeps teardown/dismissal behavior correct if that implementation evolves.
+  function close() {
+    root.closeManager()
   }
 
   function updatePopupAnchor() {
@@ -399,98 +402,136 @@ Item {
     }
   }
 
-  PopupWindow {
+  // Match Omarchy's first-party management popups: native popup chrome,
+  // content-sized geometry and native enable/disable controls. The manager is
+  // deliberately passive/non-grabbing per the Sidebar Widget contract.
+  QtObject {
+    id: managerPopupHost
+    property string position: root.controller && root.controller.edge
+      ? root.controller.edge : "left"
+    property var activePopout: null
+
+    function requestPopout(owner) {
+      activePopout = owner
+    }
+
+    function releasePopout(owner) {
+      if (activePopout === owner) activePopout = null
+    }
+  }
+
+  Ui.PopupCard {
     id: managerPopup
-    visible: root.managerOpen && root.panel.visible && !root.panel.panelCollapsed
-    color: "transparent"
-    grabFocus: false
-    implicitWidth: root.managerGeometry.width
-    implicitHeight: root.managerGeometry.height
+    anchorItem: root.managerAnchor
+    owner: root
+    bar: managerPopupHost
+    open: root.managerOpen && root.panel.visible && !root.panel.panelCollapsed
+    triggerMode: "hover"
+    contentWidth: managerPopup.fittedContentWidth(Style.space(300))
+    contentHeight: managerPopup.fittedContentHeight(
+      managerIntro.implicitHeight
+        + managerDivider.implicitHeight
+        + managerLayout.spacing * 2
+        + Math.min(managerRows.implicitHeight, Style.space(280)),
+      Style.space(420))
 
-    anchor {
-      window: root.panel
-      adjustment: PopupAdjustment.Slide
-      edges: Edges.Top | Edges.Left
-      gravity: Edges.Bottom | Edges.Right
-      rect.width: 1
-      rect.height: 1
-      onAnchoring: {
-        managerPopup.anchor.rect.x = Math.round(root.managerGeometry.x)
-        managerPopup.anchor.rect.y = Math.round(root.managerGeometry.y)
-      }
-    }
-
-    onVisibleChanged: {
-      if (!visible && root.managerOpen) root.closeManager()
-      else if (visible) Qt.callLater(root.updateManagerAnchor)
-    }
-
-    Ui.BorderSurface {
-      id: managerSurface
+    Column {
+      id: managerLayout
       anchors.fill: parent
-      color: Color.menu.background
-      borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Style.normalBorderWidth)
-      clip: true
+      spacing: Style.space(8)
 
       Item {
-        id: managerHeader
-        x: managerSurface.contentLeftInset
-        y: managerSurface.contentTopInset
-        width: Math.max(0, parent.width - managerSurface.contentLeftInset - managerSurface.contentRightInset)
-        height: root.windowRowHeight
+        id: managerIntro
+        width: parent.width
+        height: implicitHeight
+        implicitHeight: Math.max(managerIntroText.implicitHeight, managerClose.implicitHeight)
 
-        Text {
+        Column {
+          id: managerIntroText
           anchors.left: parent.left
+          anchors.right: managerClose.left
+          anchors.rightMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          text: "Widgets"
-          textFormat: Text.PlainText
-          color: Color.foreground
-          font.family: Style.font.family
-          font.pixelSize: Style.font.body
-          font.bold: true
+          spacing: Style.space(2)
+
+          Text {
+            width: parent.width
+            text: "Widgets"
+            textFormat: Text.PlainText
+            color: Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Text {
+            width: parent.width
+            text: "Choose what appears in the sidebar."
+            textFormat: Text.PlainText
+            color: Qt.darker(Color.foreground, 1.4)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
+          }
         }
 
         Ui.Button {
+          id: managerClose
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          height: Style.space(28)
-          text: "Close"
+          width: Style.space(26)
+          height: Style.space(26)
+          iconText: ""
+          tooltipText: "Close"
           Accessible.role: Accessible.Button
           Accessible.name: "Close Widget manager"
+          focusable: true
           onClicked: root.closeManager()
+
+          DockLucideIcon {
+            anchors.centerIn: parent
+            width: 14
+            height: 14
+            iconName: "x"
+            iconSize: 14
+            tint: Color.foreground
+          }
         }
       }
 
+      Ui.PanelSeparator {
+        id: managerDivider
+        width: parent.width
+      }
+
       Flickable {
-        anchors.top: managerHeader.bottom
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: managerSurface.contentLeftInset
-        anchors.rightMargin: managerSurface.contentRightInset
-        anchors.bottomMargin: managerSurface.contentBottomInset
+        id: managerScroll
+        width: parent.width
+        height: Math.max(0, managerLayout.height
+          - managerIntro.height - managerDivider.height - managerLayout.spacing * 2)
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
         contentWidth: width
-        contentHeight: managerContent.implicitHeight
+        contentHeight: managerRows.implicitHeight
 
         Column {
-          id: managerContent
-          width: parent.width
-          spacing: Style.space(4)
+          id: managerRows
+          width: managerScroll.width
+          spacing: Style.space(2)
 
           Text {
-            visible: root.availableTypeCount === 0
+            visible: root.registeredRows.length === 0
             width: parent.width
-            text: root.registeredRows.length === 0
-              ? "No Widgets are available in this build."
-              : "No registered Widgets are currently available."
+            text: "No Widgets are available in this build."
             textFormat: Text.PlainText
-            color: Util.alpha(Color.foreground, 0.68)
+            color: Qt.darker(Color.foreground, 1.5)
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.Wrap
+            font.italic: true
+            wrapMode: Text.WordWrap
             Accessible.role: Accessible.StaticText
             Accessible.name: text
           }
@@ -498,48 +539,90 @@ Item {
           Repeater {
             model: root.registeredRows
 
-            delegate: Item {
+            delegate: Ui.CursorSurface {
+              id: managerRow
               required property var modelData
-              width: managerContent.width
-              height: Style.space(42)
+              width: managerRows.width
+              height: Style.space(36)
               readonly property bool enabledWidget:
                 root.controller.widgetIds.indexOf(modelData.id) >= 0
+              readonly property bool canToggle: enabledWidget || modelData.available
+              enabled: canToggle
+              opacity: canToggle ? 1.0 : 0.5
+              hasCursor: canToggle && (managerMouse.containsMouse || activeFocus)
+              activeFocusOnTab: canToggle
+              Accessible.role: Accessible.Button
+              Accessible.name: (enabledWidget ? "Remove " : "Add ")
+                + modelData.label + (enabledWidget ? " from Widgets" : " to Widgets")
+              Keys.onReturnPressed: if (canToggle)
+                root.controller.setWidgetEnabled(modelData.id, !enabledWidget)
+              Keys.onEnterPressed: if (canToggle)
+                root.controller.setWidgetEnabled(modelData.id, !enabledWidget)
+              Keys.onSpacePressed: if (canToggle)
+                root.controller.setWidgetEnabled(modelData.id, !enabledWidget)
 
               DockLucideIcon {
                 id: managerIcon
                 anchors.left: parent.left
+                anchors.leftMargin: Style.space(8)
                 anchors.verticalCenter: parent.verticalCenter
                 width: 18
                 height: 18
-                iconName: modelData.iconName
+                iconName: managerRow.modelData.iconName
                 iconSize: 18
-                tint: modelData.available ? Color.foreground : Util.alpha(Color.foreground, 0.45)
+                tint: Color.foreground
               }
 
               Text {
                 anchors.left: managerIcon.right
                 anchors.leftMargin: Style.space(8)
-                anchors.right: toggleButton.left
+                anchors.right: unavailableLabel.visible
+                  ? unavailableLabel.left : managerSwitch.left
                 anchors.rightMargin: Style.space(8)
                 anchors.verticalCenter: parent.verticalCenter
-                text: modelData.label
+                text: managerRow.modelData.label
                 textFormat: Text.PlainText
-                color: modelData.available ? Color.foreground : Util.alpha(Color.foreground, 0.55)
+                color: Color.foreground
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
                 elide: Text.ElideRight
               }
 
-              Ui.Button {
-                id: toggleButton
-                anchors.right: parent.right
+              Text {
+                id: unavailableLabel
+                visible: !managerRow.modelData.available
+                anchors.right: managerSwitch.left
+                anchors.rightMargin: Style.space(8)
                 anchors.verticalCenter: parent.verticalCenter
-                height: Style.space(30)
-                text: parent.enabledWidget ? "Remove" : "Add"
-                enabled: parent.enabledWidget || modelData.available
-                Accessible.role: Accessible.Button
-                Accessible.name: text + " " + modelData.label
-                onClicked: root.controller.setWidgetEnabled(modelData.id, !parent.enabledWidget)
+                text: "Unavailable"
+                textFormat: Text.PlainText
+                color: Qt.darker(Color.foreground, 1.5)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
+
+              Ui.ToggleSwitch {
+                id: managerSwitch
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+                checked: managerRow.enabledWidget
+                interactive: false
+                foreground: Color.foreground
+                accent: Color.accent
+              }
+
+              MouseArea {
+                id: managerMouse
+                anchors.fill: parent
+                enabled: managerRow.canToggle
+                hoverEnabled: true
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: {
+                  managerRow.forceActiveFocus()
+                  root.controller.setWidgetEnabled(
+                    managerRow.modelData.id, !managerRow.enabledWidget)
+                }
               }
             }
           }
