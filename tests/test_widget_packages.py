@@ -272,8 +272,12 @@ class WidgetPackagesTest(unittest.TestCase):
         qmldir = package_root / "SmartDock/WidgetKit/qmldir"
         self.assertTrue(qmldir.is_file())
         qmldir_text = qmldir.read_text(encoding="utf-8")
-        self.assertIn("module SmartDock.WidgetKit", qmldir_text)
+        self.assertNotIn("module SmartDock.WidgetKit", qmldir_text)
         self.assertNotIn("../../components/widgets", qmldir_text)
+        installed_qml = (package_root / "Widget.qml").read_text(encoding="utf-8")
+        self.assertIn('import "./SmartDock/WidgetKit"', installed_qml)
+        source_qml = (Path(created["sourcePath"]) / "Widget.qml").read_text(encoding="utf-8")
+        self.assertIn("import SmartDock.WidgetKit 1.0", source_qml)
 
         test_root = self.base / "qml-runtime-test"
         test_root.mkdir()
@@ -307,6 +311,21 @@ class WidgetPackagesTest(unittest.TestCase):
             env=environment,
         )
         self.assertEqual(result.returncode, 0, result.stdout + "\n" + result.stderr)
+
+    def test_nested_widgetkit_import_is_rewritten_relative_to_each_qml_file(self):
+        source = make_package(self.base / "source", "io.example.nested")
+        nested = source / "parts"
+        nested.mkdir()
+        (nested / "Panel.qml").write_text(
+            "import QtQuick\nimport SmartDock.WidgetKit 1.0 as Kit\nItem {}\n",
+            encoding="utf-8",
+        )
+        self.store._materialize_widgetkit(source)
+        self.store._rewrite_widgetkit_imports(source)
+        self.assertIn(
+            'import "../SmartDock/WidgetKit" as Kit',
+            (nested / "Panel.qml").read_text(encoding="utf-8"),
+        )
 
     @unittest.skipUnless(QMLFORMAT, "qmlformat unavailable")
     def test_invalid_dev_reload_qml_syntax_keeps_last_working_snapshot(self):
