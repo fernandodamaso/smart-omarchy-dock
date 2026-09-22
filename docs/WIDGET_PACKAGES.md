@@ -66,11 +66,14 @@ Fields are deliberately small and closed in v1:
 Package trees are bounded and may not contain symlinked files/directories. The
 top-level `SmartDock/` directory is reserved for host-owned runtime files and
 is rejected in developer source packages. A validated package is copied into
-SmartDock-owned data, then SmartDock materializes the public
-`SmartDock.WidgetKit 1.0` module beside the installed entry so external QML can
-resolve the versioned kit without depending on a global SmartDock import path.
-The host constructs the file URL from that trusted package root; `dock.json`
-never receives the path or URL.
+SmartDock-owned data, then SmartDock materializes the public WidgetKit beside
+the installed entry. Developer source keeps the versioned
+`import SmartDock.WidgetKit 1.0` contract; only the SmartDock-owned
+installed/development snapshot adapts that import to the package-local runtime
+copy so dynamically loaded QML does not depend on an engine-global SmartDock
+import path. The developer source is never rewritten. The host constructs the
+file URL from that trusted package root; `dock.json` never receives the path or
+URL.
 
 > External Widget packages are trusted local code. Installation is explicit;
 > SmartDock does not auto-execute arbitrary repositories or marketplace entries.
