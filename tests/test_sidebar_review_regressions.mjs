@@ -14,6 +14,7 @@ const popupVisible = popupSource.match(/^    visible: (.+)$/m)[1]
 for (const edge of ['left', 'right']) {
   test(`resize on ${edge} preserves another output's collapsed reservation`, () => {
     const c = qmlMethods('DockSidebarController.qml', {
+      DockModel: loadModel('DockModel'),
       SidebarModel: loadModel('DockSidebarModel'), settings: { sidebarExpandedWidth: 320 },
       collapsed: true, collapsedByMonitor: { 'DP-1': false }, resizeActive: false,
       resizePreviewWidth: 320, edge,
@@ -123,6 +124,8 @@ function popups() {
     return qmlMethods('DockSidebar.qml', {
       controller, widgetArea: widgets, host: null, sidebarContext: { dismiss() {} },
       picker: { visible: false }, sidebarViewport: { cancelInputs() {} },
+      positionDragSurface: { cancelGesture() {} },
+      viewportDragSurface: { cancelGesture() {} },
     })
   }
   const visible = area => vm.runInContext(popupVisible, area)

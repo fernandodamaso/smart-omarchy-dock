@@ -412,11 +412,13 @@ function settingsDefaults() {
     borderWidthEnabled: false,
     borderWidth: 2,
     presentationMode: "classic",
+    presentationModeByMonitor: {},
     sidebarEdge: "left",
     sidebarMonitor: "",
     sidebarExpandedWidth: 320,
     sidebarCollapsed: false,
     sidebarCollapsedByMonitor: {},
+    sidebarInlineSoloWorkspace: true,
     sidebarWidgets: [],
     sidebarWidgetCollapsed: {},
     sidebarBrowserTabsEnabled: true,
@@ -469,6 +471,140 @@ function dockPositionDragTarget(position, deltaX, deltaY, threshold) {
   if (current === "bottom" && x <= -distance) return "left"
   if (current === "left" && y >= distance) return "bottom"
   return current
+}
+
+// Mode-switch feedback copy. `edge` is the gesture edge the press started from,
+// so every label names the destination it would commit to: the classic dock
+// lives on the bottom edge, the sidebar on its configured left/right edge.
+function modeDragHint(edge) {
+  return dockGestureEdge(edge) === "left"
+    ? "Drag down to switch to dock" : "Drag left to switch to sidebar"
+}
+
+function modeDragArmedLabel(edge) {
+  return dockGestureEdge(edge) === "left"
+    ? "Release to switch to dock" : "Release to switch to sidebar"
+}
+
+function modeDragDestination(edge) {
+  return dockGestureEdge(edge) === "left" ? "classic" : "sidebar"
+}
+
+// Edge the destination renders on. Always derived from the configured
+// sidebarEdge so the silhouette is never drawn on one edge and rendered on
+// another.
+function modeDragDestinationEdge(edge, sidebarEdge) {
+  if (dockGestureEdge(edge) === "left") return "bottom"
+  return sidebarEdge === "right" ? "right" : "left"
+}
+
+// Small movement dead zone before the directional hint appears. Wrong-direction
+// movement never arms a switch, so this only gates the hint, never the commit.
+function modeDragHintVisible(deltaX, deltaY, deadZone) {
+  var x = Number(deltaX)
+  var y = Number(deltaY)
+  if (!isFinite(x)) x = 0
+  if (!isFinite(y)) y = 0
+  var distance = Number(deadZone)
+  if (!isFinite(distance) || distance < 0) distance = 6
+  return x * x + y * y >= distance * distance
+}
+
+// Destination silhouette bounds in screen-local logical pixels. Shared by both
+// presentations so neither duplicates the other renderer's layout math.
+// `edgeInset` is the classic dock's bottom margin; side panels sit flush.
+function modeDragPreviewRect(edge, screenWidth, screenHeight, bandExtent, edgeInset) {
+  var sw = Math.max(0, Number(screenWidth) || 0)
+  var sh = Math.max(0, Number(screenHeight) || 0)
+  var band = Math.min(Math.max(0, Number(bandExtent) || 0), edge === "bottom" ? sh : sw)
+  var inset = Math.max(0, Number(edgeInset) || 0)
+  if (edge === "left" || edge === "right")
+    return { edge: edge, x: edge === "right" ? Math.max(0, sw - band) : 0,
+      y: 0, width: band, height: sh }
+  var y = Math.max(0, sh - inset - band)
+  return { edge: "bottom", x: 0, y: y, width: sw, height: Math.min(band, sh - y) }
+}
+
+// Visible classic bottom-dock band, mirroring Dock.qml's dockBackground sizing.
+function classicBandExtent(iconSize, grouped) {
+  var size = Number(iconSize)
+  if (!isFinite(size) || size <= 0) size = 42
+  return Math.round(size) + (grouped === true ? 32 : 44)
+}
+
+// The only background the sidebar ListView exposes: the tail below its content
+// while that content is shorter than the viewport. Empty as soon as the content
+// overflows or the list has scrolled, because then every pixel belongs to a
+// delegate. Both the panel binding and the hit-region fixture use this, so the
+// gesture surface and its tested geometry can never drift apart.
+function sidebarBlankRegion(contentHeight, viewportHeight, contentY, viewportWidth) {
+  var h = Number(viewportHeight)
+  var ch = Number(contentHeight)
+  var cy = Number(contentY)
+  var w = Number(viewportWidth)
+  if (!(h > 0) || !isFinite(ch) || !isFinite(cy)) return emptySidebarBlankRegion()
+  if (ch >= h || cy > 0) return emptySidebarBlankRegion()
+  var top = Math.max(0, ch - cy)
+  var height = h - top
+  if (!(height > 0)) return emptySidebarBlankRegion()
+  return { x: 0, y: top, width: isFinite(w) ? Math.max(0, w) : 0, height: height }
+}
+
+function emptySidebarBlankRegion() {
+  return { x: 0, y: 0, width: 0, height: 0 }
+}
+
+// Shared wording for a host persistence failure. Both presentations read the
+// same host state, so whichever renderer survives the failed write reports it
+// identically instead of inventing its own copy.
+function persistenceFeedback(settingsWriteError) {
+  return "Unsaved preferences: " + String(settingsWriteError || "Persistence failed")
+}
+
+// Structural equality for a stored setting comparison. The writer's stale check
+// used `!==`, which reports every object setting (override/collapse/monitor
+// maps) as changed; arrays compare in order, plain objects compare as key sets
+// so two logically identical maps never manufacture a conflict.
+function sameSettingValue(left, right) {
+  if (left === right) return true
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false
+  if (Array.isArray(left) !== Array.isArray(right)) return false
+  if (Array.isArray(left)) {
+    if (left.length !== right.length) return false
+    for (var i = 0; i < left.length; ++i)
+      if (!sameSettingValue(left[i], right[i])) return false
+    return true
+  }
+  var leftKeys = Object.keys(left).sort()
+  var rightKeys = Object.keys(right).sort()
+  if (leftKeys.length !== rightKeys.length) return false
+  for (var k = 0; k < leftKeys.length; ++k) {
+    if (leftKeys[k] !== rightKeys[k]) return false
+    if (!sameSettingValue(left[leftKeys[k]], right[rightKeys[k]])) return false
+  }
+  return true
+}
+
+// Feedback text for a completed background gesture's writer result. An accepted
+// write returns "" so the renderer clears any earlier message; a rejected
+// preflight intent (stale, busy, invalid config) surfaces its own reason
+// instead of being silently discarded. Shared so both presentations word a
+// failed mode switch identically.
+function modeDragWriteError(result) {
+  if (result && result.accepted) return ""
+  var error = result && result.reply && result.reply.error ? result.reply.error : null
+  return "Preferences were not saved: "
+    + String(error && (error.message || error.code) || "request rejected")
+}
+
+// Per-connector sidebar collapse lookup, shared by the live controller and the
+// classic dock's preview so both resolve the same destination width.
+function sidebarCollapsedForScreen(collapsedByMonitor, collapsedDefault, screenName) {
+  var name = screenName ? String(screenName) : ""
+  var map = collapsedByMonitor
+  if (name && map && Object.prototype.hasOwnProperty.call(map, name))
+    return map[name] === true
+  return collapsedDefault === true
 }
 
 function applicationStateIndicatorGeometry(position, iconWidth, iconHeight,
@@ -581,11 +717,26 @@ function normalizeSidebarCollapsedByMonitor(value) {
   return result
 }
 
+// Exact connector → presentation mode. Invalid keys/values dropped;
+// disconnected names kept, mirroring normalizeSidebarCollapsedByMonitor.
+function normalizePresentationModeByMonitor(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return ({})
+  var result = ({})
+  Object.keys(value).forEach(function(key) {
+    if (typeof key !== "string" || !key || /[\x00-\x1f\x7f-\x9f]/.test(key)) return
+    if (value[key] !== "classic" && value[key] !== "sidebar") return
+    result[key] = value[key]
+  })
+  return result
+}
+
 function normalizeSetting(key, value) {
   var defaults = settingsDefaults()
   switch (key) {
   case "presentationMode":
     return value === "sidebar" ? "sidebar" : "classic"
+  case "presentationModeByMonitor":
+    return normalizePresentationModeByMonitor(value)
   case "sidebarEdge":
     return value === "right" ? "right" : "left"
   case "sidebarMonitor":
@@ -600,6 +751,8 @@ function normalizeSetting(key, value) {
     return typeof value === "boolean" ? value : false
   case "sidebarCollapsedByMonitor":
     return normalizeSidebarCollapsedByMonitor(value)
+  case "sidebarInlineSoloWorkspace":
+    return typeof value === "boolean" ? value : defaults.sidebarInlineSoloWorkspace
   case "iconSize":
     return steppedNumber(value, 24, 96, 1, defaults.iconSize, 0)
   case "magnification":

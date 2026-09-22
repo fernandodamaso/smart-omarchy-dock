@@ -143,7 +143,7 @@ validation gate when the owning issue requires it:
 ```bash
 timeout 6s ./scripts/run --no-color
 bash -n install.sh uninstall.sh scripts/smartdock scripts/run tests/check_window_actions.sh
-QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
 omarchy plugin validate .
 /usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" \
   Overlay.qml DockHost.qml components/Dock.qml components/DockItem.qml \

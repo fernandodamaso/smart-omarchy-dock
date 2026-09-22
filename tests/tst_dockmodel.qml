@@ -141,6 +141,8 @@ TestCase {
     compare(DockModel.normalizeSetting("showPreviews", "false"), true)
     compare(DockModel.normalizeSetting("showTrash", false), false)
     compare(DockModel.normalizeSetting("showTrash", "false"), true)
+    compare(DockModel.normalizeSetting("sidebarInlineSoloWorkspace", false), false)
+    compare(DockModel.normalizeSetting("sidebarInlineSoloWorkspace", "false"), true)
     compare(DockModel.normalizeSetting("controlCommand", "  launcher --toggle  "),
       "launcher --toggle")
   }
@@ -148,6 +150,7 @@ TestCase {
   function test_defaultsToShowingWindowPreviews() {
     compare(DockModel.settingsDefaults().showPreviews, true)
     compare(DockModel.settingsDefaults().showTrash, true)
+    compare(DockModel.settingsDefaults().sidebarInlineSoloWorkspace, true)
   }
 
   function test_providesWorkspaceBadgeDefaults() {

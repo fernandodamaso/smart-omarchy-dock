@@ -168,7 +168,8 @@ The adapter uses standard-library Python and bounded argv subprocesses: `qs list
 
 ## Sidebar candidate boundary
 
-Before a sidebar request, discover `presentationMode`, `sidebarEdge`,
+Before a sidebar request, discover `presentationMode`,
+`presentationModeByMonitor`, `sidebarEdge`,
 `sidebarMonitor`, `sidebarExpandedWidth`, `sidebarCollapsed`,
 `sidebarCollapsedByMonitor`, `sidebarBrowserTabsEnabled`, and `sidebarWidgets` through the runtime
 schema. They may be unavailable in the installed version. Source SB-02 is a Draft
@@ -177,7 +178,13 @@ foundation, not permission to deploy or change the production desktop.
 Use the sole host writer and change only the requested sidebar field. Never copy
 classic values into sidebar preferences, rewrite classic `workspaceGroups` to fold
 apps, or save a topology-clamped width. Collapsing preserves expanded width; app
-folds are host-session state. Keep the saved connector on disconnect. Inspect
+folds are host-session state. Keep the saved connector on disconnect. A
+per-monitor presentation change is one explicit whole-map object patch:
+preserve the other connectors' entries, dry-run first, and read back
+`data.presentation.perMonitor` (or `modeByMonitor`) to confirm each
+connector's resolved mode and `override`/`inherited` source; the background
+mode gesture writes one connector's entry and never the global default.
+Inspect
 requested and effective values plus `data.presentation` for placement and geometry.
 Do not infer rejection from `E_BUSY` when `data.applied` is true, or claim durability
 without persisted readback. Physical qualification belongs to SB-06; the source

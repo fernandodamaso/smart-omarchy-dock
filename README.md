@@ -309,7 +309,7 @@ preserved in this repository.
 ## Configure
 
 The [CLI reference](docs/CLI_REFERENCE.md) describes commands, JSON fields and
-errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 44
+errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 57
 settings, declared defaults and dependencies. Both ship beside the offline
 [agent guide](docs/AGENT_CONFIGURATION.md). Its recipes are executed against
 the real CLI parser and production host/model harness in the existing CI;
@@ -399,6 +399,13 @@ apply. Read the running host's schema/defaults and preserve the user's values:
   "workspaceBadgeTextColor": "",
   "borderWidthEnabled": false,
   "borderWidth": 2,
+  "presentationMode": "classic",
+  "presentationModeByMonitor": {},
+  "sidebarEdge": "left",
+  "sidebarMonitor": "",
+  "sidebarExpandedWidth": 320,
+  "sidebarCollapsed": false,
+  "sidebarInlineSoloWorkspace": true,
   "position": "bottom",
   "fullLength": false,
   "reserveSpace": true,
@@ -453,7 +460,9 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 | `workspaceBadgeTextColor` | Workspace badge text in `#RRGGBB`, `#AARRGGBB`, or an Omarchy token such as `@foreground` |
 | `borderWidthEnabled` | When `true`, use `borderWidth` instead of the theme border width |
 | `borderWidth` | Custom dock border width from `0` to `8` pixels |
-| `position` | Classic dock edge: `bottom` or `left`; legacy `top` reads as bottom and `right` as left |
+| `presentationMode` | Global default presentation: `classic` bottom dock (default) or `sidebar`; a connector listed in `presentationModeByMonitor` ignores this default |
+| `presentationModeByMonitor` | Per-connector presentation overrides such as `{"DP-1":"classic"}`; listed connectors ignore `presentationMode` and `sidebarMonitor`, missing connectors inherit the default, disconnected names stay saved, and the mode-switch drag writes one entry for the dragged monitor only |
+| `position` | Classic dock edge; new writes accept only `bottom` because the vertical presentation is `presentationMode: sidebar`, and legacy `left`, `right` and `top` read as bottom |
 | `fullLength` | Fill the screen width, or height for a vertical dock |
 | `workspaceLayout` | `flat` (default) or `grouped` workspace cards; grouped applies to the bottom dock and scrolls when crowded |
 | `workspaceMonitorScope` | Grouped cards: `all` (default) mirrors workspaces across docks; `current-monitor` shows only each dock’s monitor |
@@ -474,6 +483,7 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
 | `browserActivityMutedServices` | Service IDs muted from Chrome activity header and badge totals (`gmail`, `whatsapp`, …); rows stay visible/dimmed and openable; retained by preference reset |
 | `sidebarBrowserTabsEnabled` | When true and the browser-profile provider is available, sidebar Chrome windows can expand to list open page tabs (titles only, no URLs) |
+| `sidebarInlineSoloWorkspace` | When true, populated workspace names share the first application/window row instead of using a dedicated row; empty workspaces remain dedicated rows. Set `false` to retain separate workspace rows |
 | `hiddenApplications` | Desktop-entry IDs hidden from the dock; applications remain running and pinned membership/order is preserved |
 | `pinned` | Ordered desktop-entry IDs displayed in the dock |
 
@@ -677,7 +687,7 @@ to clear hidden membership. Restoring an application returns it to its existing
 pinned position without pinning or unpinning anything. `config reset --preferences`
 intentionally preserves `hiddenApplications` and the other application collections.
 
-The configuration file is watched and updates automatically. Drag a dock icon to another slot to reorder it; the new `pinned` order is written back to this file. Drag empty dock background left to move a bottom dock to the left edge, or drag it downward to move a left dock back to the bottom; the existing settings writer persists `position` only after release. Reserved space follows visibility: while auto-hide is off, the `reserveSpace` option decides whether tiled windows keep a clear dock-sized area; while auto-hide is on, the hidden dock never reserves space.
+The configuration file is watched and updates automatically. Drag a dock icon to another slot to reorder it; the new `pinned` order is written back to this file. Dragging genuinely empty background switches that monitor's presentation: drag the bottom dock's background left (48 px or more) to switch that monitor to the sidebar, or drag empty sidebar background downward to return it to the bottom dock. The hint pill, the destination silhouette and the result stay on the monitor where the drag started; other monitors keep their own modes, so a mixed layout with a classic dock beside a sidebar is normal. While you drag, a direction hint pill appears and, once the threshold is crossed, a silhouette of the destination edge previews where it will render; releasing past the threshold commits one `presentationModeByMonitor` entry for that connector once, and releasing earlier, pressing Escape, or an interrupted drag (open menu, popup, resize or row drag) cancels with no settings write. Only background is eligible — rows, widgets, headers, pinned strips and controls keep their own input. The existing settings writer persists the mode only after release. Feedback for a rejected or failed commit appears only on the monitor that produced the gesture. Reserved space follows visibility: while auto-hide is off, the `reserveSpace` option decides whether tiled windows keep a clear dock-sized area; while auto-hide is on, the hidden dock never reserves space.
 
 Surface override settings are independent. Leave an `*Enabled` flag set to
 `false` to follow the active Omarchy theme; enable it to use the matching
@@ -873,8 +883,11 @@ for test coverage and the separate real-pointer Omarchy qualification gate.
 ### Global sidebar source foundation (FDM-964 / SB-02)
 
 The unreleased sidebar candidate adds `presentationMode` (default `classic`),
+`presentationModeByMonitor` (empty = every connector follows the effective
+default, so one output can run the bottom dock while another runs the sidebar),
 `sidebarEdge` (`left`), `sidebarMonitor` (empty = all connected monitors), `sidebarExpandedWidth` (320),
 `sidebarCollapsed` (false), `sidebarCollapsedByMonitor` (`{}`),
+`sidebarInlineSoloWorkspace` (true),
 `sidebarBrowserTabsEnabled` (true), `sidebarWidgets` (empty), and
 `sidebarWidgetCollapsed` (`{}`). It shows
 monitor/workspace/application/window hierarchy or every individual window icon

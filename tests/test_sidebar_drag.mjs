@@ -90,7 +90,7 @@ for (const invalidate of [
   f=>{f.handles[0].address='0x9'},
   f=>{f.monitors.pop()},
   f=>{f.controller.mappedScreens=[{name:'HDMI-A-1'}]},
-  f=>{f.controller.mode='classic'}
+  f=>{f.controller.mappedScreens=[]}
 ]) {
   const x=interactionFixture(),xc=x.controller
   assert.equal(xc.beginRowDrag(xc.captureTarget(xc.projection.rows[0].key)),true)

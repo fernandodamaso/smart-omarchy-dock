@@ -11,6 +11,7 @@ const rowQml = read('components/DockSidebarRow.qml')
 const controllerQml = read('components/DockSidebarController.qml')
 const sidebarQml = read('components/DockSidebar.qml')
 const viewportQml = read('components/DockSidebarViewport.qml')
+const keyboardQml = read('components/DockSidebarKeyboard.qml')
 
 // rowFill / persistentFill composition priorities
 assert.equal(Interaction.composeRowFill({
@@ -72,8 +73,8 @@ const monitor0 = { kind: 'monitor', sectionIndex: 0, layoutGapBefore: '' }
 const monitor1 = { kind: 'monitor', sectionIndex: 1, layoutGapBefore: 'monitor' }
 const windowRow = { kind: 'window', layoutGapBefore: '' }
 const id = n => n
-assert.equal(Interaction.estimatedSidebarRowHeight(monitor0, false, 34, id), 48)
-assert.equal(Interaction.estimatedSidebarRowHeight(monitor1, false, 34, id), 48 + 8)
+assert.equal(Interaction.estimatedSidebarRowHeight(monitor0, false, 34, id), 32)
+assert.equal(Interaction.estimatedSidebarRowHeight(monitor1, false, 34, id), 32 + 8)
 assert.equal(Interaction.estimatedSidebarRowHeight(windowRow, false, 34, id), 28)
 assert.equal(Interaction.estimatedSidebarRowHeight(windowRow, true, 34, id), 36)
 assert.equal(Interaction.estimatedSidebarRowHeight(windowRow, true, 34, id, true), 58)
@@ -323,11 +324,179 @@ const guide = Interaction.sidebarTreeGuideLayout(5)
 assert.equal(guide.workspaceLeft, 5)
 assert.equal(guide.badgeLeft, 13)
 assert.equal(guide.guide0, 25)
-assert.equal(Interaction.sidebarTreeStemX(5, 1), 25)
+assert.equal(guide.iconHalf, 9, 'child columns center on the 18px window icon')
 assert.equal(Interaction.sidebarTreeIconX(5, 1), 37)
-assert.equal(Interaction.sidebarTreeStemX(5, 2), 49)
 assert.equal(Interaction.sidebarTreeIconX(5, 2), 61)
 assert.equal(Interaction.sidebarTreeIconX(5, 3), 85)
+
+// Rendered guide column: depth-1 stays on the badge column (stemOffset only);
+// every deeper row branches from the parent's rendered icon *center*
+// (parentArt + iconHalf) instead of the nominal left-edge ladder.
+assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, 0, 0), 25,
+  'depth-1 keeps the guide0 badge column with no badge shift')
+assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, 19, 4), 29,
+  'depth-1 tracks the measured badge center; guideOffset never leaks in')
+assert.equal(Interaction.sidebarTreeGuideColumnX(5, 2, 0, 0),
+  Interaction.sidebarTreeIconX(5, 1) + guide.iconHalf,
+  'depth-2 branches from the parent icon center, not its left edge')
+assert.equal(Interaction.sidebarTreeGuideColumnX(5, 3, 11, 4),
+  Interaction.sidebarTreeIconX(5, 2) + 11 + guide.iconHalf,
+  'every deeper depth is parentArt + iconHalf; stemOffset never leaks up')
+
+// Inline workspace badge geometry: art sits after the real badge width + gap.
+{
+  const sp = n => n
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeMaxWidth(sp), 64)
+
+  // One measured chip-width contract for every row of a workspace: real font
+  // advance + padding, floored at 24, capped by the shared ceiling and by the
+  // workspace-wide available slot. No per-row label estimate survives.
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(0, 0, sp), 24)
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(10, 0, sp), 24,
+    '10px label + 8px padding stays on the 24px floor')
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, 0, sp), 32)
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(56, 0, sp), 64,
+    'padding can reach but never exceed the shared ceiling')
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(400, 0, sp), 64,
+    'long labels clamp to the ceiling instead of growing per row')
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(NaN, undefined, sp), 24,
+    'missing measurement keeps the stable floor')
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, 40, sp), 32)
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, 28, sp), 28,
+    'narrow panel clamps every row to the same available slot')
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, 12, sp), 24,
+    'available slot never drops below the floor')
+
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(280, 5, sp), 280 - 13 - 8 - 56,
+    'workspace-wide budget = content - badge left - padding - widest control stack')
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(100, 5, sp), 24,
+    'narrow content keeps the floor')
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(0, 5, sp), 0,
+    'unmapped content reports no budget so rows fall back together')
+
+  // Two direct window rows of one workspace consume the identical measured
+  // width, so artwork, label and hover/selection edges align exactly.
+  const available = Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(280, 5, sp)
+  const workChip = Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, available, sp)
+  assert.equal(workChip, 32, 'measured chip keeps its real width (no 8px/glyph rounding up)')
+  const leading = Interaction.sidebarInlineWorkspaceGeometry(5, sp, workChip)
+  const following = Interaction.sidebarInlineWorkspaceGeometry(5, sp, workChip)
+  assert.equal(following.badgeX, leading.badgeX)
+  assert.equal(following.artX, leading.artX)
+  assert.equal(following.labelX, leading.labelX)
+  assert.equal(following.stemX, leading.stemX)
+  assert.equal(leading.stemX, guide.badgeLeft + workChip / 2,
+    'depth-1 stem stays on the badge center for a named badge')
+  const leadingSel = Interaction.sidebarSelectionInsets({
+    kind: 'window', collapsed: false, insideWorkspaceCard: true,
+    workspaceCardInset: 5, artX: leading.artX
+  })
+  const followingSel = Interaction.sidebarSelectionInsets({
+    kind: 'window', collapsed: false, insideWorkspaceCard: true,
+    workspaceCardInset: 5, artX: following.artX
+  })
+  assert.equal(followingSel.left, leadingSel.left,
+    'hover/selection backgrounds start at the same left edge')
+
+  const tight = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 24)
+  assert.equal(tight.badgeX, 13)
+  assert.equal(tight.artX, 13 + 24 + 6 + 5)
+  assert.equal(tight.stemX, 13 + 12)
+  assert.equal(tight.labelX, tight.artX + 18 + 8)
+  assert.equal(tight.guideOffset, tight.artX - Interaction.sidebarTreeIconX(5, 1))
+  assert.equal(tight.stemOffset, 0, '24px badge stem stays on guide0')
+  assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, tight.guideOffset,
+    tight.stemOffset), tight.stemX,
+    'the rendered depth-1 column matches the measured badge stem')
+  const wide = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 64)
+  assert.equal(wide.artX, 13 + 64 + 6 + 5)
+  assert.equal(wide.stemOffset, wide.stemX - guide.guide0)
+  assert.ok(wide.stemOffset !== wide.guideOffset,
+    'wide badge: stem and icon offsets differ')
+  assert.equal(wide.stemX, guide.badgeLeft + 32)
+  const clamped = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 200)
+  assert.equal(clamped.artX, wide.artX, 'badge width clamps to max before artX')
+  assert.equal(clamped.stemOffset, wide.stemOffset)
+  const defaults = Interaction.sidebarInlineWorkspaceGeometry(5, sp)
+  assert.equal(defaults.artX, tight.artX, 'missing badgeWidth uses the 24px minimum')
+  assert.equal(defaults.stemOffset, 0)
+
+  // Wide badge: deeper columns still center the (shifted) parent icon.
+  assert.equal(Interaction.sidebarTreeGuideColumnX(5, 2, wide.guideOffset,
+    wide.stemOffset), wide.artX + guide.iconHalf,
+    'wide badge shifts the column with the icon, not with the badge center')
+
+  // Live 24px-chip shape (inset 11): parent art 54 -> depth-2 column 63,
+  // the pixel value verified on the desktop (icon box 54..72).
+  const live = Interaction.sidebarInlineWorkspaceGeometry(11, sp, 24)
+  assert.equal(live.artX, 54)
+  assert.equal(live.guideOffset, 11)
+  assert.equal(Interaction.sidebarTreeGuideColumnX(11, 2, live.guideOffset,
+    live.stemOffset), 63, 'live depth-2 guide sits on the parent icon center')
+  assert.equal(Interaction.sidebarTreeGuideColumnX(11, 3, live.guideOffset,
+    live.stemOffset), 87, 'live depth-3 guide uses the same center rule')
+}
+
+// Inline guide/alignment wiring: one viewport-owned measurement, badge-edge
+// connectors, workspace-scoped stem continuation, no header connector text.
+assert.doesNotMatch(rowQml, /sidebarInlineWorkspaceBadgeWidthForLabel/,
+  'rows never re-estimate chip width from the label')
+assert.match(rowQml, /viewport\.inlineWorkspaceBadgeWidths/,
+  'rows read the viewport-owned per-workspace measurement')
+assert.match(rowQml, /width: root\.inlineBadgeLayoutWidth/,
+  'the rendered chip binds the shared measurement')
+assert.match(viewportQml, /sidebarInlineWorkspaceBadgeLayoutWidth/,
+  'the viewport owns the shared chip-width contract')
+assert.match(viewportQml, /inlineBadgeProbe/,
+  'the viewport measures the badge font independently of delegates')
+assert.doesNotMatch(rowQml, /hasVisibleNestedTreeChildren/,
+  'expanded descendants alone must not continue the badge stem')
+assert.match(rowQml,
+  /badgeStemExtendsDown: root\.leadingWorkspaceBadgeVisible\s*&&\s*!root\.isLastSibling/,
+  'the badge stem continues only to another direct row of the workspace')
+assert.match(rowQml, /sidebarTreeGuideColumnX\(root\.workspaceCardInset,/,
+  'row stems read the icon-centered guide column helper')
+assert.doesNotMatch(rowQml, /sidebarTreeStemX\(/,
+  'no row still draws the old left-edge guide ladder')
+assert.match(rowQml, /y: Math\.max\(treeGuides\.contentMid, treeGuides\.inlineBadgeBottom\)/,
+  'the badge stem starts below the chip, never through it')
+assert.match(rowQml,
+  /x: leadingWorkspaceBadge\.x \+ leadingWorkspaceBadge\.width\n\s*y: treeGuides\.contentMid/,
+  'the horizontal connector starts at the right edge of the chip')
+assert.match(rowQml, /y: treeGuides\.workspaceBadgeBottom/,
+  'workspace header stems also start below their chip')
+assert.doesNotMatch(rowQml, /monitorConnectorLabel|sidebar-label-connector/,
+  'monitor headers no longer render connector names')
+assert.match(rowQml, /id: monitorTitleLabel[\s\S]{0,160}?width: parent\.width/,
+  'the monitor title takes the freed header width')
+assert.match(rowQml,
+  /workspaceHeader: true\s+dragEnabled: true[\s\S]{0,180}?enabled: leadingWorkspaceBadge\.visible/,
+  'the inline workspace badge keeps a live workspace drag source while busy state is owned internally')
+assert.match(rowQml, /onDragMoved: point =>[\s\S]{0,100}?viewport\.moveDrag\(point\)/,
+  'inline workspace drag motion reaches the viewport')
+assert.match(rowQml, /onDragReleased: point =>[\s\S]{0,100}?viewport\.finishDrag\(point\)/,
+  'inline workspace drag release reaches the viewport')
+assert.doesNotMatch(rowQml,
+  /enabled: leadingWorkspaceBadge\.visible && !root\.controller\.interactionBusy/,
+  'workspace badge input must stay enabled after beginRowDrag owns interactionBusy')
+assert.match(rowQml, /activeFocusOnTab: true/,
+  'inline workspace badge is an explicit keyboard focus target')
+assert.match(rowQml,
+  /id: leadingWorkspaceBadge[\s\S]{0,260}?readonly property string rowKey: root\.inlineWorkspaceBadgeKey/,
+  'inline workspace badge exposes its workspace rowKey so context refresh keeps a valid menu open')
+assert.match(rowQml, /Accessible\.onPressAction:[\s\S]{0,220}?captureTarget\(root\.inlineWorkspaceBadgeKey\)/,
+  'assistive activation resolves the synthetic workspace target')
+assert.match(viewportQml, /function focusRow\(key, preferInlineWorkspaceBadge\)/,
+  'viewport can enter a row through its inline workspace badge')
+assert.match(keyboardQml, /inlineWorkspaceBadgeFocused/,
+  'keyboard adapter distinguishes workspace badge focus from the child row')
+assert.match(keyboardQml, /focusInlineWorkspaceBadge\(Qt\.BacktabFocusReason\)/,
+  'reverse tab navigation enters the inline workspace badge before leaving the row')
+assert.match(keyboardQml, /captureTarget\(actionKey\)/,
+  'keyboard activation/context resolves the workspace key while the badge owns focus')
+assert.match(sidebarQml,
+  /trashButton\.visible \? parent\.spacing : 0/,
+  'launcher reserves utility spacing only when Trash is visible')
 
 // Phase 4: tree-indented selection starts 3px before artX; guides stay left.
 const depth1Art = Interaction.sidebarTreeIconX(5, 1)
@@ -338,14 +507,14 @@ const depth1Sel = Interaction.sidebarSelectionInsets({
 })
 assert.equal(depth1Sel.left, depth1Art - 3)
 assert.equal(depth1Sel.right, 5)
-assert.ok(depth1Sel.left > Interaction.sidebarTreeStemX(5, 1),
+assert.ok(depth1Sel.left > guide.guide0,
   'depth-1 selection leaves guide0 visible to the left')
 const depth2Sel = Interaction.sidebarSelectionInsets({
   kind: 'browser-tab', collapsed: false, insideWorkspaceCard: true,
   workspaceCardInset: 5, artX: depth2Art
 })
 assert.equal(depth2Sel.left, depth2Art - 3)
-assert.ok(depth2Sel.left > Interaction.sidebarTreeStemX(5, 1),
+assert.ok(depth2Sel.left > guide.guide0,
   'nested tab selection leaves parent stem visible')
 assert.equal(String(JSON.stringify(Interaction.sidebarSelectionInsets({
   kind: 'workspace', collapsed: false, insideWorkspaceCard: true,

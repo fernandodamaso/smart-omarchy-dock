@@ -4,6 +4,19 @@
 
 ### Added
 
+- Added `presentationModeByMonitor`, per-connector presentation overrides: an
+  explicit `classic`/`sidebar` entry beats `presentationMode` and
+  `sidebarMonitor`, unlisted connectors inherit the effective default,
+  disconnected entries stay saved, and changing the global default never
+  removes them — so one output can run the bottom dock while another runs the
+  sidebar at the same time.
+- Added one stable surface owner per connected output: switching one screen's
+  presentation never recreates another screen's renderer instance, a
+  disconnected output cancels its gesture and closes its popups, and
+  reconnecting restores the configured presentation. The host owners, the
+  sidebar controller and CLI diagnostics share one pure resolver that reports
+  `defaultMode`, `perMonitor`, `modeByMonitor`, `sourceByMonitor`,
+  `classicScreens` and `mixed`.
 - Added mute controls on Chrome activity rows (eye / eye-off). Muted service
   IDs persist in `browserActivityMutedServices`, stay visible and dimmed, and
   are excluded from the card header total and Chrome dock badge fallback.
@@ -24,10 +37,15 @@
 ### Changed
 
 - Dock presentation has two modes: the classic bottom dock and the sidebar
-  (the dock's left vertical presentation). Drag empty dock background left to
-  switch to the sidebar, or drag empty sidebar background down to return to
-  the dock; legacy top/right/left classic values remain readable as bottom
-  compatibility values.
+  (the dock's left vertical presentation), resolved per monitor so both can
+  render side by side. Drag empty dock background left to switch that monitor
+  to the sidebar, or drag empty sidebar background down to return it to the
+  dock; the gesture shows a direction hint and a destination silhouette on the
+  source monitor, commits one `presentationModeByMonitor` entry for that
+  connector only on release past the threshold, and cancels without a write on
+  early release, Escape or an interrupted drag. Rejected or failed commits
+  report feedback only on the monitor that produced the gesture. Legacy
+  top/right/left classic values remain readable as bottom compatibility values.
 - Removed the graphical Dock Settings page, its menu route, temporary preference
   previews, exclusive controls and editor-only helpers. Configuration and icon
   editing now use `smartdock config`, `smartdock apps` and `smartdock icons`.

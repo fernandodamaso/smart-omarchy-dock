@@ -17,6 +17,10 @@ Item {
   property int phase: 0
   readonly property bool timerRunning: phaseTimer.running
 
+  function synchronizedPhase() {
+    return Math.floor(Date.now() / 110) % 8
+  }
+
   function trailOpacity(dotIndex) {
     var distance = (root.phase - Number(dotIndex) + 8) % 8
     if (distance === 0) return 1.0
@@ -26,15 +30,17 @@ Item {
   }
 
   onActiveChanged: {
-    if (!active) phase = 0
+    phase = active ? synchronizedPhase() : 0
   }
 
   Timer {
     id: phaseTimer
-    interval: 110
+    // Every instance samples the same wall-clock phase. Timers only refresh
+    // bindings; they never advance an instance-local animation state.
+    interval: 55
     repeat: true
     running: root.active
-    onTriggered: root.phase = (root.phase + 1) % 8
+    onTriggered: root.phase = root.synchronizedPhase()
   }
 
   Repeater {
