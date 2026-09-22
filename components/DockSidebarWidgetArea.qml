@@ -32,17 +32,11 @@ Item {
   }
 
   readonly property bool sectionVisible: !panel.panelCollapsed && root.presentationWidgetIds.length > 0
-  readonly property var registeredRows: WidgetModel.registeredRows(controller.widgetRegistry)
-  readonly property int availableTypeCount: registeredRows.filter(function(row) {
-    return row.available
-  }).length
   readonly property var popupWindow: popup
-  readonly property var managerWindow: managerPopup
+  readonly property var managerWindow: root.panel && root.panel.widgetManager
+    ? root.panel.widgetManager.popupWindow : null
   readonly property var cards: cardRepeater
-  property bool managerOpen: false
-  property Item managerAnchor: null
   property int anchorRevision: 0
-  property int managerAnchorRevision: 0
   property string dragWidgetId: ""
   property int dragTargetSlot: -1
   property real dragSceneX: 0
@@ -96,11 +90,6 @@ Item {
       ? root.controller.widgetPopupAnchor : null, 320, 400)
   }
 
-  readonly property var managerGeometry: {
-    var revision = root.managerAnchorRevision
-    return root.popupGeometryFor(root.managerAnchor, 360, 420)
-  }
-
   function closePopup() {
     if (root.ownsPopupAnchor()) root.controller.closeWidgetPopup()
   }
@@ -114,17 +103,15 @@ Item {
   }
 
   function openManager(anchor) {
-    if (root.panel.panelCollapsed || !anchor || !anchor.visible) return false
     root.closePopup()
-    root.managerAnchor = anchor
-    root.managerOpen = true
-    Qt.callLater(root.updateManagerAnchor)
-    return true
+    if (!root.panel || typeof root.panel.openWidgetManager !== "function") return false
+    return root.panel.openWidgetManager(anchor)
   }
 
   function closeManager() {
-    root.managerOpen = false
-    root.managerAnchor = null
+    if (root.panel && root.panel.widgetManager
+        && typeof root.panel.widgetManager.close === "function")
+      root.panel.widgetManager.close()
   }
 
   function updatePopupAnchor() {
@@ -140,18 +127,6 @@ Item {
     }
     root.anchorRevision = (root.anchorRevision + 1) % 1000000000
     popup.anchor.updateAnchor()
-  }
-
-  function updateManagerAnchor() {
-    if (!root.managerOpen) return
-    var anchor = root.managerAnchor
-    if (!anchor || !anchor.visible || !root.panel.visible || root.panel.panelCollapsed
-        || root.anchorOutsideViewport(anchor)) {
-      root.closeManager()
-      return
-    }
-    root.managerAnchorRevision = (root.managerAnchorRevision + 1) % 1000000000
-    managerPopup.anchor.updateAnchor()
   }
 
   function slotForSceneY(sceneY) {
@@ -399,155 +374,6 @@ Item {
     }
   }
 
-  PopupWindow {
-    id: managerPopup
-    visible: root.managerOpen && root.panel.visible && !root.panel.panelCollapsed
-    color: "transparent"
-    grabFocus: false
-    implicitWidth: root.managerGeometry.width
-    implicitHeight: root.managerGeometry.height
-
-    anchor {
-      window: root.panel
-      adjustment: PopupAdjustment.Slide
-      edges: Edges.Top | Edges.Left
-      gravity: Edges.Bottom | Edges.Right
-      rect.width: 1
-      rect.height: 1
-      onAnchoring: {
-        managerPopup.anchor.rect.x = Math.round(root.managerGeometry.x)
-        managerPopup.anchor.rect.y = Math.round(root.managerGeometry.y)
-      }
-    }
-
-    onVisibleChanged: {
-      if (!visible && root.managerOpen) root.closeManager()
-      else if (visible) Qt.callLater(root.updateManagerAnchor)
-    }
-
-    Ui.BorderSurface {
-      id: managerSurface
-      anchors.fill: parent
-      color: Color.menu.background
-      borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Style.normalBorderWidth)
-      clip: true
-
-      Item {
-        id: managerHeader
-        x: managerSurface.contentLeftInset
-        y: managerSurface.contentTopInset
-        width: Math.max(0, parent.width - managerSurface.contentLeftInset - managerSurface.contentRightInset)
-        height: root.windowRowHeight
-
-        Text {
-          anchors.left: parent.left
-          anchors.verticalCenter: parent.verticalCenter
-          text: "Widgets"
-          textFormat: Text.PlainText
-          color: Color.foreground
-          font.family: Style.font.family
-          font.pixelSize: Style.font.body
-          font.bold: true
-        }
-
-        Ui.Button {
-          anchors.right: parent.right
-          anchors.verticalCenter: parent.verticalCenter
-          height: Style.space(28)
-          text: "Close"
-          Accessible.role: Accessible.Button
-          Accessible.name: "Close Widget manager"
-          onClicked: root.closeManager()
-        }
-      }
-
-      Flickable {
-        anchors.top: managerHeader.bottom
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: managerSurface.contentLeftInset
-        anchors.rightMargin: managerSurface.contentRightInset
-        anchors.bottomMargin: managerSurface.contentBottomInset
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        flickableDirection: Flickable.VerticalFlick
-        contentWidth: width
-        contentHeight: managerContent.implicitHeight
-
-        Column {
-          id: managerContent
-          width: parent.width
-          spacing: Style.space(4)
-
-          Text {
-            visible: root.availableTypeCount === 0
-            width: parent.width
-            text: root.registeredRows.length === 0
-              ? "No Widgets are available in this build."
-              : "No registered Widgets are currently available."
-            textFormat: Text.PlainText
-            color: Util.alpha(Color.foreground, 0.68)
-            font.family: Style.font.family
-            font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.Wrap
-            Accessible.role: Accessible.StaticText
-            Accessible.name: text
-          }
-
-          Repeater {
-            model: root.registeredRows
-
-            delegate: Item {
-              required property var modelData
-              width: managerContent.width
-              height: Style.space(42)
-              readonly property bool enabledWidget:
-                root.controller.widgetIds.indexOf(modelData.id) >= 0
-
-              DockLucideIcon {
-                id: managerIcon
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: 18
-                height: 18
-                iconName: modelData.iconName
-                iconSize: 18
-                tint: modelData.available ? Color.foreground : Util.alpha(Color.foreground, 0.45)
-              }
-
-              Text {
-                anchors.left: managerIcon.right
-                anchors.leftMargin: Style.space(8)
-                anchors.right: toggleButton.left
-                anchors.rightMargin: Style.space(8)
-                anchors.verticalCenter: parent.verticalCenter
-                text: modelData.label
-                textFormat: Text.PlainText
-                color: modelData.available ? Color.foreground : Util.alpha(Color.foreground, 0.55)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.bodySmall
-                elide: Text.ElideRight
-              }
-
-              Ui.Button {
-                id: toggleButton
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                height: Style.space(30)
-                text: parent.enabledWidget ? "Remove" : "Add"
-                enabled: parent.enabledWidget || modelData.available
-                Accessible.role: Accessible.Button
-                Accessible.name: text + " " + modelData.label
-                onClicked: root.controller.setWidgetEnabled(modelData.id, !parent.enabledWidget)
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
   Connections {
     target: root.viewport
     function onContentTailAutoScrolled() {
@@ -559,7 +385,6 @@ Item {
     target: root.viewport.listView
     function onContentYChanged() {
       Qt.callLater(root.updatePopupAnchor)
-      Qt.callLater(root.updateManagerAnchor)
     }
   }
 
@@ -579,11 +404,9 @@ Item {
     target: root.panel
     function onWidthChanged() {
       Qt.callLater(root.updatePopupAnchor)
-      Qt.callLater(root.updateManagerAnchor)
     }
     function onHeightChanged() {
       Qt.callLater(root.updatePopupAnchor)
-      Qt.callLater(root.updateManagerAnchor)
     }
     function onVisibleChanged() {
       if (!root.panel.visible) {
@@ -604,13 +427,11 @@ Item {
 
   onImplicitHeightChanged: {
     Qt.callLater(root.updatePopupAnchor)
-    Qt.callLater(root.updateManagerAnchor)
   }
 
   Component.onDestruction: {
     if (root.dragWidgetId) root.finishDrag(0, 0, true)
     else root.viewport.endContentTailDrag()
     root.closePopup()
-    root.closeManager()
   }
 }

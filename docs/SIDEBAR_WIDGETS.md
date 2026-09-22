@@ -37,6 +37,7 @@ A trusted descriptor supplies:
 {
   id: "example.internal",             // Source example, NOT a registered provider.
   label: "Example",                   // Short non-sensitive label.
+  manageable: true,                   // false hides source-owned integrations from Add/Manage.
   available: true,                    // Static capability; not an auth gate.
   status: "loading",                  // Initial capability metadata.
   revision: 1,                        // Descriptor/view revision, not snapshot revision.
@@ -163,9 +164,14 @@ provider manager keeps the same leases/subscriptions.
 The controller still owns `{widgetPopupId, widgetPopupAnchor}` for
 Widget-specific popup content. There is no normal-card overflow sentinel.
 Destroyed/hidden/scrolled-out anchors, removal, collapse, host invalidation and
-surface teardown close safely. The Add/Manage picker is a separate non-grabbing
-popup that lists trusted source descriptors and routes add/remove back through
-the controller.
+surface teardown close safely. The Add/Manage picker is a panel-owned native Omarchy popup, independent of the
+shared-scroll Widget tail. It therefore remains available from the SmartDock
+header even when zero Widget cards are enabled and the tail has zero height.
+Outside clicks dismiss it through Omarchy's normal click-popup focus handling.
+It lists only trusted source descriptors whose `manageable` flag is not false
+and routes add/remove back through the controller. Source-owned integrations such
+as `herdr.agents` may stay registered/provider-managed while opting out of this
+optional-Widget toggle surface.
 
 `widgetManager.diagnostics()` and CLI `data.presentation.widgets` retain the
 bounded, payload-free lifecycle diagnostics from FDM-967.

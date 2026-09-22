@@ -82,9 +82,13 @@ function registeredRows(registry) {
       id: id,
       label: descriptor && descriptor.label ? String(descriptor.label) : id,
       iconName: descriptor && descriptor.iconName ? String(descriptor.iconName) : "layout-grid",
-      available: descriptor && descriptor.available !== false
+      available: descriptor && descriptor.available !== false,
+      manageable: !descriptor || descriptor.manageable !== false
     }
   })
+}
+function manageableRows(registry) {
+  return registeredRows(registry).filter(function(row) { return row.manageable })
 }
 function effectiveIds(value, registry) {
   return requestedIds(value).filter(function(id) { return descriptorFor(registry, id) !== null })

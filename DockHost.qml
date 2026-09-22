@@ -41,6 +41,7 @@ Item {
       registry["herdr.agents"] = {
         id: "herdr.agents",
         label: "Coding agents",
+        manageable: false,
         available: root.herdrService.available !== false,
         revision: 1,
         acquire: function(owner) { return root.herdrService.acquire(owner) },
