@@ -206,6 +206,16 @@ Item {
   readonly property string leadingWorkspaceBadgeText: root.leadingWorkspace
     ? InteractionModel.workspaceBadgeLabel(root.leadingWorkspace.workspaceIdentity || "",
       root.leadingWorkspace.label || "") : ""
+  readonly property string inlineWorkspaceBadgeKey: root.leadingWorkspace
+    ? String(root.leadingWorkspace.key || "") : ""
+  readonly property bool inlineWorkspaceBadgeFocused: leadingWorkspaceBadge.activeFocus
+  readonly property var inlineWorkspaceBadgeAnchor: leadingWorkspaceBadge
+  function focusInlineWorkspaceBadge(reason) {
+    if (!root.leadingWorkspaceBadgeVisible) return false
+    leadingWorkspaceBadge.forceActiveFocus(
+      reason === undefined ? Qt.TabFocusReason : reason)
+    return leadingWorkspaceBadge.activeFocus
+  }
   // Rail keeps the compact two-code-point token; tooltips/expanded keep full name.
   readonly property string workspaceRailLabel: {
     if (kind !== "workspace") return ""
@@ -723,6 +733,7 @@ Item {
       visible: root.leadingWorkspaceBadgeVisible
       objectName: "sidebar-inline-workspace-badge"
       z: 4
+      activeFocusOnTab: true
       x: root.inlineWorkspaceGeometry.badgeX
       anchors.verticalCenter: parent.verticalCenter
       // Single viewport-measured width: the rendered chip, every guide column,
@@ -732,7 +743,8 @@ Item {
       radius: Style.space(4)
       color: Util.alpha(Color.foreground, 0.08)
       border.width: 1
-      border.color: root.leadingWorkspace && root.leadingWorkspace.active
+      border.color: (leadingWorkspaceBadge.activeFocus
+          || (root.leadingWorkspace && root.leadingWorkspace.active))
         ? Util.alpha(Color.accent, 0.50)
         : Util.alpha(Color.foreground, 0.14)
       Text {
@@ -752,21 +764,35 @@ Item {
       }
       Accessible.role: Accessible.Button
       Accessible.name: "Workspace " + root.leadingWorkspaceBadgeText
+      Accessible.onPressAction: {
+        var target = root.controller.captureTarget(root.inlineWorkspaceBadgeKey)
+        if (target && root.viewport)
+          root.viewport.activate(target, false, root.panelConnector, Qt.NoModifier)
+      }
+      Keys.forwardTo: root.viewport ? [root.viewport.keyboard] : []
+      onActiveFocusChanged: if (activeFocus)
+        root.controller.focusedRowKey = root.rowKey
       DockSidebarRowInput {
         anchors.fill: parent
         controller: root.controller
         rowKey: root.leadingWorkspace ? root.leadingWorkspace.key : ""
         panelConnector: root.panelConnector
-        workspaceHeader: false
-        dragEnabled: false
+        workspaceHeader: true
+        dragEnabled: true
         viewport: root.viewport
-        enabled: leadingWorkspaceBadge.visible && !root.controller.interactionBusy
-        onFocusRequested: root.forceActiveFocus(Qt.MouseFocusReason)
+        enabled: leadingWorkspaceBadge.visible
+        onFocusRequested: leadingWorkspaceBadge.forceActiveFocus(Qt.MouseFocusReason)
         onActivated: function(target, control, connector, modifiers) {
           if (root.viewport) root.viewport.activate(target, control, connector, modifiers)
         }
         onContextRequested: target => {
           if (root.viewport) root.viewport.contextRequested(target, leadingWorkspaceBadge)
+        }
+        onDragMoved: point => {
+          if (root.viewport) root.viewport.moveDrag(point)
+        }
+        onDragReleased: point => {
+          if (root.viewport) root.viewport.finishDrag(point)
         }
       }
     }

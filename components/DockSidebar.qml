@@ -380,7 +380,8 @@ PanelWindow {
       spacing: Style.space(6)
       Item {
         id: launcher
-        width: Math.max(0, parent.width - trashButton.width - parent.spacing)
+        width: Math.max(0, parent.width - trashButton.width
+          - (trashButton.visible ? parent.spacing : 0))
         height: Style.space(36)
         focus: true
         activeFocusOnTab: true

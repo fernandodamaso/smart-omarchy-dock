@@ -11,6 +11,7 @@ const rowQml = read('components/DockSidebarRow.qml')
 const controllerQml = read('components/DockSidebarController.qml')
 const sidebarQml = read('components/DockSidebar.qml')
 const viewportQml = read('components/DockSidebarViewport.qml')
+const keyboardQml = read('components/DockSidebarKeyboard.qml')
 
 // rowFill / persistentFill composition priorities
 assert.equal(Interaction.composeRowFill({
@@ -468,6 +469,31 @@ assert.doesNotMatch(rowQml, /monitorConnectorLabel|sidebar-label-connector/,
   'monitor headers no longer render connector names')
 assert.match(rowQml, /id: monitorTitleLabel[\s\S]{0,160}?width: parent\.width/,
   'the monitor title takes the freed header width')
+assert.match(rowQml,
+  /workspaceHeader: true\s+dragEnabled: true[\s\S]{0,180}?enabled: leadingWorkspaceBadge\.visible/,
+  'the inline workspace badge keeps a live workspace drag source while busy state is owned internally')
+assert.match(rowQml, /onDragMoved: point =>[\s\S]{0,100}?viewport\.moveDrag\(point\)/,
+  'inline workspace drag motion reaches the viewport')
+assert.match(rowQml, /onDragReleased: point =>[\s\S]{0,100}?viewport\.finishDrag\(point\)/,
+  'inline workspace drag release reaches the viewport')
+assert.doesNotMatch(rowQml,
+  /enabled: leadingWorkspaceBadge\.visible && !root\.controller\.interactionBusy/,
+  'workspace badge input must stay enabled after beginRowDrag owns interactionBusy')
+assert.match(rowQml, /activeFocusOnTab: true/,
+  'inline workspace badge is an explicit keyboard focus target')
+assert.match(rowQml, /Accessible\.onPressAction:[\s\S]{0,220}?captureTarget\(root\.inlineWorkspaceBadgeKey\)/,
+  'assistive activation resolves the synthetic workspace target')
+assert.match(viewportQml, /function focusRow\(key, preferInlineWorkspaceBadge\)/,
+  'viewport can enter a row through its inline workspace badge')
+assert.match(keyboardQml, /inlineWorkspaceBadgeFocused/,
+  'keyboard adapter distinguishes workspace badge focus from the child row')
+assert.match(keyboardQml, /focusInlineWorkspaceBadge\(Qt\.BacktabFocusReason\)/,
+  'reverse tab navigation enters the inline workspace badge before leaving the row')
+assert.match(keyboardQml, /captureTarget\(actionKey\)/,
+  'keyboard activation/context resolves the workspace key while the badge owns focus')
+assert.match(sidebarQml,
+  /trashButton\.visible \? parent\.spacing : 0/,
+  'launcher reserves utility spacing only when Trash is visible')
 
 // Phase 4: tree-indented selection starts 3px before artX; guides stay left.
 const depth1Art = Interaction.sidebarTreeIconX(5, 1)

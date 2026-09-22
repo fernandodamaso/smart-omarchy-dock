@@ -331,7 +331,7 @@ FocusScope {
     return accepted
   }
 
-  function focusRow(key) {
+  function focusRow(key, preferInlineWorkspaceBadge) {
     var rows = root.visibleRows
     var index = rows.findIndex(function(row) { return row.key === key })
     if (index < 0 || !InteractionModel.focusable(rows[index])) return false
@@ -342,7 +342,14 @@ FocusScope {
     list.positionViewAtIndex(index, ListView.Contain)
     list.forceLayout()
     var item = list.itemAtIndex(index)
-    if (item) item.forceActiveFocus(Qt.TabFocusReason)
+    if (item) {
+      if (preferInlineWorkspaceBadge === true
+          && item.leadingWorkspaceBadgeVisible === true
+          && typeof item.focusInlineWorkspaceBadge === "function")
+        item.focusInlineWorkspaceBadge(Qt.TabFocusReason)
+      else
+        item.forceActiveFocus(Qt.TabFocusReason)
+    }
     return item !== null
   }
 
