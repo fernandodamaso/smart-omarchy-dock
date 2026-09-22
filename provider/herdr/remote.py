@@ -222,7 +222,8 @@ print(json.dumps({
 # a base64 alphabet and never contain user-controlled shell syntax.
 _EXEC_SOURCE_WRAPPER = (
     "import base64,sys;"
-    "s=sys.argv[1];s+='='*((4-len(s)%4)%4);"
+    "s=sys.argv[1];p=sys.argv[2];s+='='*((4-len(s)%4)%4);"
+    "sys.argv=['smartdock-remote-resolver',p];"
     "exec(compile(base64.urlsafe_b64decode(s.encode('ascii')),'<smartdock-remote>','exec'))"
 )
 

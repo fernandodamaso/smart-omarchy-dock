@@ -56,6 +56,25 @@ class RemoteTransportTests(unittest.TestCase):
         self.assertNotIn("work", command)
         self.assertNotIn(target, command)
 
+    def test_resolver_bootstrap_executes_with_request_payload_in_argv(self):
+        command = resolver_ssh_argv(
+            "host",
+            "default",
+            "/definitely/missing/smartdock-herdr",
+        )[-1]
+        result = subprocess.run(
+            ["/bin/sh", "-c", command],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=3,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        payload = json.loads(result.stdout.decode())
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"], "remote_herdr_unavailable")
+
     def test_helper_bootstrap_encodes_opaque_socket_path(self):
         target = "user@remote"
         socket_path = "/tmp/herdr $x; 'quoted' \"double\".sock"
@@ -66,6 +85,37 @@ class RemoteTransportTests(unittest.TestCase):
         self.assertNotIn(socket_path, command)
         self.assertNotIn("$x", command)
         self.assertNotIn("; 'quoted'", command)
+
+    def test_helper_bootstrap_executes_encoded_socket_and_lease_arguments(self):
+        source = (
+            b"import json,sys;"
+            b"print(json.dumps({'argv':sys.argv},separators=(',',':')))"
+        )
+        command = helper_ssh_argv(
+            "host",
+            "/tmp/socket $with;chars.sock",
+            source,
+            lease_seconds=7,
+        )[-1]
+        result = subprocess.run(
+            ["/bin/sh", "-c", command],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=3,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        payload = json.loads(result.stdout.decode())
+        self.assertEqual(
+            payload["argv"],
+            [
+                "smartdock-herdr-helper",
+                "/tmp/socket $with;chars.sock",
+                "--owner-lease-seconds",
+                "7",
+            ],
+        )
 
     def test_session_metacharacters_are_rejected_before_bootstrap(self):
         for session in ("work space", "work;touch", "work$(id)", "'work'"):
