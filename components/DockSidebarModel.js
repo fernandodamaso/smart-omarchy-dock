@@ -638,9 +638,8 @@ function herdrInventoryPartial(snapshot) {
     || completeness.serverTruncated === true
 }
 
-// Show the fallback card only when it can present at least one agent whose
-// server is not already represented under a window. An unmatched healthy server
-// with an empty agent inventory must not create an otherwise-empty Widget card.
+// Keep empty local cards suppressed. Unmatched remote endpoints remain visible
+// even without agents so live-empty, reconnecting and unavailable stay distinct.
 function herdrFallbackVisible(snapshot, associations) {
   var matched = matchedHerdrServerIds(associations)
   var servers = snapshot && Array.isArray(snapshot.servers) ? snapshot.servers : []
@@ -649,7 +648,9 @@ function herdrFallbackVisible(snapshot, associations) {
     var server = servers[i]
     if (!server || typeof server !== "object") continue
     var serverId = String(server.id || "")
-    if (serverId && matched[serverId] !== true) unmatched[serverId] = true
+    if (!serverId || matched[serverId] === true) continue
+    if (HerdrModel.serverTransport(server) === "remote") return true
+    unmatched[serverId] = true
   }
 
   var agents = snapshot && Array.isArray(snapshot.agents) ? snapshot.agents : []
