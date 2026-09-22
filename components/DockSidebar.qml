@@ -126,7 +126,7 @@ PanelWindow {
     // A dying or hidden panel must not carry a half-finished mode gesture.
     positionDragSurface.cancelGesture("surface-close")
     viewportDragSurface.cancelGesture("surface-close")
-    widgetManagerPopup.close()
+    if (root.widgetManager) root.widgetManager.close()
     if (root.widgetArea) {
       if (root.widgetArea.dragWidgetId) root.widgetArea.finishDrag(0, 0, true)
       root.widgetArea.closePopup()
