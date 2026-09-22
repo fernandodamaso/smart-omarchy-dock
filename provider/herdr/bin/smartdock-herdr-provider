@@ -36,6 +36,7 @@ from attachments import (  # noqa: E402
 )
 from remote import (  # noqa: E402
     HELPER_LEASE_RENEW_EVERY,
+    REMOTE_BOOTSTRAP_TIMEOUT,
     REMOTE_PROBE_TIMEOUT,
     RemoteResolution,
     RemoteResolverPool,
@@ -46,8 +47,8 @@ from remote import (  # noqa: E402
 
 MAX_HELPER_FRAME = 1024 * 1024
 MAX_QUEUE_BYTES = 2 * 1024 * 1024
-MAX_SOURCE_QUEUE_BYTES = 256 * 1024
-MAX_REMOTE_QUEUE_BYTES = MAX_QUEUE_BYTES // 2
+MAX_SOURCE_QUEUE_BYTES = MAX_HELPER_FRAME
+MAX_REMOTE_QUEUE_BYTES = MAX_HELPER_FRAME
 MAX_HELPER_STDIN_BYTES = 64 * 1024
 MAX_OUTPUT_FRAME = 1024 * 1024
 DISCOVERY_CHECK_EVERY = 10.0
@@ -220,10 +221,14 @@ class HelperProcess:
             event = ("helper", self.server_id, self.token, message)
             if hasattr(self.events, "put_data"):
                 accepted = self.events.put_data(
-                    event, len(line) + 128, self.server_id, self.transport
+                    event, len(line), self.server_id, self.transport
                 )
             else:
-                accepted = self.events.put(event, len(line) + 128)
+                accepted = self.events.put(event, len(line))
+            if not accepted and self.transport == "local":
+                # Preserve local behavior under remote pressure: local helper
+                # data backpressures instead of being killed by the remote lane.
+                accepted = self.events.put_wait(event, len(line))
             if not accepted:
                 self.overflowed = True
                 self._terminate(process)
@@ -351,6 +356,7 @@ class Provider:
         self.remote_resolve_retry_at: dict[str, float] = {}
         self.remote_resolve_backoff: dict[str, float] = {}
         self.remote_probe_deadline: dict[str, float] = {}
+        self.remote_bootstrap_deadline: dict[str, float] = {}
         self.remote_last_lease: dict[str, float] = {}
 
     def _stdin(self) -> None:
@@ -493,6 +499,7 @@ class Provider:
         self.backoff.pop(server_id, None)
         self.last_safety.pop(server_id, None)
         self.remote_probe_deadline.pop(server_id, None)
+        self.remote_bootstrap_deadline.pop(server_id, None)
         self.remote_last_lease.pop(server_id, None)
 
     def _remove_remote_key(self, key: str) -> None:
@@ -833,6 +840,7 @@ class Provider:
             self.restart_at.pop(server_id, None)
             if transport == "remote":
                 self.remote_last_lease[server_id] = now
+                self.remote_bootstrap_deadline[server_id] = now + REMOTE_BOOTSTRAP_TIMEOUT
                 helper.send("lease")
         else:
             state.connected = False
@@ -856,6 +864,7 @@ class Provider:
         self.restart_at[server_id] = time.monotonic() + delay
         self.backoff[server_id] = min(30.0, delay * 2)
         self.remote_probe_deadline.pop(server_id, None)
+        self.remote_bootstrap_deadline.pop(server_id, None)
         self.dirty = True
 
     def process_event(self, event: object) -> None:
@@ -897,6 +906,7 @@ class Provider:
             self.restart_at[server_id] = time.monotonic() + delay
             self.backoff[server_id] = min(30.0, delay * 2)
             self.remote_probe_deadline.pop(server_id, None)
+            self.remote_bootstrap_deadline.pop(server_id, None)
             self.dirty = True
             return
 
@@ -924,6 +934,8 @@ class Provider:
             state.apply_event(message, now)
         else:
             return
+        if state.info.get("transport") == "remote" and state.live:
+            self.remote_bootstrap_deadline.pop(server_id, None)
         self.dirty = True
 
     def maintenance(self) -> None:
@@ -946,6 +958,11 @@ class Provider:
             helper = self.helpers.get(server_id)
             if helper:
                 helper.flush()
+
+            bootstrap_deadline = self.remote_bootstrap_deadline.get(server_id)
+            if bootstrap_deadline is not None and now >= bootstrap_deadline and not state.live:
+                self.fail_helper(server_id, "bootstrap_timeout")
+                continue
 
             deadline = self.remote_probe_deadline.get(server_id)
             if deadline is not None and now >= deadline:

@@ -17,6 +17,7 @@ from remote import (  # noqa: E402
     HELPER_LEASE_RENEW_EVERY,
     HELPER_OWNER_LEASE_SECONDS,
     MAX_RESOLVER_WORKERS,
+    REMOTE_BOOTSTRAP_TIMEOUT,
     REMOTE_PROBE_TIMEOUT,
     RemoteResolution,
     RemoteResolverPool,
@@ -222,7 +223,8 @@ class RemoteTransportTests(unittest.TestCase):
 
     def test_liveness_constants_leave_probe_and_owner_lease_headroom(self):
         self.assertLess(HELPER_LEASE_RENEW_EVERY, REMOTE_PROBE_TIMEOUT)
-        self.assertLess(REMOTE_PROBE_TIMEOUT, HELPER_OWNER_LEASE_SECONDS)
+        self.assertLess(REMOTE_PROBE_TIMEOUT, REMOTE_BOOTSTRAP_TIMEOUT)
+        self.assertLess(REMOTE_BOOTSTRAP_TIMEOUT, HELPER_OWNER_LEASE_SECONDS)
 
     def test_remote_helper_owner_lease_expires_without_provider(self):
         process = subprocess.Popen(

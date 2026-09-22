@@ -66,7 +66,7 @@ child branch was created.
   files and never installs, starts, or reconfigures remote Herdr.
 - Remote helper stdin writes are non-blocking. Provider event admission reserves
   capacity for local sources and caps each helper source. Safety snapshots double
-  as app-level liveness probes; a private owner lease bounds orphan helper
+  with an initial bootstrap deadline and periodic app-level liveness probes; a private owner lease bounds orphan helper
   lifetime after provider/network loss.
 
 This remains Herdr-derived state, not a second agent detector. Herdr supplies

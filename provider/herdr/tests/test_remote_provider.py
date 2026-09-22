@@ -294,6 +294,45 @@ class RemoteProviderTests(unittest.TestCase):
         self.assertEqual(queue.get_nowait(), ("remote", 1))
         self.assertEqual(queue.get_nowait(), ("local", 1))
 
+    def test_valid_max_helper_frame_fits_remote_lane_and_local_reserve(self):
+        queue = self.mod.BoundedQueue()
+        size = self.mod.MAX_HELPER_FRAME
+        self.assertTrue(queue.put_data(("remote", 1), size, "remote-1", "remote"))
+        self.assertTrue(queue.put_data(("local", 1), size, "local-1", "local"))
+        self.assertEqual(queue.get_nowait(), ("remote", 1))
+        self.assertEqual(queue.get_nowait(), ("local", 1))
+
+    def test_initial_remote_bootstrap_deadline_restarts_hung_helper(self):
+        provider, _pool = self.provider()
+        state = ServerState({
+            "id": "remote-one",
+            "transport": "remote",
+            "host": "remote-a",
+            "session": "default",
+            "sessions": ["default"],
+            "socket": "/remote/herdr.sock",
+            "capabilities": {"focusAgent": False},
+        })
+        provider.states[state.id] = state
+        provider.backoff[state.id] = 1.0
+
+        class HungHelper:
+            def __init__(self):
+                self.aborted = False
+            def flush(self):
+                pass
+            def abort(self):
+                self.aborted = True
+
+        helper = HungHelper()
+        provider.helpers[state.id] = helper
+        provider.remote_bootstrap_deadline[state.id] = time.monotonic() - 1
+        provider.maintenance()
+        self.assertTrue(helper.aborted)
+        self.assertEqual(state.error, "bootstrap_timeout")
+        self.assertIn(state.id, provider.restart_at)
+        provider.shutdown()
+
     def test_connected_empty_remote_is_zero_then_unavailable_is_unknown(self):
         state = ServerState({
             "id": "remote-one",

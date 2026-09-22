@@ -102,9 +102,11 @@ generic remote command passthrough is introduced.
 The repository-owned helper is shipped in memory and executed with remote
 Python 3; no SmartDock file is persisted remotely. A private `lease` renewal
 does no Herdr work and causes a remote helper to self-exit when its owning
-provider disappears. Periodic safety snapshots also act as application-level
-liveness probes, so a live SSH process with a hung helper is invalidated and
-reconnected rather than treated as healthy.
+provider disappears. Initial remote acquisition also has a fixed bootstrap
+deadline: if SSH/helper startup does not produce a live normalized server state
+in time, only that endpoint is invalidated and retried. Periodic safety snapshots
+then act as application-level liveness probes, so a live SSH process with a hung
+helper is invalidated and reconnected rather than treated as healthy.
 
 Multiple local TUI attachments for one `(target, session)` share resolution.
 After resolution, aliases dedupe only when remote metadata proves the same
@@ -175,7 +177,8 @@ The integration keeps the following hard limits:
 - 8 MiB incoming socket snapshot;
 - 1 MiB incoming event/helper frame;
 - 1 MiB normalized provider output frame;
-- 2 MiB bounded provider event queue with per-source caps and a reserved local lane;
+- 2 MiB bounded provider event queue; the remote lane and each source are capped at
+  1 MiB while local helper data backpressures rather than being killed by remote pressure;
 - at most 4 concurrent remote metadata resolvers and 64 queued resolutions;
 - 64 discovered servers;
 - 256 public agent rows;
