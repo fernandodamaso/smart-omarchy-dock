@@ -15,6 +15,7 @@ TestCase {
     id: actions
     property int captures: 0
     property int moves: 0
+    property int newWorkspaceMoves: 0
     property bool live: true
     property bool valid: true
     property bool changes: true
@@ -29,9 +30,18 @@ TestCase {
       return valid && identity === "id:12" ? { identity: identity, target: "12", monitor: "id:1" } : null
     }
     function workspaceMoveWouldChange(values, identity) { return live && valid && changes }
+    function canMoveCapturedToplevelsToNewWorkspace(values, monitor) {
+      return live && valid && changes && monitor === "id:1"
+    }
     function moveCapturedToplevels(values, identity) {
       moves++
       committed = identity
+      if (failMove) throw new Error("transport failure")
+      return true
+    }
+    function moveCapturedToplevelsToNewWorkspace(values, monitor) {
+      newWorkspaceMoves++
+      committed = "new:" + monitor
       if (failMove) throw new Error("transport failure")
       return true
     }
@@ -41,6 +51,9 @@ TestCase {
     Components.DockWorkspaceDrag {
       windowActions: actions
       targetAtScenePoint: function(point) { return point.x >= 100 ? "id:12" : "" }
+      newWorkspaceTargetAtScenePoint: function(point) {
+        return point.x >= 300 ? "id:1" : ""
+      }
       property int endings: 0
       onEnded: endings++
     }
@@ -79,6 +92,7 @@ TestCase {
   function init() {
     actions.captures = 0
     actions.moves = 0
+    actions.newWorkspaceMoves = 0
     actions.live = true
     actions.valid = true
     actions.changes = true
@@ -95,6 +109,7 @@ TestCase {
     compare(drag.sourceItem, null)
     compare(drag.members.length, 0)
     compare(drag.hoveredIdentity, "")
+    compare(drag.hoveredNewWorkspaceMonitor, "")
     compare(drag.iconSource.toString(), "")
   }
   function test_captureOnceAndFinishOnce() {
@@ -114,6 +129,19 @@ TestCase {
     compare(drag.endings, 1)
     verifyClean(drag)
   }
+  function test_newWorkspaceTargetCommitsCapturedGroup() {
+    var drag = makeDrag()
+    verify(drag.begin(source, [source], Qt.point(25, 35), ""))
+    drag.updatePointer(Qt.point(350, 35))
+    compare(drag.hoveredIdentity, "")
+    compare(drag.hoveredNewWorkspaceMonitor, "id:1")
+    verify(drag.finish(Qt.point(350, 35)))
+    compare(actions.moves, 0)
+    compare(actions.newWorkspaceMoves, 1)
+    compare(actions.committed, "new:id:1")
+    verifyClean(drag)
+  }
+
   function test_finalPointerAndVanishedDestination() {
     var drag = makeDrag()
     verify(drag.begin(source, [source], Qt.point(150, 35), ""))

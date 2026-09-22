@@ -6,11 +6,13 @@ Item {
 
   required property var windowActions
   property var targetAtScenePoint: function(point) { return "" }
+  property var newWorkspaceTargetAtScenePoint: function(point) { return "" }
   property bool active: false
   property Item sourceItem: null
   property var members: []
   property point pointerScene: Qt.point(0, 0)
   property string hoveredIdentity: ""
+  property string hoveredNewWorkspaceMonitor: ""
   property url iconSource: ""
   // The host supplies its retained renderer without importing host modules here.
   property Component artworkDelegate: null
@@ -65,6 +67,16 @@ Item {
         return false
       }
       liveCount = live.length
+      var newWorkspaceMonitor = newWorkspaceTargetAtScenePoint(scenePoint) || ""
+      hoveredNewWorkspaceMonitor = newWorkspaceMonitor
+        && windowActions.canMoveCapturedToplevelsToNewWorkspace(
+          members, newWorkspaceMonitor)
+        ? newWorkspaceMonitor : ""
+      if (hoveredNewWorkspaceMonitor !== "") {
+        hoveredIdentity = ""
+        return true
+      }
+
       var identity = targetAtScenePoint(scenePoint) || ""
       var destination = windowActions.resolveWorkspaceDropTarget(identity)
       hoveredIdentity = destination
@@ -82,7 +94,11 @@ Item {
     finishing = true
     try {
       updatePointer(scenePoint)
-      if (!active || !hoveredIdentity) return false
+      if (!active) return false
+      if (hoveredNewWorkspaceMonitor)
+        return windowActions.moveCapturedToplevelsToNewWorkspace(
+          members, hoveredNewWorkspaceMonitor)
+      if (!hoveredIdentity) return false
       return windowActions.moveCapturedToplevels(members, hoveredIdentity, true)
     } finally {
       endSession()
@@ -99,6 +115,7 @@ Item {
     liveCount = 0
     pointerScene = Qt.point(0, 0)
     hoveredIdentity = ""
+    hoveredNewWorkspaceMonitor = ""
     iconSource = ""
     ended()
     ending = false

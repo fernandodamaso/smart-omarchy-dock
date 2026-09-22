@@ -472,6 +472,7 @@ PanelWindow {
     ? Hyprland.workspaces.values || [] : []
   readonly property var hyprMonitors: Hyprland.monitors
     ? Hyprland.monitors.values || [] : []
+  readonly property bool showMonitorPrefixes: hyprMonitors.length > 1
   readonly property var dockHyprMonitor: {
     var revision = scopeRevision
     return DockWindowModel.monitorForScreen(screen, hyprMonitors)
@@ -600,7 +601,7 @@ PanelWindow {
     showTrash, itemSize, 12)
   readonly property int trailingMainExtent: TrashModel.trailingMainExtent(
     showTrash, itemSize, 12, workspaceMainExtent)
-  readonly property int compactMainExtent: mainPadding * 2 + itemSize
+  readonly property int compactMainExtent: mainPadding * 2 + itemSize * 2
     + appMainExtent + trailingMainExtent
   // Keep magnification space transparent, without shrinking the logical viewport.
   readonly property int groupedSurfaceTrim: mainPadding + groupedLayout.contentPadding - 4
@@ -698,6 +699,11 @@ PanelWindow {
     visibleItemsRefreshTimer.restart()
   }
 
+  function openAppPicker(anchor) {
+    appPicker.anchorItem = anchor || addPinItem
+    appPicker.open()
+  }
+
   function focusWorkspaceOnDockMonitor(workspace) {
     var monitor = DockWindowModel.monitorIdentity(root.dockHyprMonitor)
     root.windowActions.dispatchRequests(
@@ -728,6 +734,49 @@ PanelWindow {
         if (!monitor || destination.monitor !== monitor) return ""
       }
       return destination.identity
+    }
+    return ""
+  }
+
+
+  function newWorkspaceMonitorForCard(workspaceIdentity, present) {
+    if (present !== true || !windowActions) return ""
+    var wanted = String(workspaceIdentity || "")
+    if (!wanted) return ""
+    var groups = workspaceDisplayPresentation.groups || []
+    var sourceIndex = -1
+    var owner = ""
+    for (var i = 0; i < groups.length; ++i) {
+      var group = groups[i]
+      if (!group || String(group.identity || "") !== wanted) continue
+      sourceIndex = i
+      owner = String(group.monitorIdentity || monitorIdentity || "")
+      break
+    }
+    if (sourceIndex < 0 || !owner) return ""
+    var canonical = windowActions.canonicalMonitorIdentity(owner)
+    if (!canonical) return ""
+    for (var nextIndex = sourceIndex + 1; nextIndex < groups.length; ++nextIndex) {
+      var next = groups[nextIndex]
+      if (!next || next._monitorDragPlaceholder === true) continue
+      var nextOwner = String(next.monitorIdentity || monitorIdentity || "")
+      if (windowActions.canonicalMonitorIdentity(nextOwner) === canonical)
+        return ""
+    }
+    return canonical
+  }
+
+  function newWorkspaceDropMonitorAt(scenePoint) {
+    if (!grouped || !workspaceDragActive || !windowActions
+        || !groupedLayout.containsScenePoint(scenePoint)) return ""
+    for (var i = 0; i < workspaceCards.count; ++i) {
+      var wrapper = workspaceCards.itemAt(i)
+      var target = wrapper ? wrapper.newWorkspaceDropTarget : null
+      if (!wrapper || !wrapper.present || !target || !target.visible) continue
+      var point = target.mapFromItem(null, scenePoint.x, scenePoint.y)
+      if (point.x < 0 || point.x >= target.width
+          || point.y < 0 || point.y >= target.height) continue
+      return windowActions.canonicalMonitorIdentity(target.monitorIdentity)
     }
     return ""
   }
@@ -969,6 +1018,7 @@ PanelWindow {
     visible: active
     windowActions: root.windowActions
     targetAtScenePoint: root.workspaceDropTargetAt
+    newWorkspaceTargetAtScenePoint: root.newWorkspaceDropMonitorAt
     iconSize: root.iconSize
     accent: Color.accent
     background: Color.background
@@ -1112,7 +1162,7 @@ PanelWindow {
       width: parent.width + (root.compactGroupedSurface ? root.groupedSurfaceTrim : 0)
       height: parent.height
 
-      readonly property real leadingEnd: root.mainPadding + root.itemSize
+      readonly property real leadingEnd: root.mainPadding + root.itemSize * 2
       readonly property real trailingStart: (root.vertical ? height : width)
         - root.mainPadding - root.trailingMainExtent
       readonly property real trashOffset: root.showTrash
@@ -1164,11 +1214,35 @@ PanelWindow {
         position: root.position
         vertical: root.vertical
         interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
-        onAddApplicationRequested: appPicker.open()
+        onAddApplicationRequested: root.openAppPicker(controlItem)
         onAutoHideToggled: enabled => root.autoHideRequested(enabled)
         onContextMenuVisibilityChanged: visible => {
           root.openMenuCount = Math.max(0, root.openMenuCount + (visible ? 1 : -1))
         }
+      }
+
+      DockAddPinItem {
+        id: addPinItem
+
+        enabled: !root.workspaceDragActive
+        x: root.vertical
+          ? (parent.width - width) / 2
+          : root.mainPadding + root.itemSize
+        y: root.vertical
+          ? root.mainPadding + root.itemSize
+          : (parent.height - height) / 2
+        slotSize: root.itemSize
+        iconSize: root.iconSize
+        magnification: root.workspaceDragActive ? 1 : root.magnification
+        magnificationRadius: root.magnificationRadius
+        hoverGlowEnabled: root.hoverGlowEnabled
+        hoverGlowOpacity: root.hoverGlowOpacity
+        hoverGlowRadius: root.hoverGlowRadius
+        pointerPosition: root.pointerPosition
+        position: root.position
+        vertical: root.vertical
+        interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
+        onActivated: root.openAppPicker(addPinItem)
       }
 
       Grid {
@@ -1253,10 +1327,19 @@ PanelWindow {
             readonly property string sectionMonitorIdentity: String(
               (modelData.item && modelData.item.monitorIdentity)
               || (monitorSection && monitorSection.identity) || "")
-            readonly property bool hasMonitorPrefix: monitorSection !== null
+            readonly property bool hasMonitorPrefix: root.showMonitorPrefixes
+              && monitorSection !== null
             readonly property real prefixGap: hasMonitorPrefix
               ? Style.spacing.controlGap : 0
+            readonly property string newWorkspaceMonitorIdentity:
+              root.newWorkspaceMonitorForCard(workspaceIdentity, present)
+            readonly property bool hasNewWorkspaceTarget: root.workspaceDragActive
+              && newWorkspaceMonitorIdentity !== ""
+            readonly property real newWorkspaceGap: hasNewWorkspaceTarget
+              ? Style.spacing.controlGap : 0
+            readonly property Item newWorkspaceDropTarget: newWorkspaceTarget
             width: monitorPrefix.width + prefixGap + workspaceCardSlot.width
+              + newWorkspaceGap + newWorkspaceTarget.width
             height: root.itemSize + 10
 
             Row {
@@ -1381,6 +1464,17 @@ PanelWindow {
                 keyProperty: "presentationId"
                 animationsEnabled: root.interfaceAnimationsEnabled
               }
+            }
+
+            DockNewWorkspaceDropTarget {
+              id: newWorkspaceTarget
+              visible: workspaceCardWrapper.hasNewWorkspaceTarget
+              x: workspaceCardSlot.x + workspaceCardSlot.width
+                + workspaceCardWrapper.newWorkspaceGap
+              monitorIdentity: workspaceCardWrapper.newWorkspaceMonitorIdentity
+              slotSize: root.itemSize
+              highlighted: workspaceDrag.hoveredNewWorkspaceMonitor === monitorIdentity
+              animationsEnabled: root.interfaceAnimationsEnabled
             }
           }
         }
@@ -1615,7 +1709,7 @@ PanelWindow {
   DockAppPicker {
     id: appPicker
 
-    anchorItem: dockBackground
+    anchorItem: addPinItem
     position: root.position
     pinned: root.pinned
     iconOverrides: root.iconOverrides
