@@ -35,14 +35,12 @@ TestCase {
     }
   }
 
-  function find(node, name) {
-    if (node.objectName === name) return node
+  function findAll(node, name) {
+    var found = node.objectName === name ? [node] : []
     var children = node.children || []
-    for (var i = 0; i < children.length; i++) {
-      var found = find(children[i], name)
-      if (found) return found
-    }
-    return null
+    for (var i = 0; i < children.length; i++)
+      found = found.concat(findAll(children[i], name))
+    return found
   }
 
   function test_default_named_and_local_labels_data() {
@@ -123,13 +121,21 @@ TestCase {
     compare(view.rows[0].detail, "Live")
     compare(view.rows[0].focusAgentSupported, false)
     compare(view.rows[1].status, "working")
-    var indicator = find(view, "herdr-unmatched-working-indicator")
-    verify(indicator !== null)
-    tryCompare(indicator, "active", true)
+    // Every delegate owns a marker, including the hidden session-row marker.
+    // Exactly the working agent may animate; do not pick the first named child.
+    var indicators = findAll(view, "herdr-unmatched-working-indicator")
+    compare(indicators.length, view.rows.length)
+    tryVerify(function() {
+      return indicators.filter(function(item) { return item.active }).length === 1
+    })
+    var indicator = indicators.filter(function(item) { return item.active })[0]
+    compare(indicator.visible, true)
     var next = context([remote], [agent])
     next.interfaceAnimationsEnabled = false
     view.widgetContext = next
-    tryCompare(indicator, "active", false)
+    tryVerify(function() {
+      return indicators.every(function(item) { return !item.active })
+    })
     compare(view.rows[1].status, "working")
   }
 }
