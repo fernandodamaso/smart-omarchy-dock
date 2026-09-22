@@ -41,6 +41,7 @@ PROTECTED_WIDGETS = {
     "herdr.agents": ("Coding agents", "integration", False),
 }
 RESERVED_PACKAGE_FILES = {".smartdock-source.json", ".smartdock-package.json"}
+RUNTIME_WIDGETKIT_DIR = "SmartDock"
 
 
 class WidgetError(Exception):
@@ -126,7 +127,7 @@ def _is_within(path: Path, root: Path):
     return path == root or path.is_relative_to(root)
 
 
-def validate_manifest(package_root: Path, *, allow_protected=False):
+def validate_manifest(package_root: Path, *, allow_protected=False, allow_runtime_widgetkit=False):
     root = package_root.resolve()
     manifest_path = root / "widget.json"
     manifest = read_json(manifest_path, "widget.json")
@@ -166,7 +167,13 @@ def validate_manifest(package_root: Path, *, allow_protected=False):
     entry_path = (root / relative_entry).resolve()
     if not _is_within(entry_path, root) or not entry_path.is_file():
         raise WidgetError("E_VALIDATION", "Widget entry is missing or resolves outside the package.")
-    scan_package(root)
+    runtime_widgetkit = root / RUNTIME_WIDGETKIT_DIR
+    if not allow_runtime_widgetkit and (runtime_widgetkit.exists() or runtime_widgetkit.is_symlink()):
+        raise WidgetError(
+            "E_VALIDATION",
+            "Widget source may not provide the reserved SmartDock runtime module directory."
+        )
+    scan_package(root, ignored_root_names={RUNTIME_WIDGETKIT_DIR} if allow_runtime_widgetkit else None)
     normalized = {
         "apiVersion": API_VERSION,
         "id": widget_id,
@@ -178,13 +185,15 @@ def validate_manifest(package_root: Path, *, allow_protected=False):
     return normalized
 
 
-def scan_package(root: Path):
+def scan_package(root: Path, ignored_root_names=None):
     count = 0
     total = 0
+    ignored_root_names = set(ignored_root_names or ())
     try:
         for directory, dirnames, filenames in os.walk(root, followlinks=False):
             directory_path = Path(directory)
-            dirnames[:] = sorted(name for name in dirnames if name != ".git")
+            ignored = ignored_root_names if directory_path == root else set()
+            dirnames[:] = sorted(name for name in dirnames if name != ".git" and name not in ignored)
             for name in list(dirnames):
                 path = directory_path / name
                 if path.is_symlink():
@@ -214,7 +223,8 @@ def package_digest(root: Path, manifest):
     digest.update(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     for directory, dirnames, filenames in os.walk(root, followlinks=False):
         directory_path = Path(directory)
-        dirnames[:] = sorted(name for name in dirnames if name != ".git")
+        ignored = {RUNTIME_WIDGETKIT_DIR} if directory_path == root else set()
+        dirnames[:] = sorted(name for name in dirnames if name != ".git" and name not in ignored)
         for name in sorted(filenames):
             if name in RESERVED_PACKAGE_FILES or name == ".git":
                 continue
@@ -248,7 +258,7 @@ def is_git_source(text: str):
 
 
 class Store:
-    def __init__(self, *, bundle=None, home=None, data_home=None, config_home=None):
+    def __init__(self, *, bundle=None, home=None, data_home=None, config_home=None, qml_import_paths=None):
         self.bundle = Path(bundle or Path(__file__).resolve().parents[1]).resolve()
         self.home = Path(home or Path.home()).resolve()
         self.data_home = Path(data_home or os.environ.get("XDG_DATA_HOME", self.home / ".local/share")).expanduser().resolve()
@@ -259,6 +269,128 @@ class Store:
         self.dev_root = self.root / ".dev"
         self.lock_path = self.root / ".package.lock"
         self.config_path = Path(os.environ.get("SMARTDOCK_CONFIG", self.config_home / "smartdock/dock.json")).expanduser()
+        self.qml_import_paths = [Path(path).expanduser().resolve() for path in (qml_import_paths or [])]
+
+    def _qml_tool(self, name):
+        found = shutil.which(name)
+        if found:
+            return found
+        fallback = Path("/usr/lib/qt6/bin") / name
+        return str(fallback) if fallback.is_file() else None
+
+    def _runtime_qml_import_paths(self):
+        paths = list(self.qml_import_paths)
+        for variable in ("QML_IMPORT_PATH", "QML2_IMPORT_PATH"):
+            value = os.environ.get(variable, "")
+            if value:
+                paths.extend(Path(item).expanduser().resolve() for item in value.split(os.pathsep) if item)
+        omarchy_shell = Path(os.environ.get("OMARCHY_PATH", "/usr/share/omarchy")) / "shell"
+        if (omarchy_shell / "Commons").is_dir():
+            cache_home = Path(os.environ.get("XDG_CACHE_HOME", self.home / ".cache")).expanduser().resolve()
+            import_root = cache_home / "smartdock/qml-imports"
+            import_root.mkdir(parents=True, exist_ok=True)
+            qs_link = import_root / "qs"
+            if not qs_link.exists() and not qs_link.is_symlink():
+                try:
+                    qs_link.symlink_to(omarchy_shell, target_is_directory=True)
+                except OSError:
+                    pass
+            if qs_link.exists():
+                paths.append(import_root)
+        result = []
+        for path in paths:
+            if path not in result:
+                result.append(path)
+        return result
+
+    def _materialize_widgetkit(self, package_root: Path):
+        source_qmldir = self.bundle / "SmartDock/WidgetKit/qmldir"
+        if not source_qmldir.is_file():
+            raise WidgetError("E_STATE", "SmartDock WidgetKit runtime files are missing from this CLI bundle.")
+        target_root = package_root / RUNTIME_WIDGETKIT_DIR / "WidgetKit"
+        if target_root.exists() or target_root.is_symlink():
+            shutil.rmtree(package_root / RUNTIME_WIDGETKIT_DIR, ignore_errors=True)
+        target_root.mkdir(parents=True, exist_ok=True)
+        output = []
+        try:
+            for raw_line in source_qmldir.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if line.startswith("module "):
+                    output.append(line)
+                    continue
+                fields = line.split()
+                if len(fields) != 3:
+                    raise WidgetError("E_STATE", "SmartDock WidgetKit qmldir contains an unsupported entry.")
+                type_name, version, relative_source = fields
+                source_file = (source_qmldir.parent / relative_source).resolve()
+                widget_root = (self.bundle / "components/widgets").resolve()
+                if not _is_within(source_file, widget_root) or not source_file.is_file():
+                    raise WidgetError("E_STATE", "SmartDock WidgetKit references a missing public component.")
+                target_file = target_root / source_file.name
+                shutil.copy2(source_file, target_file)
+                output.append(f"{type_name} {version} {target_file.name}")
+            (target_root / "qmldir").write_text("\n".join(output) + "\n", encoding="utf-8")
+        except WidgetError:
+            raise
+        except (OSError, UnicodeError) as error:
+            raise WidgetError("E_STATE", "Could not materialize SmartDock WidgetKit: " + str(error)) from error
+
+    def _validate_qml_entry(self, package_root: Path, manifest):
+        entry = package_root / manifest["entry"]
+        formatter = self._qml_tool("qmlformat")
+        linter = self._qml_tool("qmllint")
+        if not formatter and not linter:
+            raise WidgetError(
+                "E_VALIDATION",
+                "Qt QML validation tools are unavailable; previous Widget state was preserved."
+            )
+        if formatter:
+            try:
+                result = subprocess.run(
+                    [formatter, str(entry)],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=15,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                raise WidgetError("E_VALIDATION", "Could not validate Widget entry QML syntax.") from error
+            if result.returncode != 0:
+                raise WidgetError("E_VALIDATION", "Widget entry QML syntax validation failed; previous Widget state was preserved.")
+        if linter:
+            command = [linter, "--ignore-settings"]
+            for import_path in self._runtime_qml_import_paths():
+                command.extend(["-I", str(import_path)])
+            command.append(str(entry))
+            try:
+                result = subprocess.run(
+                    command,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=20,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError) as error:
+                raise WidgetError("E_VALIDATION", "Could not validate Widget QML imports.") from error
+            diagnostics = (result.stdout or "") + "\n" + (result.stderr or "")
+            import_failure = re.search(
+                r"failed to import|warnings occurred while importing|module .+ is not installed|\[import\]|\[syntax\]",
+                diagnostics,
+                re.IGNORECASE,
+            )
+            if import_failure:
+                raise WidgetError("E_VALIDATION", "Widget entry QML import validation failed; previous Widget state was preserved.")
+
+    def _validate_installed(self, package_dir: Path):
+        if package_dir.is_symlink():
+            raise WidgetError("E_VALIDATION", "Installed Widget package directory may not be a symlink.")
+        return validate_manifest(package_dir, allow_runtime_widgetkit=True)
 
     def forbidden_source_roots(self):
         roots = [
@@ -417,7 +549,8 @@ class Store:
         if not self.root.is_dir():
             return []
         return sorted(
-            (path for path in self.root.iterdir() if path.is_dir() and not path.name.startswith(".")),
+            (path for path in self.root.iterdir()
+             if (path.is_dir() or path.is_symlink()) and not path.name.startswith(".")),
             key=lambda item: item.name,
         )
 
@@ -446,6 +579,9 @@ class Store:
         copy_package(source, stage)
         try:
             manifest = validate_manifest(stage)
+            self._materialize_widgetkit(stage)
+            self._validate_qml_entry(stage, manifest)
+            manifest = validate_manifest(stage, allow_runtime_widgetkit=True)
             write_json_atomic(
                 self._metadata_path(stage),
                 {
@@ -519,7 +655,7 @@ class Store:
                 return package_dir, False
             if _is_within(snapshot, self.dev_root.resolve()) and snapshot.is_dir():
                 try:
-                    snapshot_manifest = validate_manifest(snapshot)
+                    snapshot_manifest = validate_manifest(snapshot, allow_runtime_widgetkit=True)
                     if snapshot_manifest["id"] == manifest["id"]:
                         return snapshot, True
                 except WidgetError:
@@ -539,11 +675,11 @@ class Store:
         errors = [] if state_error is None else [state_error]
         for package_dir in self.installed_dirs():
             try:
-                manifest = validate_manifest(package_dir)
+                manifest = self._validate_installed(package_dir)
                 if package_dir.name != manifest["id"]:
                     raise WidgetError("E_VALIDATION", "Installed directory name does not match widget.json id.")
                 active_root, development = self._active_root(package_dir, manifest, dev_state)
-                active_manifest = validate_manifest(active_root)
+                active_manifest = validate_manifest(active_root, allow_runtime_widgetkit=True)
                 if active_manifest["id"] != manifest["id"]:
                     raise WidgetError("E_VALIDATION", "Development package id does not match the installed Widget.")
                 candidates.append((package_dir, active_root, active_manifest, development))
@@ -606,7 +742,7 @@ class Store:
 
     def package_row(self, package_dir: Path, manifest=None, enabled=None, dev_state=None):
         if manifest is None:
-            manifest = validate_manifest(package_dir)
+            manifest = self._validate_installed(package_dir)
         if enabled is None:
             enabled = self.enabled_ids()
         if dev_state is None:
@@ -667,7 +803,7 @@ class Store:
         seen = set(PROTECTED_WIDGETS)
         for package_dir in self.installed_dirs():
             try:
-                manifest = validate_manifest(package_dir)
+                manifest = self._validate_installed(package_dir)
                 if manifest["id"] in seen:
                     raise WidgetError("E_CONFLICT", "Duplicate Widget id; duplicate is not executable.")
                 seen.add(manifest["id"])
@@ -706,9 +842,9 @@ class Store:
             if state and state["id"] == widget_id:
                 raise WidgetError("E_DEV_ACTIVE", "Reset the active Widget development override before removing this package.")
             target = self.root / widget_id
-            if not target.is_dir():
+            if not target.is_dir() and not target.is_symlink():
                 raise WidgetError("E_NOT_FOUND", f"Widget {widget_id!r} is not installed.")
-            manifest = validate_manifest(target)
+            manifest = self._validate_installed(target)
             if manifest["id"] != widget_id:
                 raise WidgetError("E_STATE", "Installed Widget directory identity is inconsistent; refusing targeted removal.")
             tombstone = self.root / (".remove-" + uuid.uuid4().hex)
@@ -729,9 +865,9 @@ class Store:
         if state and state["id"] == widget_id:
             raise WidgetError("E_DEV_ACTIVE", "Reset the Widget development override before updating its installed package.")
         target = self.root / widget_id
-        if not target.is_dir():
+        if not target.is_dir() and not target.is_symlink():
             raise WidgetError("E_NOT_FOUND", f"Widget {widget_id!r} is not installed.")
-        previous = validate_manifest(target)
+        previous = self._validate_installed(target)
         metadata = self.source_metadata(target)
         if metadata is None:
             raise WidgetError("E_SOURCE", "Installed Widget has no valid package source metadata; reinstall it from an explicit source.")
@@ -755,7 +891,7 @@ class Store:
             ids = []
             for package_dir in self.installed_dirs():
                 try:
-                    manifest = validate_manifest(package_dir)
+                    manifest = self._validate_installed(package_dir)
                 except WidgetError:
                     ids.append(package_dir.name)
                 else:
@@ -781,6 +917,11 @@ class Store:
             staged = validate_manifest(stage)
             if staged != manifest:
                 raise WidgetError("E_VALIDATION", "Widget source changed while preparing the development snapshot.")
+            self._materialize_widgetkit(stage)
+            self._validate_qml_entry(stage, staged)
+            staged = validate_manifest(stage, allow_runtime_widgetkit=True)
+            if staged != manifest:
+                raise WidgetError("E_VALIDATION", "Widget source changed while preparing the development snapshot.")
             digest = package_digest(stage, staged)
             target = parent / digest[:24]
             if target.exists():
@@ -800,9 +941,9 @@ class Store:
                 if current and current["id"] != manifest["id"]:
                     raise WidgetError("E_DEV_ACTIVE", f"Widget {current['id']!r} already has the selected development source; reset it first.")
                 installed = self.root / manifest["id"]
-                if not installed.is_dir():
+                if not installed.is_dir() and not installed.is_symlink():
                     raise WidgetError("E_NOT_FOUND", "Install this Widget package before selecting its development source, so reset has a known working package.")
-                installed_manifest = validate_manifest(installed)
+                installed_manifest = self._validate_installed(installed)
                 if installed_manifest["id"] != manifest["id"]:
                     raise WidgetError("E_STATE", "Installed Widget identity is inconsistent.")
                 snapshot = self._new_dev_snapshot(source, manifest)
