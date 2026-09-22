@@ -610,15 +610,25 @@ function herdrInventoryPartial(snapshot) {
     || completeness.serverTruncated === true
 }
 
-// True when at least one snapshot server is not matched to a window. Lease IDs
-// are unrelated; this only drives redundant fallback presentation.
+// Show the fallback card only when it can present at least one agent whose
+// server is not already represented under a window. An unmatched healthy server
+// with an empty agent inventory must not create an otherwise-empty Widget card.
 function herdrFallbackVisible(snapshot, associations) {
   var matched = matchedHerdrServerIds(associations)
   var servers = snapshot && Array.isArray(snapshot.servers) ? snapshot.servers : []
+  var unmatched = Object.create(null)
   for (var i = 0; i < servers.length; ++i) {
     var server = servers[i]
     if (!server || typeof server !== "object") continue
-    if (matched[String(server.id || "")] !== true) return true
+    var serverId = String(server.id || "")
+    if (serverId && matched[serverId] !== true) unmatched[serverId] = true
+  }
+
+  var agents = snapshot && Array.isArray(snapshot.agents) ? snapshot.agents : []
+  for (var j = 0; j < agents.length; ++j) {
+    var agent = agents[j]
+    if (!agent || typeof agent !== "object") continue
+    if (unmatched[String(agent.serverId || "")] === true) return true
   }
   return false
 }
