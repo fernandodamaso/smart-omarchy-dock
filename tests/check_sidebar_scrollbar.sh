@@ -23,6 +23,27 @@ grep -q 'x: root.width - width' <<<"$scroll_block" \
   || fail "scrollbar lost its explicit right-edge x binding"
 grep -q 'scrollBarOutset' <<<"$scroll_block" \
   || fail "scrollbar lost its scrollBarOutset nudge toward the panel edge"
+grep -Eq 'scrollBarOutset:[[:space:]]*root\.panelCollapsed[[:space:]]*\?[[:space:]]*4[[:space:]]*:[[:space:]]*\(root\.controller[[:space:]]*&&[[:space:]]*root\.controller\.edge[[:space:]]*===[[:space:]]*"left"[[:space:]]*\?[[:space:]]*4[[:space:]]*:[[:space:]]*10\)' "$viewport" \
+  || fail "scrollbar outset must stay inside the collapsed rail and clear the left-sidebar resize handle"
+
+# Guard the two layouts that regressed: 320px expanded left sidebar and 72px rail.
+# Expanded viewport inset is 6px padding + 8px resize allowance on each side.
+expanded_panel=320
+expanded_inset=14
+viewport_width=$((expanded_panel - expanded_inset * 2))
+bar_width=6
+bar_outset=4
+bar_right=$((expanded_inset + viewport_width + bar_outset))
+resize_start=$((expanded_panel - 8))
+(( bar_right <= resize_start )) \
+  || fail "expanded scrollbar overlaps the 8px resize handle"
+
+collapsed_panel=72
+collapsed_inset=6
+collapsed_viewport=$((collapsed_panel - collapsed_inset * 2))
+collapsed_right=$((collapsed_inset + collapsed_viewport + bar_outset))
+(( collapsed_right <= collapsed_panel )) \
+  || fail "collapsed scrollbar is clipped past the panel edge"
 grep -q 'height: list.height' <<<"$scroll_block" \
   || fail "scrollbar must track the list height explicitly"
 grep -Eq 'anchors\.(top|bottom|right|left)' <<<"$scroll_block" \
