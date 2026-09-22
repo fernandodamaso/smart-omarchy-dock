@@ -55,14 +55,15 @@ Item {
   readonly property bool nestedChild: nestedTab || nestedHerdr
   readonly property bool herdrActionable: (kind === "herdr-agent"
     || kind === "herdr-tab") && row.actionable === true
+    && row.focusAgentSupported === true
   readonly property bool herdrGroupHeader: kind === "herdr-tab" && row.groupHeader === true
   readonly property bool herdrStatusDotVisible: !root.collapsed
     && (kind === "herdr-agent"
-      || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader)
+      || (kind === "herdr-tab" && !root.herdrGroupHeader)
       || kind === "herdr-state")
   readonly property string normalizedHerdrStatus: HerdrModel.normalizeStatus(row.status)
   readonly property bool herdrWorkingStatusTarget: kind === "herdr-agent"
-    || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader)
+    || (kind === "herdr-tab" && !root.herdrGroupHeader)
   readonly property bool herdrWorkingStatus: root.herdrWorkingStatusTarget
     && root.normalizedHerdrStatus === "working"
   readonly property string tabFaviconSource: nestedTab
@@ -100,12 +101,12 @@ Item {
   // Kind moves onto the two-line secondary row; do not reserve side kind width.
   readonly property bool herdrKindVisible: false
   readonly property string herdrAgentSubtitle: (kind === "herdr-agent"
-      || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader))
+      || (kind === "herdr-tab" && !root.herdrGroupHeader))
     ? String(row.subtitle || "")
     : ""
   readonly property bool herdrTwoLineLabels: !root.collapsed
     && (kind === "herdr-agent"
-      || (kind === "herdr-tab" && root.herdrActionable && !root.herdrGroupHeader))
+      || (kind === "herdr-tab" && !root.herdrGroupHeader))
   readonly property bool herdrGroupLabel: !root.collapsed && root.herdrGroupHeader
   readonly property int windowCount: kind === "application" ? Number(row.windowCount || row.windows && row.windows.length || 0) : 0
   readonly property int treeDepth: Number(row.treeDepth || 0)
@@ -199,6 +200,7 @@ Item {
         kind: kind,
         isBrowser: root.isBrowserWindow,
         isHerdr: root.herdrAssociated,
+        herdrLabel: String(row.herdrDisplayLabel || ""),
         entryName: root.entry ? String(root.entry.name || "") : String(row.label || ""),
         windowTitle: root.windowTitle,
         tabTitle: kind === "browser-tab" ? String(row.title || "") : ""
@@ -267,11 +269,11 @@ Item {
       return (row.active === true ? "Active tab: " : "Tab: ") + liveTitle + alertBits
         + (attention.muted ? " · Alerts excluded from totals" : "")
     if (kind === "herdr-agent"
-        || (kind === "herdr-tab" && row.actionable === true && row.groupHeader !== true))
+        || (kind === "herdr-tab" && row.groupHeader !== true))
       return "Herdr agent: " + liveTitle
         + (root.herdrAgentSubtitle ? " · " + root.herdrAgentSubtitle : "")
         + " · " + InteractionModel.herdrStatusAccessibleText(row.status)
-        + (root.controller.herdrFocusErrorFor(root.rowKey)
+        + (root.herdrActionable && root.controller.herdrFocusErrorFor(root.rowKey)
           ? " · Focus failed (" + root.controller.herdrFocusErrorFor(root.rowKey) + ")"
           : "")
     if (kind === "herdr-tab")
@@ -525,7 +527,7 @@ Item {
     activeFocus: root.activeFocus,
     hovered: root.kind === "monitor" ? false
       : (root.input.hovered || passiveHover.hovered),
-    navigable: InteractionModel.rowHoverFillEligible(root.kind, root.row.actionable === true),
+    navigable: InteractionModel.rowHoverFillEligible(root.kind, root.herdrActionable),
     persistentSelected: root.persistentSelected,
     persistentContext: root.persistentContext,
     dropFill: Style.pressedFillFor(Color.accent, Color.accent),

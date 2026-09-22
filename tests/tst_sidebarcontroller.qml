@@ -220,6 +220,7 @@ TestCase {
       revision: 10,
       servers: [{
         id: "local-a",
+        capabilities: { focusAgent: true },
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
       windowProcesses: { revision: 1, identities: [{ pid: 40, startTime: 40 }] }
@@ -234,6 +235,7 @@ TestCase {
       revision: 11,
       servers: [{
         id: "local-a",
+        capabilities: { focusAgent: true },
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
       windowProcesses: { revision: 2, identities: [{ pid: 40, startTime: 40 }] }
@@ -281,6 +283,7 @@ TestCase {
       revision: 5,
       servers: [{
         id: "local-a",
+        capabilities: { focusAgent: true },
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
       windowProcesses: { revision: 1, identities: [{ pid: 40, startTime: 40 }] }
@@ -306,6 +309,7 @@ TestCase {
       revision: 1,
       servers: [{
         id: "local-a",
+        capabilities: { focusAgent: true },
         health: "live",
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
@@ -339,6 +343,7 @@ TestCase {
       revision: 2,
       servers: [{
         id: "local-a",
+        capabilities: { focusAgent: true },
         health: "live",
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
@@ -407,6 +412,7 @@ TestCase {
       revision: 5,
       servers: [{
         id: "local-a",
+        capabilities: { focusAgent: true },
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
       windowProcesses: { revision: 1, identities: [{ pid: 40, startTime: 40 }] }
@@ -490,6 +496,7 @@ TestCase {
       revision: 3,
       servers: [{
         id: "local-a",
+        capabilities: { focusAgent: true },
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
       windowProcesses: { revision: 1, identities: [] }
@@ -516,6 +523,7 @@ TestCase {
       revision: 4,
       servers: [{
         id: "local-a",
+        capabilities: { focusAgent: true },
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
       windowProcesses: { revision: 2, identities: [{ pid: 40, startTime: 40 }] }
@@ -568,6 +576,7 @@ TestCase {
       revision: 1,
       servers: [{
         id: "local-a",
+        capabilities: { focusAgent: true },
         health: "live",
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],

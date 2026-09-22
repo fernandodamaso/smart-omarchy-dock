@@ -50,8 +50,10 @@ assert.equal(Interaction.composeRowFill({
   persistentFill: 'persist'
 }), 'persist', 'monitor hover fill stays persistent; tooltip uses passive HoverHandler')
 
-// Coding agents show hover fill without becoming activation-navigable yet.
-assert.equal(Interaction.rowHoverFillEligible('herdr-agent'), true)
+// Herdr rows expose hover/focus affordance only when the authoritative
+// per-server focus capability made the projected row actionable.
+assert.equal(Interaction.rowHoverFillEligible('herdr-agent', true), true)
+assert.equal(Interaction.rowHoverFillEligible('herdr-agent', false), false)
 assert.equal(Interaction.rowHoverFillEligible('herdr-tab', true), true)
 assert.equal(Interaction.rowHoverFillEligible('herdr-tab', false), false)
 assert.equal(Interaction.rowHoverFillEligible('herdr-state'), false)
@@ -59,14 +61,14 @@ assert.equal(Interaction.rowHoverFillEligible('monitor'), false)
 assert.equal(Interaction.rowHoverFillEligible('browser-tab'), true)
 assert.equal(Interaction.composeRowFill({
   dropTarget: false, pressed: false, hovered: true,
-  navigable: Interaction.rowHoverFillEligible('herdr-agent'),
+  navigable: Interaction.rowHoverFillEligible('herdr-agent', true),
   hoverFill: 'hover', persistentFill: 'persist'
-}), 'hover', 'herdr-agent hover paints fill')
+}), 'hover', 'actionable herdr-agent hover paints fill')
 assert.match(rowQml, /navigable:\s*InteractionModel\.rowHoverFillEligible\(root\.kind/,
   'rowFill gates hover via rowHoverFillEligible')
 assert.match(rowQml,
   /navigable:\s*\[["']window["'],\s*["']workspace["'],\s*["']application["'],\s*["']launcher["'],\s*["']browser-tab["']\]/,
-  'herdr-agent stays out of activation navigable until focus task')
+  'herdr-agent activation stays outside the generic navigable kind list')
 
 // Variable-height scroll restore uses heightMap; shared sidebarRowMetrics baselines
 const monitor0 = { kind: 'monitor', sectionIndex: 0, layoutGapBefore: '' }

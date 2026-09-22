@@ -324,6 +324,40 @@ function statusLabel(status) {
   }
 }
 
+// Server metadata is already bounded/sanitized by the provider. Presentation
+// deliberately derives focus support only from the per-server capability.
+function cleanDisplayText(value) {
+  if (typeof value !== "string") return ""
+  return value.replace(/^\s+|\s+$/g, "")
+}
+
+function serverTransport(server) {
+  if (!server || typeof server !== "object") return ""
+  var value = String(server.transport || "")
+  return value === "remote" || value === "local" ? value : ""
+}
+
+function serverFocusAgentSupported(server) {
+  return !!(server && typeof server === "object"
+    && server.capabilities && typeof server.capabilities === "object"
+    && server.capabilities.focusAgent === true)
+}
+
+function serverDisplayLabel(server) {
+  var source = server && typeof server === "object" ? server : ({})
+  if (serverTransport(source) !== "remote") {
+    // Preserve the legacy local fallback byte-for-byte.
+    if (typeof source.label === "string" && source.label) return source.label
+    if (typeof source.session === "string" && source.session) return source.session
+    return "Herdr"
+  }
+  var hostLabel = cleanDisplayText(source.label) || cleanDisplayText(source.host)
+    || "Remote Herdr"
+  var session = cleanDisplayText(source.session)
+  if (!session || session === "default") return hostLabel
+  return hostLabel + " · " + session
+}
+
 function displayAgentKind(kind) {
   if (typeof kind !== "string") return ""
   var raw = kind.replace(/^\s+|\s+$/g, "")
