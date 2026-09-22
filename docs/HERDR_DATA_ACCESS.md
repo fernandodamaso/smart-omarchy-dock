@@ -62,13 +62,15 @@ The provider checks a cheap filesystem fingerprint every 10 seconds and reruns
 metadata discovery only when the local socket/session set changes. Explicit
 `refresh` also rescans. There is no recurring `herdr agent list` or equivalent
 agent-status subprocess loop.
+
 ## Attached remote discovery and SSH transport
 
 Remote support is attachment-driven only. The process classifier recognizes the
 current TUI forms `herdr --remote TARGET [--session NAME]` (including the
-equivalent `--flag=value` spelling and the documented `--remote-keybindings`
-modifier). Help/version/control/handoff shapes, duplicate flags and unsafe
-targets fail closed. PID/start-time/same-user/ancestry proof is retained before
+equivalent `--flag=value` spelling, `--remote-keybindings`, and the current
+remote `--handoff` modifier). Help/version/control shapes, duplicate flags and
+unsafe targets fail closed; `--handoff` without `--remote` is not classified as
+an attached remote endpoint. PID/start-time/same-user/ancestry proof is retained before
 an attachment is accepted, and raw argv is never published.
 
 The attached Herdr process's direct child SSH bridge is used as bounded read-only
@@ -124,7 +126,8 @@ owned by this repository. It:
 Stdin accepts `snapshot`, `quit`, one bounded JSON `focus-agent` command and
 the remote-only private owner `lease`. Local focus calls only Herdr
 `agent.focus` with a pane id; remote server rows disable `focusAgent` and the
-provider rejects those requests before helper forwarding. The helper emits correlated
+provider rejects those requests before helper forwarding. The helper emits
+correlated
 `action-result` records with fixed error codes. There is no generic RPC surface,
 answer command, notification command or transcript access.
 

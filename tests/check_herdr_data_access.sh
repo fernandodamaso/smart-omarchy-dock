@@ -70,7 +70,8 @@ fi
 active_paths=(
   Service.qml Overlay.qml DockHost.qml shell.qml
   components/DockHerdrService.qml components/DockHerdrAgentsView.qml
-  provider/herdr/discovery.py provider/herdr/model.py "$provider"
+  provider/herdr/attachments.py provider/herdr/discovery.py provider/herdr/remote.py
+  provider/herdr/model.py "$provider"
 )
 if grep -Eiq 'herdr[[:space:]]+agent[[:space:]]+list|org\.omarchy\.Omaherdr|omaherdr-notify' "${active_paths[@]}"; then
   fail 'working integration contains legacy polling/omaherdr coupling'

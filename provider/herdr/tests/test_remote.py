@@ -84,6 +84,23 @@ class RemoteTransportTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertEqual(result.socket, "/remote/home/a/../a/.config/herdr/herdr.sock")
 
+    def test_resolution_output_is_bounded_and_malformed_fails_closed(self):
+        self.assertEqual(
+            parse_resolution_output(b"not-json", "host").error,
+            "remote_metadata_invalid",
+        )
+        self.assertEqual(
+            parse_resolution_output(
+                b"{" + b"x" * remote.MAX_RESOLVER_OUTPUT + b"}", "host"
+            ).error,
+            "remote_metadata_invalid",
+        )
+        unavailable = parse_resolution_output(
+            b'{"ok":false,"error":"remote_herdr_unavailable"}', "host"
+        )
+        self.assertFalse(unavailable.ok)
+        self.assertEqual(unavailable.error, "remote_herdr_unavailable")
+
     def test_named_session_failure_never_falls_back_to_default(self):
         seen = []
 

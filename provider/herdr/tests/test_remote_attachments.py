@@ -31,7 +31,13 @@ class RemoteAttachmentClassifierTests(unittest.TestCase):
         self.assertEqual(
             classify_tui_attachment([
                 "herdr", "--remote=notebook", "--session=work",
-                "--remote-keybindings", "server",
+                "--remote-keybindings", "server", "--handoff",
+            ]),
+            AttachmentSpec("remote", "work", "notebook"),
+        )
+        self.assertEqual(
+            classify_tui_attachment([
+                "herdr", "--handoff", "--remote", "notebook", "--session", "work",
             ]),
             AttachmentSpec("remote", "work", "notebook"),
         )
@@ -44,6 +50,7 @@ class RemoteAttachmentClassifierTests(unittest.TestCase):
             ["herdr", "client"],
             ["herdr", "status"],
             ["herdr", "--handoff"],
+            ["herdr", "--remote", "host", "--handoff", "--handoff"],
             ["herdr", "--remote-keybindings", "server"],
             ["herdr", "--remote", "-oProxyCommand=id"],
             ["herdr", "--remote", "host name"],

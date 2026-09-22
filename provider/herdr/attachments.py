@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Local Herdr TUI attachment discovery via process identity.
+"""Herdr TUI attachment discovery via process identity.
 
 Raw argv and environment are read transiently for classification only. Public
 output is bounded to pid/startTime ancestry metadata — never socket paths,
@@ -22,8 +22,8 @@ MAX_ARGV = 64
 MAX_WINDOW_PROCESS_PIDS = 256
 MAX_STDIN_COMMAND = 4096
 
-# Local TUI attach accepts only these options (from installed `herdr --help`).
-# Remote / exit-immediately / control surfaces are rejected.
+# TUI classification is intentionally static/fail-closed. Exit-immediately and
+# control surfaces are rejected; remote-only flags require a validated target.
 _CONTROL_COMMANDS = frozenset({
     "server", "api", "agent", "pane", "tab", "workspace", "worktree",
     "config", "channel", "machine", "integration", "completion", "update",
@@ -82,8 +82,8 @@ def classify_tui_attachment(argv: list[str] | None) -> AttachmentSpec | None:
     """Classify only verified local/remote Herdr TUI launch forms.
 
     Current Herdr accepts the default TUI launch with optional --session and
-    --remote, plus --remote-keybindings only for remote attach. Control/help,
-    handoff and positional subcommands are rejected fail-closed.
+    --remote, plus --remote-keybindings and --handoff for remote attach.
+    Control/help and positional subcommands are rejected fail-closed.
     """
     if not argv or _basename(argv[0]) != "herdr":
         return None
@@ -103,13 +103,20 @@ def classify_tui_attachment(argv: list[str] | None) -> AttachmentSpec | None:
     target: str | None = None
     remote_seen = False
     keybindings_seen = False
+    handoff_seen = False
     i = 0
     while i < len(args):
         arg = args[i]
         if not isinstance(arg, str) or not arg:
             return None
-        if arg in _EXIT_OPTIONS or arg == "--handoff" or arg == "--":
+        if arg in _EXIT_OPTIONS or arg == "--":
             return None
+        if arg == "--handoff":
+            if handoff_seen:
+                return None
+            handoff_seen = True
+            i += 1
+            continue
 
         if arg == "--session":
             if session_seen or i + 1 >= len(args):
@@ -171,7 +178,7 @@ def classify_tui_attachment(argv: list[str] | None) -> AttachmentSpec | None:
         # Unknown options and positional/control forms are not TUI attachments.
         return None
 
-    if keybindings_seen and target is None:
+    if (keybindings_seen or handoff_seen) and target is None:
         return None
     if target is None:
         return AttachmentSpec("local", session, None)
@@ -193,24 +200,33 @@ def parse_remote_bridge_executable(argv: list[str] | None) -> str | None:
     """
     if not argv or _basename(argv[0]) != "ssh":
         return None
-    command = " ".join(str(part) for part in argv[1:])
-    if "remote-client-bridge" not in command:
+    # Current Herdr passes the remote bridge script as one SSH argv element.
+    # Parse only that element: joining the entire SSH argv would reinterpret
+    # quotes/metacharacters in the validated target as shell syntax.
+    executable = None
+    for candidate in reversed(argv[1:]):
+        if not isinstance(candidate, str) or "remote-client-bridge" not in candidate:
+            continue
+        try:
+            tokens = shlex.split(candidate, posix=True)
+        except ValueError:
+            continue
+        try:
+            bridge_index = tokens.index("remote-client-bridge")
+        except ValueError:
+            continue
+        exec_indexes = [
+            index for index, token in enumerate(tokens[:bridge_index]) if token == "exec"
+        ]
+        if not exec_indexes:
+            continue
+        exec_index = exec_indexes[-1]
+        if exec_index + 1 >= bridge_index:
+            continue
+        executable = tokens[exec_index + 1]
+        break
+    if executable is None:
         return None
-    try:
-        tokens = shlex.split(command, posix=True)
-    except ValueError:
-        return None
-    try:
-        bridge_index = tokens.index("remote-client-bridge")
-    except ValueError:
-        return None
-    exec_indexes = [index for index, token in enumerate(tokens[:bridge_index]) if token == "exec"]
-    if not exec_indexes:
-        return None
-    exec_index = exec_indexes[-1]
-    if exec_index + 1 >= bridge_index:
-        return None
-    executable = tokens[exec_index + 1]
     if not isinstance(executable, str) or not executable or executable.startswith("-"):
         return None
     try:
