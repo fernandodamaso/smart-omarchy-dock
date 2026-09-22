@@ -278,8 +278,16 @@ console.log('herdr sidebar model association: PASS')
     providerEpoch: 'epoch-b',
     revision: 1,
     servers: [
-      { id: 'local-matched', health: 'live', label: 'Matched' },
-      { id: 'local-free', health: 'live', label: 'Free' },
+      {
+        id: 'local-matched', health: 'live', label: 'Matched',
+        transport: 'local', host: 'local', session: 'default',
+        connectionGeneration: 1, capabilities: { focusAgent: true },
+      },
+      {
+        id: 'local-free', health: 'live', label: 'Free',
+        transport: 'local', host: 'local', session: 'default',
+        connectionGeneration: 1, capabilities: { focusAgent: true },
+      },
     ],
     agents: [
       {
@@ -686,6 +694,202 @@ console.log('herdr sidebar model association: PASS')
   assert.ok(withBrowser.rows.some(row => row.kind === 'herdr-agent' && row.windowKey === windowKey))
 }
 
+// --- HERDR-REMOTE-02: remote labels, health truth, metadata and focus gates ---
+{
+  const f = sidebarFixture()
+  const desktop = desktopModel.build(f.input)
+  const registry = Sidebar.reconcileHandles({ nextToken: 1, entries: [] }, f.toplevels)
+  const termEntry = registry.entries.find((_, i) => f.toplevels[i].id === 'terminal')
+  assert.ok(termEntry)
+  const windowKey = termEntry.key
+
+  const remoteDefault = {
+    id: 'remote-default',
+    transport: 'remote',
+    host: 'devbox',
+    session: 'default',
+    label: 'devbox',
+    connectionGeneration: 7,
+    health: 'live',
+    capabilities: { focusAgent: false },
+  }
+  const remoteNamed = {
+    id: 'remote-named',
+    transport: 'remote',
+    host: 'devbox',
+    session: 'review',
+    label: 'devbox',
+    connectionGeneration: 2,
+    health: 'connecting',
+    capabilities: { focusAgent: false },
+  }
+  const remoteOther = {
+    id: 'remote-other',
+    transport: 'remote',
+    host: 'buildbox',
+    session: 'review',
+    label: 'buildbox',
+    connectionGeneration: 4,
+    health: 'unavailable',
+    capabilities: { focusAgent: false },
+  }
+
+  assert.equal(Model.serverDisplayLabel(remoteDefault), 'devbox')
+  assert.equal(Model.serverDisplayLabel(remoteNamed), 'devbox · review')
+  assert.equal(Model.serverDisplayLabel(remoteOther), 'buildbox · review')
+  assert.equal(Model.serverFocusAgentSupported(remoteDefault), false)
+  assert.equal(Model.serverFocusAgentSupported({
+    ...remoteDefault, capabilities: { focusAgent: true },
+  }), true)
+  assert.equal(Model.serverFocusAgentSupported({
+    ...remoteDefault, capabilities: {},
+  }), false)
+  assert.equal(Model.serverDisplayLabel({
+    transport: 'local', label: 'Matched', session: 'default',
+  }), 'Matched')
+
+  const snapshot = {
+    providerEpoch: 'epoch-remote',
+    revision: 1,
+    servers: [remoteDefault, remoteNamed, remoteOther],
+    agents: [{
+      id: 'remote-default:7:pane-r',
+      serverId: 'remote-default',
+      connectionGeneration: 7,
+      transport: 'remote',
+      host: 'devbox',
+      session: 'default',
+      paneId: 'pane-r',
+      terminalId: 'term-r',
+      workspaceId: 'rw',
+      workspaceLabel: 'smartdock',
+      tabId: 'rw:tab',
+      tabTitle: 'Remote work',
+      title: 'Remote Codex',
+      agent: 'codex',
+      status: 'working',
+    }],
+    liveCounts: {
+      agents: 1, working: 1, idle: 0, done: 0, blocked: 0, unknown: 0,
+      servers: 1, complete: false,
+    },
+    completeness: { state: 'partial' },
+  }
+  const projected = plain(Sidebar.project({
+    desktop,
+    screens: f.screens,
+    monitors: f.monitors,
+    monitorOrder: [],
+    pinned: f.settings.pinned,
+    hiddenApplications: f.settings.hiddenApplications,
+    registry,
+    folds: ({}),
+    collapsed: false,
+    herdrSnapshot: snapshot,
+    herdrAssociations: {
+      byWindowKey: { [windowKey]: 'remote-default' },
+      unmatchedServerIds: ['remote-named', 'remote-other'],
+    },
+    herdrAssociationsVerified: true,
+  }))
+  const parent = projected.rows.find(row => row.key === windowKey)
+  assert.ok(parent)
+  assert.equal(parent.herdrDisplayLabel, 'devbox')
+  assert.equal(parent.herdrTransport, 'remote')
+  assert.equal(parent.herdrHost, 'devbox')
+  assert.equal(parent.herdrSession, 'default')
+  assert.equal(parent.herdrFocusAgentSupported, false)
+
+  const remoteTab = projected.rows.find(row =>
+    row.kind === 'herdr-tab' && row.windowKey === windowKey)
+  assert.ok(remoteTab)
+  assert.equal(remoteTab.status, 'working')
+  assert.equal(remoteTab.actionable, false)
+  assert.equal(remoteTab.focusAgentSupported, false)
+  assert.equal(remoteTab.transport, 'remote')
+  assert.equal(remoteTab.host, 'devbox')
+  assert.equal(remoteTab.session, 'default')
+  assert.equal(remoteTab.serverLabel, 'devbox')
+  assert.equal(remoteTab.providerEpoch, 'epoch-remote')
+  assert.equal(remoteTab.serverId, 'remote-default')
+  assert.equal(remoteTab.connectionGeneration, 7)
+  assert.equal(remoteTab.agentId, 'remote-default:7:pane-r')
+  assert.equal(remoteTab.paneId, 'pane-r')
+  assert.equal(remoteTab.terminalId, 'term-r')
+
+  assert.notEqual(Model.serverDisplayLabel(remoteNamed), Model.serverDisplayLabel(remoteOther))
+  assert.equal(Sidebar.herdrAgentsForServer(snapshot, 'remote-named').length, 0)
+  assert.equal(Sidebar.herdrAgentsForServer(snapshot, 'remote-other').length, 0)
+
+  const reconnecting = Sidebar.herdrFallbackStateChild(remoteNamed, snapshot)
+  assert.ok(reconnecting)
+  assert.equal(reconnecting.title, 'Reconnecting')
+  assert.notEqual(reconnecting.title, 'No active agents')
+  const unavailable = Sidebar.herdrFallbackStateChild(remoteOther, snapshot)
+  assert.ok(unavailable)
+  assert.equal(unavailable.title, 'Herdr unavailable')
+  assert.notEqual(unavailable.title, 'No active agents')
+  const healthyZero = Sidebar.herdrFallbackStateChild({
+    ...remoteOther, id: 'remote-zero', health: 'live',
+  }, {
+    liveCounts: { agents: 0, complete: true },
+    completeness: { state: 'complete' },
+  })
+  assert.equal(healthyZero.title, 'No active agents')
+
+  const supportedSnapshot = {
+    ...snapshot,
+    servers: [{
+      ...remoteDefault,
+      capabilities: { focusAgent: true },
+    }],
+    completeness: { state: 'complete' },
+    liveCounts: {
+      agents: 1, working: 1, idle: 0, done: 0, blocked: 0, unknown: 0,
+      servers: 1, complete: true,
+    },
+  }
+  const supportedProjection = plain(Sidebar.project({
+    desktop,
+    screens: f.screens,
+    monitors: f.monitors,
+    monitorOrder: [],
+    pinned: f.settings.pinned,
+    hiddenApplications: f.settings.hiddenApplications,
+    registry,
+    folds: ({}),
+    collapsed: false,
+    herdrSnapshot: supportedSnapshot,
+    herdrAssociations: {
+      byWindowKey: { [windowKey]: 'remote-default' },
+      unmatchedServerIds: [],
+    },
+    herdrAssociationsVerified: true,
+  }))
+  const supportedTab = supportedProjection.rows.find(row =>
+    row.kind === 'herdr-tab' && row.windowKey === windowKey)
+  assert.ok(supportedTab)
+  assert.equal(supportedTab.actionable, true)
+  assert.equal(supportedTab.focusAgentSupported, true)
+
+  const Interaction = loadModel('DockSidebarInteractionModel')
+  assert.equal(Interaction.rowHoverFillEligible('herdr-agent', false), false)
+  assert.equal(Interaction.rowHoverFillEligible('herdr-tab', false), false)
+  assert.equal(Interaction.rowHoverFillEligible('herdr-agent', true), true)
+  assert.equal(Interaction.sidebarWindowDisplayTitle({
+    kind: 'window', isHerdr: true, herdrLabel: 'devbox · review',
+    windowTitle: 'original terminal',
+  }), 'devbox · review')
+  assert.equal(Interaction.sidebarWindowDisplayTitle({
+    kind: 'window', isHerdr: true, windowTitle: 'original terminal',
+  }), 'Herdr')
+
+  const agentsView = read('components/DockHerdrAgentsView.qml')
+  assert.ok(agentsView.includes('HerdrModel.serverDisplayLabel(server)'))
+  assert.ok(agentsView.includes('transport === "remote"'))
+  assert.ok(agentsView.includes('herdrFallbackStateChild'))
+}
+
 // Delegates must not acquire a provider (static source contract).
 {
   const agentsView = read('components/DockHerdrAgentsView.qml')
@@ -885,7 +1089,11 @@ console.log('herdr sidebar model projection: PASS')
   const snapshot = {
     providerEpoch: 'epoch-c',
     revision: 1,
-    servers: [{ id: 'local-matched', health: 'live', label: 'Matched' }],
+    servers: [{
+      id: 'local-matched', health: 'live', label: 'Matched',
+      transport: 'local', host: 'local', session: 'default',
+      connectionGeneration: 1, capabilities: { focusAgent: true },
+    }],
     agents: manyAgents,
     liveCounts: {
       agents: 28, working: 12, idle: 3, done: 1, blocked: 10, unknown: 2, complete: true,

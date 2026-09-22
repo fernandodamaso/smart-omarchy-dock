@@ -767,7 +767,7 @@ class Provider:
             self.emit_action_result(request_id, False, "server_unavailable")
             return
         capabilities = state.info.get("capabilities")
-        if isinstance(capabilities, dict) and capabilities.get("focusAgent") is False:
+        if not isinstance(capabilities, dict) or capabilities.get("focusAgent") is not True:
             self.emit_action_result(request_id, False, "unsupported")
             return
         if not state.live:

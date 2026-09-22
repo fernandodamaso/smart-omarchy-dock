@@ -745,8 +745,9 @@ Item {
       target.targetId = String(row.targetId || "")
       target.windowAddress = String(row.windowAddress || "").toLowerCase()
       target.windowKey = String(row.windowKey || "")
-    } else if (row.kind === "herdr-agent" || (row.kind === "herdr-tab" && row.actionable === true)) {
-      if (!row.actionable || !row.paneId || !row.agentId || !row.serverId) return null
+    } else if (row.kind === "herdr-agent" || row.kind === "herdr-tab") {
+      if (row.actionable !== true || row.focusAgentSupported !== true
+          || !row.paneId || !row.agentId || !row.serverId) return null
       if (!root.windowActions.isAlive(row.toplevel)) return null
       var generation = Number(row.connectionGeneration)
       if (!isFinite(generation) || Math.floor(generation) !== generation || generation <= 0)
@@ -760,6 +761,7 @@ Item {
       target.agentId = String(row.agentId || "")
       target.paneId = String(row.paneId || "")
       target.terminalId = String(row.terminalId || "")
+      target.focusAgentSupported = true
       if (!target.providerEpoch || !target.windowKey) return null
     } else if (row.kind === "workspace") {
       var destination = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
@@ -835,7 +837,8 @@ Item {
         && String(row.windowAddress || "").toLowerCase() === target.windowAddress
     }
     if (target.kind === "herdr-agent" || target.kind === "herdr-tab") {
-      if (row.actionable !== true) return false
+      if (target.focusAgentSupported !== true
+          || row.actionable !== true || row.focusAgentSupported !== true) return false
       if (String(row.windowKey || "") !== String(target.windowKey || "")) return false
       if (String(row.providerEpoch || "") !== String(target.providerEpoch || "")) return false
       if (String(row.serverId || "") !== String(target.serverId || "")) return false
@@ -976,6 +979,7 @@ Item {
       agentId: target.agentId,
       paneId: target.paneId,
       terminalId: target.terminalId,
+      focusAgentSupported: true,
       agentKey: agentKey,
       afterRaise: afterRaise === true
     }

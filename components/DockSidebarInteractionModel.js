@@ -278,9 +278,9 @@ function composeRowFill(state) {
 // Hover fill for navigable rows plus actionable Herdr agents/tabs
 // (including multi-panel tab headers that focus the Herdr tab).
 function rowHoverFillEligible(kind, actionable) {
-  if (kind === "herdr-tab") return actionable === true
-  return ["window", "workspace", "application", "launcher", "browser-tab",
-    "herdr-agent"].indexOf(kind) >= 0
+  if (kind === "herdr-tab" || kind === "herdr-agent")
+    return actionable === true
+  return ["window", "workspace", "application", "launcher", "browser-tab"].indexOf(kind) >= 0
 }
 
 // Numeric attention tokens are `count:<n>[:severity]` (see DockApplicationBadge).
@@ -498,8 +498,8 @@ function contextMenuMembers(target, anchor) {
 
 // Browser window parents show the desktop-entry application name; selected-tab
 // titles stay on browser-tab children and in the parent tooltip only.
-// Associated Herdr parents show "Herdr"; the original window title stays in the
-// tooltip. Agent activation is wired in a later task.
+// Local Herdr parents keep the legacy "Herdr" label; remote parents may supply
+// a sanitized host/session label. The original window title stays in the tooltip.
 function sidebarWindowDisplayTitle(input) {
   var source = input || ({})
   var kind = String(source.kind || "")
@@ -510,8 +510,10 @@ function sidebarWindowDisplayTitle(input) {
   if (kind === "herdr-agent" || kind === "herdr-state")
     return String(source.title || "").trim() || (kind === "herdr-state" ? "Herdr" : "Coding agent")
   var windowTitle = String(source.windowTitle || "").trim() || "Untitled window"
-  if (kind === "window" && source.isHerdr === true)
-    return "Herdr"
+  if (kind === "window" && source.isHerdr === true) {
+    var herdrLabel = String(source.herdrLabel || "").trim()
+    return herdrLabel || "Herdr"
+  }
   if (kind === "window" && source.isBrowser === true) {
     var entryName = String(source.entryName || "").trim()
     if (entryName) return entryName

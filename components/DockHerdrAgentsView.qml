@@ -78,14 +78,24 @@ Item {
     })
     root.servers.forEach(function(server) {
       var id = String(server.id || "")
+      var transport = HerdrModel.serverTransport(server)
+      var items = HerdrModel.sortAgentsForDisplay(byServer[id] || [])
+      var detail = String(server.health || "unavailable")
+      if (transport === "remote") {
+        detail = String(server.health || "") === "live" && items.length > 0
+          ? "Live" : SidebarModel.herdrStateTitle(server, root.snapshot)
+      }
       output.push({
         kind: "session",
         key: "server:" + id,
-        title: String(server.label || server.session || "Herdr"),
-        detail: String(server.health || "unavailable"),
-        status: String(server.health || "unavailable")
+        title: HerdrModel.serverDisplayLabel(server),
+        detail: detail,
+        status: String(server.health || "unavailable"),
+        transport: transport,
+        host: String(server.host || ""),
+        session: String(server.session || ""),
+        focusAgentSupported: HerdrModel.serverFocusAgentSupported(server)
       })
-      var items = HerdrModel.sortAgentsForDisplay(byServer[id] || [])
       items.forEach(function(agent) {
         var secondary = HerdrModel.displayAgentSecondary(agent)
         output.push({
@@ -97,7 +107,9 @@ Item {
         })
       })
       if (!items.length) {
-        var emptyChild = SidebarModel.herdrFallbackEmptyChild(server, root.snapshot)
+        var emptyChild = transport === "remote"
+          ? SidebarModel.herdrFallbackStateChild(server, root.snapshot)
+          : SidebarModel.herdrFallbackEmptyChild(server, root.snapshot)
         if (emptyChild)
           output.push(emptyChild)
       }
