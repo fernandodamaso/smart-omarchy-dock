@@ -23,6 +23,8 @@ cli_install
 test -x "$XDG_BIN_HOME/smartdock"
 test -f "$XDG_DATA_HOME/smartdock-cli/scripts/smartdock_cli.py"
 test -f "$XDG_DATA_HOME/smartdock-cli/scripts/smartdock_widget.py"
+test -f "$XDG_DATA_HOME/smartdock-cli/SmartDock/WidgetKit/qmldir"
+test -f "$XDG_DATA_HOME/smartdock-cli/components/widgets/WidgetSection.qml"
 test -f "$XDG_DATA_HOME/smartdock-cli/config/settings-schema.json"
 test -f "$XDG_DATA_HOME/smartdock-cli/config/dock.json"
 test -f "$XDG_DATA_HOME/smartdock-cli/docs/AGENT_CONFIGURATION.md"
