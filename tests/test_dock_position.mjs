@@ -35,7 +35,8 @@ assert.equal(dock.normalizeSetting('position', 'right'), 'bottom');
 assert.equal(dock.normalizeSetting('position', 'diagonal'), 'bottom');
 
 // The drag surface still maps between the bottom dock and the left sidebar
-// edge; DockHost translates those edges into presentationMode writes.
+// edge; DockHost translates those edges into presentationModeByMonitor
+// writes for the source connector.
 assert.equal(dock.dockGestureEdge('bottom'), 'bottom');
 assert.equal(dock.dockGestureEdge('left'), 'left');
 assert.equal(dock.dockGestureEdge('right'), 'left');

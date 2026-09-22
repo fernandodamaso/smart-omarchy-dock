@@ -7,7 +7,9 @@ typed preferences and initial reservation. SB-03 adds live resize, cancellation 
 conflict-safe preference commits. SB-04 adds exact-window actions, menus, keyboard
 navigation and single-sidebar drag adapters. SB-05 adds host-owned widget leases and
 a bounded footer with no production providers. These slices do not deploy or qualify
-a compositor. Classic remains the default. Parent contract: FDM-962. Detailed SB-03
+a compositor. Classic remains the default; per-monitor `presentationModeByMonitor`
+overrides let one output run the classic dock while another runs the sidebar.
+Parent contract: FDM-962. Detailed SB-03
 behavior is in [`SIDEBAR_RESIZE.md`](SIDEBAR_RESIZE.md); SB-04 is in
 [`SIDEBAR_INTERACTIONS.md`](SIDEBAR_INTERACTIONS.md); SB-05 is in
 [`SIDEBAR_WIDGETS.md`](SIDEBAR_WIDGETS.md).
@@ -52,13 +54,22 @@ provider or settings writer. SB-05 adds host-owned widget leases with no product
   keys, captured menu/input targets and temporary resize/drag state. It emits
   `aboutToRefresh`, `refreshed` and `surfaceInvalidated`. `interactionBusy` freezes
   preferred reconnects during an active interaction or open widget popup; current-screen
-  removal and explicit mode/edge/host changes cancel immediately. Shared expanded
-  width, collapse and edge preferences drive every mirrored panel; each panel clamps
+  removal, sidebar membership/pin changes and explicit edge/host changes cancel immediately.
+  Widget work, resize eligibility, collapse requests, target checks and drag eligibility
+  follow actual sidebar membership per connector, never the global mode, so a classic
+  output drives no sidebar work; workspace-card drag registration stays on classic docks.
+  Shared expanded
+  width, collapse and edge preferences drive every sidebar panel; each panel clamps
   geometry to its own screen.
-- `DockHost` owns one mutually exclusive presentation Loader: classic Variants or
-  sidebar Variants over `mappedScreens`. Destruction precedes deferred creation on
-  mode/edge changes. Hotplug and `sidebarMonitor` remapping adopt panels without
-  tearing the Loader down. The existing action, monitor-drag, badge and config
+- `DockHost` owns one stable `DockScreenPresentation` surface owner per connected
+  output instead of a single mutually exclusive presentation Loader. Each owner
+  resolves its own mode through the shared `DockScreenPresentationModel` and swaps
+  classic/sidebar surfaces teardown-first, so switching one screen never recreates
+  another screen's renderer instance, and a surface-key change rebuilds only that
+  owner's surface. Hotplug, `sidebarMonitor` remapping and override changes adopt
+  or tear down only the affected owners: a disconnected output cancels its gesture
+  and closes its popups, and reconnecting restores the configured presentation.
+  The existing action, monitor-drag, badge and config
   services remain singletons. `saveSettingIntent` is only an acceptance/staleness
   adapter around the existing sole FileView writer; it is not a second write path.
   Each `DockSidebar` uses `badgeScopeOwner: "smartdock-sidebar:<connector>"` and
@@ -108,7 +119,8 @@ badge scope is removed. A sidebar never registers as an invisible classic monito
 
 The sidebar keys are typed through bundled defaults/schema, runtime normalization,
 the existing strict host validator, Python CLI parsing and the sole FileView writer:
-`presentationMode`, `sidebarEdge`, `sidebarMonitor`, `sidebarExpandedWidth`,
+`presentationMode`, `presentationModeByMonitor`, `sidebarEdge`, `sidebarMonitor`,
+`sidebarExpandedWidth`,
 `sidebarCollapsed`, `sidebarCollapsedByMonitor`, `sidebarBrowserTabsEnabled`,
 plus SB-05 `sidebarWidgets`. See
 `CONFIGURATION.md` for their inventory and `SIDEBAR_RESIZE.md` for gesture/persistence
@@ -118,7 +130,11 @@ semantics. Chrome open-tab nesting (titles only) is documented in
 Requested classic settings, unknown extension keys, pins, artwork, hidden apps and
 provider preferences are preserved. `data.presentation` describes the primary
 screen, full `screens` list for mirrored panels, per-screen `collapsedByScreen`,
-width, mapping eligibility and inactive classic fields. A dry-run reports the
+width, mapping eligibility and inactive classic fields. The per-monitor
+resolution is `defaultMode` plus `perMonitor`/`modeByMonitor`/`sourceByMonitor`/
+`mappedByMonitor`, the `classicScreens` list and the `mixed` flag; in a mixed
+layout the legacy `mode` field reports the inherited default while `screen`,
+`screens`, `width` and `mapped` describe the rendering sidebar. A dry-run reports the
 proposed projection without writing. Classic action policies are `null` in sidebar
 effective output, not falsely active. Theme values are not claimed as decoded
 rendering evidence.
@@ -137,14 +153,18 @@ the host's persistence state and does not claim early durability.
 
 The background mode gesture is a sibling of that writer contract: a press on
 eligible empty sidebar background (the panel surface, or the list's blank tail
-while it exists) dragged down past the same 48 px threshold arms a switch back to
-the classic dock, showing a direction hint pill and then a bottom-edge
-silhouette. Release commits exactly one `presentationMode` intent through
-`DockHost.commitModeGesture`; release below threshold, Escape, grab loss, an open
-menu/popup, resize, row/widget drag or a presentation change during the press
-cancels with no write. The gesture yields whenever
+while it exists) captures that connector's presentation token, and dragging down
+past the same 48 px threshold arms a switch of that monitor back to the classic
+dock, showing a direction hint pill and then a bottom-edge silhouette on the
+source monitor. Release revalidates the captured token and commits exactly one
+`presentationModeByMonitor` entry for the source connector through
+`DockHost.commitMonitorModeGesture`, leaving every other connector's mode
+untouched; release below threshold, Escape, grab loss, an open
+menu/popup, resize, row/widget drag, a presentation or topology change during
+the press, or a disconnected source cancels with no write. The gesture yields whenever
 `controller.interactionBusy` becomes true, is cancelled by panel closure, and
-its stale/busy/persistence failures use the shared host feedback wording.
+its stale/busy/persistence failures use shared host feedback keyed by the source
+connector, so a rejected message appears only on that monitor.
 
 For unreserved logical screen width W, rail = min(72, W); expanded maximum =
 min(W, max(72, min(480, floor(0.40 × W)))); minimum = min(240, maximum).
@@ -182,6 +202,7 @@ node tests/test_sidebar_geometry.mjs
 node tests/test_sidebar_mutations.mjs
 node tests/test_sidebar_actions.mjs
 node tests/test_sidebar_drag.mjs
+node tests/test_screen_presentation_model.mjs
 node tests/test_desktop_model.mjs
 python3 -m unittest discover -s tests -p 'test_sidebar_config.py'
 python3 -m unittest discover -s tests -p 'test_sidebar_qml_syntax.py'
