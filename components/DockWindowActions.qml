@@ -510,41 +510,85 @@ Item {
     return candidate
   }
 
-  function moveCapturedWindowToNewWorkspace(member, monitorIdentity) {
-    if (!member || !member.toplevel || !member.address) return false
+  function newWorkspaceMovePlan(members, monitorIdentity) {
     var requested = canonicalMonitorIdentity(monitorIdentity)
-    if (!requested) return false
-    var location = workspaceMoveLocation(member.toplevel, member.address)
-    if (!location) return false
-    if (windowWorkspacePin(member.toplevel)) return false
+    if (!requested) return null
+    var live = workspaceMoveMembers(members)
+    if (!live || live.length === 0) return null
     var newId = allocateNewWorkspaceId()
-    if (!(newId > 0)) return false
+    if (!(newId > 0)) return null
     var newTarget = String(newId)
     var newIdentity = "id:" + newTarget
-    var rechecked = workspaceMoveLocation(member.toplevel, member.address)
-    if (!rechecked) return false
-    if (windowWorkspacePin(member.toplevel)) return false
+    for (var i = 0; i < live.length; ++i) {
+      if (!canMoveToplevelToWorkspace(live[i].toplevel, newIdentity))
+        return null
+    }
+    return {
+      monitor: requested,
+      id: newId,
+      target: newTarget,
+      identity: newIdentity,
+      members: live
+    }
+  }
+
+  function canMoveCapturedToplevelsToNewWorkspace(members, monitorIdentity) {
+    return newWorkspaceMovePlan(members, monitorIdentity) !== null
+  }
+
+  function moveCapturedToplevelsToNewWorkspace(members, monitorIdentity) {
+    var plan = newWorkspaceMovePlan(members, monitorIdentity)
+    if (!plan) return false
+
+    // Revalidate the target monitor, free workspace id and every surviving
+    // captured member immediately before the first compositor side effect.
     var reMonitor = canonicalMonitorIdentity(monitorIdentity)
-    if (!reMonitor || reMonitor !== requested) return false
-    if (occupiedNumericWorkspaceIds()[newId] === true) return false
-    if (!canMoveToplevelToWorkspace(member.toplevel, newIdentity)) return false
-    var moveRequest = rechecked.minimized
-      ? DockModel.restoreWindowRequest(
-        rechecked.address, newTarget, Hyprland.usingLua)
-      : DockModel.moveWindowRequest(
-        rechecked.address, newTarget, Hyprland.usingLua)
+    if (!reMonitor || reMonitor !== plan.monitor) return false
+    if (occupiedNumericWorkspaceIds()[plan.id] === true) return false
+    var confirmed = workspaceMoveMembers(members)
+    if (!confirmed || confirmed.length === 0) return false
+    for (var checkIndex = 0; checkIndex < confirmed.length; ++checkIndex) {
+      if (!canMoveToplevelToWorkspace(confirmed[checkIndex].toplevel, plan.identity))
+        return false
+    }
+
+    var requests = []
+    for (var moveIndex = 0; moveIndex < confirmed.length; ++moveIndex) {
+      var current = confirmed[moveIndex]
+      var moveRequest = current.minimized
+        ? DockModel.restoreWindowRequest(
+          current.address, plan.target, Hyprland.usingLua)
+        : DockModel.moveWindowRequest(
+          current.address, plan.target, Hyprland.usingLua)
+      if (!moveRequest) return false
+      requests.push(moveRequest)
+    }
+
     var relocateRequest = DockModel.moveWorkspaceToMonitorRequest(
-      newTarget, reMonitor, Hyprland.usingLua)
+      plan.target, reMonitor, Hyprland.usingLua)
     var activateRequest = DockModel.focusWorkspaceTargetRequest(
-      newTarget, Hyprland.usingLua)
+      plan.target, Hyprland.usingLua)
+    var focusMember = confirmed[0]
+    for (var focusIndex = 0; focusIndex < confirmed.length; ++focusIndex) {
+      if (confirmed[focusIndex].toplevel === root.activeToplevel) {
+        focusMember = confirmed[focusIndex]
+        break
+      }
+    }
     var focusRequest = DockModel.focusWindowRequest(
-      rechecked.address, Hyprland.usingLua)
-    if (!moveRequest || !relocateRequest || !activateRequest || !focusRequest)
-      return false
-    if (!dispatchRequests([moveRequest, relocateRequest, activateRequest, focusRequest]))
-      return false
-    forgetOrigin(rechecked.address)
+      focusMember.address, Hyprland.usingLua)
+    if (!relocateRequest || !activateRequest || !focusRequest) return false
+    requests.push(relocateRequest)
+    requests.push(activateRequest)
+    requests.push(focusRequest)
+    if (!dispatchRequests(requests)) return false
+    for (var forgetIndex = 0; forgetIndex < confirmed.length; ++forgetIndex)
+      forgetOrigin(confirmed[forgetIndex].address)
     return true
+  }
+
+  function moveCapturedWindowToNewWorkspace(member, monitorIdentity) {
+    return moveCapturedToplevelsToNewWorkspace([member], monitorIdentity)
   }
 
   function reliableWorkspaceForToplevel(toplevel) {

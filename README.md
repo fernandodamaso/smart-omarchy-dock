@@ -741,9 +741,10 @@ scope, workspace sorting and urgent-outside-scope affect the flat layout; their
 saved values are preserved. `groupWindows` remains effective in either layout.
 
 By default, `workspaceMonitorScope: all` shows the same ordered monitor sections,
-workspaces and applications on every monitor dock. Each connected monitor section
-is introduced inline before its first present workspace card by a small display
-glyph and a bounded informational label. The compact label prefers the live
+workspaces and applications on every monitor dock. When more than one monitor is
+connected, each monitor section is introduced inline before its first present
+workspace card by a small display glyph and a bounded informational label. With
+only one connected monitor, SmartDock omits that redundant glyph and label. The compact label prefers the live
 monitor model, then description, connector/name, and `Monitor N`; the full
 description/connector remains available in the tooltip/accessibility text. The
 prefix is not clickable, does not take keyboard focus, and is not a workspace-drop target.
@@ -825,7 +826,8 @@ to a workspace.
 
 Crowded cards and monitor prefixes stay in one bounded horizontal viewport. Use
 the previous/next buttons with a mouse; app wheel cycling keeps its configured
-behavior. Dock Controls and optional Trash stay fixed. A workspace switch reveals
+behavior. Dock Controls, the dedicated **Add pinned application** (+) button, and
+optional Trash stay fixed. The + button opens the existing searchable app picker. A workspace switch reveals
 only the globally primary card's real header, not its monitor prefix; manual
 scroll and drag suppression remain authoritative. Scrolling a popup's icon out
 of view closes the popup. Compact and full-length layouts retain magnification
@@ -857,17 +859,20 @@ establish a missing restore origin. Members already at the destination are
 skipped. Closed members are never replaced by another window, and an entirely
 closed group cancels. Sticky or unresolved surviving members are rejected.
 
-Destinations must be existing normal workspaces in the selected monitor scope,
-including empty cards, IDs above 10, and safely supported names with spaces or
-Unicode. Named cards are resolved by their real identity, not the compact `*`
-label. A remote-monitor card shown in this dock is valid; its workspace itself
-is not relocated. Monitor labels/separators, their prefix gaps, **Other windows**,
-special sections, ordinary gaps, Trash, navigation buttons and clipped-out areas
-are not destinations: hit-testing maps into the actual workspace card only. A
-non-sticky **Other windows** source is allowed only when its live handle/address
-is resolvable. Window-icon dragging between separate monitor-dock surfaces and
-creating workspaces are not supported; workspace-header dragging between docks
-is described above.
+Existing normal workspaces in the selected monitor scope remain valid
+destinations, including empty cards, IDs above 10, and safely supported names
+with spaces or Unicode. Named cards are resolved by their real identity, not the
+compact `*` label. While a window-icon drag is active, SmartDock also shows a
+temporary **New workspace** (+) target after the final workspace card for each
+visible monitor section. Dropping there allocates the lowest free numeric
+workspace, moves the exact captured window group into it, relocates that new
+workspace to the target monitor, then follows the moved group. Monitor
+labels/separators, their prefix gaps, **Other windows**, special sections,
+ordinary gaps, Trash, navigation buttons and clipped-out areas are not
+destinations. A non-sticky **Other windows** source is allowed only when its live
+handle/address is resolvable. Window-icon dragging between separate monitor-dock
+surfaces remains unsupported; workspace-header dragging between docks is
+described above.
 
 Hold over an overflow navigation button for 250 ms to scroll at 12 logical
 pixels per 40 ms; scrolling stops at the boundary, on leaving the button, or when

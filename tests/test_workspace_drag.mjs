@@ -22,6 +22,7 @@ function fixture(usingLua = false) {
   const handles = windows.map((wayland, index) => ({ wayland, address: String(index + 1),
     lastIpcObject: { workspace: { id: index === 2 ? 9 : 1 }, monitor: 0, pinned: false } }))
   const requests = []
+  const batches = []
   const workspaces = [
     { id: 1, monitorID: 0 }, { id: 9, monitor: 'DP-1' }, { id: 12, monitor: 'DP-2' },
     { id: -1337, name: 'Design work', monitorID: 1 },
@@ -35,10 +36,11 @@ function fixture(usingLua = false) {
     minimizedWorkspace: 'special:smartdock-minimized', minimizedOrigins: {},
     windowWorkspacePins: {}, workspaceMonitorPins: {},
     ToplevelManager: { toplevels: { values: windows } },
+    Quickshell: { execDetached: args => batches.push(args) },
     Hyprland: { toplevels: { values: handles }, workspaces: { values: workspaces },
       monitors: { values: monitors }, usingLua, dispatch: request => requests.push(request) }
   })
-  return { actions, windows, handles, requests, workspaces, monitors }
+  return { actions, windows, handles, requests, batches, workspaces, monitors }
 }
 
 // Both production dispatch dialects, not a duplicate request builder.
@@ -97,6 +99,36 @@ for (const lua of [false, true]) {
   assert.equal(a.moveCapturedToplevels([captured[0]], 'name:Design work'), true)
   assert.equal(a.minimizedOrigins['0x1'].monitor, 'id:1', 'explicit drop establishes missing origin')
   assert.equal(r.length, 0)
+}
+
+// Dock new-workspace drops move the exact captured group, allocate once and
+// explicitly relocate the new numeric workspace to the hovered monitor.
+for (const lua of [false, true]) {
+  const f = fixture(lua)
+  const captured = f.actions.captureWorkspaceMove(f.windows.slice(0, 2))
+  assert.equal(f.actions.canMoveCapturedToplevelsToNewWorkspace(captured, 'id:1'), true)
+  assert.equal(f.actions.moveCapturedToplevelsToNewWorkspace(captured, 'id:1'), true)
+  const transport = lua ? String(f.requests[0]) : String(f.batches[0]?.[2] || '')
+  assert.ok(transport.includes(lua
+    ? 'window = "address:0x1", workspace = "2"'
+    : 'movetoworkspacesilent 2,address:0x1'))
+  assert.ok(transport.includes(lua
+    ? 'window = "address:0x2", workspace = "2"'
+    : 'movetoworkspacesilent 2,address:0x2'))
+  assert.ok(transport.includes(lua
+    ? 'workspace = "2", monitor = "1"'
+    : 'moveworkspacetomonitor 2 1'))
+  assert.ok(transport.includes(lua ? 'workspace = "2"' : 'workspace 2'))
+  assert.ok(transport.includes(lua ? 'address:0x1' : 'focuswindow address:0x1'))
+
+  const pinned = fixture(lua)
+  const pinnedMembers = pinned.actions.captureWorkspaceMove(pinned.windows.slice(0, 2))
+  pinned.actions.pinWindowToWorkspace(pinned.windows[0])
+  assert.equal(pinned.actions.canMoveCapturedToplevelsToNewWorkspace(
+    pinnedMembers, 'id:1'), false)
+  assert.equal(pinned.actions.moveCapturedToplevelsToNewWorkspace(
+    pinnedMembers, 'id:1'), false)
+  assert.equal(pinned.requests.length + pinned.batches.length, 0)
 }
 
 for (const invalid of ['other', '*', '12', 'id:999', 'id:0', 'id:01', 'special:scratch',
