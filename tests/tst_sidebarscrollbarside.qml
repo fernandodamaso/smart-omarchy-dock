@@ -37,10 +37,12 @@ TestCase {
     id: viewportScene
     FocusScope {
       id: root
-      width: 276
+      width: 292
       height: 600
+      property bool panelCollapsed: false
+      property string sidebarEdge: "left"
       readonly property real scrollGutter: 6
-      readonly property real scrollBarOutset: 10
+      readonly property real scrollBarOutset: panelCollapsed ? 4 : (sidebarEdge === "left" ? 4 : 10)
       property alias listAlias: list
       property alias barAlias: verticalScrollBar
 
@@ -81,6 +83,41 @@ TestCase {
         }
       }
     }
+  }
+
+  function test_expandedLeftScrollbarClearsResizeHandle() {
+    var scene = createTemporaryObject(viewportScene, testCase, {
+      width: 292, panelCollapsed: false, sidebarEdge: "left"
+    })
+    verify(scene)
+    waitForRendering(scene)
+    // 320px panel - 14px symmetric viewport insets; the inner 8px is resize.
+    var barRightInPanel = 14 + scene.barAlias.x + scene.barAlias.width
+    compare(barRightInPanel <= 320 - 8, true,
+      "left-sidebar scrollbar must not enter the resize hit area")
+  }
+
+  function test_collapsedScrollbarStaysInsidePanel() {
+    var scene = createTemporaryObject(viewportScene, testCase, {
+      width: 60, panelCollapsed: true, sidebarEdge: "left"
+    })
+    verify(scene)
+    waitForRendering(scene)
+    // 72px rail - 6px insets. The complete 6px bar must remain visible.
+    var barRightInPanel = 6 + scene.barAlias.x + scene.barAlias.width
+    compare(barRightInPanel <= 72, true,
+      "collapsed scrollbar must not be clipped past the panel edge")
+  }
+
+  function test_rightSidebarUsesOuterEdgeRoom() {
+    var scene = createTemporaryObject(viewportScene, testCase, {
+      width: 292, panelCollapsed: false, sidebarEdge: "right"
+    })
+    verify(scene)
+    waitForRendering(scene)
+    compare(scene.scrollBarOutset, 10,
+      "right sidebar keeps the larger nudge because its resize handle is on the left")
+    compare(14 + scene.barAlias.x + scene.barAlias.width <= 320, true)
   }
 
   function test_scrollbarSitsPastTheRightEdge() {
