@@ -1,10 +1,17 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
 
-MODULE = Path(__file__).resolve().parents[1] / "scripts/smartdock_widget.py"
+ROOT = Path(__file__).resolve().parents[1]
+MODULE = ROOT / "scripts/smartdock_widget.py"
+QMLFORMAT = shutil.which("qmlformat") or ("/usr/lib/qt6/bin/qmlformat" if Path("/usr/lib/qt6/bin/qmlformat").is_file() else None)
+QMLLINT = shutil.which("qmllint") or ("/usr/lib/qt6/bin/qmllint" if Path("/usr/lib/qt6/bin/qmllint").is_file() else None)
+QMLTESTRUNNER = shutil.which("qmltestrunner") or ("/usr/lib/qt6/bin/qmltestrunner" if Path("/usr/lib/qt6/bin/qmltestrunner").is_file() else None)
 SPEC = importlib.util.spec_from_file_location("smartdock_widget", MODULE)
 widget = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(widget)
@@ -31,10 +38,16 @@ class WidgetPackagesTest(unittest.TestCase):
         self.home = self.base / "home"
         self.data = self.base / "data"
         self.config = self.base / "config"
-        self.bundle = self.base / "smartdock-core"
-        for path in (self.home, self.data, self.config, self.bundle):
+        self.bundle = ROOT
+        for path in (self.home, self.data, self.config):
             path.mkdir(parents=True, exist_ok=True)
-        self.store = widget.Store(bundle=self.bundle, home=self.home, data_home=self.data, config_home=self.config)
+        self.store = widget.Store(
+            bundle=self.bundle,
+            home=self.home,
+            data_home=self.data,
+            config_home=self.config,
+            qml_import_paths=[ROOT / "tests/qml-imports"],
+        )
 
     def tearDown(self):
         self.temp.cleanup()
@@ -241,6 +254,111 @@ class WidgetPackagesTest(unittest.TestCase):
         self.assertEqual(json.loads(self.store.dev_state_path.read_text()), before_state)
         self.assertEqual(self.store.registry_path.read_text(), before_registry)
         self.assertTrue(Path(before_state["snapshot"]).is_dir())
+
+
+    def test_source_cannot_supply_reserved_runtime_widgetkit_directory(self):
+        source = make_package(self.base / "source")
+        (source / "SmartDock/WidgetKit").mkdir(parents=True)
+        (source / "SmartDock/WidgetKit/qmldir").write_text("module SmartDock.WidgetKit\n", encoding="utf-8")
+        with self.assertRaises(widget.WidgetError) as caught:
+            widget.validate_manifest(source)
+        self.assertEqual(caught.exception.code, "E_VALIDATION")
+
+    @unittest.skipUnless(QMLFORMAT and QMLLINT and QMLTESTRUNNER, "Qt QML tools unavailable")
+    def test_installed_scaffold_materializes_widgetkit_and_loads_without_global_smartdock_import_path(self):
+        created = self.store.create("io.example.scaffold-runtime", "Runtime Scaffold")
+        installed = self.store.install(created["sourcePath"])
+        package_root = self.store.root / installed["id"]
+        qmldir = package_root / "SmartDock/WidgetKit/qmldir"
+        self.assertTrue(qmldir.is_file())
+        qmldir_text = qmldir.read_text(encoding="utf-8")
+        self.assertIn("module SmartDock.WidgetKit", qmldir_text)
+        self.assertNotIn("../../components/widgets", qmldir_text)
+
+        test_root = self.base / "qml-runtime-test"
+        test_root.mkdir()
+        entry_url = (package_root / "Widget.qml").as_uri()
+        (test_root / "tst_external_widget_runtime.qml").write_text(
+            "import QtQuick\n"
+            "import QtTest\n\n"
+            "TestCase {\n"
+            "  name: \"ExternalWidgetRuntime\"\n"
+            "  function test_loadInstalledWidget() {\n"
+            f"    var component = Qt.createComponent({json.dumps(entry_url)})\n"
+            "    compare(component.status, Component.Ready, component.errorString())\n"
+            "    var object = component.createObject(null)\n"
+            "    verify(object !== null, component.errorString())\n"
+            "    object.destroy()\n"
+            "  }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        environment = dict(os.environ)
+        environment["QT_QPA_PLATFORM"] = "offscreen"
+        result = subprocess.run(
+            [
+                QMLTESTRUNNER,
+                "-input", str(test_root),
+                "-import", str(ROOT / "tests/qml-imports"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=environment,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + "\n" + result.stderr)
+
+    @unittest.skipUnless(QMLFORMAT, "qmlformat unavailable")
+    def test_invalid_dev_reload_qml_syntax_keeps_last_working_snapshot(self):
+        installed_source = make_package(self.base / "installed-source", "io.example.syntax", "1.0.0", "Syntax")
+        dev_source = make_package(self.base / "dev-source", "io.example.syntax", "1.1.0", "Syntax")
+        self.store.install(str(installed_source))
+        self.store.dev_use(str(dev_source))
+        before_state = json.loads(self.store.dev_state_path.read_text())
+        before_registry = self.store.registry_path.read_text()
+        (dev_source / "Widget.qml").write_text("import QtQuick\nItem {\n", encoding="utf-8")
+        with self.assertRaises(widget.WidgetError) as caught:
+            self.store.dev_reload()
+        self.assertEqual(caught.exception.code, "E_VALIDATION")
+        self.assertEqual(json.loads(self.store.dev_state_path.read_text()), before_state)
+        self.assertEqual(self.store.registry_path.read_text(), before_registry)
+        self.assertTrue(Path(before_state["snapshot"]).is_dir())
+
+    @unittest.skipUnless(QMLLINT, "qmllint unavailable")
+    def test_invalid_dev_reload_unresolved_import_keeps_last_working_snapshot(self):
+        installed_source = make_package(self.base / "installed-source", "io.example.imports", "1.0.0", "Imports")
+        dev_source = make_package(self.base / "dev-source", "io.example.imports", "1.1.0", "Imports")
+        self.store.install(str(installed_source))
+        self.store.dev_use(str(dev_source))
+        before_state = json.loads(self.store.dev_state_path.read_text())
+        before_registry = self.store.registry_path.read_text()
+        (dev_source / "Widget.qml").write_text(
+            "import QtQuick\nimport DefinitelyMissing.Module 1.0\nItem { property var widgetContext: ({}) }\n",
+            encoding="utf-8",
+        )
+        with self.assertRaises(widget.WidgetError) as caught:
+            self.store.dev_reload()
+        self.assertEqual(caught.exception.code, "E_VALIDATION")
+        self.assertEqual(json.loads(self.store.dev_state_path.read_text()), before_state)
+        self.assertEqual(self.store.registry_path.read_text(), before_registry)
+        self.assertTrue(Path(before_state["snapshot"]).is_dir())
+
+    def test_symlinked_installed_package_is_isolated_from_registry_and_bulk_update(self):
+        valid = make_package(self.base / "valid", "io.example.valid")
+        self.store.install(str(valid))
+        outside = make_package(self.base / "outside", "io.example.link")
+        link = self.store.root / "io.example.link"
+        link.symlink_to(outside, target_is_directory=True)
+
+        registry = self.store.rebuild_registry()
+        self.assertEqual([row["id"] for row in registry["packages"]], ["io.example.valid"])
+        self.assertTrue(any(row.get("id") == "io.example.link" and "symlink" in row.get("error", "")
+                            for row in registry["errors"]))
+
+        result = self.store.update()
+        self.assertEqual(result["failed"], 1)
+        self.assertTrue(any(row["id"] == "io.example.valid" and row["ok"] for row in result["results"]))
+        self.assertTrue(any(row["id"] == "io.example.link" and not row["ok"] for row in result["results"]))
 
     def test_herdr_list_row_is_source_owned_and_not_manageable(self):
         rows, _, _ = self.store.list_rows()
