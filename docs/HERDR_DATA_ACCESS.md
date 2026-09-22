@@ -1,21 +1,27 @@
-# Herdr data access: SmartDock-owned local provider (FDM-970)
+# Herdr data access: SmartDock-owned local + attached-remote provider (FDM-970 / FDM-980)
 
-SmartDock now owns the local Herdr integration. It does **not** require omaherdr
-to be installed or running and it does not import, call, stop or configure
-omaherdr.
+SmartDock owns the Herdr integration. It does **not** require omaherdr to be
+installed or running and it does not import, call, stop or configure omaherdr.
+Local servers are discovered directly; remote servers are considered only while
+this desktop has a verified attached `herdr --remote <target>` TUI process.
 
 The production path is:
 
 ```text
 local Herdr session socket(s)
+  OR verified attached remote Herdr TUI
+     -> bounded non-interactive SSH -> in-memory remote smartdock-herdr-helper
   -> provider/herdr/bin/smartdock-herdr-helper
   -> provider/herdr/bin/smartdock-herdr-provider
   -> components/DockHerdrService.qml
   -> internal sidebar widget herdr.agents
 ```
 
-The first milestone is intentionally local-only. Normalized snapshots advertise
-`capabilities.remote: false`; no SSH bridge or remote-session support is implied.
+Normalized snapshots continue to advertise global `capabilities.remote: false`
+until FDM-982 completes native qualification. FDM-980 can nevertheless emit
+source-qualified server rows with `transport: "remote"`; those rows advertise
+`capabilities.focusAgent: false`. The global bit therefore remains a rollout /
+qualification gate rather than a claim that remote source code is absent.
 
 ## Activation and ownership
 
@@ -56,6 +62,52 @@ The provider checks a cheap filesystem fingerprint every 10 seconds and reruns
 metadata discovery only when the local socket/session set changes. Explicit
 `refresh` also rescans. There is no recurring `herdr agent list` or equivalent
 agent-status subprocess loop.
+## Attached remote discovery and SSH transport
+
+Remote support is attachment-driven only. The process classifier recognizes the
+current TUI forms `herdr --remote TARGET [--session NAME]` (including the
+equivalent `--flag=value` spelling and the documented `--remote-keybindings`
+modifier). Help/version/control/handoff shapes, duplicate flags and unsafe
+targets fail closed. PID/start-time/same-user/ancestry proof is retained before
+an attachment is accepted, and raw argv is never published.
+
+The attached Herdr process's direct child SSH bridge is used as bounded read-only
+evidence for the remote Herdr executable. Bare PATH lookup is not trusted. A
+finite worker pool resolves the requested remote session without blocking the
+provider loop. Named-session lookup fails closed: failure to prove `work`, for
+example, never falls back to remote `default`.
+
+SSH is argv-based and non-interactive:
+
+```text
+ssh
+-o BatchMode=yes
+-o ConnectTimeout=8
+-o ServerAliveInterval=15
+-o ServerAliveCountMax=3
+--
+<TARGET>
+<FIXED BOOTSTRAP>
+```
+
+The bootstrap is fixed. Session, executable, helper source and socket values are
+validated or base64-encoded fixed-position data. Remote `~` expansion and
+canonicalization happen on the remote host; SmartDock never applies the local
+home or local `realpath()` to a remote path. No password prompt, saved-machine
+scan, credential persistence, remote install, Herdr startup/reconfiguration, or
+generic remote command passthrough is introduced.
+
+The repository-owned helper is shipped in memory and executed with remote
+Python 3; no SmartDock file is persisted remotely. A private `lease` renewal
+does no Herdr work and causes a remote helper to self-exit when its owning
+provider disappears. Periodic safety snapshots also act as application-level
+liveness probes, so a live SSH process with a hung helper is invalidated and
+reconnected rather than treated as healthy.
+
+Multiple local TUI attachments for one `(target, session)` share resolution.
+After resolution, aliases dedupe only when remote metadata proves the same
+remote machine authority and canonical socket. Different hosts with the same
+session name remain distinct.
 
 ## Socket protocol
 
@@ -69,8 +121,10 @@ owned by this repository. It:
 5. forwards status and structural invalidations to the provider;
 6. reconnects with bounded backoff.
 
-Stdin accepts `snapshot`, `quit`, and one bounded JSON `focus-agent` command that
-calls only Herdr `agent.focus` with a pane id. The helper emits correlated
+Stdin accepts `snapshot`, `quit`, one bounded JSON `focus-agent` command and
+the remote-only private owner `lease`. Local focus calls only Herdr
+`agent.focus` with a pane id; remote server rows disable `focusAgent` and the
+provider rejects those requests before helper forwarding. The helper emits correlated
 `action-result` records with fixed error codes. There is no generic RPC surface,
 answer command, notification command or transcript access.
 
@@ -91,7 +145,7 @@ The provider emits JSON-lines with `schemaVersion: 1`, a process-scoped
 `providerEpoch` and monotonically increasing `revision`. Public state contains:
 
 - `capabilities`;
-- `servers`;
+- `servers` (bounded `transport`, `host`, `session`, health and per-server capabilities);
 - `agents`;
 - `attention` (blocked/done agents only);
 - `liveCounts`;
@@ -118,7 +172,8 @@ The integration keeps the following hard limits:
 - 8 MiB incoming socket snapshot;
 - 1 MiB incoming event/helper frame;
 - 1 MiB normalized provider output frame;
-- 2 MiB bounded provider event queue;
+- 2 MiB bounded provider event queue with per-source caps and a reserved local lane;
+- at most 4 concurrent remote metadata resolvers and 64 queued resolutions;
 - 64 discovered servers;
 - 256 public agent rows;
 - 4 KiB private stdin command;
@@ -147,16 +202,20 @@ bash tests/check_launcher_badge_counts.sh
 git diff --check
 ```
 
-The provider tests cover socket bootstrap/events, discovery, endpoint
-deduplication, unavailable-vs-empty semantics, reconnect generations, status
-updates, truncation, process refresh, pane focus transport and clean helper
-shutdown. The lifecycle tests lock the real source registry, shared service
+The provider tests cover socket bootstrap/events, local and remote attachment
+classification, bounded SSH/bootstrap construction, finite resolver concurrency,
+remote endpoint deduplication, unavailable-vs-empty semantics, reconnect
+generations, owner-lease/probe liveness, queue isolation, status updates,
+truncation, process refresh, pane focus transport and clean helper shutdown.
+The lifecycle tests lock the real source registry, shared service
 ownership, standalone/plugin wiring, schema registration and packaging.
 
 These tests use controlled socket/provider fixtures. They establish source and
-protocol behavior but are not a substitute for the separate native
-Omarchy/Quickshell qualification with a real Herdr installation. That native
-gate should verify default, named and unattached local sessions, omaherdr absent,
-and coexistence when omaherdr is installed separately.
+protocol behavior but are not a substitute for FDM-982 native
+Omarchy/Quickshell qualification with real local and remote Herdr installations.
+That gate owns real SSH reachability, current installed Herdr/Python compatibility
+and the decision to enable global `capabilities.remote`.
 
-Canonical issue: https://linear.app/fdamaso/issue/FDM-970
+Canonical issues:
+- https://linear.app/fdamaso/issue/FDM-970
+- https://linear.app/fdamaso/issue/FDM-980

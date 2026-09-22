@@ -29,14 +29,26 @@ sys.path.insert(0, str(ROOT))
 from discovery import Discovery  # noqa: E402
 from model import ServerState, normalized_snapshot  # noqa: E402
 from attachments import (  # noqa: E402
-    discover_attachments,
+    discover_attachment_inventory,
     parse_provider_focus_agent_command,
     parse_window_processes_command,
     resolve_window_identities,
 )
+from remote import (  # noqa: E402
+    HELPER_LEASE_RENEW_EVERY,
+    REMOTE_PROBE_TIMEOUT,
+    RemoteResolution,
+    RemoteResolverPool,
+    attachment_key as remote_attachment_key,
+    endpoint_id as remote_endpoint_id,
+    helper_ssh_argv,
+)
 
 MAX_HELPER_FRAME = 1024 * 1024
 MAX_QUEUE_BYTES = 2 * 1024 * 1024
+MAX_SOURCE_QUEUE_BYTES = 256 * 1024
+MAX_REMOTE_QUEUE_BYTES = MAX_QUEUE_BYTES // 2
+MAX_HELPER_STDIN_BYTES = 64 * 1024
 MAX_OUTPUT_FRAME = 1024 * 1024
 DISCOVERY_CHECK_EVERY = 10.0
 SAFETY_SNAPSHOT_EVERY = 60.0
@@ -44,24 +56,55 @@ OUTPUT_TIMEOUT = 2.0
 
 
 class BoundedQueue:
+    """Bounded event queue with a reserved local lane and per-source caps."""
+
     def __init__(self, max_bytes: int = MAX_QUEUE_BYTES) -> None:
         self.max_bytes = max_bytes
         self.bytes = 0
-        self.items: deque[tuple[object, int]] = deque()
+        self.items: deque[tuple[object, int, str | None, str | None]] = deque()
+        self.source_bytes: dict[str, int] = {}
+        self.lane_bytes: dict[str, int] = {"local": 0, "remote": 0}
         self.cv = threading.Condition()
         self.control_waiters = 0
 
     def put(self, value: object, size: int) -> bool:
+        """Compatibility data enqueue without lane accounting."""
+        return self._put_data(value, size, None, None, fair=False)
+
+    def put_data(self, value: object, size: int, source: str, lane: str) -> bool:
+        if lane not in ("local", "remote") or not source:
+            return False
+        return self._put_data(value, size, source, lane, fair=True)
+
+    def _put_data(
+        self,
+        value: object,
+        size: int,
+        source: str | None,
+        lane: str | None,
+        *,
+        fair: bool,
+    ) -> bool:
         if size < 0 or size > self.max_bytes:
             return False
         with self.cv:
-            # Once a control/lifecycle writer is waiting, helper data may no
-            # longer refill the queue ahead of it. Helper overflow is already a
-            # fail-closed reconnect path, while control delivery must be lossless.
             if self.control_waiters > 0 or self.bytes + size > self.max_bytes:
                 return False
-            self.items.append((value, size))
+            if fair and source is not None and lane is not None:
+                if self.source_bytes.get(source, 0) + size > min(
+                    MAX_SOURCE_QUEUE_BYTES, self.max_bytes
+                ):
+                    return False
+                # Remote sources cannot consume the local half of the queue.
+                if lane == "remote" and self.lane_bytes["remote"] + size > min(
+                    MAX_REMOTE_QUEUE_BYTES, self.max_bytes // 2
+                ):
+                    return False
+            self.items.append((value, size, source, lane))
             self.bytes += size
+            if fair and source is not None and lane is not None:
+                self.source_bytes[source] = self.source_bytes.get(source, 0) + size
+                self.lane_bytes[lane] += size
             self.cv.notify()
             return True
 
@@ -74,7 +117,7 @@ class BoundedQueue:
             try:
                 while self.bytes + size > self.max_bytes:
                     self.cv.wait()
-                self.items.append((value, size))
+                self.items.append((value, size, None, None))
                 self.bytes += size
                 self.cv.notify()
                 return True
@@ -92,8 +135,15 @@ class BoundedQueue:
                     if remaining <= 0:
                         raise queue.Empty
                     self.cv.wait(remaining)
-            value, size = self.items.popleft()
+            value, size, source, lane = self.items.popleft()
             self.bytes -= size
+            if source is not None and lane is not None:
+                remaining = self.source_bytes.get(source, 0) - size
+                if remaining > 0:
+                    self.source_bytes[source] = remaining
+                else:
+                    self.source_bytes.pop(source, None)
+                self.lane_bytes[lane] = max(0, self.lane_bytes[lane] - size)
             self.cv.notify_all()
             return value
 
@@ -109,26 +159,42 @@ class HelperProcess:
         token: int,
         events: BoundedQueue,
         helper_path: Path,
+        *,
+        transport: str = "local",
+        target: str = "",
     ) -> None:
         self.server_id = server_id
         self.socket_path = socket_path
         self.token = token
         self.events = events
         self.helper_path = helper_path
+        self.transport = transport if transport in ("local", "remote") else "local"
+        self.target = target
         self.process: subprocess.Popen[bytes] | None = None
         self.overflowed = False
         self.thread: threading.Thread | None = None
+        self._write_lock = threading.Lock()
+        self._write_frames: deque[bytes] = deque()
+        self._write_offset = 0
+        self._write_bytes = 0
 
     def start(self) -> bool:
         try:
+            if self.transport == "remote":
+                helper_source = self.helper_path.read_bytes()
+                argv = helper_ssh_argv(self.target, self.socket_path, helper_source)
+            else:
+                argv = [sys.executable, "-B", str(self.helper_path), self.socket_path]
             self.process = subprocess.Popen(
-                [sys.executable, "-B", str(self.helper_path), self.socket_path],
+                argv,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
-        except OSError:
+            assert self.process.stdin is not None
+            os.set_blocking(self.process.stdin.fileno(), False)
+        except (OSError, ValueError):
             self.process = None
             return False
         self.thread = threading.Thread(target=self._pump, args=(self.process,), daemon=True)
@@ -152,29 +218,63 @@ class HelperProcess:
             if not isinstance(message, dict):
                 continue
             event = ("helper", self.server_id, self.token, message)
-            if not self.events.put(event, len(line) + 128):
+            if hasattr(self.events, "put_data"):
+                accepted = self.events.put_data(
+                    event, len(line) + 128, self.server_id, self.transport
+                )
+            else:
+                accepted = self.events.put(event, len(line) + 128)
+            if not accepted:
                 self.overflowed = True
                 self._terminate(process)
                 break
         code = process.wait()
-        # Helper death is lifecycle state, not telemetry: never lose it behind
-        # an event burst or the provider can retain stale state indefinitely.
         self.events.put_wait(("exit", self.server_id, self.token, code, self.overflowed), 128)
 
-    def send(self, command: str) -> bool:
+    def send(self, command: str | bytes | bytearray) -> bool:
         process = self.process
         if not process or process.poll() is not None or process.stdin is None:
             return False
         try:
-            # ASCII for snapshot/quit; UTF-8 JSON for focus-agent (ids are ASCII).
-            payload = command if isinstance(command, (bytes, bytearray)) else command.encode("utf-8")
-            if not payload.endswith(b"\n"):
-                payload += b"\n"
-            process.stdin.write(payload)
-            process.stdin.flush()
-            return True
-        except (OSError, ValueError, BrokenPipeError):
+            payload = bytes(command) if isinstance(command, (bytes, bytearray)) else command.encode("utf-8")
+        except (UnicodeError, TypeError):
             return False
+        if not payload.endswith(b"\n"):
+            payload += b"\n"
+        if len(payload) > MAX_HELPER_FRAME:
+            return False
+        self.flush()
+        with self._write_lock:
+            if self._write_bytes + len(payload) > MAX_HELPER_STDIN_BYTES:
+                return False
+            self._write_frames.append(payload)
+            self._write_bytes += len(payload)
+        self.flush()
+        return True
+
+    def flush(self) -> None:
+        process = self.process
+        if not process or process.poll() is not None or process.stdin is None:
+            return
+        fd = process.stdin.fileno()
+        with self._write_lock:
+            for _ in range(16):
+                if not self._write_frames:
+                    return
+                frame = self._write_frames[0]
+                try:
+                    written = os.write(fd, memoryview(frame)[self._write_offset:self._write_offset + 65536])
+                except (BlockingIOError, InterruptedError):
+                    return
+                except OSError:
+                    return
+                if written <= 0:
+                    return
+                self._write_offset += written
+                self._write_bytes -= written
+                if self._write_offset == len(frame):
+                    self._write_frames.popleft()
+                    self._write_offset = 0
 
     @staticmethod
     def _terminate(process: subprocess.Popen[bytes]) -> None:
@@ -188,15 +288,22 @@ class HelperProcess:
             except OSError:
                 pass
 
+    def abort(self) -> None:
+        process = self.process
+        if process is not None:
+            self._terminate(process)
+
     def stop(self) -> None:
         process = self.process
         if not process:
             return
         if process.poll() is None:
             self.send("quit")
-            try:
-                process.wait(timeout=0.8)
-            except subprocess.TimeoutExpired:
+            deadline = time.monotonic() + 0.8
+            while process.poll() is None and time.monotonic() < deadline:
+                self.flush()
+                time.sleep(0.02)
+            if process.poll() is None:
                 self._terminate(process)
                 try:
                     process.wait(timeout=0.5)
@@ -211,9 +318,15 @@ class HelperProcess:
 
 
 class Provider:
-    def __init__(self, helper_path: Path, discovery: Discovery | None = None) -> None:
+    def __init__(
+        self,
+        helper_path: Path,
+        discovery: Discovery | None = None,
+        remote_pool: RemoteResolverPool | None = None,
+    ) -> None:
         self.helper_path = helper_path
         self.discovery = discovery or Discovery()
+        self.remote_pool = remote_pool or RemoteResolverPool()
         self.events = BoundedQueue()
         self.states: dict[str, ServerState] = {}
         self.helpers: dict[str, HelperProcess] = {}
@@ -231,6 +344,14 @@ class Provider:
         self.window_process_revision = 0
         self.window_process_pids: list[int] = []
         self.window_process_identities: list[dict[str, int]] = []
+        self.remote_specs: dict[str, dict[str, object]] = {}
+        self.remote_tokens: dict[str, int] = {}
+        self.remote_bindings: dict[str, str] = {}
+        self.remote_pending_ids: dict[str, str] = {}
+        self.remote_resolve_retry_at: dict[str, float] = {}
+        self.remote_resolve_backoff: dict[str, float] = {}
+        self.remote_probe_deadline: dict[str, float] = {}
+        self.remote_last_lease: dict[str, float] = {}
 
     def _stdin(self) -> None:
         for raw in sys.stdin.buffer:
@@ -255,50 +376,326 @@ class Provider:
     def scan(self) -> None:
         infos, error = self.discovery.scan()
         self.discovery_error = error
-        incoming = {str(info["id"]): info for info in infos}
+        incoming: dict[str, dict[str, object]] = {}
+        for source in infos:
+            info = dict(source)
+            info.setdefault("transport", "local")
+            info.setdefault("host", "local")
+            info.setdefault("capabilities", {"focusAgent": True})
+            incoming[str(info["id"])] = info
 
         for server_id in list(self.states):
-            if server_id in incoming:
-                self.states[server_id].info = incoming[server_id]
+            state = self.states[server_id]
+            if state.info.get("transport", "local") == "remote":
                 continue
-            helper = self.helpers.pop(server_id, None)
-            if helper:
-                helper.stop()
-            self.states.pop(server_id, None)
-            self.restart_at.pop(server_id, None)
-            self.backoff.pop(server_id, None)
-            self.last_safety.pop(server_id, None)
+            if server_id in incoming:
+                state.info = incoming[server_id]
+                continue
+            self._remove_server(server_id)
 
         for server_id, info in incoming.items():
             if server_id not in self.states:
                 self.states[server_id] = ServerState(info)
                 self.backoff[server_id] = 1.0
                 self.start_helper(server_id, replace=False)
-        self.refresh_attachments(infos)
+        self.refresh_attachments(list(incoming.values()))
         self.dirty = True
 
     def refresh_attachments(self, infos: list[dict[str, object]] | None = None) -> None:
-        """Refresh TUI client identity on the bounded discovery cadence.
-
-        Socket fingerprints may be unchanged; process attach/detach still moves.
-        Topology-triggered scan() coalesces into the same path.
-        """
+        """Refresh verified local/remote TUI attachments on every scan cadence."""
         inventory = infos
         if inventory is None:
-            inventory = [state.info for state in self.states.values()]
-        attachments = discover_attachments(inventory)
+            inventory = [
+                state.info for state in self.states.values()
+                if state.info.get("transport", "local") == "local"
+            ]
+        rows = discover_attachment_inventory(inventory)
+        local: dict[str, list[dict[str, object]]] = {}
+        remote: dict[str, dict[str, object]] = {}
+
+        for row in rows:
+            client = row.get("client")
+            if not isinstance(client, dict):
+                continue
+            if row.get("kind") == "local":
+                server_id = row.get("serverId")
+                if isinstance(server_id, str):
+                    bucket = local.setdefault(server_id, [])
+                    if len(bucket) < 16 and not any(
+                        item.get("pid") == client.get("pid")
+                        and item.get("startTime") == client.get("startTime")
+                        for item in bucket
+                    ):
+                        bucket.append(client)
+                continue
+
+            target = row.get("target")
+            session = row.get("session")
+            if not isinstance(target, str) or not isinstance(session, str):
+                continue
+            try:
+                key = remote_attachment_key(target, session)
+            except ValueError:
+                continue
+            group = remote.setdefault(key, {
+                "target": target,
+                "session": session,
+                "clients": [],
+                "executables": set(),
+            })
+            clients = group["clients"]
+            if isinstance(clients, list) and len(clients) < 16 and not any(
+                item.get("pid") == client.get("pid")
+                and item.get("startTime") == client.get("startTime")
+                for item in clients if isinstance(item, dict)
+            ):
+                clients.append(client)
+            executable = row.get("herdrExecutable")
+            if isinstance(executable, str) and executable:
+                group["executables"].add(executable)
+
         changed = False
         for server_id, state in self.states.items():
-            clients = attachments.get(server_id, [])
+            if state.info.get("transport", "local") != "local":
+                continue
+            clients = local.get(server_id, [])
             if state.clients != clients:
                 state.clients = clients
                 changed = True
-        # Drop attachment metadata for servers that disappeared from inventory
-        # is already handled by scan()'s state removal.
+
+        normalized_remote: dict[str, dict[str, object]] = {}
+        for key, group in remote.items():
+            executables = group.pop("executables")
+            group["herdrExecutable"] = (
+                next(iter(executables)) if isinstance(executables, set) and len(executables) == 1
+                else None
+            )
+            normalized_remote[key] = group
+        if self.reconcile_remote_attachments(normalized_remote):
+            changed = True
         if self.refresh_window_processes():
             changed = True
         if changed:
             self.dirty = True
+
+    def _pending_remote_id(self, key: str) -> str:
+        return "remote-pending-" + key.removeprefix("remote-attachment-")
+
+    def _remove_server(self, server_id: str) -> None:
+        self.helper_tokens[server_id] = self.helper_tokens.get(server_id, 0) + 1
+        helper = self.helpers.pop(server_id, None)
+        if helper:
+            helper.stop()
+        state = self.states.pop(server_id, None)
+        if state is not None and (state.connected or state.snapshot is not None):
+            state.invalidate_connection("removed")
+        self.restart_at.pop(server_id, None)
+        self.backoff.pop(server_id, None)
+        self.last_safety.pop(server_id, None)
+        self.remote_probe_deadline.pop(server_id, None)
+        self.remote_last_lease.pop(server_id, None)
+
+    def _remove_remote_key(self, key: str) -> None:
+        self.remote_tokens[key] = self.remote_tokens.get(key, 0) + 1
+        self.remote_specs.pop(key, None)
+        self.remote_resolve_retry_at.pop(key, None)
+        self.remote_resolve_backoff.pop(key, None)
+        pending_id = self.remote_pending_ids.pop(key, None)
+        if pending_id is not None and pending_id in self.states:
+            self._remove_server(pending_id)
+        server_id = self.remote_bindings.pop(key, None)
+        if server_id is None:
+            return
+        if server_id not in self.remote_bindings.values():
+            self._remove_server(server_id)
+        else:
+            self._refresh_remote_server_info(server_id)
+
+    def _schedule_remote_resolution(self, key: str, now: float | None = None) -> bool:
+        spec = self.remote_specs.get(key)
+        if spec is None or key in self.remote_bindings:
+            return False
+        now = time.monotonic() if now is None else now
+        target = spec.get("target")
+        session = spec.get("session")
+        executable = spec.get("herdrExecutable")
+        pending_id = self.remote_pending_ids.get(key)
+        pending = self.states.get(pending_id) if pending_id else None
+        if not isinstance(executable, str) or not executable:
+            if pending is not None:
+                pending.error = "remote_herdr_unavailable"
+            delay = self.remote_resolve_backoff.get(key, 1.0)
+            self.remote_resolve_retry_at[key] = now + delay
+            self.remote_resolve_backoff[key] = min(30.0, delay * 2)
+            return False
+        if not isinstance(target, str) or not isinstance(session, str):
+            return False
+        token = self.remote_tokens.get(key, 0) + 1
+        self.remote_tokens[key] = token
+        if not self.remote_pool.submit(key, token, target, session, executable):
+            if pending is not None:
+                pending.error = "resolver_busy"
+            delay = self.remote_resolve_backoff.get(key, 1.0)
+            self.remote_resolve_retry_at[key] = now + delay
+            self.remote_resolve_backoff[key] = min(30.0, delay * 2)
+            return False
+        if pending is not None:
+            pending.error = "resolving"
+        self.remote_resolve_retry_at.pop(key, None)
+        return True
+
+    def reconcile_remote_attachments(self, incoming: dict[str, dict[str, object]]) -> bool:
+        changed = False
+        for key in list(self.remote_specs):
+            if key not in incoming:
+                self._remove_remote_key(key)
+                changed = True
+
+        for key, source in incoming.items():
+            spec = {
+                "target": source.get("target"),
+                "session": source.get("session"),
+                "herdrExecutable": source.get("herdrExecutable"),
+                "clients": list(source.get("clients") or [])[:16],
+            }
+            previous = self.remote_specs.get(key)
+            self.remote_specs[key] = spec
+            server_id = self.remote_bindings.get(key)
+            if server_id is not None:
+                if previous != spec:
+                    self._refresh_remote_server_info(server_id)
+                    changed = True
+                continue
+
+            pending_id = self.remote_pending_ids.get(key)
+            if pending_id is None:
+                pending_id = self._pending_remote_id(key)
+                self.remote_pending_ids[key] = pending_id
+                target = str(spec.get("target") or "")
+                session = str(spec.get("session") or "default")
+                state = ServerState({
+                    "id": pending_id,
+                    "transport": "remote",
+                    "host": target,
+                    "session": session,
+                    "sessions": [session],
+                    "label": target,
+                    "socket": "",
+                    "capabilities": {"focusAgent": False},
+                })
+                state.error = "resolving"
+                state.clients = list(spec["clients"])
+                self.states[pending_id] = state
+                self.remote_resolve_backoff[key] = 1.0
+                self._schedule_remote_resolution(key)
+                changed = True
+            else:
+                state = self.states.get(pending_id)
+                if state is not None and state.clients != spec["clients"]:
+                    state.clients = list(spec["clients"])
+                    changed = True
+                if previous is not None and previous.get("herdrExecutable") != spec.get("herdrExecutable"):
+                    self._schedule_remote_resolution(key)
+                    changed = True
+        return changed
+
+    def _refresh_remote_server_info(self, server_id: str) -> None:
+        state = self.states.get(server_id)
+        if state is None:
+            return
+        keys = sorted(key for key, bound in self.remote_bindings.items() if bound == server_id)
+        specs = [self.remote_specs[key] for key in keys if key in self.remote_specs]
+        if not specs:
+            return
+        targets = sorted({str(spec.get("target") or "") for spec in specs if spec.get("target")})
+        sessions = sorted({str(spec.get("session") or "default") for spec in specs})
+        host = targets[0] if targets else "remote"
+        state.info["host"] = host
+        state.info["sessions"] = sessions
+        state.info["session"] = sessions[0] if sessions else "default"
+        state.info["label"] = host if len(sessions) <= 1 else host + " · " + ", ".join(sessions[:3])
+        clients: list[dict[str, object]] = []
+        seen: set[tuple[object, object]] = set()
+        for spec in specs:
+            for client in spec.get("clients") or []:
+                if not isinstance(client, dict):
+                    continue
+                identity = (client.get("pid"), client.get("startTime"))
+                if identity in seen or len(clients) >= 16:
+                    continue
+                seen.add(identity)
+                clients.append(client)
+        state.clients = clients
+
+    def apply_remote_resolution(self, key: str, token: int, result: RemoteResolution) -> None:
+        if self.remote_tokens.get(key) != token or key not in self.remote_specs:
+            return
+        spec = self.remote_specs[key]
+        pending_id = self.remote_pending_ids.get(key)
+        pending = self.states.get(pending_id) if pending_id else None
+        if not result.ok:
+            if pending is not None:
+                pending.error = result.error or "remote_metadata_unavailable"
+            delay = self.remote_resolve_backoff.get(key, 1.0)
+            self.remote_resolve_retry_at[key] = time.monotonic() + delay
+            self.remote_resolve_backoff[key] = min(30.0, delay * 2)
+            self.dirty = True
+            return
+
+        target = str(spec.get("target") or "")
+        session = str(spec.get("session") or "default")
+        try:
+            server_id = remote_endpoint_id(result.authority, result.socket, target)
+        except ValueError:
+            if pending is not None:
+                pending.error = "remote_metadata_invalid"
+            self.dirty = True
+            return
+
+        previous_server = self.remote_bindings.get(key)
+        if pending_id is not None:
+            self.remote_pending_ids.pop(key, None)
+            if pending_id in self.states:
+                self._remove_server(pending_id)
+
+        self.remote_bindings[key] = server_id
+        self.remote_resolve_retry_at.pop(key, None)
+        self.remote_resolve_backoff[key] = 1.0
+
+        if server_id not in self.states:
+            info = {
+                "id": server_id,
+                "transport": "remote",
+                "host": target,
+                "session": session,
+                "sessions": [session],
+                "label": target,
+                "socket": result.socket,
+                "herdrExecutable": result.executable,
+                "remoteAuthority": result.authority,
+                "capabilities": {"focusAgent": False},
+            }
+            self.states[server_id] = ServerState(info)
+            self.backoff[server_id] = 1.0
+            self._refresh_remote_server_info(server_id)
+            self.start_helper(server_id, replace=False)
+        else:
+            state = self.states[server_id]
+            state.info["socket"] = result.socket
+            state.info["herdrExecutable"] = result.executable
+            state.info["remoteAuthority"] = result.authority
+            self._refresh_remote_server_info(server_id)
+
+        if previous_server is not None and previous_server != server_id:
+            if previous_server not in self.remote_bindings.values():
+                self._remove_server(previous_server)
+            else:
+                self._refresh_remote_server_info(previous_server)
+        self.dirty = True
+
+    def drain_remote_results(self) -> None:
+        for key, token, result in self.remote_pool.poll():
+            self.apply_remote_resolution(key, token, result)
 
     def refresh_window_processes(self) -> bool:
         """Re-resolve requested window PIDs through the opened proc reader."""
@@ -359,7 +756,14 @@ class Provider:
             return
         server_id = str(request.get("serverId") or "")
         state = self.states.get(server_id)
-        if not state or not state.live:
+        if state is None:
+            self.emit_action_result(request_id, False, "server_unavailable")
+            return
+        capabilities = state.info.get("capabilities")
+        if isinstance(capabilities, dict) and capabilities.get("focusAgent") is False:
+            self.emit_action_result(request_id, False, "unsupported")
+            return
+        if not state.live:
             self.emit_action_result(request_id, False, "server_unavailable")
             return
         # Do not block on snapshot_due. Status and post-focus structural events
@@ -412,24 +816,46 @@ class Provider:
             state.replace_connection()
         token = self.helper_tokens.get(server_id, 0) + 1
         self.helper_tokens[server_id] = token
+        transport = state.info.get("transport", "local")
         helper = HelperProcess(
             server_id,
-            str(state.info["socket"]),
+            str(state.info.get("socket") or ""),
             token,
             self.events,
             self.helper_path,
+            transport="remote" if transport == "remote" else "local",
+            target=str(state.info.get("host") or "") if transport == "remote" else "",
         )
         self.helpers[server_id] = helper
-        self.last_safety[server_id] = time.monotonic()
+        now = time.monotonic()
+        self.last_safety[server_id] = now
         if helper.start():
             self.restart_at.pop(server_id, None)
+            if transport == "remote":
+                self.remote_last_lease[server_id] = now
+                helper.send("lease")
         else:
             state.connected = False
             state.snapshot = None
             state.error = "helper_unavailable"
             delay = self.backoff.get(server_id, 1.0)
-            self.restart_at[server_id] = time.monotonic() + delay
+            self.restart_at[server_id] = now + delay
             self.backoff[server_id] = min(30.0, delay * 2)
+        self.dirty = True
+
+    def fail_helper(self, server_id: str, error: str) -> None:
+        state = self.states.get(server_id)
+        if state is None:
+            return
+        self.helper_tokens[server_id] = self.helper_tokens.get(server_id, 0) + 1
+        helper = self.helpers.pop(server_id, None)
+        if helper:
+            helper.abort()
+        state.invalidate_connection(error)
+        delay = self.backoff.get(server_id, 1.0)
+        self.restart_at[server_id] = time.monotonic() + delay
+        self.backoff[server_id] = min(30.0, delay * 2)
+        self.remote_probe_deadline.pop(server_id, None)
         self.dirty = True
 
     def process_event(self, event: object) -> None:
@@ -465,10 +891,12 @@ class Provider:
 
         if kind == "exit":
             overflowed = bool(event[4])
+            self.helpers.pop(server_id, None)
             state.invalidate_connection("helper_overflow" if overflowed else "helper_exited")
             delay = self.backoff.get(server_id, 1.0)
             self.restart_at[server_id] = time.monotonic() + delay
             self.backoff[server_id] = min(30.0, delay * 2)
+            self.remote_probe_deadline.pop(server_id, None)
             self.dirty = True
             return
 
@@ -485,6 +913,8 @@ class Provider:
                 )
             return
         if message_kind == "snapshot":
+            if state.info.get("transport") == "remote":
+                self.remote_probe_deadline.pop(server_id, None)
             state.apply_snapshot(message, now)
         elif message_kind == "status":
             state.apply_status(message)
@@ -498,30 +928,54 @@ class Provider:
 
     def maintenance(self) -> None:
         now = time.monotonic()
+        self.drain_remote_results()
+
         if now >= self.next_discovery_check:
             self.next_discovery_check = now + DISCOVERY_CHECK_EVERY
             if self.discovery.changed():
                 self.scan()
             else:
-                # Attachments track live TUI processes, not socket mtime alone.
+                # Attachment process identity changes independently of local sockets.
                 self.refresh_attachments()
+
+        for key, retry_at in list(self.remote_resolve_retry_at.items()):
+            if now >= retry_at and key in self.remote_specs and key not in self.remote_bindings:
+                self._schedule_remote_resolution(key, now)
 
         for server_id, state in list(self.states.items()):
             helper = self.helpers.get(server_id)
+            if helper:
+                helper.flush()
+
+            deadline = self.remote_probe_deadline.get(server_id)
+            if deadline is not None and now >= deadline:
+                self.fail_helper(server_id, "probe_timeout")
+                continue
+
             restart_at = self.restart_at.get(server_id)
             if restart_at is not None and now >= restart_at:
-                # The exit/failure path already advanced connection generation.
                 self.start_helper(server_id, replace=False)
                 continue
+
+            is_remote = state.info.get("transport") == "remote"
+            if is_remote and helper is not None:
+                last_lease = self.remote_last_lease.get(server_id, 0.0)
+                if now - last_lease >= HELPER_LEASE_RENEW_EVERY:
+                    if helper.send("lease"):
+                        self.remote_last_lease[server_id] = now
 
             if state.snapshot_due is not None and now >= state.snapshot_due:
                 state.snapshot_due = None
                 if helper and helper.send("snapshot"):
                     self.last_safety[server_id] = now
+                    if is_remote:
+                        self.remote_probe_deadline[server_id] = now + REMOTE_PROBE_TIMEOUT
 
             if now - self.last_safety.get(server_id, now) >= SAFETY_SNAPSHOT_EVERY:
                 if helper and helper.send("snapshot"):
                     self.last_safety[server_id] = now
+                    if is_remote:
+                        self.remote_probe_deadline[server_id] = now + REMOTE_PROBE_TIMEOUT
 
     def emit(self) -> None:
         self.revision += 1
@@ -570,6 +1024,7 @@ class Provider:
 
     def shutdown(self) -> None:
         self.stopping = True
+        self.remote_pool.close()
         helpers = list(self.helpers.values())
         self.helpers.clear()
         for helper in helpers:

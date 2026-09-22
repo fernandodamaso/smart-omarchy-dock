@@ -7,8 +7,8 @@
 # See ../UPSTREAM.md and ../LICENSE.omaherdr.
 """One explicitly selected Herdr server -> private JSON-lines transport.
 
-stdin: snapshot | quit | focus-agent JSON. stdout: snapshot | event | status |
-error | action-result records.
+stdin: snapshot | quit | lease | focus-agent JSON. stdout: snapshot | event | status |
+error | action-result records. `lease` is enabled only for a provider-owned remote helper.
 The SmartDock-owned provider supervises this private transport; it is not a public RPC surface.
 """
 import argparse
@@ -362,8 +362,11 @@ def snapshot(sub):
         return None
 
 
-def run():
+def run(owner_lease_seconds=0.0):
     sub = Subscription()
+    lease_deadline = (
+        time.monotonic() + owner_lease_seconds if owner_lease_seconds > 0 else None
+    )
     stdin = sys.stdin.buffer
     inbuf = b""
     os.set_blocking(sys.stdout.fileno(), False)
@@ -376,6 +379,11 @@ def run():
             buffered = sub.sock is not None and b"\n" in sub.buf
             timeout = 0.0 if buffered or sub.snapshot_pending else (
                 2.0 if sub.sock else max(0.0, sub.retry_at - time.monotonic()))
+            if lease_deadline is not None:
+                remaining_lease = lease_deadline - time.monotonic()
+                if remaining_lease <= 0:
+                    return
+                timeout = min(timeout, remaining_lease)
             try:
                 ready, _, _ = select.select(fds, [], [], timeout)
             except InterruptedError:
@@ -394,6 +402,9 @@ def run():
                     command = line.strip()
                     if command == b"quit":
                         return
+                    if command == b"lease" and lease_deadline is not None:
+                        lease_deadline = time.monotonic() + owner_lease_seconds
+                        continue
                     if command == b"snapshot":
                         snapshot(sub)
                         continue
@@ -423,17 +434,25 @@ def main():
     global SOCK
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("socket", help="Explicit absolute Herdr Unix-socket path")
+    parser.add_argument(
+        "--owner-lease-seconds",
+        type=float,
+        default=0.0,
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
     SOCK = os.path.expanduser(args.socket)
     if not os.path.isabs(SOCK):
         parser.error("socket path must be absolute")
+    if args.owner_lease_seconds != 0.0 and not (1.0 <= args.owner_lease_seconds <= 300.0):
+        parser.error("owner lease must be zero or between 1 and 300 seconds")
 
     def stop(_signum, _frame):
         raise KeyboardInterrupt()
 
     signal.signal(signal.SIGTERM, stop)
     try:
-        run()
+        run(args.owner_lease_seconds)
     except (KeyboardInterrupt, BrokenPipeError):
         pass
 
