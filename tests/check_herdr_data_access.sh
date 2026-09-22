@@ -10,6 +10,7 @@ required=(
   "$helper"
   "$provider"
   provider/herdr/discovery.py
+  provider/herdr/remote.py
   provider/herdr/model.py
   provider/herdr/UPSTREAM.md
   provider/herdr/LICENSE.omaherdr
@@ -18,6 +19,9 @@ required=(
   provider/herdr/tests/test_discovery.py
   provider/herdr/tests/test_model.py
   provider/herdr/tests/test_provider.py
+  provider/herdr/tests/test_remote.py
+  provider/herdr/tests/test_remote_attachments.py
+  provider/herdr/tests/test_remote_provider.py
   components/DockHerdrService.qml
   components/DockHerdrAgentsView.qml
   docs/HERDR_DATA_ACCESS.md
@@ -30,7 +34,7 @@ done
 [[ "$(git hash-object provider/herdr/LICENSE.omaherdr)" == d645695673349e3947e8e5ae42332d0ac3164cd7 ]]   || fail 'upstream license text changed'
 
 grep -Fq 'c20d9b0db3a65b5a7590876c56026bc906306e04' provider/herdr/UPSTREAM.md   || fail 'pinned provenance missing'
-for file in "$helper" "$provider" provider/herdr/discovery.py provider/herdr/model.py; do
+for file in "$helper" "$provider" provider/herdr/discovery.py provider/herdr/remote.py provider/herdr/model.py; do
   grep -Fq 'SPDX-License-Identifier: Apache-2.0' "$file"     || fail "derived-code notice missing: $file"
 done
 
@@ -66,13 +70,27 @@ fi
 active_paths=(
   Service.qml Overlay.qml DockHost.qml shell.qml
   components/DockHerdrService.qml components/DockHerdrAgentsView.qml
-  provider/herdr/discovery.py provider/herdr/model.py "$provider"
+  provider/herdr/attachments.py provider/herdr/discovery.py provider/herdr/remote.py
+  provider/herdr/model.py "$provider"
 )
 if grep -Eiq 'herdr[[:space:]]+agent[[:space:]]+list|org\.omarchy\.Omaherdr|omaherdr-notify' "${active_paths[@]}"; then
   fail 'working integration contains legacy polling/omaherdr coupling'
 fi
-if grep -Eiq '(^|[^[:alnum:]_])ssh([^[:alnum:]_]|$)' provider/herdr/discovery.py "$provider"; then
-  fail 'local-only milestone must not launch SSH'
+# SSH is centralized in remote.py; local discovery must not grow ad-hoc transport.
+if grep -Eiq '(^|[^[:alnum:]_])ssh([^[:alnum:]_]|$)' provider/herdr/discovery.py; then
+  fail 'local discovery must not launch SSH'
 fi
+grep -Fq 'BatchMode=yes' provider/herdr/remote.py || fail 'remote SSH must be non-interactive'
+grep -Fq 'ConnectTimeout=8' provider/herdr/remote.py || fail 'remote SSH connect timeout missing'
+grep -Fq 'ServerAliveInterval=15' provider/herdr/remote.py || fail 'remote SSH keepalive missing'
+grep -Fq 'ServerAliveCountMax=3' provider/herdr/remote.py || fail 'remote SSH keepalive count missing'
+grep -Fq '["ssh", *SSH_OPTIONS, "--", target, remote_command]' provider/herdr/remote.py \
+  || fail 'remote target must remain argv data after --'
+if grep -Fq 'shell=True' provider/herdr/remote.py; then
+  fail 'remote transport must not enable local shell execution'
+fi
+grep -Fq 'HELPER_OWNER_LEASE_SECONDS = 20.0' provider/herdr/remote.py \
+  || fail 'remote helper owner lease missing'
+grep -Fq 'command == b"lease"' "$helper" || fail 'remote helper lease renewal missing'
 
 printf 'check_herdr_data_access: PASS\n'

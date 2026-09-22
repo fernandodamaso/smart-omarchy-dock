@@ -191,14 +191,28 @@ class ServerState:
     def public_server(self, now: float) -> dict[str, Any]:
         sessions = [_text(value, 64) for value in self.info.get("sessions", [])]
         sessions = [value for value in sessions if value]
+        transport = self.info.get("transport")
+        transport = transport if transport in ("local", "remote") else "local"
+        host = _text(self.info.get("host"), 255) or "local"
+        capabilities = self.info.get("capabilities")
+        focus_agent = transport == "local"
+        if isinstance(capabilities, dict) and isinstance(capabilities.get("focusAgent"), bool):
+            focus_agent = capabilities["focusAgent"]
         health = ("live" if self.live else
-                  "connecting" if self.error in ("starting", "reconnecting", "awaiting_event_stream")
-                  else "unavailable")
+                  "connecting" if self.error in (
+                      "starting", "reconnecting", "awaiting_event_stream", "resolving"
+                  ) else "unavailable")
+        default_label = host if transport == "remote" else (
+            sessions[0] if sessions else "Local Herdr"
+        )
         row: dict[str, Any] = {
             "id": self.id,
+            "transport": transport,
+            "host": host,
             "sessions": sessions,
             "session": _text(self.info.get("session"), 64) or (sessions[0] if sessions else "default"),
-            "label": _text(self.info.get("label"), 128) or (sessions[0] if sessions else "Local Herdr"),
+            "label": _text(self.info.get("label"), 128) or default_label,
+            "capabilities": {"focusAgent": focus_agent},
             "connectionGeneration": self.generation,
             "health": health,
             "connected": self.connected,
@@ -223,10 +237,14 @@ class ServerState:
             pane = _identity(source.get("pane_id"))
             if not pane:
                 continue
+            transport = self.info.get("transport")
+            transport = transport if transport in ("local", "remote") else "local"
             row: dict[str, Any] = {
                 "id": f"{self.id}:{self.generation}:{pane}",
                 "serverId": self.id,
                 "connectionGeneration": self.generation,
+                "transport": transport,
+                "host": _text(self.info.get("host"), 255) or "local",
                 "session": _text(self.info.get("session"), 64) or "default",
                 "paneId": pane,
                 "status": _status(source.get("agent_status")),

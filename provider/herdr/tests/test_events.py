@@ -96,7 +96,13 @@ class LiveOnlyServer:
                 try:
                     connection.settimeout(2)
                     with connection.makefile("rb") as stream:
-                        request = json.loads(stream.readline(1024 * 1024))
+                        frame = stream.readline(1024 * 1024)
+                    # SIGTERM/owner-loss may close an accepted helper socket
+                    # before its request frame is complete. That is a normal
+                    # client shutdown, not a fake-server protocol failure.
+                    if not frame:
+                        continue
+                    request = json.loads(frame)
                     self.requests.append(request)
                     method = request["method"]
                     if method == "events.subscribe":
