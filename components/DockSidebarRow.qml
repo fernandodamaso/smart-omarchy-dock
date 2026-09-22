@@ -744,6 +744,9 @@ Item {
       id: leadingWorkspaceBadge
       visible: root.leadingWorkspaceBadgeVisible
       objectName: "sidebar-inline-workspace-badge"
+      // Context refresh validates anchors by rowKey. This badge targets the
+      // synthetic workspace row, not the child application/window row.
+      readonly property string rowKey: root.inlineWorkspaceBadgeKey
       z: 4
       activeFocusOnTab: true
       x: root.inlineWorkspaceGeometry.badgeX
