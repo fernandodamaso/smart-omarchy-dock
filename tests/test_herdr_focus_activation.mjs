@@ -19,6 +19,10 @@ function herdrFixture() {
     desktopId: '',
     workspaceIdentity: windowRow.workspaceIdentity,
     monitorIdentity: windowRow.monitorIdentity,
+    transport: 'local',
+    host: 'local',
+    session: 'default',
+    focusAgentSupported: true,
   }
   const agentRow = Object.assign({}, shared, {
     kind: 'herdr-agent',
@@ -137,6 +141,8 @@ const failTarget = fail.controller.captureTarget(fail.agentRow.key)
 assert.equal(fail.controller.activateTarget(failTarget, false, 'DP-1', 0), true)
 fail.controller.onHerdrFocusFinished('focus-1', false, 'agent_gone')
 assert.equal(fail.controller.herdrFocusErrorFor(fail.agentRow.key), 'agent_gone')
+assert.deepEqual(Object.keys(fail.controller.pendingFocusByRequest), [])
+assert.deepEqual(Object.keys(fail.controller.pendingFocusByAgent), [])
 
 const tab = herdrFixture()
 const tabTarget = tab.controller.captureTarget(tab.soleTab.key)
@@ -151,5 +157,62 @@ assert.ok(multiTarget, 'multi-panel tab header is actionable')
 assert.equal(multiTarget.paneId, 'pane-m')
 assert.equal(multi.controller.activateTarget(multiTarget, false, 'DP-1', 0), true)
 assert.equal(multi.focusCalls[0].paneId, 'pane-m')
+
+// Capability false or absent: visible row data may exist, but capture/focus is inert.
+const unsupported = herdrFixture()
+unsupported.agentRow.actionable = false
+unsupported.agentRow.focusAgentSupported = false
+assert.equal(unsupported.controller.captureTarget(unsupported.agentRow.key), null)
+assert.equal(unsupported.focusCalls.length, 0)
+assert.deepEqual(Object.keys(unsupported.controller.pendingFocusByRequest), [])
+
+const absent = herdrFixture()
+delete absent.soleTab.focusAgentSupported
+assert.equal(absent.controller.captureTarget(absent.soleTab.key), null)
+assert.equal(absent.focusCalls.length, 0)
+
+// Reconnect/generation change invalidates an already captured action identity.
+const staleGeneration = herdrFixture()
+const staleTarget = staleGeneration.controller.captureTarget(staleGeneration.agentRow.key)
+assert.ok(staleTarget)
+staleGeneration.agentRow.connectionGeneration = 2
+assert.equal(staleGeneration.controller.activateTarget(staleTarget, false, 'DP-1', 0), false)
+assert.equal(staleGeneration.focusCalls.length, 0)
+
+// Server/association disappearance also fails closed without enqueuing.
+const serverGone = herdrFixture()
+const serverGoneTarget = serverGone.controller.captureTarget(serverGone.agentRow.key)
+assert.ok(serverGoneTarget)
+serverGone.controller.herdrAssociations = { byWindowKey: {}, unmatchedServerIds: ['srv'] }
+assert.equal(serverGone.controller.activateTarget(serverGoneTarget, false, 'DP-1', 0), false)
+assert.equal(serverGone.focusCalls.length, 0)
+
+// A source-level supported-remote fixture follows the same exact identity path.
+// FDM-980 still advertises real remote servers as unsupported until qualified.
+const remoteSupported = herdrFixture()
+remoteSupported.agentRow.transport = 'remote'
+remoteSupported.agentRow.host = 'devbox'
+remoteSupported.agentRow.session = 'review'
+const remoteTarget = remoteSupported.controller.captureTarget(remoteSupported.agentRow.key)
+assert.ok(remoteTarget)
+assert.equal(remoteSupported.controller.activateTarget(remoteTarget, false, 'DP-1', 0), true)
+assert.equal(remoteSupported.focusCalls.length, 1)
+assert.deepEqual(remoteSupported.focusCalls[0], {
+  providerEpoch: 'epoch-1',
+  serverId: 'srv',
+  connectionGeneration: 1,
+  agentId: 'srv:1:pane-a',
+  paneId: 'pane-a',
+  terminalId: 'term-a',
+})
+
+// Immediate provider rejection never creates pending UI state.
+const rejected = herdrFixture()
+rejected.controller.host.herdrService.focusAgent = () => ''
+const rejectedTarget = rejected.controller.captureTarget(rejected.agentRow.key)
+assert.ok(rejectedTarget)
+assert.equal(rejected.controller.activateTarget(rejectedTarget, false, 'DP-1', 0), false)
+assert.deepEqual(Object.keys(rejected.controller.pendingFocusByRequest), [])
+assert.deepEqual(Object.keys(rejected.controller.pendingFocusByAgent), [])
 
 console.log('herdr focus activation: PASS')

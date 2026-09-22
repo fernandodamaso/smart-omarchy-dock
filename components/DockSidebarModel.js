@@ -559,6 +559,21 @@ function herdrServerById(snapshot, serverId) {
   return null
 }
 
+function herdrServerMetadata(server) {
+  var source = server && typeof server === "object" ? server : ({})
+  var generation = Number(source.connectionGeneration)
+  if (!isFinite(generation) || Math.floor(generation) !== generation || generation <= 0)
+    generation = 0
+  return {
+    transport: HerdrModel.serverTransport(source),
+    host: typeof source.host === "string" ? source.host : "",
+    session: typeof source.session === "string" ? source.session : "",
+    serverLabel: HerdrModel.serverDisplayLabel(source),
+    focusAgentSupported: HerdrModel.serverFocusAgentSupported(source),
+    serverConnectionGeneration: generation
+  }
+}
+
 function herdrAgentsForServer(snapshot, serverId) {
   var agents = snapshot && Array.isArray(snapshot.agents) ? snapshot.agents : []
   var output = []
@@ -569,6 +584,19 @@ function herdrAgentsForServer(snapshot, serverId) {
     output.push(agent)
   }
   return output
+}
+
+function herdrAgentIdentityValid(agent, server) {
+  if (!agent || typeof agent !== "object") return false
+  if (!String(agent.id || "") || !String(agent.paneId || "")) return false
+  var generation = Number(agent.connectionGeneration)
+  if (!isFinite(generation) || Math.floor(generation) !== generation || generation <= 0)
+    return false
+  var serverGeneration = Number(server && server.connectionGeneration)
+  if (isFinite(serverGeneration) && Math.floor(serverGeneration) === serverGeneration
+      && serverGeneration > 0 && serverGeneration !== generation)
+    return false
+  return true
 }
 
 // Non-actionable child title for an associated parent. Actionable agent rows are
@@ -648,6 +676,22 @@ function herdrFallbackEmptyChild(server, snapshot) {
   }
 }
 
+// Remote unmatched sessions need the same truthful health states as associated
+// sessions, including reconnecting/unavailable rather than a healthy-empty lie.
+function herdrFallbackStateChild(server, snapshot) {
+  if (!server || typeof server !== "object") return null
+  var title = herdrStateTitle(server, snapshot)
+  var health = String(server.health || "unavailable")
+  return {
+    kind: "empty",
+    key: "state:" + String(server.id || "") + ":" + title,
+    title: title,
+    detail: "",
+    status: health === "live" && title === "No active agents" ? "idle"
+      : health === "connecting" ? "connecting" : "unknown"
+  }
+}
+
 function project(input) {
   var native = input.desktop.workspacePresentation
   var result = emptyProjection()
@@ -712,10 +756,22 @@ function project(input) {
       window.herdrFolded = false
       window.herdrStatusCounts = emptyCounts
       window.herdrStatusCounters = []
+      window.herdrTransport = ""
+      window.herdrHost = ""
+      window.herdrSession = ""
+      window.herdrDisplayLabel = "Herdr"
+      window.herdrFocusAgentSupported = false
       return window
     }
+    var server = herdrServerById(herdrSnapshot, serverId)
+    var serverMeta = herdrServerMetadata(server)
     window.herdrAssociated = true
     window.herdrServerId = serverId
+    window.herdrTransport = serverMeta.transport
+    window.herdrHost = serverMeta.host
+    window.herdrSession = serverMeta.session
+    window.herdrDisplayLabel = serverMeta.transport === "remote" ? serverMeta.serverLabel : "Herdr"
+    window.herdrFocusAgentSupported = serverMeta.focusAgentSupported
     window.herdrFoldKey = HerdrModel.herdrFoldKeyForWindow(window.key)
     // Missing fold key => expanded. folds[herdrFoldKey] === true => folded.
     window.herdrFolded = !!window.herdrFoldKey && folds[window.herdrFoldKey] === true
@@ -730,12 +786,19 @@ function project(input) {
     return window
   }
   function emitHerdrState(window, serverId, server, epoch, title, status) {
+    var serverMeta = herdrServerMetadata(server)
     row({
       kind: "herdr-state",
       key: JSON.stringify(["herdr-state", window.key, serverId, title]),
       windowKey: window.key,
       providerEpoch: epoch,
       serverId: serverId,
+      transport: serverMeta.transport,
+      host: serverMeta.host,
+      session: serverMeta.session,
+      serverLabel: serverMeta.serverLabel,
+      focusAgentSupported: false,
+      serverConnectionGeneration: serverMeta.serverConnectionGeneration,
       title: title,
       status: status || (server ? String(server.health || "unavailable") : "unavailable"),
       nested: true,
@@ -753,6 +816,7 @@ function project(input) {
     if (window.herdrFolded) return
     var serverId = window.herdrServerId
     var server = herdrServerById(herdrSnapshot, serverId)
+    var serverMeta = herdrServerMetadata(server)
     var agents = herdrSnapshot ? herdrAgentsForServer(herdrSnapshot, serverId) : []
     var epoch = herdrSnapshot && typeof herdrSnapshot.providerEpoch === "string"
       ? herdrSnapshot.providerEpoch : ""
@@ -778,6 +842,12 @@ function project(input) {
             windowKey: window.key,
             providerEpoch: epoch,
             serverId: serverId,
+            transport: serverMeta.transport,
+            host: serverMeta.host,
+            session: serverMeta.session,
+            serverLabel: serverMeta.serverLabel,
+            focusAgentSupported: serverMeta.focusAgentSupported,
+            serverConnectionGeneration: serverMeta.serverConnectionGeneration,
             herdrWorkspaceId: workspace.id,
             herdrTabId: tab.id,
             nested: true,
@@ -805,7 +875,8 @@ function project(input) {
               workspaceLabel: solePayload.workspaceLabel,
               tabTitle: tab.title || "",
               status: HerdrModel.normalizeStatus(sole.status),
-              actionable: true,
+              actionable: serverMeta.focusAgentSupported
+                && herdrAgentIdentityValid(sole, server),
               groupHeader: false
             }))
             return
@@ -815,7 +886,7 @@ function project(input) {
           var focusPane = null
           for (var fi = 0; fi < tab.agents.length; fi++) {
             var candidate = tab.agents[fi]
-            if (candidate && String(candidate.id || "") && candidate.paneId) {
+            if (herdrAgentIdentityValid(candidate, server)) {
               focusPane = candidate
               break
             }
@@ -829,7 +900,7 @@ function project(input) {
               paneId: focusPane.paneId,
               terminalId: focusPane.terminalId || "",
               tabTitle: tab.title || "",
-              actionable: true,
+              actionable: serverMeta.focusAgentSupported,
               groupHeader: true
             }))
           } else {
@@ -854,6 +925,12 @@ function project(input) {
               windowKey: window.key,
               providerEpoch: epoch,
               serverId: serverId,
+              transport: serverMeta.transport,
+              host: serverMeta.host,
+              session: serverMeta.session,
+              serverLabel: serverMeta.serverLabel,
+              focusAgentSupported: serverMeta.focusAgentSupported,
+              serverConnectionGeneration: serverMeta.serverConnectionGeneration,
               herdrWorkspaceId: workspace.id,
               herdrTabId: tab.id,
               herdrTabKey: tabRowKey,
@@ -868,7 +945,8 @@ function project(input) {
               tabTitle: tab.title || agent.tabTitle || "",
               status: HerdrModel.normalizeStatus(agent.status),
               nested: true,
-              actionable: true,
+              actionable: serverMeta.focusAgentSupported
+                && herdrAgentIdentityValid(agent, server),
               toplevel: window.toplevel,
               address: window.address,
               desktopId: window.desktopId,

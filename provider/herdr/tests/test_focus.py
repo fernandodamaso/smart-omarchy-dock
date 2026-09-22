@@ -151,6 +151,7 @@ class ProviderFocusValidationTests(unittest.TestCase):
                         "socket": "/tmp/x",
                         "session": "default",
                         "kind": "default",
+                        "capabilities": {"focusAgent": True},
                     })
                 }
                 state = inner.states["srv"]
@@ -214,6 +215,44 @@ class ProviderFocusValidationTests(unittest.TestCase):
             "pane_id": "p1",
         }, separators=(",", ":")))
         self.assertFalse(any(r[0] == "r5" for r in stub.results))
+
+    def test_apply_focus_rejects_missing_capability_before_forwarding(self):
+        stub = self._stub()
+        stub.states["srv"].info.pop("capabilities", None)
+        stub.apply_focus_agent({
+            "requestId": "missing-capability",
+            "providerEpoch": "epoch-live",
+            "serverId": "srv",
+            "connectionGeneration": 3,
+            "agentId": "srv:3:p1",
+            "paneId": "p1",
+            "terminalId": "t1",
+        })
+        self.assertEqual(
+            stub.results[-1], ("missing-capability", False, "unsupported")
+        )
+        self.assertEqual(stub.helpers["srv"].commands, [])
+
+    def test_supported_remote_fixture_preserves_exact_focus_identity(self):
+        stub = self._stub()
+        stub.states["srv"].info["transport"] = "remote"
+        stub.states["srv"].info["host"] = "devbox"
+        stub.states["srv"].info["capabilities"] = {"focusAgent": True}
+        stub.apply_focus_agent({
+            "requestId": "remote-supported",
+            "providerEpoch": "epoch-live",
+            "serverId": "srv",
+            "connectionGeneration": 3,
+            "agentId": "srv:3:p1",
+            "paneId": "p1",
+            "terminalId": "t1",
+        })
+        self.assertEqual(stub.helpers["srv"].commands[-1], json.dumps({
+            "kind": "focus-agent",
+            "requestId": "remote-supported",
+            "pane_id": "p1",
+        }, separators=(",", ":")))
+        self.assertFalse(any(r[0] == "remote-supported" for r in stub.results))
 
 
 if __name__ == "__main__":
