@@ -49,16 +49,14 @@ PanelWindow {
   // Official Lucide panel icons; edge does not flip these names.
   readonly property string collapseIcon: root.panelCollapsed
     ? "panel-left-open" : "panel-left-close"
-  // Match viewport inner pad + resize-edge allowance + list scroll gutter so the
-  // expanded collapse control shares the monitor/workspace card right edge.
+  // Match viewport inner pad + resize-edge allowance on both sides so the
+  // expanded header shares the monitor/workspace card edges symmetrically.
   readonly property real panelInnerPad: Style.space(6)
   readonly property real resizeEdgeAllowance: 8
-  readonly property real scrollGutter: 6
   readonly property real expandedHeaderLeftInset: root.panelInnerPad
-    + (!root.panelCollapsed && root.controller.edge === "right" ? root.resizeEdgeAllowance : 0)
+    + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
   readonly property real expandedHeaderRightInset: root.panelInnerPad
-    + (!root.panelCollapsed && root.controller.edge === "left" ? root.resizeEdgeAllowance : 0)
-    + (!root.panelCollapsed ? root.scrollGutter : 0)
+    + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
   readonly property var pinStripAdd: pinnedStrip.addPinButton
   // Per-output clamp of the shared expanded-width preference.
   readonly property var panelGeometry: controller.geometryFor(screen)
@@ -407,8 +405,8 @@ PanelWindow {
       anchors.bottomMargin: root.panelCollapsed ? 0 : Style.space(8)
       anchors.left: parent.left
       anchors.right: parent.right
-      anchors.leftMargin: Style.space(6) + (!root.panelCollapsed && root.controller.edge === "right" ? 8 : 0)
-      anchors.rightMargin: Style.space(6) + (!root.panelCollapsed && root.controller.edge === "left" ? 8 : 0)
+      anchors.leftMargin: Style.space(6) + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
+      anchors.rightMargin: Style.space(6) + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
     }
     // The ListView owns every pixel its delegates and widget tail cover; only
     // the blank tail below the last row is background. This surface sits above

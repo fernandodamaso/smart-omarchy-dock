@@ -40,7 +40,13 @@ FocusScope {
   readonly property int rowCount: visibleRows.length
   readonly property real rowHeight: Math.max(34, Math.ceil(metrics.height + Style.space(12)))
   readonly property real workspaceCardInset: Style.space(5)
+  // Scrollbar thickness only; the list reserves no gutter. The bar sits
+  // scrollBarOutset past the viewport edge, inside the symmetric outer inset.
   readonly property real scrollGutter: 6
+  // Nudges the bar this far past the viewport's right edge toward the
+  // panel's outer edge. The symmetric outer inset keeps it on-panel and
+  // clear of the content.
+  readonly property real scrollBarOutset: 10
   readonly property real cardRadius: appearance && appearance.cardRadius !== undefined
     ? appearance.cardRadius : Math.min(3, Style.cornerRadius)
   readonly property color monitorFill: appearance ? appearance.monitorFill
@@ -578,7 +584,6 @@ FocusScope {
     anchors.top: parent.top
     anchors.bottom: parent.bottom
     anchors.right: parent.right
-    anchors.rightMargin: root.scrollGutter
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     flickableDirection: Flickable.VerticalFlick
@@ -647,10 +652,14 @@ FocusScope {
     Controls.ScrollBar.vertical: Controls.ScrollBar {
       id: verticalScrollBar
       parent: root
-      anchors.top: list.top
-      anchors.bottom: list.bottom
-      anchors.right: root.right
+      // Under pragma ComponentBehavior: Bound this inline attached component
+      // evaluates anchor bindings without a valid parent/sibling context, so
+      // Qt drops them ("Cannot anchor to an item that isn't a parent or
+      // sibling") and the bar parks at x=0. Bind geometry explicitly instead.
+      x: root.width - width + root.scrollBarOutset
+      y: list.y
       width: root.scrollGutter
+      height: list.height
       padding: 0
       policy: list.contentHeight > list.height
         ? Controls.ScrollBar.AsNeeded : Controls.ScrollBar.AlwaysOff
