@@ -16,6 +16,7 @@ PanelWindow {
   readonly property var resizeHandle: resizeHandle
   readonly property var contextMenu: sidebarContext
   readonly property var widgetArea: sidebarViewport.contentTailItem
+  readonly property var widgetManager: widgetManagerPopup
   readonly property var collapseControl: collapseButton
   property var menuTarget: null
   property var menuAnchor: null
@@ -125,9 +126,9 @@ PanelWindow {
     // A dying or hidden panel must not carry a half-finished mode gesture.
     positionDragSurface.cancelGesture("surface-close")
     viewportDragSurface.cancelGesture("surface-close")
+    widgetManagerPopup.close()
     if (root.widgetArea) {
       if (root.widgetArea.dragWidgetId) root.widgetArea.finishDrag(0, 0, true)
-      root.widgetArea.closeManager()
       root.widgetArea.closePopup()
     }
     // A disappearing mirror must not release another panel's widget session.
@@ -157,6 +158,10 @@ PanelWindow {
     root.menuEntry = anchorItem.entry || (root.menuTarget.item && root.menuTarget.item.entry) || null
     sidebarContext.open()
     return true
+  }
+
+  function openWidgetManager(anchor) {
+    return root.widgetManager ? root.widgetManager.openFor(anchor) : false
   }
 
   property Item pickerAnchorItem: null
@@ -357,9 +362,7 @@ PanelWindow {
           Accessible.name: tooltipText
           focusable: visible
           enabled: !root.controller.interactionBusy
-          onClicked: {
-            if (root.widgetArea) root.widgetArea.openManager(widgetManage)
-          }
+          onClicked: root.openWidgetManager(widgetManage)
           DockLucideIcon {
             anchors.centerIn: parent
             width: 14
@@ -408,6 +411,13 @@ PanelWindow {
       anchors.leftMargin: Style.space(6) + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
       anchors.rightMargin: Style.space(6) + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
     }
+    DockSidebarWidgetManager {
+      id: widgetManagerPopup
+      controller: root.controller
+      panel: root
+      viewport: sidebarViewport
+    }
+
     // The ListView owns every pixel its delegates and widget tail cover; only
     // the blank tail below the last row is background. This surface sits above
     // the list and covers exactly that region, so a press on a row or on the

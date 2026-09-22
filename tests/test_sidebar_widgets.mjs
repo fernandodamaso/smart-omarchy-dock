@@ -165,11 +165,19 @@ for (const value of [null, [], {'../bad':true}, {'constructor':true}, {'fixture.
   assert.notEqual(Model.collapsedError(value), '', JSON.stringify(value));
 assert.deepEqual(plain(Model.registeredIds(registry)), ['fixture.one','fixture.two']);
 assert.deepEqual(plain(Model.registeredRows(registry).map(row => ({
-  id:row.id,label:row.label,available:row.available
+  id:row.id,label:row.label,available:row.available,manageable:row.manageable
 }))), [
-  {id:'fixture.one',label:'fixture.one',available:true},
-  {id:'fixture.two',label:'fixture.two',available:true}
+  {id:'fixture.one',label:'fixture.one',available:true,manageable:true},
+  {id:'fixture.two',label:'fixture.two',available:true,manageable:true}
 ]);
+const managerRegistry = Object.assign({}, registry, {
+  'herdr.agents': Object.assign({}, a.descriptor, {
+    id:'herdr.agents', label:'Coding agents', manageable:false
+  })
+});
+assert.deepEqual(plain(Model.manageableRows(managerRegistry).map(row => row.id)),
+  ['fixture.one','fixture.two'],
+  'source-owned integrations opt out of the optional Widget manager');
 assert.equal(typeof Model.footerLayout, 'undefined',
   'the retired bounded footer layout must not survive the shared-scroll migration');
 
@@ -177,6 +185,8 @@ assert.equal(typeof Model.footerLayout, 'undefined',
 const viewportSource = read('components/DockSidebarViewport.qml');
 const sidebarSource = read('components/DockSidebar.qml');
 const areaSource = read('components/DockSidebarWidgetArea.qml');
+const managerSource = read('components/DockSidebarWidgetManager.qml');
+const hostSource = read('DockHost.qml');
 const cardSource = read('components/DockWidgetCard.qml');
 assert.match(viewportSource, /property Component contentTail/);
 assert.match(viewportSource, /footer: Item\s*\{/);
@@ -193,22 +203,48 @@ assert.match(areaSource, /sectionVisible: !panel\.panelCollapsed && root\.presen
 assert.match(areaSource, /implicitHeight: root\.sectionVisible \?/);
 assert.match(areaSource, /target: root\.viewport\.listView/);
 assert.match(areaSource, /anchorOutsideViewport/);
-assert.match(areaSource, /Ui\.PopupCard\s*\{[\s\S]*?id:\s*managerPopup/,
+assert.match(sidebarSource, /DockSidebarWidgetManager\s*\{/,
+  'Widget manager must be panel-owned, not tied to the zero-height content tail');
+assert.match(sidebarSource, /onClicked:\s*root\.openWidgetManager\(widgetManage\)/,
+  'header Add\/Manage must open the persistent panel-owned manager directly');
+assert.doesNotMatch(sidebarSource, /widgetArea\.openManager\(widgetManage\)/,
+  'header Add\/Manage must not depend on the Widget tail existing');
+assert.match(managerSource, /Ui\.PopupCard\s*\{[\s\S]*?id:\s*managerPopup/,
   'Widget manager must use Omarchy native PopupCard chrome');
-assert.match(areaSource, /triggerMode:\s*"hover"/,
-  'Widget manager remains passive\/non-grabbing per the Sidebar Widget contract');
-assert.match(areaSource, /contentHeight:\s*managerPopup\.fittedContentHeight/,
+assert.match(managerSource, /triggerMode:\s*"click"/,
+  'Widget manager must use Omarchy outside-click dismissal');
+assert.match(managerSource, /WidgetModel\.manageableRows\(controller\.widgetRegistry\)/,
+  'manager must exclude source-owned non-manageable integrations');
+assert.match(managerSource, /contentHeight:\s*managerPopup\.fittedContentHeight/,
   'Widget manager must size to content instead of reserving a fixed tall window');
-assert.match(areaSource, /Ui\.ToggleSwitch\s*\{/,
+assert.match(managerSource, /Ui\.ToggleSwitch\s*\{/,
   'Widget enablement uses the native Omarchy switch affordance');
-assert.doesNotMatch(areaSource, /popupGeometryFor\(root\.managerAnchor,\s*360,\s*420\)/,
+assert.match(hostSource, /id:\s*"herdr\.agents"[\s\S]*?manageable:\s*false/,
+  'Herdr must stay out of the optional Widget manager');
+assert.doesNotMatch(managerSource, /popupGeometryFor\(root\.managerAnchor,\s*360,\s*420\)/,
   'legacy fixed manager geometry must not return');
-assert.doesNotMatch(areaSource, /text:\s*parent\.enabledWidget\s*\?\s*"Remove"\s*:\s*"Add"/,
+assert.doesNotMatch(managerSource, /text:\s*parent\.enabledWidget\s*\?\s*"Remove"\s*:\s*"Add"/,
   'manager rows should not use text Add\/Remove buttons');
 assert.match(cardSource, /Remove from Widgets/);
 assert.match(cardSource, /presentation: "expanded"/);
 assert.doesNotMatch(cardSource, /presentation: "compact"/);
 assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"/);
+
+// Header Add/Manage remains callable even when the shared-scroll Widget tail is absent.
+{
+  let opened = null;
+  const anchor = {visible:true};
+  const shell = qmlMethods('DockSidebar.qml', {
+    widgetManager: {
+      openFor(value) {
+        opened = value;
+        return true;
+      }
+    }
+  });
+  assert.equal(shell.openWidgetManager(anchor), true);
+  assert.equal(opened, anchor);
+}
 
 // Production controller mutations write only through the existing host intent.
 {
