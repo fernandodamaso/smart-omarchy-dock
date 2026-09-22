@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Local Herdr TUI attachment discovery via process identity.
+"""Herdr TUI attachment discovery via process identity.
 
 Raw argv and environment are read transiently for classification only. Public
 output is bounded to pid/startTime ancestry metadata — never socket paths,
@@ -10,7 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import os
+import shlex
 from typing import Any, Callable
+
+from remote import valid_remote_target, valid_session as valid_attachment_session
 
 ANCESTOR_DEPTH = 8
 MAX_CLIENTS_PER_SERVER = 16
@@ -19,8 +22,8 @@ MAX_ARGV = 64
 MAX_WINDOW_PROCESS_PIDS = 256
 MAX_STDIN_COMMAND = 4096
 
-# Local TUI attach accepts only these options (from installed `herdr --help`).
-# Remote / exit-immediately / control surfaces are rejected.
+# TUI classification is intentionally static/fail-closed. Exit-immediately and
+# control surfaces are rejected; remote-only flags require a validated target.
 _CONTROL_COMMANDS = frozenset({
     "server", "api", "agent", "pane", "tab", "workspace", "worktree",
     "config", "channel", "machine", "integration", "completion", "update",
@@ -66,76 +69,178 @@ def _basename(value: str) -> str:
     return os.path.basename(value.rstrip("/")) or value
 
 
-def parse_tui_session(argv: list[str] | None) -> str | None:
-    """Return the local TUI session name, or None when not a local attach."""
-    if not argv:
-        return None
-    binary = _basename(argv[0])
-    if binary != "herdr":
+@dataclass(frozen=True)
+class AttachmentSpec:
+    """Bounded TUI attachment identity; raw argv never leaves classification."""
+
+    kind: str
+    session: str = "default"
+    target: str | None = None
+
+
+def classify_tui_attachment(argv: list[str] | None) -> AttachmentSpec | None:
+    """Classify only verified local/remote Herdr TUI launch forms.
+
+    Current Herdr accepts the default TUI launch with optional --session and
+    --remote, plus --remote-keybindings and --handoff for remote attach.
+    Control/help and positional subcommands are rejected fail-closed.
+    """
+    if not argv or _basename(argv[0]) != "herdr":
         return None
     args = argv[1:]
-
     if not args:
-        return "default"
+        return AttachmentSpec("local")
 
     if args[0] == "session":
-        if len(args) >= 3 and args[1] == "attach":
-            name = args[2]
-            if not isinstance(name, str) or not name or name.startswith("-"):
-                return None
-            # Only `session attach NAME` — reject trailing help/control tokens.
-            if len(args) > 3:
-                return None
-            return name
+        if len(args) == 3 and args[1] == "attach" and valid_attachment_session(args[2]):
+            return AttachmentSpec("local", args[2], None)
         return None
-
     if args[0] in _CONTROL_COMMANDS:
         return None
 
-    session: str | None = None
+    session = "default"
+    session_seen = False
+    target: str | None = None
+    remote_seen = False
+    keybindings_seen = False
+    handoff_seen = False
     i = 0
     while i < len(args):
         arg = args[i]
         if not isinstance(arg, str) or not arg:
             return None
-        if arg in _EXIT_OPTIONS:
-            return None
-        if arg == "--remote" or arg.startswith("--remote="):
-            return None
-        if arg == "--remote-keybindings" or arg.startswith("--remote-keybindings="):
+        if arg in _EXIT_OPTIONS or arg == "--":
             return None
         if arg == "--handoff":
-            return None
+            if handoff_seen:
+                return None
+            handoff_seen = True
+            i += 1
+            continue
+
         if arg == "--session":
-            if i + 1 >= len(args):
+            if session_seen or i + 1 >= len(args):
                 return None
             value = args[i + 1]
-            if not isinstance(value, str) or not value or value.startswith("-"):
-                return None
-            if session is not None:
-                # Repeated or conflicting --session is not a local attach.
+            if not valid_attachment_session(value):
                 return None
             session = value
+            session_seen = True
             i += 2
             continue
         if arg.startswith("--session="):
-            value = arg.split("=", 1)[1]
-            if not value:
+            if session_seen:
                 return None
-            if session is not None:
+            value = arg.split("=", 1)[1]
+            if not valid_attachment_session(value):
                 return None
             session = value
+            session_seen = True
             i += 1
             continue
-        # Unknown option or positional — not a whitelisted local TUI attach.
+
+        if arg == "--remote":
+            if remote_seen or i + 1 >= len(args):
+                return None
+            value = args[i + 1]
+            if not valid_remote_target(value):
+                return None
+            target = value
+            remote_seen = True
+            i += 2
+            continue
+        if arg.startswith("--remote="):
+            if remote_seen:
+                return None
+            value = arg.split("=", 1)[1]
+            if not valid_remote_target(value):
+                return None
+            target = value
+            remote_seen = True
+            i += 1
+            continue
+
+        if arg == "--remote-keybindings":
+            if keybindings_seen or i + 1 >= len(args):
+                return None
+            if args[i + 1] not in ("local", "server"):
+                return None
+            keybindings_seen = True
+            i += 2
+            continue
+        if arg.startswith("--remote-keybindings="):
+            if keybindings_seen or arg.split("=", 1)[1] not in ("local", "server"):
+                return None
+            keybindings_seen = True
+            i += 1
+            continue
+
+        # Unknown options and positional/control forms are not TUI attachments.
         return None
 
-    if session is None:
-        return "default"
-    if session.startswith("-"):
+    if (keybindings_seen or handoff_seen) and target is None:
         return None
-    return session
+    if target is None:
+        return AttachmentSpec("local", session, None)
+    return AttachmentSpec("remote", session, target)
 
+
+def parse_tui_session(argv: list[str] | None) -> str | None:
+    """Compatibility wrapper for callers that specifically need local TUI sessions."""
+    spec = classify_tui_attachment(argv)
+    return spec.session if spec is not None and spec.kind == "local" else None
+
+
+def parse_remote_bridge_executable(argv: list[str] | None) -> str | None:
+    """Recover the remote Herdr executable from a direct child SSH bridge.
+
+    This is transient process evidence only. The command line is never
+    published, and the returned executable is used only as encoded resolver
+    input. Bare PATH lookups are intentionally rejected.
+    """
+    if not argv or _basename(argv[0]) != "ssh":
+        return None
+    # Current Herdr passes the remote bridge script as one SSH argv element.
+    # Parse only that element: joining the entire SSH argv would reinterpret
+    # quotes/metacharacters in the validated target as shell syntax.
+    executable = None
+    for candidate in reversed(argv[1:]):
+        if not isinstance(candidate, str) or "remote-client-bridge" not in candidate:
+            continue
+        try:
+            tokens = shlex.split(candidate, posix=True)
+        except ValueError:
+            continue
+        try:
+            bridge_index = tokens.index("remote-client-bridge")
+        except ValueError:
+            continue
+        exec_indexes = [
+            index for index, token in enumerate(tokens[:bridge_index]) if token == "exec"
+        ]
+        if not exec_indexes:
+            continue
+        exec_index = exec_indexes[-1]
+        if exec_index + 1 >= bridge_index:
+            continue
+        executable = tokens[exec_index + 1]
+        break
+    if executable is None:
+        return None
+    if not isinstance(executable, str) or not executable or executable.startswith("-"):
+        return None
+    try:
+        if len(executable.encode("utf-8", errors="strict")) > 1024:
+            return None
+    except UnicodeError:
+        return None
+    if any(ord(char) < 32 or ord(char) == 127 or 0xD800 <= ord(char) <= 0xDFFF
+           for char in executable):
+        return None
+    if not (executable.startswith("/") or executable.startswith("~/")
+            or executable.startswith("$HOME/")):
+        return None
+    return executable
 
 def identity_alive(client: dict[str, Any], identity_of: IdentityFn) -> bool:
     pid = client.get("pid")
@@ -355,30 +460,73 @@ def _revalidate_links(
     return True
 
 
-def discover_attachments(
+def _remote_bridge_executables(
+    parent_pids: set[int],
+    pids: list[int],
+    open_proc: OpenProcFn,
+    uid: int,
+) -> dict[int, str | None]:
+    """Resolve at most one stable direct-child SSH bridge executable per parent."""
+    candidates: dict[int, set[str]] = {pid: set() for pid in parent_pids}
+    for child_pid in pids[:8192]:
+        child = open_proc(child_pid)
+        if child is None:
+            continue
+        try:
+            if child.uid() != uid:
+                continue
+            identity = child.identity()
+            if identity is None:
+                continue
+            parent = int(identity.get("ppid", 0))
+            if parent not in parent_pids:
+                continue
+            start = int(identity.get("startTime", -1))
+            argv = child.cmdline()
+            executable = parse_remote_bridge_executable(argv)
+            if executable is None:
+                continue
+            # Revalidate the bound child after reading argv.
+            if child.uid() != uid:
+                continue
+            live = child.identity()
+            if live is None or int(live.get("startTime", -2)) != start:
+                continue
+            if int(live.get("ppid", 0)) != parent:
+                continue
+            candidates[parent].add(executable)
+        finally:
+            child.close()
+    return {
+        parent: (next(iter(values)) if len(values) == 1 else None)
+        for parent, values in candidates.items()
+    }
+
+
+def discover_attachment_inventory(
     inventory: list[dict[str, Any]],
     *,
     uid: int | None = None,
     list_pids: ListPidsFn | None = None,
     open_proc: OpenProcFn | None = None,
-) -> dict[str, list[dict[str, Any]]]:
-    """Discover same-user local TUI attachments keyed by canonical server id."""
+) -> list[dict[str, Any]]:
+    """Discover verified local and remote TUI attachments before endpoint lookup."""
     uid = os.getuid() if uid is None else uid
     list_pids = list_pids or _list_pids
     open_proc = open_proc or open_linux_proc
-
+    pids = list_pids()[:8192]
     sessions = _session_index(inventory)
-    found: dict[str, list[dict[str, Any]]] = {}
+    rows: list[dict[str, Any]] = []
 
-    for pid in list_pids():
+    for pid in pids:
+        if len(rows) >= 256:
+            break
         proc = open_proc(pid)
         if proc is None:
             continue
         try:
-            # Same-user gate from the bound handle before identity/cmdline.
             if proc.uid() != uid:
                 continue
-
             identity = proc.identity()
             if identity is None:
                 continue
@@ -388,18 +536,20 @@ def discover_attachments(
             argv = proc.cmdline()
             if argv is None:
                 continue
-            session = parse_tui_session(argv)
-            if session is None:
+            spec = classify_tui_attachment(argv)
+            if spec is None:
                 continue
-            server_id = sessions.get(session)
-            if server_id is None:
-                continue
+
+            server_id = None
+            if spec.kind == "local":
+                server_id = sessions.get(spec.session)
+                if server_id is None:
+                    continue
 
             walked = _walk_ancestors(proc, pid, start_time, open_proc, uid)
             if walked is None:
                 continue
             ancestors, links = walked
-
             if not _revalidate_links(bound, links, open_proc, uid, proc):
                 continue
             if proc.uid() != uid:
@@ -408,25 +558,58 @@ def discover_attachments(
             if live is None or int(live["startTime"]) != bound["startTime"]:
                 continue
 
-            client = {
-                "pid": bound["pid"],
-                "startTime": bound["startTime"],
-                "ancestors": ancestors,
+            row = {
+                "kind": spec.kind,
+                "session": spec.session,
+                "target": spec.target,
+                "serverId": server_id,
+                "client": {
+                    "pid": bound["pid"],
+                    "startTime": bound["startTime"],
+                    "ancestors": ancestors,
+                },
             }
-            bucket = found.setdefault(server_id, [])
-            if len(bucket) >= MAX_CLIENTS_PER_SERVER:
-                continue
-            if any(row["pid"] == client["pid"] and row["startTime"] == client["startTime"]
-                   for row in bucket):
-                continue
-            bucket.append(client)
+            rows.append(row)
         finally:
             proc.close()
 
+    remote_parents = {row["client"]["pid"] for row in rows if row["kind"] == "remote"}
+    if remote_parents:
+        executables = _remote_bridge_executables(remote_parents, pids, open_proc, uid)
+        for row in rows:
+            if row["kind"] == "remote":
+                row["herdrExecutable"] = executables.get(row["client"]["pid"])
+    return rows
+
+
+def discover_attachments(
+    inventory: list[dict[str, Any]],
+    *,
+    uid: int | None = None,
+    list_pids: ListPidsFn | None = None,
+    open_proc: OpenProcFn | None = None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Compatibility local attachment map keyed by canonical local server id."""
+    found: dict[str, list[dict[str, Any]]] = {}
+    for row in discover_attachment_inventory(
+        inventory, uid=uid, list_pids=list_pids, open_proc=open_proc
+    ):
+        if row.get("kind") != "local":
+            continue
+        server_id = row.get("serverId")
+        client = row.get("client")
+        if not isinstance(server_id, str) or not isinstance(client, dict):
+            continue
+        bucket = found.setdefault(server_id, [])
+        if len(bucket) >= MAX_CLIENTS_PER_SERVER:
+            continue
+        if any(item.get("pid") == client.get("pid")
+               and item.get("startTime") == client.get("startTime") for item in bucket):
+            continue
+        bucket.append(client)
     for server_id in found:
         found[server_id] = public_clients(found[server_id])
     return found
-
 
 def _list_pids() -> list[int]:
     pids: list[int] = []
