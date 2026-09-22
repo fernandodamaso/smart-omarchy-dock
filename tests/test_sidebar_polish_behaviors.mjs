@@ -481,6 +481,9 @@ assert.doesNotMatch(rowQml,
   'workspace badge input must stay enabled after beginRowDrag owns interactionBusy')
 assert.match(rowQml, /activeFocusOnTab: true/,
   'inline workspace badge is an explicit keyboard focus target')
+assert.match(rowQml,
+  /id: leadingWorkspaceBadge[\s\S]{0,260}?readonly property string rowKey: root\.inlineWorkspaceBadgeKey/,
+  'inline workspace badge exposes its workspace rowKey so context refresh keeps a valid menu open')
 assert.match(rowQml, /Accessible\.onPressAction:[\s\S]{0,220}?captureTarget\(root\.inlineWorkspaceBadgeKey\)/,
   'assistive activation resolves the synthetic workspace target')
 assert.match(viewportQml, /function focusRow\(key, preferInlineWorkspaceBadge\)/,
