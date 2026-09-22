@@ -43,7 +43,7 @@ PanelWindow {
   signal hideRequested(string desktopId)
   signal browserActivityMuteToggled(string serviceId)
   signal autoHideRequested(bool enabled)
-  signal positionRequested(string position, var expectedPosition, string expectedPresentation)
+  signal positionRequested(string position, var expectedPosition, var gestureToken)
   signal openTrashRequested()
   signal emptyTrashRequested()
 
@@ -437,9 +437,17 @@ PanelWindow {
   readonly property bool interfaceAnimationsEnabled: DockModel.normalizeSetting(
     "interfaceAnimationsEnabled", settings.interfaceAnimationsEnabled)
   // Background mode gesture state. The host reports a rejected or still-pending
-  // mode write back through modeGestureFeedback; the rest drives the sidebar
-  // destination silhouette this dock would switch to.
+  // mode write back through modeGestureFeedback, keyed to this dock's output;
+  // the rest drives the sidebar destination silhouette this dock would switch to.
   property string modeGestureFeedback: ""
+  // Presentation mode this dock's output actually renders, injected by its
+  // screen owner in a mixed layout; falls back to the global default when the
+  // dock is instantiated without an owner (isolated tests).
+  property string presentationMode: DockModel.normalizeSetting(
+    "presentationMode", settings.presentationMode)
+  // Press-time presentation token for this dock's output, injected by its
+  // screen owner and captured by the drag surface when the pointer goes down.
+  property var modeGestureToken: null
   readonly property string sidebarPreviewEdge: DockModel.normalizeSetting(
     "sidebarEdge", settings.sidebarEdge)
   readonly property bool sidebarPreviewCollapsed: DockModel.sidebarCollapsedForScreen(
@@ -1083,8 +1091,8 @@ PanelWindow {
       dockPosition: root.position
       requestedPosition: root.settings.position
       switchThreshold: 48
-      presentationMode: DockModel.normalizeSetting("presentationMode",
-        root.settings.presentationMode)
+      presentationMode: root.presentationMode
+      gestureToken: root.modeGestureToken
       sidebarEdge: root.sidebarPreviewEdge
       animationsEnabled: root.interfaceAnimationsEnabled
       interactionAllowed: root.dockShown
@@ -1094,8 +1102,8 @@ PanelWindow {
         && root.openMenuCount === 0
         && !windowPreview.interactionActive
         && !appPicker.visible
-      onPositionRequested: (position, expectedPosition, expectedPresentation) =>
-        root.positionRequested(position, expectedPosition, expectedPresentation)
+      onPositionRequested: (position, expectedPosition, gestureToken) =>
+        root.positionRequested(position, expectedPosition, gestureToken)
     }
 
     Item {

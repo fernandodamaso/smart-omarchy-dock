@@ -47,10 +47,13 @@ TestCase {
       anchors.fill: parent
       switchThreshold: 48
       presentationMode: "sidebar"
+      // Stand-in for the host's press-time state token this panel's output
+      // resolved to; the commit must emit exactly this value.
+      gestureToken: "panel-token"
       animationsEnabled: false
-      onPositionRequested: (position, expectedPosition, expectedPresentation) =>
+      onPositionRequested: (position, expectedPosition, gestureToken) =>
         testCase.events.push({ source: "panel", position: position,
-          expectedPresentation: expectedPresentation })
+          gestureToken: gestureToken })
       onGestureCancelled: reason => testCase.cancels.push({ source: "panel", reason: reason })
     }
 
@@ -118,10 +121,11 @@ TestCase {
       visible: width > 0 && height > 0
       switchThreshold: 48
       presentationMode: "sidebar"
+      gestureToken: "tail-token"
       animationsEnabled: false
-      onPositionRequested: (position, expectedPosition, expectedPresentation) =>
+      onPositionRequested: (position, expectedPosition, gestureToken) =>
         testCase.events.push({ source: "tail", position: position,
-          expectedPresentation: expectedPresentation })
+          gestureToken: gestureToken })
       onGestureCancelled: reason => testCase.cancels.push({ source: "tail", reason: reason })
     }
   }
@@ -164,7 +168,8 @@ TestCase {
     compare(events.length, 1, "one request per completed gesture")
     compare(events[0].source, "tail")
     compare(events[0].position, "bottom")
-    compare(events[0].expectedPresentation, "sidebar")
+    compare(events[0].gestureToken, "tail-token",
+      "the commit carries this surface's press-time token")
     compare(rowClicks, 0)
     compare(chromeClicks, 0)
     compare(list.contentY, 0, "the mode gesture never scrolled the list")
@@ -213,7 +218,8 @@ TestCase {
     compare(events.length, 1)
     compare(events[0].source, "panel")
     compare(events[0].position, "bottom")
-    compare(events[0].expectedPresentation, "sidebar")
+    compare(events[0].gestureToken, "panel-token",
+      "the commit carries this surface's press-time token")
     compare(rowClicks, 0)
     compare(chromeClicks, 0)
   }
@@ -229,7 +235,7 @@ TestCase {
     mouseRelease(panelSurface, 200, 310, Qt.LeftButton)
     compare(events.length, 1)
     compare(events[0].position, "left")
-    compare(events[0].expectedPresentation, "classic")
+    compare(events[0].gestureToken, "panel-token")
   }
 
   function test_overflowing_content_leaves_no_blank_tail() {

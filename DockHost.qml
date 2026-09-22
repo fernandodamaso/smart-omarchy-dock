@@ -11,6 +11,7 @@ import "components/DockWindowModel.js" as DockWindowModel
 import "components/DockTrashModel.js" as TrashModel
 import "components/DockConfigModel.js" as ConfigModel
 import "components/DockIconModel.js" as DockIconModel
+import "components/DockScreenPresentationModel.js" as ScreenPresentationModel
 
 Item {
   id: root
@@ -51,46 +52,30 @@ Item {
     return registry
   }
   readonly property var sidebarController: sidebarState
-  readonly property var sidebarPanels: rendererMode === "sidebar" && presentationLoader.item
-    ? presentationLoader.item.panels : []
+  readonly property var sidebarPanels: ScreenPresentationModel.aggregateSidebarPanels(
+    presentationOwners.instances)
   // Primary surface for harnesses that still expect a single panel reference.
   readonly property var sidebarPanel: sidebarPanels.length ? sidebarPanels[0] : null
-  property bool rendererInitialized: false
-  property bool rendererReady: false
-  property string rendererMode: "classic"
-  property string rendererEdge: "left"
-  property var rendererScreen: null
 
-  function syncRenderer() {
-    if (!root.rendererInitialized) return
-    var mode = DockModel.normalizeSetting("presentationMode", root.settings.presentationMode)
-    var edge = mode === "sidebar" ? DockModel.normalizeSetting("sidebarEdge", root.settings.sidebarEdge) : "left"
-    // Mode/edge recreate the Loader. Screen membership is owned by Variants over
-    // mappedScreens and must not tear every panel down on hotplug or preference.
-    if (mode !== root.rendererMode || edge !== root.rendererEdge) {
-      // Synchronous Loader teardown precedes deferred creation of the new branch.
-      // The old Dock/Sidebar owns its popup, drag and badge-scope destruction.
-      root.rendererReady = false
-      root.rendererMode = mode
-      root.rendererEdge = edge
-    }
-    root.rendererScreen = mode === "sidebar" ? sidebarState.selectedScreen : null
-    Qt.callLater(root.activateRenderer)
+  // Pure per-screen presentation resolution, the same function the sidebar
+  // controller and CLI diagnostics run: each connected output resolves its own
+  // mode from presentationModeByMonitor, inheriting the global presentationMode
+  // when unmapped, so classic and sidebar surfaces coexist. Owners bind to the
+  // `presentation` copy declaratively; gesture writes re-resolve through this
+  // function so they always validate against live state.
+  function currentPresentation() {
+    return ScreenPresentationModel.resolve({
+      presentationMode: settings.presentationMode,
+      presentationModeByMonitor: settings.presentationModeByMonitor,
+      sidebarMonitor: settings.sidebarMonitor,
+      workspaceMonitorOrder: settings.workspaceMonitorOrder,
+      screens: connectedScreens,
+      monitors: hyprMonitors,
+      previousSidebarScreens: sidebarState ? sidebarState.mappedScreens : [],
+      busy: sidebarState ? sidebarState.interactionBusy === true : false
+    })
   }
-
-  function activateRenderer() {
-    var mode = DockModel.normalizeSetting("presentationMode", root.settings.presentationMode)
-    var edge = mode === "sidebar" ? DockModel.normalizeSetting("sidebarEdge", root.settings.sidebarEdge) : "left"
-    if (mode !== root.rendererMode || edge !== root.rendererEdge) {
-      root.syncRenderer()
-      return
-    }
-    root.rendererScreen = mode === "sidebar" ? sidebarState.selectedScreen : null
-    root.rendererReady = mode === "classic"
-      || (sidebarState.mappedScreens && sidebarState.mappedScreens.length > 0)
-  }
-
-  onSettingsChanged: if (rendererInitialized) Qt.callLater(root.syncRenderer)
+  readonly property var presentation: currentPresentation()
 
   property int trashItemCount: 0
   property bool trashStateKnown: false
@@ -103,12 +88,14 @@ Item {
   property bool settingsPersisted: false
   property string settingsWriteState: "idle"
   property string settingsWriteError: ""
-  // Background mode-switch feedback visible to renderers that have no other
-  // feedback surface. Carries a rejected mode intent and, once a write was
-  // accepted, any later persistence failure — the renderer that survived the
-  // mode switch is the one that has to report it. Cleared when settings are
-  // actually reloaded or saved again.
-  property string modeGestureFeedback: ""
+  // Background mode-switch feedback keyed by output connector. Each renderer
+  // reports only its own connector, and the host owns the map — so a stale or
+  // rejected gesture on one monitor can never display on another, even across
+  // renderer replacement. Persistence failures stay host-wide through
+  // settingsWriteState rather than being stored per connector. Cleared
+  // explicitly when settings reload or save, and overwritten by the next
+  // gesture for that connector.
+  property var modeGestureFeedbackByMonitor: ({})
   property bool settingsReloadPending: false
   property string settingsLoadedText: ""
   property string settingsWriteBaseText: ""
@@ -143,7 +130,7 @@ Item {
           || ConfigModel.windowIconsChanged(settings.windowIconOverrides, requested.windowIconOverrides))
         iconReloadRevision++
       if (JSON.stringify(settings) !== JSON.stringify(requested)) settingsRevision++
-      modeGestureFeedback = ""
+      modeGestureFeedbackByMonitor = ({})
       settings = requested
       settingsLoadState = "loaded"
       settingsLoadError = ""
@@ -286,7 +273,9 @@ Item {
   function saveSettingIntent(key, value, expectedValue) {
     var blocked = mutationBlocked()
     if (blocked) return { accepted: false, pending: false, reply: blocked }
-    if (settings[key] !== expectedValue) {
+    // Structural comparison: object settings (override/collapse maps) must not
+    // read as stale merely because the same value is a different instance.
+    if (!DockModel.sameSettingValue(settings[key], expectedValue)) {
       var stale = dockControl.mutationData(settings, settings, [], false, false)
       stale.currentValue = settings[key]
       stale.expectedValue = expectedValue
@@ -301,25 +290,87 @@ Item {
     return { accepted: accepted, pending: pending, reply: reply }
   }
 
+  // Per-connector rejection text stored for a completed background gesture.
+  function modeGestureFeedbackFor(connector) {
+    var text = modeGestureFeedbackByMonitor[String(connector || "")]
+    return typeof text === "string" ? text : ""
+  }
+
+  function setModeGestureFeedback(connector, text) {
+    var name = String(connector || "")
+    if (!name) return
+    var next = ({})
+    Object.keys(modeGestureFeedbackByMonitor).forEach(function(key) {
+      next[key] = modeGestureFeedbackByMonitor[key]
+    })
+    next[name] = String(text || "")
+    modeGestureFeedbackByMonitor = next
+  }
+
+  // What a surface displays: its own connector's rejection first, plus a
+  // persistence failure host-wide — that applies to every output regardless of
+  // which gesture triggered the save, so no surviving renderer silently drops it.
+  function modeGestureDisplayFor(connector) {
+    var local = modeGestureFeedbackFor(connector)
+    if (settingsWriteState !== "error") return local
+    var persistence = DockModel.persistenceFeedback(settingsWriteError)
+    return local ? local + " · " + persistence : persistence
+  }
+
   // A completed background mode gesture, routed through the same sole writer.
-  // Exactly one intent per gesture; the returned text is "" when the request
-  // was accepted and clears any earlier message, otherwise it explains why the
-  // mode did not change. Stored on the host because the gesture's own renderer
-  // may be the one torn down by a successful switch.
-  function commitModeGesture(value, expectedValue) {
+  // Exactly one intent per gesture, scoped to the connector it started on:
+  // only that connector's presentationModeByMonitor entry may change. Feedback
+  // is stored on the host because the gesture's own renderer may be the one
+  // torn down by a successful switch.
+  function commitMonitorModeGesture(connector, destination, capturedState) {
     var feedback = DockModel.modeDragWriteError(
-      saveSettingIntent("presentationMode", value, expectedValue))
-    modeGestureFeedback = feedback
+      monitorModeIntent(connector, destination, capturedState))
+    setModeGestureFeedback(connector, feedback)
     return feedback
   }
 
+  function monitorModeIntent(connector, destination, capturedState) {
+    var name = String(connector || "")
+    var mode = destination === "sidebar" || destination === "classic" ? destination : ""
+    if (!name || !mode)
+      return { accepted: false, pending: false,
+        reply: dockControl.failure("E_VALIDATION",
+          "A mode switch needs a connected output and a destination mode.") }
+    var blocked = mutationBlocked()
+    if (blocked) return { accepted: false, pending: false, reply: blocked }
+    var live = currentPresentation()
+    var entry = ScreenPresentationModel.entryFor(live, name)
+    if (!entry)
+      return { accepted: false, pending: false,
+        reply: dockControl.failure("E_STALE",
+          "This output is no longer connected; the mode was not changed.") }
+    if (!ScreenPresentationModel.modeGestureTokenCurrent(capturedState, live, name))
+      return { accepted: false, pending: false,
+        reply: dockControl.failure("E_STALE",
+          "Preference changed after the interaction started; refresh before retrying.") }
+    // Copy the live map — never a captured one — and touch only this gesture's
+    // connector. Disconnected entries and foreign overrides are preserved; the
+    // writer's stale check compares against that same live map.
+    var expected = settings.presentationModeByMonitor
+    var nextMap = Object.assign({},
+      DockModel.normalizeSetting("presentationModeByMonitor", expected))
+    nextMap[name] = mode
+    return saveSettingIntent("presentationModeByMonitor", nextMap, expected)
+  }
+
   // One position request from either renderer. Dragging the bottom dock's empty
-  // background left switches presentation to the sidebar; the classic dock is
-  // bottom-only, so any other edge keeps the stale-protected position writer.
-  function handlePositionRequest(position, expectedPosition, expectedPresentation) {
-    if (position === "left")
-      return commitModeGesture("sidebar", expectedPresentation)
-    return saveSettingIntent("position", position, expectedPosition)
+  // background left switches that output to the sidebar; dragging empty sidebar
+  // background down switches that output back to the classic dock. The gesture
+  // writes this monitor's presentationModeByMonitor entry, never the global
+  // position setting, and expectedPosition only exists to keep the legacy
+  // signal shape — a stale gesture is rejected through its token instead.
+  function handlePositionRequest(connector, position, expectedPosition, gestureToken) {
+    if (position !== "left" && position !== "bottom")
+      return { accepted: false, pending: false,
+        reply: dockControl.failure("E_VALIDATION",
+          "Unsupported gesture destination: " + String(position)) }
+    return commitMonitorModeGesture(connector,
+      position === "left" ? "sidebar" : "classic", gestureToken)
   }
 
   function mutationBlocked() {
@@ -419,7 +470,7 @@ Item {
   function settingsSaved() {
     settingsWriteError = ""
     settingsWriteState = "saved"
-    modeGestureFeedback = ""
+    modeGestureFeedbackByMonitor = ({})
     settingsLoadedText = settingsWriteText
     settingsLoadState = "loaded"
     settingsLoadError = ""
@@ -433,9 +484,8 @@ Item {
       + "Retry before restarting. " + FileViewError.toString(error)
     settingsWriteState = "error"
     settingsPersisted = false
-    // The renderer that requested the switch may already be gone; the one that
-    // replaced it inherits the report.
-    modeGestureFeedback = DockModel.persistenceFeedback(settingsWriteError)
+    // No per-connector message: a persistence failure is host-wide and every
+    // surface derives it from settingsWriteState through modeGestureDisplayFor.
     console.warn("Dock: could not save " + configPath + ":", error)
     reloadSettingsIfPending()
   }
@@ -491,8 +541,6 @@ Item {
   }
 
   Component.onCompleted: {
-    rendererInitialized = true
-    Qt.callLater(root.syncRenderer)
     refreshWorkspaceCounts()
     scopeRefreshController.requestRefresh()
   }
@@ -638,79 +686,96 @@ Item {
       var revision = root.scopeRevision
       return DockWindowModel.focusedWorkspaceIdentity(root.hyprMonitors, Hyprland.focusedWorkspace)
     }
-    onSelectedScreenChanged: root.rendererScreen = selectedScreen
-    onMappedScreensChanged: if (root.rendererInitialized) Qt.callLater(root.activateRenderer)
-    onSurfaceInvalidated: {
-      if (root.rendererMode === "sidebar") root.rendererReady = false
-      Qt.callLater(root.syncRenderer)
-    }
   }
 
-  Loader {
-    id: presentationLoader
-    active: root.rendererReady
-    sourceComponent: root.rendererMode === "sidebar" ? sidebarPresentation : classicPresentation
-  }
-
-  Component {
-    id: sidebarPresentation
-    Item {
-      id: sidebarRoot
-      readonly property var panels: sidebarVariants.instances
-      readonly property var panel: panels.length ? panels[0] : null
-      Variants {
-        id: sidebarVariants
-        model: sidebarState.mappedScreens
-        delegate: Component {
-          DockSidebar {
-            required property var modelData
-            screen: modelData
-            host: root
-            controller: sidebarState
-          }
-        }
+  // One stable owner per connected output. Owners exist for every screen and
+  // each maps exactly one surface, so switching one screen's presentation
+  // tears down and rebuilds only that screen's surface — every other output
+  // keeps its renderer instance, interactions and popups untouched.
+  Variants {
+    id: presentationOwners
+    model: root.connectedScreens
+    delegate: Component {
+      DockScreenPresentation {
+        required property var modelData
+        readonly property var resolvedEntry: ScreenPresentationModel.entryFor(
+          root.presentation, modelData.name)
+        connector: modelData.name
+        screenObject: modelData
+        presentation: root.presentation
+        mode: resolvedEntry ? resolvedEntry.mode : root.presentation.defaultMode
+        source: resolvedEntry ? resolvedEntry.source : "inherited"
+        // Sidebar needs both the resolved mapping and live controller
+        // membership (the controller defers membership changes while an
+        // interaction is in flight); classic outputs always map.
+        mapped: !resolvedEntry ? true : (resolvedEntry.mode === "sidebar"
+          ? resolvedEntry.mapped && sidebarState.connectorIsMapped(modelData.name)
+          : resolvedEntry.mapped)
+        // A sidebar edge change re-anchors its layer shell: recreate only
+        // sidebar surfaces, teardown-first.
+        surfaceKey: mode === "sidebar"
+          ? "sidebar:" + DockModel.normalizeSetting("sidebarEdge", root.settings.sidebarEdge)
+          : "classic"
+        surfaceComponent: mode === "sidebar" ? sidebarSurface : classicSurface
       }
     }
   }
 
   Component {
-    id: classicPresentation
+    id: classicSurface
     Item {
-      Variants {
-        model: Quickshell.screens
-        delegate: Component {
-          Dock {
-            required property var modelData
-            screen: modelData
-            settings: root.settings
-            iconOverrides: root.settings.iconOverrides || ({})
-            iconReloadRevision: root.iconReloadRevision
-            browserProfileService: root.browserProfileService
-            browserProfileBadgesEnabled: root.settings.browserProfileBadgesEnabled !== false
-            showTrash: root.showTrash
-            windowActions: root.windowActions
-            workspaceMonitorDrag: workspaceMonitorDragController
-            badgeTracker: root.badgeTracker
-            trashItemCount: root.trashItemCount
-            trashStateKnown: root.trashStateKnown
-            workspaceWindowCounts: root.workspaceWindowCounts
-            workspaceCountsReady: root.workspaceCountsReady
-            workspaceCountsRevision: root.workspaceCountsRevision
-            scopeRevision: root.scopeRevision
-            modeGestureFeedback: root.modeGestureFeedback
-            onReorderRequested: (sourceDesktopId, targetDesktopId) => root.reorderPinned(sourceDesktopId, targetDesktopId)
-            onPinRequested: desktopId => root.pinApplication(desktopId)
-            onUnpinRequested: desktopId => root.unpinApplication(desktopId)
-            onHideRequested: desktopId => root.hideApplication(desktopId)
-            onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
-            onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
-            onPositionRequested: (position, expectedPosition, expectedPresentation) =>
-              root.handlePositionRequest(position, expectedPosition,
-                expectedPresentation)
-            onOpenTrashRequested: root.openTrash()
-            onEmptyTrashRequested: root.emptyTrash()
-          }
-        }
+      id: classicRoot
+      property var owner: null
+      readonly property var panels: []
+      Dock {
+        screen: classicRoot.owner ? classicRoot.owner.screenObject : null
+        settings: root.settings
+        iconOverrides: root.settings.iconOverrides || ({})
+        iconReloadRevision: root.iconReloadRevision
+        browserProfileService: root.browserProfileService
+        browserProfileBadgesEnabled: root.settings.browserProfileBadgesEnabled !== false
+        showTrash: root.showTrash
+        windowActions: root.windowActions
+        workspaceMonitorDrag: workspaceMonitorDragController
+        badgeTracker: root.badgeTracker
+        trashItemCount: root.trashItemCount
+        trashStateKnown: root.trashStateKnown
+        workspaceWindowCounts: root.workspaceWindowCounts
+        workspaceCountsReady: root.workspaceCountsReady
+        workspaceCountsRevision: root.workspaceCountsRevision
+        scopeRevision: root.scopeRevision
+        presentationMode: classicRoot.owner ? classicRoot.owner.mode : "classic"
+        modeGestureFeedback: classicRoot.owner
+          ? root.modeGestureDisplayFor(classicRoot.owner.connector) : ""
+        modeGestureToken: classicRoot.owner ? classicRoot.owner.gestureToken : null
+        onReorderRequested: (sourceDesktopId, targetDesktopId) => root.reorderPinned(sourceDesktopId, targetDesktopId)
+        onPinRequested: desktopId => root.pinApplication(desktopId)
+        onUnpinRequested: desktopId => root.unpinApplication(desktopId)
+        onHideRequested: desktopId => root.hideApplication(desktopId)
+        onBrowserActivityMuteToggled: serviceId => root.toggleBrowserActivityMute(serviceId)
+        onAutoHideRequested: enabled => root.saveSetting("autoHide", enabled)
+        onPositionRequested: (position, expectedPosition, gestureToken) =>
+          root.handlePositionRequest(classicRoot.owner ? classicRoot.owner.connector : "",
+            position, expectedPosition, gestureToken)
+        onOpenTrashRequested: root.openTrash()
+        onEmptyTrashRequested: root.emptyTrash()
+      }
+    }
+  }
+
+  Component {
+    id: sidebarSurface
+    Item {
+      id: sidebarRoot
+      property var owner: null
+      readonly property var panels: dockSidebar ? [dockSidebar] : []
+      DockSidebar {
+        id: dockSidebar
+        screen: sidebarRoot.owner ? sidebarRoot.owner.screenObject : null
+        host: root
+        controller: sidebarState
+        presentationMode: sidebarRoot.owner ? sidebarRoot.owner.mode : "sidebar"
+        modeGestureToken: sidebarRoot.owner ? sidebarRoot.owner.gestureToken : null
       }
     }
   }

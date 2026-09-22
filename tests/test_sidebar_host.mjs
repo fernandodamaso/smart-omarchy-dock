@@ -68,31 +68,41 @@ assert.equal(model.geometry(720,320,false).width,288)
 const host=read('DockHost.qml')
 assert.equal((host.match(/\n  DockWindowActions \{/g)||[]).length,1)
 assert.equal((host.match(/\n  DockSidebarController \{/g)||[]).length,1)
-assert.match(host,/id: presentationLoader/)
-assert.match(host,/active: root.rendererReady/)
-assert.match(host,/sourceComponent: root.rendererMode === "sidebar"/)
-// Execute the actual renderer switch functions, with the unavailable QML Loader
-// represented by its state only. Actual surfaces/delegates are tested by runtime/sidebar.qml.
-h.host.rendererInitialized = true
-h.host.rendererReady = true
-h.host.rendererMode = 'classic'
-h.host.rendererEdge = 'left'
-h.host.rendererScreen = null
-h.host.sidebarState = {selectedScreen:h.host.connectedScreens[0],
-  mappedScreens:[h.host.connectedScreens[0]]}
-h.host.settings = {...h.host.settings, sidebarEdge:'right'}
-h.host.syncRenderer()
-assert.equal(h.host.rendererReady,true,'inactive sidebar edge must not recreate classic docks')
-h.host.settings = {...h.host.settings,presentationMode:'sidebar'}
-h.host.syncRenderer()
-assert.equal(h.host.rendererReady,false,'old renderer unloads before deferred creation')
-assert.equal(h.host.rendererMode,'sidebar')
-h.host.activateRenderer()
-assert.equal(h.host.rendererReady,true)
-h.host.sidebarState.selectedScreen=null
-h.host.sidebarState.mappedScreens=[]
-h.host.syncRenderer(); h.host.activateRenderer()
-assert.equal(h.host.rendererReady,false,'zero screens creates no sidebar branch')
-assert.match(host,/model: sidebarState\.mappedScreens/)
+// Per-screen presentation ownership replaces the single global renderer loader:
+// one stable owner per connected output, each mapping at most one surface.
+assert.doesNotMatch(host,
+  /\bpresentationLoader\b|\bsyncRenderer\b|\bactivateRenderer\b|rendererMode|rendererReady|rendererInitialized|rendererEdge|rendererScreen|commitModeGesture\b/,
+  'the single global renderer state machine is gone')
+assert.match(host,/id: presentationOwners/)
+assert.match(host,/model: root\.connectedScreens/)
+assert.match(host,/DockScreenPresentation \{/)
+assert.match(host,/surfaceComponent: mode === "sidebar" \? sidebarSurface : classicSurface/)
 assert.match(host,/readonly property var sidebarPanels:/)
+assert.match(host,/function commitMonitorModeGesture\(connector, destination, capturedState\)/)
+assert.match(host,/function currentPresentation\(\)/)
+// Ownership lifecycle is generic and behavior-tested with fake components by
+// tests/tst_screenownership.qml; here only the teardown-first contract is pinned.
+const ownerSource=read('components/DockScreenPresentation.qml')
+assert.match(ownerSource,
+  /function syncSurface\(\) \{[\s\S]*?surfaceLoader\.active = false\s*\n\s*surfaceLoader\.sourceComponent = root\.surfaceComponent\s*\n\s*Qt\.callLater\(root\.activateSurface\)/,
+  'syncSurface tears down synchronously before deferring creation')
+// Host presentation resolves per screen from live settings through the same
+// pure resolver the sidebar controller and CLI diagnostics call.
+h.host.connectedScreens=[{name:'DP-1',width:1920,height:1080},
+  {name:'DP-2',width:1920,height:1080}]
+h.host.hyprMonitors=[{name:'DP-1',x:0},{name:'DP-2',x:1920}]
+h.host.sidebarState={selectedScreen:h.host.connectedScreens[0],
+  mappedScreens:h.host.connectedScreens,interactionBusy:false}
+h.host.settings={...h.host.settings,presentationMode:'sidebar'}
+let presentation=h.host.currentPresentation()
+assert.equal(presentation.defaultMode,'sidebar')
+assert.deepEqual([...presentation.sidebarScreens].map(s=>s.name),['DP-1','DP-2'],
+  'the inherited sidebar default still mirrors every connected screen')
+h.host.settings={...h.host.settings,presentationModeByMonitor:{'DP-2':'classic'}}
+presentation=h.host.currentPresentation()
+assert.deepEqual([...presentation.classicScreens].map(s=>s.name),['DP-2'])
+assert.deepEqual([...presentation.sidebarScreens].map(s=>s.name),['DP-1'])
+assert.equal(presentation.sourceByMonitor['DP-2'],'override')
+assert.equal(presentation.sourceByMonitor['DP-1'],'inherited')
+assert.equal(presentation.mixed,true)
 console.log('SB-02 typed configuration, requested/effective diagnostics and sole writer: PASS')

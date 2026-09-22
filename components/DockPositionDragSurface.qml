@@ -29,6 +29,10 @@ MouseArea {
   property string presentationMode: ""
   // Configured sidebar edge, used to place the destination silhouette.
   property string sidebarEdge: "left"
+  // Press-time presentation token for this panel's output, injected by the
+  // screen owner. Captured on press and emitted with the commit so the host can
+  // reject a gesture whose state changed underneath it.
+  property var gestureToken: null
   // Owned by the panel; mirrors the existing interface-animation preference.
   property bool animationsEnabled: true
 
@@ -44,6 +48,9 @@ MouseArea {
   property string startEdge: "bottom"
   property var expectedPosition: "bottom"
   property string expectedPresentation: ""
+  // Press-time copy of gestureToken; the commit emits this exact token so the
+  // host validates against the state the gesture started from.
+  property var capturedGestureToken: null
   property string candidatePosition: "bottom"
   property bool cancelRequested: false
 
@@ -56,7 +63,7 @@ MouseArea {
   readonly property string destinationPresentation: DockModel.modeDragDestination(startEdge)
   readonly property string destinationEdge: DockModel.modeDragDestinationEdge(startEdge, sidebarEdge)
 
-  signal positionRequested(string position, var expectedPosition, string expectedPresentation)
+  signal positionRequested(string position, var expectedPosition, var gestureToken)
   signal gestureCancelled(string reason)
 
   enabled: interactionAllowed
@@ -79,6 +86,7 @@ MouseArea {
     startEdge = DockModel.dockGestureEdge(dockPosition)
     expectedPosition = requestedPosition
     expectedPresentation = presentationMode
+    capturedGestureToken = gestureToken
     candidatePosition = startEdge
     deltaX = 0
     deltaY = 0
@@ -116,15 +124,16 @@ MouseArea {
 
   onReleased: function(mouse) {
     if (!cancelRequested) trackMovement(mouse.x, mouse.y)
-    // A mode write happens at most once per completed gesture, and never when
-    // the presentation changed underneath the press.
+    // A mode write happens at most once per completed gesture, never when the
+    // presentation changed underneath the press, and always against the token
+    // captured at press time — the host re-validates it before writing.
     var commit = !cancelRequested && candidatePosition !== startEdge
       && expectedPresentation === presentationMode
     var position = candidatePosition
     var expected = expectedPosition
-    var expectedMode = expectedPresentation
+    var token = capturedGestureToken
     resetGesture()
-    if (commit) root.positionRequested(position, expected, expectedMode)
+    if (commit) root.positionRequested(position, expected, token)
   }
 
   onCanceled: {

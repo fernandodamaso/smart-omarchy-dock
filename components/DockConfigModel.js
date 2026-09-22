@@ -101,6 +101,17 @@ function valueError(value, spec) {
       seenIcons[key] = true
     }
   }
+  if (spec.format === "presentation-mode-by-monitor") {
+    var modeConnectors = Object.keys(value)
+    for (var p = 0; p < modeConnectors.length; ++p) {
+      var modeConnector = modeConnectors[p]
+      if (typeof modeConnector !== "string" || !modeConnector
+          || /[\x00-\x1f\x7f-\x9f]/.test(modeConnector))
+        return "Invalid monitor connector: " + modeConnector
+      if (value[modeConnector] !== "classic" && value[modeConnector] !== "sidebar")
+        return "Expected classic or sidebar for " + modeConnector
+    }
+  }
   if (spec.format === "sidebar-collapsed-by-monitor") {
     var connectors = Object.keys(value)
     for (var m = 0; m < connectors.length; ++m) {

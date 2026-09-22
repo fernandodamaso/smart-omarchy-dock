@@ -29,6 +29,7 @@ export function hostHarness(settings, applications = []) {
     WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel'),
     SidebarModel: loadModel('DockSidebarModel'),
     SidebarWidgetModel: loadModel('DockSidebarWidgetModel'),
+    ScreenPresentationModel: loadModel('DockScreenPresentationModel'),
     TrashModel: loadModel('DockTrashModel') };
   const writes = [];
   let cached = '', host;
@@ -57,7 +58,11 @@ export function hostHarness(settings, applications = []) {
     settingsLoadState: 'loaded', settingsLoadError: '', settingsReloadPending: false,
     settingsWriteState: 'idle', settingsWriteError: '', settingsPersisted: true,
     settingsDefaultsInUse: false, showTrash: false, showTrashSetting: false,
-    settingsLoadedText: '', settingsWriteBaseText: '', settingsWriteText: '' });
+    settingsLoadedText: '', settingsWriteBaseText: '', settingsWriteText: '',
+    // Presentation inputs read by currentPresentation()/gesture functions.
+    connectedScreens: [], hyprMonitors: [],
+    sidebarState: { mappedScreens: [], interactionBusy: false },
+    modeGestureFeedbackByMonitor: ({}) });
   const control = functions('components/DockControl.qml', {
     ...shared, host, defaults, metadata, Quickshell: { processId: 123 } });
   host.dockControl = control;

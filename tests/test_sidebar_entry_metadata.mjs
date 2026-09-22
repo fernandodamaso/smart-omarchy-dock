@@ -127,7 +127,7 @@ const activations = []
 const controller = qmlMethods('DockSidebarController.qml', {
   DockModel,
   interactionBusy: false,
-  mode: 'sidebar',
+  mappedScreens: [{ name: 'DP-1' }, { name: 'HDMI-A-1' }],
   settings: { hiddenApplications: [], pinned: settings.pinned },
   rowsByKey,
   windowActions: {

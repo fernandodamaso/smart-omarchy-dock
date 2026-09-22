@@ -412,6 +412,7 @@ function settingsDefaults() {
     borderWidthEnabled: false,
     borderWidth: 2,
     presentationMode: "classic",
+    presentationModeByMonitor: {},
     sidebarEdge: "left",
     sidebarMonitor: "",
     sidebarExpandedWidth: 320,
@@ -560,6 +561,30 @@ function persistenceFeedback(settingsWriteError) {
   return "Unsaved preferences: " + String(settingsWriteError || "Persistence failed")
 }
 
+// Structural equality for a stored setting comparison. The writer's stale check
+// used `!==`, which reports every object setting (override/collapse/monitor
+// maps) as changed; arrays compare in order, plain objects compare as key sets
+// so two logically identical maps never manufacture a conflict.
+function sameSettingValue(left, right) {
+  if (left === right) return true
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false
+  if (Array.isArray(left) !== Array.isArray(right)) return false
+  if (Array.isArray(left)) {
+    if (left.length !== right.length) return false
+    for (var i = 0; i < left.length; ++i)
+      if (!sameSettingValue(left[i], right[i])) return false
+    return true
+  }
+  var leftKeys = Object.keys(left).sort()
+  var rightKeys = Object.keys(right).sort()
+  if (leftKeys.length !== rightKeys.length) return false
+  for (var k = 0; k < leftKeys.length; ++k) {
+    if (leftKeys[k] !== rightKeys[k]) return false
+    if (!sameSettingValue(left[leftKeys[k]], right[rightKeys[k]])) return false
+  }
+  return true
+}
+
 // Feedback text for a completed background gesture's writer result. An accepted
 // write returns "" so the renderer clears any earlier message; a rejected
 // preflight intent (stale, busy, invalid config) surfaces its own reason
@@ -692,11 +717,26 @@ function normalizeSidebarCollapsedByMonitor(value) {
   return result
 }
 
+// Exact connector → presentation mode. Invalid keys/values dropped;
+// disconnected names kept, mirroring normalizeSidebarCollapsedByMonitor.
+function normalizePresentationModeByMonitor(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return ({})
+  var result = ({})
+  Object.keys(value).forEach(function(key) {
+    if (typeof key !== "string" || !key || /[\x00-\x1f\x7f-\x9f]/.test(key)) return
+    if (value[key] !== "classic" && value[key] !== "sidebar") return
+    result[key] = value[key]
+  })
+  return result
+}
+
 function normalizeSetting(key, value) {
   var defaults = settingsDefaults()
   switch (key) {
   case "presentationMode":
     return value === "sidebar" ? "sidebar" : "classic"
+  case "presentationModeByMonitor":
+    return normalizePresentationModeByMonitor(value)
   case "sidebarEdge":
     return value === "right" ? "right" : "left"
   case "sidebarMonitor":

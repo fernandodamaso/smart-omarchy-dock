@@ -33,6 +33,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 56 rows 
 | `borderWidthEnabled` | `false` | Boolean; enables a fixed width instead of theme-owned widths. |
 | `borderWidth` | `2` | Integer 0–8 logical pixels; relevant only with borderWidthEnabled. |
 | `presentationMode` | `"classic"` | Classic bottom dock or mirrored sidebar panels (the dock's vertical presentation). Drag empty dock background left past the 48 px threshold to switch to the sidebar, or empty sidebar background down to return; release commits once, an early release, Escape or an interrupted drag writes nothing. |
+| `presentationModeByMonitor` | `{}` | Object map of exact connector → `classic` or `sidebar`. A listed connector ignores `presentationMode` and `sidebarMonitor`; missing connectors inherit the effective default. Disconnected names retained; control characters and non-mode values rejected. |
 | `sidebarEdge` | `"left"` | Sidebar panel edge; leaves classic position unchanged. |
 | `sidebarMonitor` | `""` | Empty maps a mirrored panel on every connected screen. A connected connector maps only that output. Disconnected preferences are retained and fall back to all connected screens; control characters are rejected. |
 | `sidebarExpandedWidth` | `320` | Requested expanded width in logical pixels. Runtime screen clamping never overwrites this preference; a changed resize release persists only this field. |

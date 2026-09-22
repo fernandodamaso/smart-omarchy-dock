@@ -26,12 +26,17 @@ PanelWindow {
     : !host ? "" : host.settingsWriteState === "error"
     ? DockModel.persistenceFeedback(host.settingsWriteError)
     : host.settingsWriteState === "saving" ? "Saving preferences" : controller.mutationFeedback
-  // Rejected or persistence-pending mode writes from the background gesture.
-  // Kept out of controller.mutationFeedback so it never overlaps a row/menu
-  // message, and cleared as soon as settings actually change.
-  property string modeDragError: ""
-  readonly property string presentationMode: DockModel.normalizeSetting(
+  // Host-owned, per-connector gesture feedback for this panel's output. The
+  // host keys it by connector, so a stale gesture on another monitor can never
+  // display here, and a persistence failure stays visible host-wide. Derived:
+  // the host clears it on save/reload and on the next gesture.
+  readonly property string modeDragError: !host || !screen ? ""
+    : host.modeGestureDisplayFor(screen.name)
+  property string presentationMode: DockModel.normalizeSetting(
     "presentationMode", host ? host.settings.presentationMode : "sidebar")
+  // Press-time mode-switch token for this panel's connector, injected by the
+  // screen owner so a gesture commits against the state it started from.
+  property var modeGestureToken: null
   readonly property string sidebarEdge: DockModel.normalizeSetting(
     "sidebarEdge", host ? host.settings.sidebarEdge : "left")
   // Mirrors the existing interface-animation preference; owned by the panel so
@@ -86,12 +91,13 @@ PanelWindow {
   }
 
   // Exactly one host-owned write per completed background gesture, through the
-  // sole settings writer. A stale or busy rejection is surfaced but never
-  // retried silently; an accepted write clears local error state and lets the
-  // host's own saving/persistence feedback take over.
-  function commitModeSwitch(position, expectedPresentation) {
-    if (!host || position !== "bottom") return
-    root.modeDragError = host.commitModeGesture("classic", expectedPresentation)
+  // sole settings writer and scoped to this panel's connector. A stale, busy or
+  // disconnected gesture is surfaced but never retried silently; an accepted
+  // write clears feedback and lets the host's own saving/persistence state take
+  // over.
+  function commitModeSwitch(position, gestureToken) {
+    if (!host || position !== "bottom" || !root.screen) return
+    host.commitMonitorModeGesture(root.screen.name, "classic", gestureToken)
   }
 
   // The panel-level surface owns header, margin, pin-shelf and utility gaps;
@@ -121,7 +127,6 @@ PanelWindow {
     // A dying or hidden panel must not carry a half-finished mode gesture.
     positionDragSurface.cancelGesture("surface-close")
     viewportDragSurface.cancelGesture("surface-close")
-    root.modeDragError = ""
     if (root.widgetArea) {
       if (root.widgetArea.dragWidgetId) root.widgetArea.finishDrag(0, 0, true)
       root.widgetArea.closeManager()
@@ -251,11 +256,12 @@ PanelWindow {
       requestedPosition: root.sidebarEdge
       switchThreshold: 48
       presentationMode: root.presentationMode
+      gestureToken: root.modeGestureToken
       sidebarEdge: root.sidebarEdge
       animationsEnabled: root.animationsEnabled
       interactionAllowed: !root.controller.interactionBusy
-      onPositionRequested: (position, expectedPosition, expectedPresentation) =>
-        root.commitModeSwitch(position, expectedPresentation)
+      onPositionRequested: (position, expectedPosition, gestureToken) =>
+        root.commitModeSwitch(position, gestureToken)
     }
     // Subtle desktop-facing divider instead of a full bright panel outline.
     Rectangle {
@@ -420,11 +426,12 @@ PanelWindow {
       requestedPosition: root.sidebarEdge
       switchThreshold: 48
       presentationMode: root.presentationMode
+      gestureToken: root.modeGestureToken
       sidebarEdge: root.sidebarEdge
       animationsEnabled: root.animationsEnabled
       interactionAllowed: visible && !root.controller.interactionBusy
-      onPositionRequested: (position, expectedPosition, expectedPresentation) =>
-        root.commitModeSwitch(position, expectedPresentation)
+      onPositionRequested: (position, expectedPosition, gestureToken) =>
+        root.commitModeSwitch(position, gestureToken)
     }
     DockSidebarPinnedStrip {
       id: pinnedStrip
@@ -657,8 +664,6 @@ PanelWindow {
     function onMonitorsChanged() { Qt.callLater(root.refreshContext) }
     function onMinimizedOriginsChanged() { Qt.callLater(root.refreshContext) }
     function onSettingsChanged() {
-      // A settings change supersedes any stale/pending gesture error.
-      root.modeDragError = ""
       Qt.callLater(root.refreshContext)
     }
     function onSurfaceInvalidated() { root.closeSurfaces() }

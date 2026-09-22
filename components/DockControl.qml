@@ -11,6 +11,7 @@ import "DockTrashModel.js" as TrashModel
 import "DockConfigModel.js" as ConfigModel
 import "DockIconModel.js" as DockIconModel
 import "DockWorkspaceGroupModel.js" as WorkspaceGroupModel
+import "DockScreenPresentationModel.js" as ScreenPresentationModel
 
 // Exactly one host-owned target, never one target per screen/Variants delegate.
 Item {
@@ -76,42 +77,80 @@ Item {
     return result
   }
 
-  // Requested preferences remain untouched. These diagnostics describe only the
-  // selected presentation; geometry is unavailable without a connected screen.
+  // Requested preferences remain untouched. These diagnostics resolve the same
+  // per-screen presentation the renderers consume — from settings and connected
+  // screens alone, so a dry run resolves without any renderer instance — plus
+  // the sidebar geometry/collapse of the outputs actually showing a sidebar.
+  // Geometry is unavailable without a connected screen.
   function presentationData(requested) {
-    var sidebar = DockModel.normalizeSetting("presentationMode", requested.presentationMode) === "sidebar"
     var controller = root.host.sidebarController
-    var preferred = DockModel.normalizeSetting("sidebarMonitor", requested.sidebarMonitor)
-    var mapped = SidebarModel.selectScreens(root.host.connectedScreens || [],
-      root.host.hyprMonitors || [], requested.workspaceMonitorOrder || [], preferred,
-      controller && controller.mappedScreens ? controller.mappedScreens : [],
-      controller ? controller.interactionBusy : false)
-    var screen = mapped.length ? mapped[0] : null
+    var presentation = ScreenPresentationModel.resolve({
+      presentationMode: requested.presentationMode,
+      presentationModeByMonitor: requested.presentationModeByMonitor,
+      sidebarMonitor: requested.sidebarMonitor,
+      workspaceMonitorOrder: requested.workspaceMonitorOrder,
+      screens: root.host.connectedScreens || [],
+      monitors: root.host.hyprMonitors || [],
+      previousSidebarScreens: controller && controller.mappedScreens
+        ? controller.mappedScreens : [],
+      busy: controller ? controller.interactionBusy === true : false
+    })
+    var sidebarScreens = presentation.sidebarScreens
+    var hasSidebar = sidebarScreens.length > 0
+    // Geometry and the classic-only settings list describe the configured
+    // sidebar presentation: outputs that show one now, or — when no screen is
+    // connected yet — the sidebar-only default itself, so a disconnected
+    // sidebar profile still projects the same numbers it always has.
+    var sidebarPresentation = hasSidebar || presentation.defaultMode === "sidebar"
+    var screen = hasSidebar ? sidebarScreens[0] : null
     var map = DockModel.normalizeSetting("sidebarCollapsedByMonitor",
       requested.sidebarCollapsedByMonitor)
     var defaultCollapsed = requested.sidebarCollapsed === true
     var collapsedByScreen = ({})
-    if (sidebar) {
-      mapped.forEach(function(entry) {
-        var name = entry && entry.name ? entry.name : ""
-        if (!name) return
-        collapsedByScreen[name] = Object.prototype.hasOwnProperty.call(map, name)
-          ? map[name] === true : defaultCollapsed
-      })
-    }
+    sidebarScreens.forEach(function(entry) {
+      var name = entry && entry.name ? entry.name : ""
+      if (!name) return
+      collapsedByScreen[name] = Object.prototype.hasOwnProperty.call(map, name)
+        ? map[name] === true : defaultCollapsed
+    })
     var primaryCollapsed = screen && Object.prototype.hasOwnProperty.call(collapsedByScreen, screen.name)
       ? collapsedByScreen[screen.name] : defaultCollapsed
     var bounds = SidebarModel.geometry(screen ? screen.width : 0,
       requested.sidebarExpandedWidth, primaryCollapsed)
     return {
-      mode: sidebar ? "sidebar" : "classic",
-      screen: sidebar && screen ? screen.name : null,
-      screens: sidebar ? mapped.map(function(entry) { return entry.name }) : [],
-      collapsedByScreen: sidebar ? collapsedByScreen : ({}),
-      width: sidebar ? bounds.width : null,
-      expandedWidth: sidebar ? bounds.expandedWidth : null,
-      mapped: sidebar ? bounds.mapped : null,
-      inactiveClassicSettings: sidebar ? ["position", "workspaceLayout", "workspaceGroups",
+      // Legacy summary fields keep their meaning: `mode` is the inherited
+      // default (per-output truth lives below), and `screen`/`screens` describe
+      // the outputs actually showing a sidebar — empty when none do, even if
+      // the default mode is sidebar.
+      mode: presentation.defaultMode,
+      screen: screen ? screen.name : null,
+      screens: sidebarScreens.map(function(entry) { return entry.name }),
+      collapsedByScreen: collapsedByScreen,
+      width: sidebarPresentation ? bounds.width : null,
+      expandedWidth: sidebarPresentation ? bounds.expandedWidth : null,
+      mapped: sidebarPresentation ? bounds.mapped : null,
+      // Per-output resolution shared with the renderers: every connected
+      // output with its effective mode, where it came from, and whether the
+      // legacy sidebar selection (or an explicit override) maps it.
+      defaultMode: presentation.defaultMode,
+      perMonitor: presentation.entries.map(function(entry) {
+        return {
+          connector: entry.connector,
+          mode: entry.mode,
+          source: entry.source,
+          mapped: entry.mapped,
+          sidebarSelected: entry.sidebarSelected
+        }
+      }),
+      modeByMonitor: presentation.modeByMonitor,
+      sourceByMonitor: presentation.sourceByMonitor,
+      mappedByMonitor: presentation.mappedByMonitor,
+      classicScreens: presentation.classicScreens.map(function(entry) { return entry.name }),
+      mixed: presentation.mixed,
+      // Classic-only settings are still honored by classic outputs; this lists
+      // what the sidebar presentation ignores, so it is empty only when no
+      // sidebar is configured or rendered.
+      inactiveClassicSettings: sidebarPresentation ? ["position", "workspaceLayout", "workspaceGroups",
         "windowScope", "workspaceMonitorScope", "reserveSpace", "autoHide", "showPreviews",
         "clickAction", "middleClickAction", "scrollAction", "magnification", "iconSize",
         "sortByWorkspace", "fullLength", "margin", "backgroundOpacity", "backgroundColorEnabled",
@@ -150,11 +189,18 @@ Item {
     result.launcherBadgeMode = requested.launcherBadgeMode === "dots-only" ? "dots-only" : "automatic"
     result.reserveSpace = DockModel.shouldReserveSpace(result.reserveSpace, result.autoHide)
     if (result.workspaceLayout === "flat") result.workspaceMonitorScope = "all"
-    if (result.presentationMode === "sidebar") {
-      var presentation = root.presentationData(requested)
+    // Sidebar rewrites describe an output that actually renders a sidebar. In a
+    // mixed layout the classic outputs keep honoring their own values for these
+    // keys, so the rewrite applies only when the inherited default is sidebar
+    // and no classic surface exists; with no connected screen it still follows
+    // the sidebar-only default, exactly as before per-monitor overrides existed.
+    var presentation = root.presentationData(requested)
+    if (presentation.defaultMode === "sidebar" && presentation.classicScreens.length === 0) {
       result.position = result.sidebarEdge
       result.sidebarMonitor = presentation.screen
-      result.sidebarExpandedWidth = presentation.expandedWidth
+      result.sidebarExpandedWidth = presentation.expandedWidth === null
+        ? DockModel.normalizeSetting("sidebarExpandedWidth", requested.sidebarExpandedWidth)
+        : presentation.expandedWidth
       result.windowScope = "all"
       result.workspaceMonitorScope = "all"
       result.workspaceLayout = "grouped"

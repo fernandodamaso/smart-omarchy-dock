@@ -34,21 +34,22 @@ TestCase {
     return null
   }
 
-  function makeSurface(position, requested, presentation) {
+  function makeSurface(position, requested, presentation, token) {
     events = []
     cancels = []
     var surface = createTemporaryObject(surfaceFactory, testCase, {
       dockPosition: position,
       requestedPosition: requested,
       switchThreshold: 48,
-      presentationMode: presentation === undefined ? "" : presentation
+      presentationMode: presentation === undefined ? "" : presentation,
+      gestureToken: token === undefined ? null : token
     })
     verify(surface !== null)
-    surface.positionRequested.connect(function(nextPosition, expectedPosition, expectedPresentation) {
+    surface.positionRequested.connect(function(nextPosition, expectedPosition, gestureToken) {
       testCase.events = testCase.events.concat([{
         position: nextPosition,
         expectedPosition: expectedPosition,
-        expectedPresentation: expectedPresentation
+        gestureToken: gestureToken
       }])
     })
     surface.gestureCancelled.connect(function(reason) {
@@ -63,22 +64,38 @@ TestCase {
   }
 
   function test_bottom_drag_left_commits_once() {
-    var surface = makeSurface("bottom", "bottom", "classic")
+    var surface = makeSurface("bottom", "bottom", "classic", "press-1")
     drag(surface, 220, 50, 150, 50)
     compare(events.length, 1)
     compare(events[0].position, "left")
     compare(events[0].expectedPosition, "bottom")
-    compare(events[0].expectedPresentation, "classic")
+    compare(events[0].gestureToken, "press-1")
     compare(cancels.length, 0)
   }
 
   function test_left_drag_down_commits_once() {
-    var surface = makeSurface("left", "left", "sidebar")
+    var surface = makeSurface("left", "left", "sidebar", "press-2")
     drag(surface, 150, 20, 150, 80)
     compare(events.length, 1)
     compare(events[0].position, "bottom")
     compare(events[0].expectedPosition, "left")
-    compare(events[0].expectedPresentation, "sidebar")
+    compare(events[0].gestureToken, "press-2")
+  }
+
+  function test_gesture_token_is_captured_at_press() {
+    var surface = makeSurface("bottom", "bottom", "classic", "press-time")
+    mousePress(surface, 240, 50, Qt.LeftButton)
+    mouseMove(surface, 150, 50, 20, Qt.LeftButton)
+    verify(surface.armed)
+    // The host re-resolves its presentation state after the press; the commit
+    // must still carry the token captured when the pointer went down so the
+    // host can reject the gesture as stale instead of writing against new state.
+    surface.gestureToken = "later-state"
+    mouseRelease(surface, 150, 50, Qt.LeftButton)
+    compare(events.length, 1)
+    compare(events[0].gestureToken, "press-time")
+    compare(surface.capturedGestureToken, "later-state",
+      "release re-captures the current token for the next gesture")
   }
 
   function test_right_edge_uses_the_same_downward_target() {
@@ -103,12 +120,12 @@ TestCase {
   }
 
   function test_legacy_requested_value_is_preserved_as_stale_token() {
-    var surface = makeSurface("bottom", "top")
+    var surface = makeSurface("bottom", "top", undefined, "press-legacy")
     drag(surface, 220, 50, 150, 50)
     compare(events.length, 1)
     compare(events[0].position, "left")
     compare(events[0].expectedPosition, "top")
-    compare(events[0].expectedPresentation, "")
+    compare(events[0].gestureToken, "press-legacy")
   }
 
   function test_disabled_surface_does_not_start_gesture() {

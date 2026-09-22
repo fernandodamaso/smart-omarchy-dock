@@ -39,6 +39,7 @@ const shared = {
   WorkspaceGroupModel: loadModel('DockWorkspaceGroupModel.js'),
   SidebarModel: loadModel('DockSidebarModel.js'),
   SidebarWidgetModel: loadModel('DockSidebarWidgetModel.js'),
+  ScreenPresentationModel: loadModel('DockScreenPresentationModel.js'),
   TrashModel: loadModel('DockTrashModel.js'),
 };
 let deferred = 0;

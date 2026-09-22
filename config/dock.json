@@ -22,6 +22,7 @@
   "borderWidthEnabled": false,
   "borderWidth": 2,
   "presentationMode": "classic",
+  "presentationModeByMonitor": {},
   "sidebarEdge": "left",
   "sidebarMonitor": "",
   "sidebarExpandedWidth": 320,

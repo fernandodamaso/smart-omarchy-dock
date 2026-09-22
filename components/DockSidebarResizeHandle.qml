@@ -17,8 +17,10 @@ Item {
   readonly property bool panelCollapsed: controller && screen
     ? controller.collapsedFor(screen) : !!(controller && controller.collapsed)
   readonly property var pointerTarget: resizeDrag.target
-  readonly property bool resizeEnabled: visible && controller
-    && controller.mode === "sidebar" && !root.panelCollapsed
+  // Resize is a sidebar affordance: require this panel's output to actually be
+  // sidebar-mapped rather than a global presentation default.
+  readonly property bool resizeEnabled: visible && controller && root.screen
+    && controller.connectorIsMapped(root.screen.name) && !root.panelCollapsed
     && (!controller.interactionBusy || controller.resizeActive)
   visible: controller && !root.panelCollapsed
 
