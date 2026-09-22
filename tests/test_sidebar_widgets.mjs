@@ -193,6 +193,18 @@ assert.match(areaSource, /sectionVisible: !panel\.panelCollapsed && root\.presen
 assert.match(areaSource, /implicitHeight: root\.sectionVisible \?/);
 assert.match(areaSource, /target: root\.viewport\.listView/);
 assert.match(areaSource, /anchorOutsideViewport/);
+assert.match(areaSource, /Ui\.PopupCard\s*\{[\s\S]*?id:\s*managerPopup/,
+  'Widget manager must use Omarchy native PopupCard chrome');
+assert.match(areaSource, /triggerMode:\s*"hover"/,
+  'Widget manager remains passive\/non-grabbing per the Sidebar Widget contract');
+assert.match(areaSource, /contentHeight:\s*managerPopup\.fittedContentHeight/,
+  'Widget manager must size to content instead of reserving a fixed tall window');
+assert.match(areaSource, /Ui\.ToggleSwitch\s*\{/,
+  'Widget enablement uses the native Omarchy switch affordance');
+assert.doesNotMatch(areaSource, /popupGeometryFor\(root\.managerAnchor,\s*360,\s*420\)/,
+  'legacy fixed manager geometry must not return');
+assert.doesNotMatch(areaSource, /text:\s*parent\.enabledWidget\s*\?\s*"Remove"\s*:\s*"Add"/,
+  'manager rows should not use text Add\/Remove buttons');
 assert.match(cardSource, /Remove from Widgets/);
 assert.match(cardSource, /presentation: "expanded"/);
 assert.doesNotMatch(cardSource, /presentation: "compact"/);
