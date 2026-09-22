@@ -43,9 +43,11 @@ PROTECTED_WIDGETS = {
 RESERVED_PACKAGE_FILES = {".smartdock-source.json", ".smartdock-package.json"}
 RUNTIME_WIDGETKIT_DIR = "SmartDock"
 WIDGETKIT_IMPORT_RE = re.compile(
-    r'^(?P<indent>\\s*)import\\s+SmartDock\\.WidgetKit\\s+1\\.0'
-    r'(?P<alias>\\s+as\\s+[A-Za-z_][A-Za-z0-9_]*)?'
-    r'(?P<comment>\\s*//.*)?\\s*
+    r"^(?P<indent>\s*)import\s+SmartDock[.]WidgetKit\s+1[.]0"
+    r"(?P<alias>\s+as\s+[A-Za-z_][A-Za-z0-9_]*)?"
+    r"(?P<comment>\s*//.*)?\s*\Z"
+)
+
 
 class WidgetError(Exception):
     def __init__(self, code: str, message: str, data=None):
