@@ -31,6 +31,28 @@ test('complete reusable Widget kit is repository-owned', () => {
   }
 })
 
+test('Widget component API documents the complete kit and is discoverable to agents', () => {
+  const apiPath = new URL('../docs/WIDGET_COMPONENTS.md', import.meta.url)
+  assert.equal(fs.existsSync(apiPath), true, 'Widget component API reference missing')
+  const api = fs.readFileSync(apiPath, 'utf8')
+  for (const name of all)
+    assert.match(api, new RegExp('`' + name + '`'), `${name} missing from API reference`)
+  assert.match(api, /WidgetSemanticPalette/)
+  for (const value of [
+    'neutral', 'info', 'success', 'warning', 'danger',
+    'urgent', 'overdue', 'primary', 'secondary', 'ghost',
+    'loading', 'empty', 'unavailable', 'error', 'stale',
+  ])
+    assert.match(api, new RegExp('\\b' + value + '\\b'), `shared value ${value} missing from API reference`)
+
+  const agents = fs.readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8')
+  const sidebar = fs.readFileSync(new URL('../docs/SIDEBAR_WIDGETS.md', import.meta.url), 'utf8')
+  const gallery = fs.readFileSync(new URL('../docs/widget-gallery/README.md', import.meta.url), 'utf8')
+  assert.match(agents, /docs\/WIDGET_COMPONENTS\.md/)
+  assert.match(sidebar, /WIDGET_COMPONENTS\.md/)
+  assert.match(gallery, /WIDGET_COMPONENTS\.md/)
+})
+
 test('WidgetIcon is the single flexible icon primitive', () => {
   const icon = source('WidgetIcon')
   assert.match(icon, /assets\/lucide\//)

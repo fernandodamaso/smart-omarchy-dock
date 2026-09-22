@@ -214,6 +214,12 @@ No model/rectangle test, synthetic state or pure-Qt result substitutes for that.
 
 ## Reusable Widget UI kit and gallery (FDM-975)
 
+For the coding-agent-facing per-component API — public properties, signals,
+supported semantic/state values, model shapes, inherited control behavior and a
+new-Widget checklist — read
+[`docs/WIDGET_COMPONENTS.md`](WIDGET_COMPONENTS.md). The source QML remains the
+final authority when a component implementation changes.
+
 FDM-975 adds a presentation-only UI kit under `components/widgets/`. It does
 not add a registry, provider manager, provider process, settings writer or service
 integration. Widget bodies continue to receive the existing FDM-967/FDM-973

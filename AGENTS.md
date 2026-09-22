@@ -84,6 +84,20 @@ For each future native-UI refactor:
 5. Validate only the current affected surface and tests; never treat the
    historical FDM-858 commands as live qualification.
 
+## Sidebar Widget development
+
+Before creating or modifying a SmartDock sidebar Widget, read
+`docs/SIDEBAR_WIDGETS.md` for registry/provider/lifecycle ownership and
+`docs/WIDGET_COMPONENTS.md` for the reusable `Widget*` component API. Start
+from `tests/widget-gallery/WidgetGallery.qml` or a
+`components/widgets/DemoWidget*Body.qml` composition.
+
+Do not invent a second provider lifecycle, settings writer, card shell, normal
+scroll area, popup manager, typography system, semantic color palette, or generic
+form/action control when the existing Widget framework owns it. New Widget UI
+should compose `components/widgets/` primitives first; custom presentation code
+must be justified by a contract the kit does not already cover.
+
 ## Configuration workflow
 
 Use `smartdock status --json`, `smartdock config schema --json`, and
