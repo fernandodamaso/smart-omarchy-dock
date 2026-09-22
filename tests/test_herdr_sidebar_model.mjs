@@ -632,6 +632,15 @@ console.log('herdr sidebar model association: PASS')
     { liveCounts: { agents: 0, complete: true }, completeness: { state: 'complete' } },
   )
   assert.equal(healthyEmpty.title, 'No active agents')
+  assert.equal(Sidebar.herdrFallbackVisible({
+    servers: [{ id: 'local-free', health: 'live' }],
+    agents: [],
+    liveCounts: { agents: 0, complete: true },
+    completeness: { state: 'complete' },
+  }, {
+    byWindowKey: {},
+    unmatchedServerIds: ['local-free'],
+  }), false, 'healthy empty unmatched Herdr session must not create a Widget card')
   assert.equal(Sidebar.herdrFallbackVisible(snapshot, associations), true)
   assert.equal(Sidebar.herdrFallbackVisible(snapshot, {
     byWindowKey: { [windowKey]: 'local-matched', x: 'local-free' },
