@@ -320,10 +320,16 @@ class WidgetPackagesTest(unittest.TestCase):
             "import QtQuick\nimport SmartDock.WidgetKit 1.0 as Kit\nItem {}\n",
             encoding="utf-8",
         )
-        self.store._materialize_widgetkit(source)
-        self.store._rewrite_widgetkit_imports(source)
+        runtime = self.base / "runtime"
+        widget.copy_package(source, runtime)
+        self.store._materialize_widgetkit(runtime)
+        self.store._rewrite_widgetkit_imports(runtime)
         self.assertIn(
             'import "../SmartDock/WidgetKit" as Kit',
+            (runtime / "parts/Panel.qml").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "import SmartDock.WidgetKit 1.0 as Kit",
             (nested / "Panel.qml").read_text(encoding="utf-8"),
         )
 
