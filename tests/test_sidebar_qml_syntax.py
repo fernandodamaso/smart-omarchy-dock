@@ -15,6 +15,7 @@ class SidebarQmlSyntaxTests(unittest.TestCase):
                  'components/DockSidebarRow.qml','components/DockSidebarRowInput.qml','components/DockSidebarKeyboard.qml',
                  'components/DockContextMenu.qml','components/DockSidebarWidgetArea.qml',
                  'components/DockSidebarWidgetManager.qml',
+                 'components/DockExternalWidgetRegistry.qml',
                  'components/DockSidebarWidgetView.qml','components/DockWidgetCard.qml',
                  'components/DockSidebarPinnedStrip.qml',
                  'tests/fixtures/SidebarWidgetFixture.qml',

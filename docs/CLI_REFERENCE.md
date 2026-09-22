@@ -208,3 +208,31 @@ removes all enabled Widget cards. `sidebarWidgetCollapsed` is a separate typed
 ID→boolean map; missing keys mean expanded, and removing a Widget intentionally
 keeps its saved collapse state for a later re-add. No collapse entry enables or
 executes a provider. No test provider or external QML path is enabled by production.
+
+
+## External Widget packages (API v1)
+
+Widget package management is a top-level local CLI surface and does not mutate
+SmartDock configuration directly:
+
+```bash
+smartdock widget create <id> [--name <name>] [--destination <dir>]
+smartdock widget install <source>
+smartdock widget remove <id>
+smartdock widget list [--json]
+smartdock widget update [<id>]
+smartdock widget dev use <local-source>
+smartdock widget dev reload
+smartdock widget dev reset
+```
+
+`<source>` is an explicit trusted local directory or repository URL. Installed
+packages live under `${XDG_DATA_HOME:-$HOME/.local/share}/smartdock/widgets/<id>/`.
+Updates stage and validate a replacement before swapping it into place; updating
+one package never runs `git pull` against the SmartDock plugin/deployment and a
+failure does not stop unrelated packages from being attempted.
+
+The runtime registry is host-owned. `dock.json` and `sidebarWidgets` continue
+to contain stable Widget IDs only; they never contain QML paths or package source
+locations. Package schema, trust boundaries, development workflow, and source
+location rules are specified in `docs/WIDGET_PACKAGES.md`.

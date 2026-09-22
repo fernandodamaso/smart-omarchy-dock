@@ -1,0 +1,264 @@
+import importlib.util
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+MODULE = Path(__file__).resolve().parents[1] / "scripts/smartdock_widget.py"
+SPEC = importlib.util.spec_from_file_location("smartdock_widget", MODULE)
+widget = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(widget)
+
+
+def make_package(root, widget_id="io.example.weather", version="0.1.0", name="Weather"):
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "widget.json").write_text(json.dumps({
+        "apiVersion": 1,
+        "id": widget_id,
+        "name": name,
+        "version": version,
+        "entry": "Widget.qml",
+        "icon": "cloud",
+    }) + "\n", encoding="utf-8")
+    (root / "Widget.qml").write_text("import QtQuick\nItem { property var widgetContext: ({}) }\n", encoding="utf-8")
+    return root
+
+
+class WidgetPackagesTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.base = Path(self.temp.name)
+        self.home = self.base / "home"
+        self.data = self.base / "data"
+        self.config = self.base / "config"
+        self.bundle = self.base / "smartdock-core"
+        for path in (self.home, self.data, self.config, self.bundle):
+            path.mkdir(parents=True, exist_ok=True)
+        self.store = widget.Store(bundle=self.bundle, home=self.home, data_home=self.data, config_home=self.config)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_manifest_validation(self):
+        source = make_package(self.base / "source")
+        manifest = widget.validate_manifest(source)
+        self.assertEqual(manifest["id"], "io.example.weather")
+        self.assertEqual(manifest["apiVersion"], 1)
+        bad = make_package(self.base / "bad", "Bad ID")
+        with self.assertRaises(widget.WidgetError) as caught:
+            widget.validate_manifest(bad)
+        self.assertEqual(caught.exception.code, "E_VALIDATION")
+        incompatible = make_package(self.base / "incompatible", "io.example.future")
+        value = json.loads((incompatible / "widget.json").read_text())
+        value["apiVersion"] = 2
+        (incompatible / "widget.json").write_text(json.dumps(value))
+        with self.assertRaises(widget.WidgetError) as caught:
+            widget.validate_manifest(incompatible)
+        self.assertEqual(caught.exception.code, "E_INCOMPATIBLE")
+        missing = make_package(self.base / "missing", "io.example.missing")
+        (missing / "Widget.qml").unlink()
+        with self.assertRaises(widget.WidgetError):
+            widget.validate_manifest(missing)
+
+    def test_entry_cannot_escape_package(self):
+        source = make_package(self.base / "source")
+        outside = self.base / "Outside.qml"
+        outside.write_text("import QtQuick\nItem {}\n")
+        value = json.loads((source / "widget.json").read_text())
+        value["entry"] = "../Outside.qml"
+        (source / "widget.json").write_text(json.dumps(value))
+        with self.assertRaises(widget.WidgetError):
+            widget.validate_manifest(source)
+
+    def test_forbidden_source_locations_direct_nested_and_symlink(self):
+        plugin = self.home / ".config/omarchy/plugins" / widget.PLUGIN_ID
+        plugin.mkdir(parents=True)
+        with self.assertRaises(widget.WidgetError) as caught:
+            self.store.source_preflight(plugin)
+        self.assertEqual(caught.exception.code, "E_SOURCE_FORBIDDEN")
+        with self.assertRaises(widget.WidgetError):
+            self.store.source_preflight(plugin / "nested/widget")
+        link = self.base / "plugin-link"
+        link.symlink_to(plugin, target_is_directory=True)
+        with self.assertRaises(widget.WidgetError):
+            self.store.source_preflight(link / "nested")
+        valid = self.base / "external/widget"
+        self.assertEqual(self.store.source_preflight(valid), valid.parent.resolve() / valid.name)
+
+    def test_source_in_core_or_standalone_bundle_is_forbidden(self):
+        with self.assertRaises(widget.WidgetError):
+            self.store.source_preflight(self.bundle / "custom")
+        standalone = self.data / "smartdock" / "custom-source"
+        with self.assertRaises(widget.WidgetError):
+            self.store.source_preflight(standalone)
+
+    def test_create_scaffold_is_external_and_uses_widgetkit(self):
+        result = self.store.create("io.example.scaffold", "My Widget")
+        source = Path(result["sourcePath"])
+        self.assertTrue(source.is_dir())
+        self.assertFalse(source.is_relative_to(self.bundle))
+        self.assertFalse(source.is_relative_to(self.home / ".config/omarchy/plugins" / widget.PLUGIN_ID))
+        self.assertEqual(widget.validate_manifest(source)["id"], "io.example.scaffold")
+        qml = (source / "Widget.qml").read_text()
+        self.assertIn("import SmartDock.WidgetKit 1.0", qml)
+        readme = (source / "README.md").read_text()
+        self.assertIn("WIDGET_COMPONENTS.md", readme)
+        self.assertIn("WIDGET_PACKAGES.md", readme)
+
+    def test_install_list_registry_and_remove(self):
+        source = make_package(self.base / "source")
+        installed = self.store.install(str(source))
+        self.assertEqual(installed["id"], "io.example.weather")
+        target = self.store.root / "io.example.weather"
+        self.assertTrue(target.is_dir())
+        self.assertFalse(target.is_symlink())
+        registry = json.loads(self.store.registry_path.read_text())
+        self.assertEqual([row["id"] for row in registry["packages"]], ["io.example.weather"])
+        self.assertTrue(registry["packages"][0]["entryPath"].endswith("/Widget.qml"))
+        rows, errors, _ = self.store.list_rows()
+        external = next(row for row in rows if row["id"] == "io.example.weather")
+        self.assertEqual(external["ownership"], "external")
+        self.assertFalse(external["enabled"])
+        self.assertEqual(errors, [])
+        result = self.store.remove("io.example.weather")
+        self.assertTrue(result["removed"])
+        self.assertTrue(source.is_dir(), "remove must preserve developer source")
+        registry = json.loads(self.store.registry_path.read_text())
+        self.assertEqual(registry["packages"], [])
+
+    def test_install_rejects_duplicate_and_protected(self):
+        source = make_package(self.base / "source")
+        self.store.install(str(source))
+        with self.assertRaises(widget.WidgetError) as caught:
+            self.store.install(str(source))
+        self.assertEqual(caught.exception.code, "E_CONFLICT")
+        protected = make_package(self.base / "protected", "herdr.agents")
+        with self.assertRaises(widget.WidgetError) as caught:
+            self.store.install(str(protected))
+        self.assertEqual(caught.exception.code, "E_PROTECTED")
+
+    def test_invalid_install_never_creates_target(self):
+        source = make_package(self.base / "source", "io.example.invalid")
+        (source / "Widget.qml").unlink()
+        with self.assertRaises(widget.WidgetError):
+            self.store.install(str(source))
+        self.assertFalse((self.store.root / "io.example.invalid").exists())
+
+    def test_update_is_atomic_and_preserves_previous_on_invalid_candidate(self):
+        source = make_package(self.base / "source", version="0.1.0")
+        self.store.install(str(source))
+        before = (self.store.root / "io.example.weather/widget.json").read_text()
+        value = json.loads((source / "widget.json").read_text())
+        value["version"] = "0.2.0"
+        value["entry"] = "Missing.qml"
+        (source / "widget.json").write_text(json.dumps(value))
+        with self.assertRaises(widget.WidgetError):
+            self.store.update("io.example.weather")
+        self.assertEqual((self.store.root / "io.example.weather/widget.json").read_text(), before)
+        registry = json.loads(self.store.registry_path.read_text())
+        self.assertEqual(registry["packages"][0]["version"], "0.1.0")
+
+    def test_update_all_continues_after_one_broken_source(self):
+        a = make_package(self.base / "a", "io.example.a", "0.1.0", "A")
+        b = make_package(self.base / "b", "io.example.b", "0.1.0", "B")
+        self.store.install(str(a))
+        self.store.install(str(b))
+        av = json.loads((a / "widget.json").read_text())
+        av["entry"] = "Missing.qml"
+        (a / "widget.json").write_text(json.dumps(av))
+        bv = json.loads((b / "widget.json").read_text())
+        bv["version"] = "0.2.0"
+        (b / "widget.json").write_text(json.dumps(bv))
+        result = self.store.update()
+        self.assertEqual(result["failed"], 1)
+        installed_b = json.loads((self.store.root / "io.example.b/widget.json").read_text())
+        self.assertEqual(installed_b["version"], "0.2.0")
+        installed_a = json.loads((self.store.root / "io.example.a/widget.json").read_text())
+        self.assertEqual(installed_a["version"], "0.1.0")
+
+    def test_invalid_package_isolated_from_valid_registry_package(self):
+        valid = make_package(self.base / "valid", "io.example.valid")
+        self.store.install(str(valid))
+        broken_dir = self.store.root / "io.example.broken"
+        make_package(broken_dir, "io.example.broken")
+        (broken_dir / "Widget.qml").unlink()
+        registry = self.store.rebuild_registry()
+        self.assertEqual([row["id"] for row in registry["packages"]], ["io.example.valid"])
+        self.assertTrue(any(row.get("id") == "io.example.broken" for row in registry["errors"]))
+
+    def test_registry_is_bounded_without_disabling_earlier_valid_packages(self):
+        for index in range(widget.MAX_REGISTRY_PACKAGES + 1):
+            widget_id = f"io.example.bound{index}"
+            make_package(self.store.root / widget_id, widget_id)
+        registry = self.store.rebuild_registry()
+        self.assertEqual(len(registry["packages"]), widget.MAX_REGISTRY_PACKAGES)
+        self.assertEqual(registry["packages"][0]["id"], "io.example.bound0")
+        self.assertTrue(any("registry limit" in row.get("error", "") for row in registry["errors"]))
+
+    def test_enabled_remove_is_refused_without_rewriting_config(self):
+        source = make_package(self.base / "source")
+        self.store.install(str(source))
+        self.store.config_path.parent.mkdir(parents=True, exist_ok=True)
+        original = json.dumps({"sidebarWidgets": ["io.example.weather"], "unknown": {"keep": True}}, indent=2) + "\n"
+        self.store.config_path.write_text(original)
+        with self.assertRaises(widget.WidgetError) as caught:
+            self.store.remove("io.example.weather")
+        self.assertEqual(caught.exception.code, "E_ENABLED")
+        self.assertEqual(self.store.config_path.read_text(), original)
+        self.assertTrue((self.store.root / "io.example.weather").is_dir())
+
+    def test_dev_use_reload_and_reset_preserve_source_and_installed_package(self):
+        installed_source = make_package(self.base / "installed-source", "io.example.dev", "1.0.0", "Dev")
+        dev_source = make_package(self.base / "dev-source", "io.example.dev", "1.1.0", "Dev")
+        self.store.install(str(installed_source))
+        use = self.store.dev_use(str(dev_source))
+        self.assertTrue(use["development"])
+        registry = json.loads(self.store.registry_path.read_text())
+        self.assertTrue(registry["packages"][0]["development"])
+        first_url = registry["packages"][0]["entryRevision"]
+        (dev_source / "Widget.qml").write_text("import QtQuick\nItem { property var widgetContext: ({}) ; property string marker: 'two' }\n")
+        reload_result = self.store.dev_reload()
+        self.assertTrue(reload_result["reloaded"])
+        registry = json.loads(self.store.registry_path.read_text())
+        self.assertNotEqual(registry["packages"][0]["entryRevision"], first_url)
+        reset = self.store.dev_reset()
+        self.assertTrue(reset["reset"])
+        self.assertTrue(dev_source.is_dir(), "dev reset must never delete developer source")
+        registry = json.loads(self.store.registry_path.read_text())
+        self.assertFalse(registry["packages"][0]["development"])
+        self.assertEqual(registry["packages"][0]["version"], "1.0.0")
+
+    def test_invalid_dev_reload_keeps_last_working_snapshot(self):
+        installed_source = make_package(self.base / "installed-source", "io.example.dev", "1.0.0", "Dev")
+        dev_source = make_package(self.base / "dev-source", "io.example.dev", "1.1.0", "Dev")
+        self.store.install(str(installed_source))
+        self.store.dev_use(str(dev_source))
+        before_state = json.loads(self.store.dev_state_path.read_text())
+        before_registry = self.store.registry_path.read_text()
+        (dev_source / "Widget.qml").unlink()
+        with self.assertRaises(widget.WidgetError):
+            self.store.dev_reload()
+        self.assertEqual(json.loads(self.store.dev_state_path.read_text()), before_state)
+        self.assertEqual(self.store.registry_path.read_text(), before_registry)
+        self.assertTrue(Path(before_state["snapshot"]).is_dir())
+
+    def test_herdr_list_row_is_source_owned_and_not_manageable(self):
+        rows, _, _ = self.store.list_rows()
+        herdr = next(row for row in rows if row["id"] == "herdr.agents")
+        self.assertEqual(herdr["ownership"], "integration")
+        self.assertFalse(herdr["manageable"])
+
+    def test_package_manager_never_writes_qml_paths_to_dock_config(self):
+        source = make_package(self.base / "source")
+        self.store.config_path.parent.mkdir(parents=True, exist_ok=True)
+        original = '{"sidebarWidgets":["io.example.weather"],"keep":7}\n'
+        self.store.config_path.write_text(original)
+        self.store.install(str(source))
+        self.assertEqual(self.store.config_path.read_text(), original)
+        registry = json.loads(self.store.registry_path.read_text())
+        self.assertIn("entryPath", registry["packages"][0])
+        self.assertNotIn("entryPath", json.loads(original))
+
+
+if __name__ == "__main__":
+    unittest.main()

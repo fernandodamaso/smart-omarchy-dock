@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+
+function read(path) { return fs.readFileSync(new URL('../' + path, import.meta.url), 'utf8'); }
+
+const host = read('DockHost.qml');
+const view = read('components/DockSidebarWidgetView.qml');
+const manager = read('components/DockSidebarWidgetManager.qml');
+const model = read('components/DockSidebarWidgetModel.js');
+const external = read('components/DockExternalWidgetRegistry.qml');
+const launcher = read('scripts/smartdock');
+const packageManager = read('scripts/smartdock_widget.py');
+const defaults = JSON.parse(read('config/dock.json'));
+const schema = JSON.parse(read('config/settings-schema.json'));
+const qmldir = read('SmartDock/WidgetKit/qmldir');
+
+assert.match(host, /DockExternalWidgetRegistry\s*\{\s*id:\s*externalWidgetRegistry\s*\}/,
+  'the host must own external package discovery');
+assert.match(host, /externalWidgetRegistry\.descriptors/,
+  'validated external descriptors must merge into the existing host registry');
+assert.match(host, /"herdr\.agents"[\s\S]*?manageable:\s*false/,
+  'Herdr remains source-owned and opts out of Add\/Manage');
+assert.match(model, /function manageableRows\(registry\)/,
+  'registry model must expose the manageable descriptor filter');
+assert.match(manager, /WidgetModel\.manageableRows\(controller\.widgetRegistry\)/,
+  'Add\/Manage must filter source-owned non-manageable descriptors');
+assert.match(view, /presentation \+ "Source"/,
+  'the existing Widget view loader must accept registry-owned package sources');
+assert.match(view, /source:\s*root\.factory \? "" : root\.sourceUrl/,
+  'external QML must flow through the existing Widget view rather than a second card system');
+assert.match(external, /allowedEntryPrefix/);
+assert.match(external, /StandardPaths\.writableLocation\(StandardPaths\.GenericDataLocation\)/,
+  'external packages must resolve from the SmartDock-owned XDG data store');
+assert.match(external, /\/smartdock\/widgets/,
+  'the runtime registry must stay under the SmartDock Widget package root');
+assert.match(external, /acquire:\s*function\(owner\)/,
+  'external descriptors use the existing host-owned lease API');
+assert.doesNotMatch(external, /dock\.json|sidebarWidgets/,
+  'runtime package discovery may not turn settings paths into executable QML');
+assert.match(launcher, /smartdock_widget\.py/,
+  'the normal smartdock launcher owns the Widget package CLI');
+assert.doesNotMatch(packageManager, /\[\s*["']git["']\s*,\s*["']pull["']/,
+  'Widget updates must never git-pull a deployment checkout');
+assert.deepEqual(defaults.sidebarWidgets.every(id => typeof id === 'string'), true);
+assert.equal(schema.settings.sidebarWidgets.format, 'sidebar-widget-ids');
+assert.ok(!JSON.stringify(defaults.sidebarWidgets).match(/[\\/]|\.qml/i),
+  'dock.json Widget selection stays ID-only');
+for (const type of ['WidgetSection', 'WidgetText', 'WidgetButton', 'WidgetListItem', 'WidgetState']) {
+  assert.match(qmldir, new RegExp('^' + type + ' 1\\.0 ', 'm'), `${type} must be exported by WidgetKit v1`);
+}
+
+console.log('External Widget package registry and ID-only runtime boundary: PASS');
