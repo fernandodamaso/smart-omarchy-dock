@@ -97,7 +97,7 @@ TestCase {
         return false
       }
       readonly property bool windowWorkingAnimationActive: !agentMode && hasWorkingCounter
-        && interfaceAnimationsEnabled && animationEligible
+        && herdrFolded && interfaceAnimationsEnabled && animationEligible
       readonly property real windowWorkingIndicatorGap: 5
       readonly property real windowWorkingIndicatorReservation:
         windowWorkingAnimationActive ? 10 + windowWorkingIndicatorGap : 0
@@ -354,12 +354,13 @@ TestCase {
     compare(InteractionModel.viewportIntersects(100, 40, 100, 0), false)
   }
 
-  function test_working_animation_sits_before_name_and_counter_stays_static() {
+  function test_parent_working_animation_only_when_folded() {
     var chrome = createTemporaryObject(chromeFactory, test, {
       width: 240,
       visible: true,
       interfaceAnimationsEnabled: true,
       animationEligible: true,
+      herdrFolded: false,
       herdrStatusCounters: [{ status: "working", count: 2 }]
     })
     verify(chrome !== null)
@@ -379,18 +380,36 @@ TestCase {
         + findByName(delegates[0], "sidebar-herdr-counter-text").height / 2)) <= 1, true,
       "robot and counter text are vertically centered")
     compare(delegates[0].Accessible.name, "2 agents working")
+
+    // Expanded Herdr rows already expose the animated working agents below,
+    // so the duplicate parent animation stays hidden and reserves no space.
+    compare(indicator.visible, false)
+    compare(indicator.active, false)
+    compare(label.x, chrome.labelX)
+
+    chrome.herdrFolded = true
+    wait(0)
     compare(indicator.visible, true)
     compare(indicator.active, true)
     compare(indicator.x, chrome.labelX)
     compare(label.x, indicator.x + indicator.width + chrome.windowWorkingIndicatorGap)
     verify(label.x + label.width <= counters.x + 0.5)
     verify(chrome.accessibleLabel.indexOf("Working 2") >= 0)
+    compare(agentIcon.visible, true)
 
+    chrome.herdrFolded = false
+    wait(0)
+    compare(indicator.visible, false)
+    compare(indicator.active, false)
+    compare(label.x, chrome.labelX)
+
+    chrome.herdrFolded = true
     chrome.interfaceAnimationsEnabled = false
     wait(0)
     compare(indicator.visible, false)
     compare(agentIcon.visible, true)
 
+    chrome.interfaceAnimationsEnabled = true
     chrome.animationEligible = false
     wait(0)
     compare(indicator.visible, false)

@@ -85,7 +85,8 @@ Item {
     return false
   }
   readonly property bool herdrWindowWorkingAnimationActive: herdrAssociated
-    && herdrWorkingCounter && root.animationsEnabled && root.herdrAnimationEligible
+    && root.herdrFolded && herdrWorkingCounter
+    && root.animationsEnabled && root.herdrAnimationEligible
   readonly property real herdrWindowWorkingIndicatorGap: Style.space(5)
   readonly property real herdrWindowWorkingIndicatorReservation:
     herdrWindowWorkingAnimationActive ? 10 + herdrWindowWorkingIndicatorGap : 0
