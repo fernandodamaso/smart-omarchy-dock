@@ -409,15 +409,15 @@ assert.match(rowQml, /borderSpec: root\.keyboardFocusVisible/,
 assert.doesNotMatch(rowQml, /root\.forceActiveFocus\(Qt\.MouseFocusReason\);|onFocusRequested: root\.forceActiveFocus/,
   'every row pointer focus path goes through focusFromPointer')
 assert.match(rowInputQml,
-  /id: hover[\s\S]{0,100}?cursorShape: Qt\.ArrowCursor/,
-  'ordinary rows override the panel-wide drag cursor')
+  /id: hover[\s\S]{0,150}?cursorShape: root\.dragOwned \? Qt\.ClosedHandCursor : Qt\.ArrowCursor/,
+  'ordinary rows use an arrow when idle and a closed hand while dragging')
 assert.match(sidebarQml,
   /id: headerBar[\s\S]{0,140}?HoverHandler \{ cursorShape: Qt\.ArrowCursor \}/,
   'header controls override the panel-wide drag cursor')
 assert.match(pinnedStripQml, /HoverHandler \{ cursorShape: Qt\.ArrowCursor \}/,
   'the pinned area overrides the panel-wide drag cursor')
 assert.match(viewportQml,
-  /visible: isWorkspace && geom\.height > 0\s*&& !InteractionModel\.isMonitorFinalKey\(modelData\.lastKey, root\.sectionSpans\)/,
+  /Rectangle \{\s*visible: !InteractionModel\.isMonitorFinalKey\(modelData\.lastKey, root\.sectionSpans\)/,
   'the final workspace in each monitor does not draw a trailing divider')
 assert.match(rowQml,
   /id: leadingWorkspaceBadge[\s\S]{0,260}?readonly property string rowKey: root\.inlineWorkspaceBadgeKey/,

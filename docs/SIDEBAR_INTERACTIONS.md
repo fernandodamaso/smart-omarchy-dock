@@ -67,20 +67,36 @@ stays ordinary scrolling; its competing built-in key navigation is disabled.
 
 ## Drag lifecycle and geometry
 
-A captured individual window can move silently to a visible workspace region.
-The shared service moves only that selected handle, updates minimized origins
-without showing the window and applies current session pins. A workspace header
-can move its entire workspace to a visible monitor heading through the existing
-`canMoveWorkspaceToMonitor`/`moveWorkspaceToMonitor` policy. No fake per-monitor
-dock is registered and classic coordinator checks are not relaxed.
+A captured individual window moves and follows to a visible workspace group,
+new-workspace slot, or explicit monitor header. Workspace groups share their
+painted inset/gap geometry with hit testing; the first hit is final even when
+ineligible. Footer slots appear on every monitor while a window is dragged,
+not only the hovered one. No predicted workspace number is displayed. Workspace
+sources retain whole-monitor-card targets and sorted, view-only placeholders.
 
-`DockSidebarInteractionModel` consumes the actual mapped ListView delegate
-rectangles, clipped to the viewport. Offscreen rows, Unassigned locations,
-separators, utilities and the SB-05 footer are not valid drop surfaces. Window
-moves never target monitor headings. A passive native-artwork/label proxy follows
-the pointer; it is not a separate window or screenshot preview. Edge scrolling
-is bounded to at most 12 logical pixels per 16 ms tick and stops outside the
-viewport. Hit testing is repeated after scrolling and again on release.
+A header resolves its monitor's active workspace through the live workspace
+inventory. Its owner must equal that monitor at hover, release, and immediately
+before dispatch. Missing/changed identities or owner disagreement reject the
+drop with zero dispatch; an existing workspace is never relocated to repair a
+stale header. The shared `moveCapturedToplevels(..., true)` action preserves
+captured member identity, pins, minimized restoration, named-workspace backend
+eligibility and ordered follow behavior. Ctrl-click uses the extracted active
+workspace lookup without changing its existing semantics.
+
+**Provisional Draft policy:** dropping on the current monitor's header from a
+different workspace moves to its active workspace (the R1 proposed default).
+The internal `headerDropWithinMonitor` guard isolates this branch. Owner
+acceptance is still required before Task 4 merges; source execution is not a
+record of that product decision. Dropping into one's current workspace is a no-op.
+
+Only header/top and unclaimed bottom padding are window-to-monitor targets.
+Workspace content, separators, side gutters, Widget tail, footer extra height,
+offscreen/clipped areas and gaps between cards cannot fall through to a header.
+Window pins and workspace monitor pins have distinct rejection labels. A dimmed
+source and clipped, theme-aware pill identify the source and destination without
+creating another window. The collapsed rail shows artwork only. Edge scrolling
+remains bounded to 12 logical pixels per 16 ms tick and stops outside the viewport;
+hit testing is repeated after geometry/scroll changes and at release.
 
 Presentation ordering freezes while dragging, not live action validity. Closure,
 address reuse, source location changes, target-owner changes, topology changes,
@@ -89,16 +105,74 @@ without a partial move. Resize, menus and row drags share the existing busy
 boundary. Qt `UngrabExclusive` is the successful release; becoming inactive alone
 is not permission to commit. A completed or cancelled gesture consumes its click.
 
+## Post-dispatch feedback
+
+The gesture ends before submission and releases its busy boundary. A separately
+bounded operation captures the exact toplevel/native handle/address (or workspace
+identity), expected workspace and monitor, token, deadline, originating connector
+and unique viewport generation. New-workspace identity comes from the shared
+action's **single-submission receipt**, not a preview allocation. Existing boolean
+callers remain strict booleans.
+
+A transport acknowledgment means **pending**, not success. Confirmation requires
+consistent live identity, workspace, window monitor and workspace owner readback.
+Minimized storage, replacement handles and conflicting inventories do not confirm.
+The initial wait bound is 1500 ms, driven by existing refresh signals plus one
+single-shot deadline timer. Timeout/ambiguous submission means **Move not confirmed**;
+there is no rollback, compensating move, retry or late feedback revival.
+
+Only known pre-dispatch rejection/cancellation can animate the captured artwork
+back to its still-exact, visible source (200 ms). An absent/offscreen source or
+reduced-animation preference receives cleanup without a false return animation.
+Confirmed feedback waits for projection and queued scroll restoration to settle,
+resolves the current row, uses `ListView.Contain` and saves its resulting anchor
+before the 400 ms accent flash. Folded/absent windows only permit a verified visible
+workspace-group fallback, never unfolding, focus stealing or a different window.
+Only the originating live viewport participates; mirrored panels keep independent
+connector × expanded/rail anchors. New gestures, topology/surface changes and
+teardown invalidate outstanding tokens, timers and queued callbacks.
+
+### Native qualification matrix (FDM-995 — not yet qualified)
+
+| Area | Cases to qualify in the exact-head, fresh two-output KVM guest |
+| --- | --- |
+| W1/W5/G1 source feedback | Window/workspace dimming, numeric/named labels, pins, rejected-to-valid transition, expanded and rail pills, clipping and closed-hand grab |
+| W2/W4 geometry | Group fill without outline, final group, shared boundaries, autoscroll, all-monitor dashed slots, blocked slots, footer/header/Widget-tail exclusion |
+| W3 header drop | Cross-monitor active workspace; same-monitor other-workspace provisional policy; stale/missing active owner; release revalidation; minimized/named sources; no workspace relocation |
+| Workspace card drop | Card border/fill, numeric/named sorted placeholders, empty monitors, pin/same-monitor refusal |
+| Confirmation | Existing/new workspace and workspace-source moves, delayed/inconsistent readback, timeout then late success, no rollback, captured-source closure/replacement |
+| W6/W7 finish | Real `UngrabExclusive`, escape/grab cancellation, safe refusal snap, 400 ms confirmed flash, reduced animation, fresh drag/teardown during feedback |
+| Scrolling and lifecycle | Offscreen success after queued restore, folded/absent fallback, two mirrored panels/mixed modes, origin destroy/recreate, topology change, live reload |
+
+Inspect the exact candidate in a fresh named guest per `docs/DEV_SESSIONS.md`;
+record captures/results and stopped-state evidence. No installed-plugin edit or
+physical desktop preview is authorized by source execution.
+
+### Native UI composition inspected
+
+Omarchy `947e2fc002d6831c7888b29b5761d59d29e69727`: `shell/Ui/BorderSurface.qml`,
+`PopupCard.qml`, `shell/Commons/Style.qml`, and first-party `shell/plugins/bar/widgets/Tray.qml`.
+Inline ghosts compose `qs.Ui.BorderSurface` with popup colors, native border/font/
+spacing/state tokens. `PopupCard` would add a window and is deliberately not used.
+The domain-only `DockSidebarDropSlot` paints dashed decoration because BorderSurface
+has no dashed-edge API; it owns no input, action, settings or window lifecycle.
+
 ## Source checks
+
+`tst_sidebardropfeedback.qml` reads trusted repository methods into a real Qt Quick
+ListView harness. `QML_XHR_ALLOW_FILE_READ=1` is test-only; file writes stay disabled.
+This exercises real `Qt.callLater` callbacks, not compositor/native qualification.
 
 ```bash
 node tests/test_sidebar_actions.mjs
 node tests/test_sidebar_drag.mjs
+node tests/test_sidebar_drop_confirmation.mjs
+node tests/test_sidebar_drop_scroll.mjs
 node tests/test_grouped_actions.mjs
 node tests/test_session_pins.mjs
-QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner \
+QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner \
   -input tests/tst_sidebarinteraction.qml -import components
-QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner \
+QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner \
   -input tests/tst_sidebarkeyboard.qml -import components
 ```
 

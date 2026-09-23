@@ -33,6 +33,18 @@ Item {
     settings.windowIconOverrides || [])
   property var dragSession: null
   property var dragTarget: null
+  property var dragRejection: null
+  // R1 proposed policy, provisional until the owner accepts Task 4 for merge.
+  // Internal guard, not a persisted setting; Ctrl-click policy is unchanged.
+  property bool headerDropWithinMonitor: true
+  // Session-local correlation only; no watcher, settings writer or polling.
+  property double dropToken: 0
+  property double dropSurfaceSerial: 0
+  property var dropSurfaces: ({})
+  property var dropOperation: null
+  property int dropTimeoutMs: 1500
+  property var dropClock: function() { return Date.now() }
+
   property var focusReturnTarget: null
   readonly property bool rowDragActive: dragSession !== null
   property bool interactionBusy: false
@@ -350,6 +362,7 @@ Item {
   }
 
   function invalidateSurface() {
+    root.invalidateDropOperation()
     root.cancelRowDrag("surface-invalidated")
     root.focusReturnTarget = null
     root.cancelResize("surface-invalidated")
@@ -443,6 +456,7 @@ Item {
       root.refreshBody()
     } finally {
       root.projecting = false
+      root.evaluateDropOperation()
       if (root.refreshPending && !root.interactionBusy)
         Qt.callLater(root.refresh)
     }
@@ -1079,14 +1093,147 @@ Item {
     return {identity:identity, monitor:owner.monitor, minimized:location.minimized === true}
   }
 
-  function beginRowDrag(target, connector) {
+  function registerDropSurface(connector) {
+    var generation = ++root.dropSurfaceSerial
+    var surfaces = Object.assign({}, root.dropSurfaces)
+    surfaces[generation] = String(connector || "")
+    root.dropSurfaces = surfaces
+    return generation
+  }
+
+  function releaseDropSurface(generation) {
+    var surfaces = Object.assign({}, root.dropSurfaces)
+    delete surfaces[generation]
+    root.dropSurfaces = surfaces
+    if (root.dropOperation && root.dropOperation.originSurfaceGeneration === generation)
+      root.invalidateDropOperation()
+    if (root.dragSession && root.dragSession.originSurfaceGeneration === generation)
+      root.cancelRowDrag("surface-invalidated")
+  }
+
+  function invalidateDropOperation() {
+    dropDeadlineTimer.stop()
+    root.dropToken = (Number(root.dropToken) || 0) + 1
+    root.dropOperation = null
+  }
+
+  function endDropOperation(token) {
+    if (token !== root.dropToken) return
+    root.invalidateDropOperation()
+  }
+
+  function dropOriginIsCurrent(operation) {
+    return !!operation && root.initialized && operation.token === root.dropToken
+      && root.connectorIsMapped(operation.originConnector)
+      && operation.originSurfaceGeneration > 0
+      && root.dropSurfaces[operation.originSurfaceGeneration] === operation.originConnector
+      && operation.topology === root.topologyStamp()
+  }
+
+  function dropEntityAlive(operation) {
+    if (operation.sourceKind === "workspace") return true
+    return WindowModel.handleForToplevel(operation.toplevel, root.hyprToplevels) === operation.hyprHandle
+      && root.windowActions.isAlive(operation.toplevel)
+      && DockModel.normalizeWindowAddress(root.windowActions.addressFor(operation.toplevel)) === operation.address
+  }
+
+  // A full location predicate, never a dispatch acknowledgment. For windows,
+  // both the IPC monitor and workspace inventory owner must agree; conflicting
+  // handles/readbacks remain unknown. Minimized storage is not a destination.
+  function dropLocationMatches(operation) {
+    if (!root.dropEntityAlive(operation)) return false
+    var owner = root.windowActions.resolveWorkspaceDropTarget(operation.expectedWorkspace)
+    if (!owner || owner.monitor !== operation.expectedMonitor) return false
+    if (operation.sourceKind === "workspace") return true
+    var location = root.windowActions.workspaceMoveLocation(operation.toplevel, operation.address)
+    if (!location || location.minimized
+        || root.windowActions.canonicalWorkspaceIdentity(location.workspace) !== operation.expectedWorkspace
+        || root.windowActions.canonicalMonitorIdentity(location.monitor) !== operation.expectedMonitor) return false
+    var handles = root.hyprToplevels || []
+    var observed = false
+    for (var i = 0; i < handles.length; ++i) {
+      var handle = handles[i]
+      if (!handle || handle.wayland !== operation.toplevel) continue
+      var ipc = handle.lastIpcObject || ({})
+      if (DockModel.normalizeWindowAddress(handle.address || ipc.address) !== operation.address
+          || root.windowActions.canonicalWorkspaceIdentity(WindowModel.workspaceIdentity(ipc.workspace)) !== operation.expectedWorkspace
+          || root.windowActions.canonicalMonitorIdentity(ipc.monitor) !== operation.expectedMonitor) return false
+      observed = true
+    }
+    return observed
+  }
+
+  function dropSourceIsCurrent(operation) {
+    if (!root.dropOriginIsCurrent(operation) || !root.dropEntityAlive(operation)) return false
+    var owner = root.windowActions.resolveWorkspaceDropTarget(operation.sourceWorkspace)
+    if (!owner || owner.monitor !== operation.sourceMonitor) return false
+    if (operation.sourceKind === "workspace") return true
+    var location = root.windowActions.workspaceMoveLocation(operation.toplevel, operation.address)
+    return !!location && root.windowActions.canonicalWorkspaceIdentity(location.workspace) === operation.sourceWorkspace
+      && root.windowActions.canonicalMonitorIdentity(location.monitor) === operation.sourceMonitor
+      && (location.minimized === true) === operation.sourceMinimized
+  }
+
+  function makeDropOperation(session, destination) {
+    root.invalidateDropOperation()
+    var operation = {token:root.dropToken, sourceKind:session.target.kind,
+      sourceKey:session.target.key, sourceWorkspace:session.location.identity,
+      sourceMonitor:session.location.monitor, sourceMinimized:session.location.minimized === true,
+      expectedWorkspace:destination ? destination.identity || "" : "",
+      expectedMonitor:destination ? destination.monitor || "" : "",
+      originConnector:session.connector,
+      originSurfaceGeneration:session.originSurfaceGeneration || 0,
+      topology:session.topology, deadline:Number(root.dropClock()) + Math.max(1, root.dropTimeoutMs),
+      state:"submitting"}
+    if (session.target.kind === "window") {
+      operation.toplevel = session.target.toplevel
+      operation.hyprHandle = WindowModel.handleForToplevel(session.target.toplevel, root.hyprToplevels)
+      operation.address = DockModel.normalizeWindowAddress(session.target.address)
+    }
+    // Keeping a submitting record makes synchronous surface invalidation final.
+    if (root.dropOriginIsCurrent(operation)) root.dropOperation = operation
+    return operation
+  }
+
+  function evaluateDropOperation() {
+    var operation = root.dropOperation
+    if (!operation) return
+    if (!root.dropOriginIsCurrent(operation) || !root.dropEntityAlive(operation)) {
+      root.invalidateDropOperation()
+      return
+    }
+    if (operation.state === "confirmed" && !root.dropLocationMatches(operation)) {
+      root.invalidateDropOperation()
+      return
+    }
+    if (operation.state !== "pending") return
+    if (Number(root.dropClock()) >= operation.deadline) {
+      root.expireDropOperation(operation.token)
+      return
+    }
+    if (!root.dropLocationMatches(operation)) return
+    dropDeadlineTimer.stop()
+    root.dropOperation = Object.assign({}, operation, {state:"confirmed"})
+  }
+
+  function expireDropOperation(token) {
+    var operation = root.dropOperation
+    if (!operation || token !== operation.token || token !== root.dropToken
+        || operation.state !== "pending" || Number(root.dropClock()) < operation.deadline) return
+    dropDeadlineTimer.stop()
+    root.dropOperation = Object.assign({}, operation, {state:"unconfirmed"})
+  }
+
+  function beginRowDrag(target, connector, surfaceGeneration) {
     if (root.interactionBusy || root.resizeActive || root.dragSession) return false
     var location = root.dragSourceLocation(target)
     var host = String(connector || root.selectedConnector || "")
     if (!location || !root.connectorIsMapped(host)) return false
+    root.invalidateDropOperation()
     root.dragSession = {target:target, location:location, connector:host,
-      topology:root.topologyStamp()}
+      originSurfaceGeneration:Number(surfaceGeneration) || 0, topology:root.topologyStamp()}
     root.dragTarget = null
+    root.dragRejection = null
     root.interactionBusy = true
     return true
   }
@@ -1101,36 +1248,76 @@ Item {
       && current.minimized === session.location.minimized
   }
 
-  function dragDestination(key) {
+  // Presentation reasons do not authorize moves. Optional labels use only
+  // resolved identities; a stale/unknown row must never invent a destination.
+  function rejectDragDestination(key, reason, identity, monitor) {
     var session = root.dragSession
-    if (!session || !root.rowDragIsCurrent()) return null
+    if (!session || !key) return null
+    var rejection = {key:key, sourceKind:session.target.kind, reason:reason}
+    if (identity) rejection.identity = identity
+    if (monitor) rejection.monitor = monitor
+    root.dragRejection = rejection
+    return null
+  }
+
+  function dragDestination(key) {
+    root.dragRejection = null
+    var session = root.dragSession
+    if (!session || !root.rowDragIsCurrent() || !key) return null
     var footerMonitor = InteractionModel.parseNewWorkspaceFooterKey(key)
     if (footerMonitor !== "") {
       if (!root.windowActions || session.target.kind !== "window") return null
       var footerCanonical = root.windowActions.canonicalMonitorIdentity(footerMonitor)
-      if (!footerCanonical) return null
+      if (!footerCanonical) return root.rejectDragDestination(key, "unknown-location")
       var source = root.windowActions.workspaceMoveLocation(
         session.target.toplevel, session.target.address)
-      if (!source) return null
-      if (root.windowActions.windowWorkspacePin(session.target.toplevel)) return null
+      if (!source) return root.rejectDragDestination(key, "stale")
+      var footerPin = root.windowActions.windowWorkspacePin(session.target.toplevel)
+      if (footerPin) return root.rejectDragDestination(key, "pinned", footerPin.workspace)
       return {key:key, kind:"new-workspace", monitor:footerCanonical}
     }
     var row = root.rowsByKey[key]
-    if (!row) return null
+    if (!row) return root.rejectDragDestination(key, "stale")
     if (session.target.kind === "workspace") {
-      if (row.kind !== "monitor" || !row.monitorIdentity) return null
+      if (row.kind !== "monitor") return null
       var monitor = root.windowActions.canonicalMonitorIdentity(row.connector || row.monitorIdentity)
-      if (!monitor || !root.windowActions.canMoveWorkspaceToMonitor(
-          session.location.identity, monitor)) return null
+      if (!monitor) return root.rejectDragDestination(key, "unknown-location")
+      var workspacePin = root.windowActions.workspaceMonitorPin(session.location.identity)
+      if (workspacePin && workspacePin.monitor !== monitor)
+        return root.rejectDragDestination(key, "workspace-pinned",
+          session.location.identity, workspacePin.monitor)
+      if (!root.windowActions.canMoveWorkspaceToMonitor(session.location.identity, monitor))
+        return root.rejectDragDestination(key,
+          session.location.monitor === monitor ? "same-monitor" : "unknown-location")
       return {key:key, identity:session.location.identity, monitor:monitor}
     }
-    if (["workspace", "application", "window"].indexOf(row.kind) < 0
-        || !row.workspaceIdentity) return null
+    if (row.kind === "monitor") {
+      var requested = root.windowActions.canonicalMonitorIdentity(row.connector || row.monitorIdentity)
+      if (!requested) return root.rejectDragDestination(key, "unknown-location")
+      var active = root.windowActions.monitorActiveWorkspaceIdentity(requested)
+      var resolved = active ? root.windowActions.resolveWorkspaceDropTarget(active) : null
+      if (!resolved) return root.rejectDragDestination(key, "unknown-location")
+      if (resolved.monitor !== requested) return root.rejectDragDestination(key, "owner-mismatch")
+      var headerPin = root.windowActions.windowWorkspacePin(session.target.toplevel)
+      if (headerPin && headerPin.workspace !== resolved.identity)
+        return root.rejectDragDestination(key, "pinned", headerPin.workspace)
+      if (!root.windowActions.workspaceMoveWouldChange([session.target], resolved.identity))
+        return root.rejectDragDestination(key, "same-workspace", resolved.identity)
+      if (root.headerDropWithinMonitor === false && session.location.monitor === requested)
+        return root.rejectDragDestination(key, "unknown-location")
+      return {key:key, kind:"monitor", identity:resolved.identity, monitor:resolved.monitor}
+    }
+    if (["workspace", "application", "window"].indexOf(row.kind) < 0) return null
+    if (!row.workspaceIdentity) return root.rejectDragDestination(key, "unknown-location")
     if (row.kind === "window" && root.windowActions.reliableWorkspaceForToplevel(row.toplevel)
-        !== row.workspaceIdentity) return null
+        !== row.workspaceIdentity) return root.rejectDragDestination(key, "stale")
     var destination = root.windowActions.resolveWorkspaceDropTarget(row.workspaceIdentity)
-    if (!destination || !root.windowActions.workspaceMoveWouldChange(
-        [session.target], destination.identity)) return null
+    if (!destination) return root.rejectDragDestination(key, "unknown-location")
+    var pin = root.windowActions.windowWorkspacePin(session.target.toplevel)
+    if (pin && pin.workspace !== destination.identity)
+      return root.rejectDragDestination(key, "pinned", pin.workspace)
+    if (!root.windowActions.workspaceMoveWouldChange([session.target], destination.identity))
+      return root.rejectDragDestination(key, "same-workspace", destination.identity)
     return {key:key, identity:destination.identity, monitor:destination.monitor}
   }
 
@@ -1141,7 +1328,14 @@ Item {
   }
 
   function cancelRowDrag(reason) {
+    root.dragRejection = null
     if (!root.dragSession) return false
+    var session = root.dragSession
+    if (["escape", "grab-loss", "cancelled"].indexOf(reason) >= 0) {
+      var cancelled = root.makeDropOperation(session, null)
+      if (root.dropOriginIsCurrent(cancelled) && root.dropEntityAlive(cancelled))
+        root.dropOperation = Object.assign({}, cancelled, {state:"cancelled"})
+    }
     root.dragSession = null
     root.dragTarget = null
     root.interactionBusy = false
@@ -1164,14 +1358,50 @@ Item {
         destination = null
       }
     }
-    // Clear state before dispatch; a synchronous host refresh cannot commit twice.
+    // Snapshot identities and token before cleanup/submission, never the footer's
+    // predicted allocation. Artwork/coordinates stay in the originating viewport.
+    var operation = root.makeDropOperation(session, destination)
     root.cancelRowDrag("release")
-    if (!destination) return false
-    if (destination.kind === "new-workspace")
-      return root.windowActions.moveCapturedWindowToNewWorkspace(session.target, destination.monitor)
-    if (session.target.kind === "workspace")
-      return root.windowActions.moveWorkspaceToMonitor(session.location.identity, destination.monitor)
-    return root.windowActions.moveCapturedToplevels([session.target], destination.identity, true)
+    var accepted = false, outcome = "rejected", receipt = null
+    try {
+      if (destination && (destination.kind !== "monitor" || root.headerDropIsCurrent(session, destination))) {
+        if (destination.kind === "new-workspace") {
+          receipt = root.windowActions.moveCapturedWindowToNewWorkspaceResult(session.target, destination.monitor)
+          accepted = receipt.accepted === true
+          if (accepted) operation = Object.assign({}, operation, {
+            expectedWorkspace:receipt.expectedWorkspace, expectedMonitor:receipt.expectedMonitor})
+        } else if (session.target.kind === "workspace") {
+          accepted = root.windowActions.moveWorkspaceToMonitor(session.location.identity, destination.monitor)
+        } else {
+          accepted = root.windowActions.moveCapturedToplevels([session.target], destination.identity, true)
+        }
+      }
+      outcome = accepted ? "pending" : "rejected"
+    } catch (error) {
+      // Transport may have submitted before throwing. Never promise rollback,
+      // retry, or animate a return on an ambiguous outcome.
+      outcome = "unconfirmed"
+    }
+    if (root.dropOriginIsCurrent(operation) && root.dropEntityAlive(operation)) {
+      root.dropOperation = Object.assign({}, operation, {state:outcome})
+      if (outcome === "pending") {
+        dropDeadlineTimer.operationToken = operation.token
+        dropDeadlineTimer.interval = Math.max(1, operation.deadline - Number(root.dropClock()))
+        dropDeadlineTimer.restart()
+        root.evaluateDropOperation()
+      }
+    } else if (root.dropOperation && root.dropOperation.token === operation.token) {
+      root.invalidateDropOperation()
+    }
+    return accepted
+  }
+
+  // Last check after gesture cleanup, immediately before the shared action.
+  function headerDropIsCurrent(session, destination) {
+    if (!root.targetIsCurrent(session.target) || session.topology !== root.topologyStamp()) return false
+    var active = root.windowActions.monitorActiveWorkspaceIdentity(destination.monitor)
+    var resolved = root.windowActions.resolveWorkspaceDropTarget(destination.identity)
+    return !!resolved && active === destination.identity && resolved.monitor === destination.monitor
   }
 
   function toggleApplication(key) {
@@ -1459,6 +1689,13 @@ Item {
     }
   }
   Timer {
+    id: dropDeadlineTimer
+    property double operationToken: 0
+    interval: 1500
+    repeat: false
+    onTriggered: root.expireDropOperation(operationToken)
+  }
+  Timer {
     id: herdrFocusErrorTimer
     interval: 1000
     repeat: true
@@ -1495,6 +1732,7 @@ Item {
     root.refresh()
   }
   Component.onDestruction: {
+    root.invalidateDropOperation()
     root.initialized = false
     root.closeWidgetPopup()
     if (root.widgetManager) root.widgetManager.dispose()
