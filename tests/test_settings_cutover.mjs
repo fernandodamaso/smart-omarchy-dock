@@ -56,7 +56,7 @@ for (const action of ['launcher', 'add', 'auto-hide'])
 assert.match(controlItem, /onAddApplication: root\.addApplicationRequested\(\)/);
 assert.match(controlItem, /onToggleAutoHide: root\.autoHideToggled\(!root\.autoHide\)/);
 assert.match(dock, /onAddApplicationRequested: root\.openAppPicker\(controlItem\)/);
-assert.match(dock, /DockAddPinItem\s*\{[\s\S]*?onActivated: root\.openAppPicker\(addPinItem\)/);
+assert.doesNotMatch(dock, /DockAddPinItem/);
 assert.match(dock, /onAutoHideToggled: enabled => root\.autoHideRequested\(enabled\)/);
 assert.match(host, /onAutoHideRequested: enabled => root\.saveSetting\("autoHide", enabled\)/);
 assert.equal((host.match(/configFile\.setText\(/g) || []).length, 1, 'Keep the single host writer');

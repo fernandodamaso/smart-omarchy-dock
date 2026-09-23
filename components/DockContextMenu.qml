@@ -900,7 +900,7 @@ PopupWindow {
         DockModel.dockControlIcon("launcher", root.autoHide),
         true, "open-launcher", null),
       DockMenuModel.actionRecord(
-        "controls:add", "Add Application",
+        "controls:add", "Add Pinned Application",
         DockModel.dockControlIcon("add", root.autoHide),
         true, "add-application", null),
       DockMenuModel.actionRecord(

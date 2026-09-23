@@ -22,7 +22,7 @@ Item {
   property bool compactActivityLayout: false
   property url fallbackArtwork: ""
   property bool captureStopped: false
-  signal activateRequested(var toplevel, bool pullToDockMonitor)
+  signal activateRequested(var toplevel, bool pullToMonitorWorkspace)
   signal closeRequested(var toplevel)
 
   readonly property var windowState: root.windowActions

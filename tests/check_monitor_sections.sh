@@ -15,9 +15,13 @@ rg -q 'OpticalGlyph' "$monitor_label"
 rg -q '󰍺' "$monitor_label"
 rg -q 'Color\.(muted|foreground)' "$monitor_label"
 rg -q 'Style\.font\.' "$monitor_label"
-rg -q 'DockToolTip' "$monitor_label"
 rg -q 'Accessible\.name' "$monitor_label"
 ! rg -q 'TapHandler|MouseArea|activeFocusOnTab\s*:\s*true' "$monitor_label"
+! rg -q 'DockToolTip' "$monitor_label"
+
+# The section renders its numeric position inside the glyph.
+rg -q 'property int monitorNumber' "$monitor_label"
+rg -q 'String\(root\.monitorNumber\)' "$monitor_label"
 
 # Keep one global workspace reconciler and wrap its retained delegate instead
 # of introducing a model/repeater per monitor.
@@ -26,7 +30,11 @@ rg -q 'Accessible\.name' "$monitor_label"
 ! rg -q 'model:\s*root\.workspacePresentation\.monitorGroups' "$dock"
 rg -q 'WorkspaceModel\.monitorGroupForWorkspace' "$dock"
 rg -q 'DockMonitorLabel' "$dock"
+rg -q 'monitorNumber:\s*workspaceCardWrapper\.monitorSectionIndex \+ 1' "$dock"
+rg -q 'monitorFocused:\s*workspaceCardWrapper\.cardMonitorFocused' "$dock"
 rg -q 'firstWorkspaceIdentity' "$workspace_model"
+rg -q 'monitorGroupIndexForMonitor' "$workspace_model"
+rg -q 'monitorGroupIndexForMonitor' "$dock"
 
 # Drag/reveal continue to use the actual card, not prefix/wrapper pixels.
 rg -q 'readonly property Item dropCard:\s*workspaceCard' "$dock"

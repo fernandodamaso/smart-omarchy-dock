@@ -53,6 +53,29 @@ TestCase {
     mouseClick(input,30,30,Qt.MiddleButton,Qt.NoModifier)
     compare(activations.length,2)
   }
+  function test_workspace_rows_forward_control_and_connector() {
+    input.destroy(); input = null
+    controller.target = {key:"ws:1",kind:"workspace",workspaceIdentity:"id:1"}
+    var component = Qt.createComponent("../components/DockSidebarRowInput.qml")
+    compare(component.status, Component.Ready, component.errorString())
+    input = component.createObject(test, {controller:controller,rowKey:"ws:1",x:20,y:20,width:200,height:80})
+    verify(input !== null)
+    input.activated.connect(function(target,control,monitor,modifiers) {
+      activations.push({target:target,control:control,monitor:monitor,modifiers:modifiers})
+    })
+    input.contextRequested.connect(function(target) {menus.push(target)})
+    activations=[]; menus=[]
+    controller.selectedConnector="DP-1"
+    mouseClick(input,30,30,Qt.LeftButton,Qt.NoModifier)
+    compare(activations.length,1); verify(!activations[0].control)
+    compare(activations[0].monitor,"DP-1")
+    compare(activations[0].target.workspaceIdentity,"id:1")
+    mouseClick(input,30,30,Qt.LeftButton,Qt.ControlModifier)
+    compare(activations.length,2); verify(activations[1].control)
+    verify((activations[1].modifiers & Qt.ControlModifier) !== 0)
+    compare(activations[1].monitor,"DP-1")
+    compare(activations[1].target.workspaceIdentity,"id:1")
+  }
   function test_press_captures_target_and_host_before_transition() {
     var original=controller.target
     mousePress(input,30,30,Qt.LeftButton,Qt.ControlModifier)

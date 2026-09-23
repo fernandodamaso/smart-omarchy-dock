@@ -68,6 +68,12 @@ TestCase {
     compare(events.length,1); compare(events[0].key,"window")
     verify(!events[0].control); compare(events[0].connector,"")
   }
+  function test_enter_on_workspace_row_is_plain_even_with_control_held() {
+    actionController.focusedRowKey="ws"
+    keyClick(Qt.Key_Return,Qt.ControlModifier)
+    compare(events.length,1); compare(events[0].key,"ws")
+    verify(!events[0].control); compare(events[0].connector,"")
+  }
   function test_menu_and_escape_use_explicit_target_and_restore_focus() {
     actionController.focusedRowKey="window"
     keyClick(Qt.Key_F10,Qt.ShiftModifier); compare(events[0],"menu:window")

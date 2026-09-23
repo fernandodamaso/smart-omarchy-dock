@@ -588,6 +588,8 @@ PanelWindow {
       workspaceWindowCounts, workspaceCountsReady)
   }
   readonly property int itemSize: iconSize + (grouped ? 14 : 22)
+  // Visible gap between sidebar pinned icons: (cell - iconSize) + pinGap.
+  readonly property int pinnedIconGap: Style.space(16)
   readonly property int reservedSize: iconSize + (grouped ? 32 : 44) + edgeMargin
   readonly property int mainPadding: grouped ? 8 : 16
   readonly property int revealThickness: 3
@@ -601,10 +603,12 @@ PanelWindow {
     showTrash, itemSize, 12)
   readonly property int trailingMainExtent: TrashModel.trailingMainExtent(
     showTrash, itemSize, 12, workspaceMainExtent)
-  readonly property int compactMainExtent: mainPadding * 2 + itemSize * 2
+  readonly property int compactMainExtent: mainPadding * 2 + itemSize
     + appMainExtent + trailingMainExtent
   // Keep magnification space transparent, without shrinking the logical viewport.
-  readonly property int groupedSurfaceTrim: mainPadding + groupedLayout.contentPadding - 4
+  // Trim only the magnification allowance so the trailing inset matches the
+  // leading mainPadding before the control item.
+  readonly property int groupedSurfaceTrim: groupedLayout.contentPadding
   readonly property int groupedSurfaceGutter: Math.max(0, groupedLayout.contentPadding - 4)
   readonly property bool compactGroupedSurface: grouped && !vertical && !fullLength && !showTrash
     && (!screen || Math.max(compactMainExtent,
@@ -700,7 +704,7 @@ PanelWindow {
   }
 
   function openAppPicker(anchor) {
-    appPicker.anchorItem = anchor || addPinItem
+    appPicker.anchorItem = anchor || controlItem
     appPicker.open()
   }
 
@@ -1162,7 +1166,7 @@ PanelWindow {
       width: parent.width + (root.compactGroupedSurface ? root.groupedSurfaceTrim : 0)
       height: parent.height
 
-      readonly property real leadingEnd: root.mainPadding + root.itemSize * 2
+      readonly property real leadingEnd: root.mainPadding + root.itemSize
       readonly property real trailingStart: (root.vertical ? height : width)
         - root.mainPadding - root.trailingMainExtent
       readonly property real trashOffset: root.showTrash
@@ -1221,30 +1225,6 @@ PanelWindow {
         }
       }
 
-      DockAddPinItem {
-        id: addPinItem
-
-        enabled: !root.workspaceDragActive
-        x: root.vertical
-          ? (parent.width - width) / 2
-          : root.mainPadding + root.itemSize
-        y: root.vertical
-          ? root.mainPadding + root.itemSize
-          : (parent.height - height) / 2
-        slotSize: root.itemSize
-        iconSize: root.iconSize
-        magnification: root.workspaceDragActive ? 1 : root.magnification
-        magnificationRadius: root.magnificationRadius
-        hoverGlowEnabled: root.hoverGlowEnabled
-        hoverGlowOpacity: root.hoverGlowOpacity
-        hoverGlowRadius: root.hoverGlowRadius
-        pointerPosition: root.pointerPosition
-        position: root.position
-        vertical: root.vertical
-        interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
-        onActivated: root.openAppPicker(addPinItem)
-      }
-
       Grid {
         id: appGrid
         visible: !root.grouped
@@ -1301,12 +1281,15 @@ PanelWindow {
           keyProperty: "identity"
           animationsEnabled: root.interfaceAnimationsEnabled
         }
-        Repeater {
+        Row {
+          spacing: Math.max(0, root.pinnedIconGap - (root.itemSize - root.iconSize))
+          Repeater {
           model: root.groupedRequested ? root.workspacePresentation.globalLaunchers : []
           AppIcon {
             y: 2
             fullscreenModeActive: false
             fullscreenEmphasized: false
+          }
           }
         }
         Repeater {
@@ -1329,6 +1312,19 @@ PanelWindow {
               || (monitorSection && monitorSection.identity) || "")
             readonly property bool hasMonitorPrefix: root.showMonitorPrefixes
               && monitorSection !== null
+            readonly property var cardMonitorSection: monitorSection !== null
+              ? monitorSection : WorkspaceModel.monitorGroupForMonitor(
+                root.workspaceDisplayPresentation.monitorGroups, sectionMonitorIdentity)
+            readonly property int monitorSectionIndex: WorkspaceModel.monitorGroupIndexForMonitor(
+              root.workspaceDisplayPresentation.monitorGroups, String(
+                (cardMonitorSection && cardMonitorSection.identity)
+                || sectionMonitorIdentity || ""))
+            readonly property bool isFirstMonitorSection: monitorSectionIndex === 0
+            readonly property bool cardMonitorFocused: {
+              if (!root.showMonitorPrefixes) return true
+              if (cardMonitorSection) return cardMonitorSection.focused === true
+              return false
+            }
             readonly property real prefixGap: hasMonitorPrefix
               ? Style.spacing.controlGap : 0
             readonly property string newWorkspaceMonitorIdentity:
@@ -1347,13 +1343,25 @@ PanelWindow {
               visible: workspaceCardWrapper.hasMonitorPrefix
               width: visible ? implicitWidth : 0
               height: parent.height
-              spacing: Math.max(2, Math.round(Style.spacing.controlGap / 2))
+              spacing: 0
 
               DockSeparator {
                 y: (monitorPrefix.height - height) / 2
+                visible: workspaceCardWrapper.isFirstMonitorSection
                 vertical: false
                 slotSize: root.itemSize
                 iconSize: root.iconSize
+              }
+
+              // Center the separator: its left side gets the last pinned
+              // icon's inset plus the grouped row's 8px spacing; the glyph's
+              // own side bearing supplies about half of that spacing here.
+              // Later monitor sections get a plain gap instead of a line.
+              Item {
+                width: workspaceCardWrapper.isFirstMonitorSection
+                  ? Math.round((root.itemSize - root.iconSize) / 2) + Style.spacing.sm
+                  : Style.spacing.controlGap * 2
+                height: 1
               }
 
               DockMonitorLabel {
@@ -1365,6 +1373,7 @@ PanelWindow {
                   ? String(workspaceCardWrapper.monitorSection.connector || "") : ""
                 focused: workspaceCardWrapper.monitorSection
                   ? workspaceCardWrapper.monitorSection.focused === true : false
+                monitorNumber: workspaceCardWrapper.monitorSectionIndex + 1
                 position: root.position
                 slotSize: root.itemSize
               }
@@ -1405,6 +1414,7 @@ PanelWindow {
                 count: modelData.count
                 urgent: modelData.urgent === true && root.attentionBadgesEnabled
                 windowDragActive: root.workspaceDragActive
+                monitorFocused: workspaceCardWrapper.cardMonitorFocused
                 dropHighlighted: root.workspaceDragActive && workspaceDrag.hoveredIdentity === modelData.identity
                 position: root.position
                 viewport: groupedLayout
@@ -1442,8 +1452,12 @@ PanelWindow {
                     }
                   }
                 }
-                onActivated: {
-                  root.focusWorkspaceOnDockMonitor(modelData.activationTarget)
+                onActivated: pullToMonitor => {
+                  var target = modelData.activationTarget
+                  if (pullToMonitor === true)
+                    root.focusWorkspaceOnDockMonitor(target)
+                  else
+                    root.windowActions.focusWorkspaceInPlace(target)
                 }
               }
 
@@ -1579,8 +1593,11 @@ PanelWindow {
         iconSize: root.iconSize
         position: root.position
         animationsEnabled: root.interfaceAnimationsEnabled
-        onWorkspaceRequested: workspaceId => {
-          root.focusWorkspaceOnDockMonitor(workspaceId)
+        onWorkspaceRequested: (workspaceId, pullToMonitor) => {
+          if (pullToMonitor === true)
+            root.focusWorkspaceOnDockMonitor(workspaceId)
+          else
+            root.windowActions.focusWorkspaceInPlace(workspaceId)
         }
       }
     }
@@ -1709,7 +1726,7 @@ PanelWindow {
   DockAppPicker {
     id: appPicker
 
-    anchorItem: addPinItem
+    anchorItem: controlItem
     position: root.position
     pinned: root.pinned
     iconOverrides: root.iconOverrides

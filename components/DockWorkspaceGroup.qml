@@ -1,7 +1,7 @@
 import QtQuick
 import qs.Commons
 
-Rectangle {
+Item {
   id: root
 
   required property string label
@@ -14,6 +14,7 @@ Rectangle {
   property bool switchable: true
   property bool urgent: false
   property bool dropHighlighted: false
+  property bool monitorFocused: true
   property bool windowDragActive: false
   property var workspaceMonitorDrag: null
   property var workspaceMonitorDragDock: null
@@ -45,7 +46,7 @@ Rectangle {
   }
   readonly property real headerWidth: header.width
   default property alias items: appRow.data
-  signal activated()
+  signal activated(bool pullToMonitor)
 
   function cancelWorkspaceMonitorDrag(reason) {
     if (root.workspaceMonitorGestureStarted && root.workspaceMonitorDrag
@@ -94,40 +95,57 @@ Rectangle {
   Component.onDestruction: cancelWorkspaceMonitorDrag("source destroyed")
 
   readonly property real appOccupancy: Math.min(1, appRow.width / Math.max(1, slotSize))
-  width: header.width + appRow.width + 2 + 14 * appOccupancy
+  width: header.width + appRow.width + Style.space(4) * appOccupancy
   height: slotSize + 10
-  radius: Math.max(12, Style.cornerRadius - 4)
-  color: dropHighlighted ? Util.alpha(Color.accent, 0.24)
-    : active ? Util.alpha(Color.accent, workspaceHover.hovered ? 0.13 : 0.10) : Util.alpha(Color.background, workspaceHover.hovered ? 0.42 : 0.26)
-  border.width: 1
-  border.color: dropHighlighted ? Color.accent
-    : urgent ? Color.urgent : active ? Util.alpha(Color.accent, 0.50) : Util.alpha(Color.foreground, workspaceHover.hovered ? 0.14 : 0.07)
   opacity: workspaceMonitorDragSource && workspaceMonitorDrag
     && workspaceMonitorDrag.captureReady ? 0.55 : 1
-  Behavior on color {
-    enabled: root.animationsEnabled
-    ColorAnimation { duration: 160 }
-  }
-  Behavior on border.color {
-    enabled: root.animationsEnabled
-    ColorAnimation { duration: 160 }
-  }
   HoverHandler { id: workspaceHover }
+
+  Rectangle {
+    id: surface
+    y: 4
+    width: parent.width
+    height: parent.height - 8
+    radius: Math.max(12, Style.cornerRadius - 4)
+    color: root.dropHighlighted ? Util.alpha(Color.accent, 0.24)
+      : root.active && root.monitorFocused ? Util.alpha(Color.accent, workspaceHover.hovered ? 0.13 : 0.10)
+      : root.active ? Util.alpha(Color.foreground, workspaceHover.hovered ? 0.11 : 0.08)
+      : Util.alpha(Color.foreground, workspaceHover.hovered ? 0.08 : 0.045)
+    border.width: (root.dropHighlighted || root.urgent || (root.active && root.monitorFocused)) ? 1 : 0
+    border.color: root.dropHighlighted ? Color.accent
+      : root.urgent ? Color.urgent
+      : (root.active && root.monitorFocused) ? Util.alpha(Color.accent, 0.50) : "transparent"
+    Behavior on color {
+      enabled: root.animationsEnabled
+      ColorAnimation { duration: 160 }
+    }
+    Behavior on border.color {
+      enabled: root.animationsEnabled
+      ColorAnimation { duration: 160 }
+    }
+  }
 
   Rectangle {
     id: header
     color: "transparent"
-    radius: Math.max(10, root.radius - 2)
+    radius: Math.max(10, surface.radius - 2)
     x: 1
     y: 1
-    width: Math.min(80, Math.max(root.slotSize, title.implicitWidth + 16))
+    // Label sits at the pill's leading inset; the trailing gap plus the
+    // first icon's slot inset gives the same space before the icon.
+    // Empty pills get equal padding; it narrows as the first icon arrives.
+    readonly property real leadingPadding: Style.space(9)
+    readonly property real trailingPadding: leadingPadding
+      + (Style.space(2) - leadingPadding) * root.appOccupancy
+    width: Math.min(80, Math.max(Math.round(root.slotSize * 0.6),
+      title.implicitWidth + leadingPadding + trailingPadding))
     height: parent.height - 2
     Accessible.role: Accessible.Button
     Accessible.name: root.label + ", " + root.count + " windows" + (root.urgent ? ", urgent" : "")
-    Accessible.onPressAction: if (root.switchable && !root.headerInputSuppressed) root.activated()
+    Accessible.onPressAction: if (root.switchable && !root.headerInputSuppressed) root.activated(false)
     activeFocusOnTab: root.switchable && !root.headerInputSuppressed
-    Keys.onReturnPressed: if (root.switchable && !root.headerInputSuppressed) root.activated()
-    Keys.onSpacePressed: if (root.switchable && !root.headerInputSuppressed) root.activated()
+    Keys.onReturnPressed: if (root.switchable && !root.headerInputSuppressed) root.activated(false)
+    Keys.onSpacePressed: if (root.switchable && !root.headerInputSuppressed) root.activated(false)
     Keys.onEscapePressed: event => {
       if (!root.workspaceMonitorDragActive) return
       root.cancelWorkspaceMonitorDrag("escape")
@@ -135,27 +153,39 @@ Rectangle {
     }
     Text {
       id: title
-      anchors.horizontalCenter: parent.horizontalCenter
+      x: header.leadingPadding
       anchors.verticalCenter: parent.verticalCenter
-      width: Math.min(implicitWidth, parent.width - 8)
+      width: Math.min(implicitWidth, parent.width - header.leadingPadding - header.trailingPadding)
       elide: Text.ElideRight
       text: root.displayLabel
       horizontalAlignment: Text.AlignHCenter
-      color: root.active ? Color.accent : Color.foreground
+      color: root.active && root.monitorFocused ? Color.accent
+        : root.active ? Util.alpha(Color.accent, 0.6) : Color.foreground
       Behavior on color {
         enabled: root.animationsEnabled
         ColorAnimation { duration: 160 }
       }
       font.family: Style.font.family
-      font.pixelSize: Math.max(Style.font.body, root.slotSize * 0.38)
-      font.bold: true
+      font.pixelSize: Style.font.body
+      font.weight: Font.DemiBold
     }
     TapHandler {
       enabled: root.switchable && !root.headerInputSuppressed
+      acceptedModifiers: Qt.NoModifier
       onPressedChanged: if (pressed)
         header.forceActiveFocus(Qt.MouseFocusReason)
       onTapped: {
-        if (!root.headerInputSuppressed) root.activated()
+        if (!root.headerInputSuppressed) root.activated(false)
+        header.focus = false
+      }
+    }
+    TapHandler {
+      enabled: root.switchable && !root.headerInputSuppressed
+      acceptedModifiers: Qt.ControlModifier
+      onPressedChanged: if (pressed)
+        header.forceActiveFocus(Qt.MouseFocusReason)
+      onTapped: {
+        if (!root.headerInputSuppressed) root.activated(true)
         header.focus = false
       }
     }
@@ -227,21 +257,9 @@ Rectangle {
     }
   }
 
-  Rectangle {
-    id: groupDivider
-    x: header.width + 5
-    visible: root.appOccupancy > 0
-    opacity: root.appOccupancy
-    anchors.verticalCenter: parent.verticalCenter
-    width: 1
-    height: Math.max(18, parent.height * 0.48)
-    radius: 1
-    color: Util.alpha(Color.foreground, root.active ? 0.13 : 0.09)
-  }
-
   Row {
     id: appRow
-    x: header.width + 10
+    x: header.width + Style.space(2)
     anchors.verticalCenter: parent.verticalCenter
     spacing: 0
 

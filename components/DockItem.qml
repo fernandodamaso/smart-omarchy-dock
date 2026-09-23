@@ -238,9 +238,24 @@ Item {
   function dispatchPointerAction(input, modifiers, options) {
     var keys = modifiers || ({})
     var request = Object.assign({}, options || ({}))
+    // Ctrl+left on a running app moves the window a plain click would focus
+    // to this monitor's workspace; other inputs keep their monitor routing.
+    if (input === "left" && keys.control === true) {
+      var action = DockModel.resolveApplicationPointerAction(
+        applicationActions, input, modifiers)
+      if (action === "focus-or-launch" && root.runningCount > 0) {
+        // Preserve the pre-FDM-815 left-click cycling order: repeated
+        // Ctrl-clicks walk the group in model order and move each window.
+        root.lastActivatedToplevel = DockModel.nextToplevelIndex(
+          root.lastActivatedToplevel, root.runningCount)
+        return root.windowActions.pullToplevelToMonitorWorkspace(
+          root.runningToplevels[root.lastActivatedToplevel], root.originOnly,
+          root.activationMonitor)
+      }
+    }
     var cardTarget = root.workspaceActivationTarget || ""
     // Left-click relocation requires explicit Ctrl; preserve other input actions.
-    if (keys.control === true || (input !== "left" && cardTarget !== "")) {
+    if (input !== "left" && cardTarget !== "") {
       request.activationMonitor = root.activationMonitor
       if (cardTarget !== "")
         request.workspaceTargetOverride = cardTarget
@@ -545,6 +560,8 @@ Item {
       iconHeight: iconContainer.height
       running: root.runningCount > 0
       focused: root.focused
+      // Workspace pills leave ~8px below the icon; keep the marker inside them.
+      edgeGap: root.originOnly ? 2 : 7
       runningColor: Color.foreground
       focusedColor: Color.accent
     }

@@ -608,7 +608,7 @@ function sidebarCollapsedForScreen(collapsedByMonitor, collapsedDefault, screenN
 }
 
 function applicationStateIndicatorGeometry(position, iconWidth, iconHeight,
-                                           running, focused) {
+                                           running, focused, edgeGap) {
   var edge = ["top", "bottom", "left", "right"].indexOf(position) >= 0
     ? position : "bottom"
   var width = Math.max(0, Number(iconWidth) || 0)
@@ -622,7 +622,8 @@ function applicationStateIndicatorGeometry(position, iconWidth, iconHeight,
   var vertical = edge === "left" || edge === "right"
   var markerWidth = vertical ? thickness : markerLength
   var markerHeight = vertical ? markerLength : thickness
-  var gap = 7
+  var gap = Number(edgeGap)
+  if (!isFinite(gap) || gap < 0) gap = 7
   var x = Math.round((width - markerWidth) / 2)
   var y = Math.round((height - markerHeight) / 2)
 

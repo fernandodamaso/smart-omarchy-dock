@@ -358,8 +358,11 @@ for (const mutate of [
   assert.match(read('Dock.qml'), /workspaceDragMapItem/,
     'card capture maps through a QQuickItem, not the PanelWindow')
   assert.match(groupSource,
-    /TapHandler \{[\s\S]*?onTapped: \{[\s\S]*?root\.activated\(\)[\s\S]*?header\.focus = false/,
-    'ordinary header clicks activate without retaining a mouse focus ring')
+    /TapHandler \{[\s\S]*?acceptedModifiers: Qt\.NoModifier[\s\S]*?onTapped: \{[\s\S]*?root\.activated\(false\)[\s\S]*?header\.focus = false/,
+    'ordinary header clicks focus in place without retaining a mouse focus ring')
+  assert.match(groupSource,
+    /TapHandler \{[\s\S]*?acceptedModifiers: Qt\.ControlModifier[\s\S]*?onTapped: \{[\s\S]*?root\.activated\(true\)[\s\S]*?header\.focus = false/,
+    'Ctrl header clicks request the monitor pull and also drop focus')
   assert.match(groupSource, /onPressedChanged: if \(pressed\)/,
     'header press must take layer focus before the drag threshold or the grab is lost on the first move')
   assert.match(groupSource, /Application\.styleHints\.startDragDistance/,
@@ -381,8 +384,8 @@ for (const mutate of [
   assert.doesNotMatch(groupSource, /workspaceMonitorDragSourceActive/,
     'unused duplicate source predicate is removed')
   assert.match(groupSource,
-    /width: Math.min\(80, Math.max\(root\.slotSize, title\.implicitWidth \+ 16\)\)/,
-    'the workspace number column must be at least one icon wide so card drag is hittable')
+    /width: Math\.min\(80, Math\.max\(Math\.round\(root\.slotSize \* 0\.6\),/,
+    'the workspace number column keeps a minimum hit width so card drag stays hittable')
   assert.match(groupSource, /\n    DragHandler \{\s+id: workspaceMonitorDragHandler/,
     'monitor drag starts from the workspace number so window icons keep window-to-workspace drag')
   assert.doesNotMatch(groupSource, /\n  DragHandler \{\s+id: workspaceMonitorDragHandler/,

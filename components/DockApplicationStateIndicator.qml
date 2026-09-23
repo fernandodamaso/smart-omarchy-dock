@@ -11,12 +11,14 @@ Item {
   required property bool focused
   required property color runningColor
   required property color focusedColor
+  // Distance between the icon edge and the marker.
+  property real edgeGap: 7
 
   readonly property var indicatorGeometry:
     DockModel.applicationStateIndicatorGeometry(
-      position, iconWidth, iconHeight, running, focused)
+      position, iconWidth, iconHeight, running, focused, edgeGap)
   readonly property color markerColor: focused ? focusedColor : runningColor
-  readonly property real markerOpacity: focused ? 1.0 : 0.46
+  readonly property real markerOpacity: focused ? 1.0 : 0.72
 
   visible: indicatorGeometry.visible
   x: indicatorGeometry.x

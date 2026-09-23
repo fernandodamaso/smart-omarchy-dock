@@ -265,6 +265,8 @@ Item {
           anchors.centerIn: parent
           width: root.iconSize
           height: root.iconSize
+          roundedArtwork: false
+          badgeRingColor: root.appearance.workspaceFill
           desktopId: pinCell.desktopId
           desktopIcon: pinCell.entry ? String(pinCell.entry.icon || "") : ""
           iconOverrides: root.controller.settings.iconOverrides || ({})

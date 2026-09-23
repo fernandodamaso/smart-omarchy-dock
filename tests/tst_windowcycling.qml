@@ -41,6 +41,17 @@ TestCase {
     compare(DockModel.applicationActionValues().indexOf("cycle-windows"), -1)
   }
 
+  function test_nextToplevelIndexWalksModelOrderWithWrap() {
+    // Plain and Ctrl icon clicks share this cycling order: Ctrl moves the
+    // window a plain click would focus.
+    compare(DockModel.nextToplevelIndex(-1, 3), 0)
+    compare(DockModel.nextToplevelIndex(0, 3), 1)
+    compare(DockModel.nextToplevelIndex(1, 3), 2)
+    compare(DockModel.nextToplevelIndex(2, 3), 0)
+    compare(DockModel.nextToplevelIndex(2, 1), 0)
+    compare(DockModel.nextToplevelIndex(0, 0), -1)
+  }
+
   function test_wrapsForwardAndBackwardFromTheActiveMember() {
     if (!hasFunction(DockWindowModel, "cycleTargetIndex")) return
 

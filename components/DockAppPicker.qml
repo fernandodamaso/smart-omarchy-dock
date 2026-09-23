@@ -236,6 +236,8 @@ PopupWindow {
           }
           width: 30
           height: 30
+          roundedArtwork: false
+          badgeRingColor: Color.menu.background
           desktopId: applicationRow.modelData.id
           desktopIcon: applicationRow.modelData.icon || ""
           iconOverrides: root.iconOverrides

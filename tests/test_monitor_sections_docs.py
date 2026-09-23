@@ -27,7 +27,8 @@ class MonitorSectionDocsTests(unittest.TestCase):
         self.assertIn("single horizontal workspace viewport", inventory)
         self.assertIn("first present workspace card", inventory)
         self.assertIn("unique primary workspace", inventory)
-        self.assertIn("pulls that workspace onto the clicked dock monitor", inventory)
+        self.assertIn("pulls it onto the clicked dock monitor", inventory)
+        self.assertIn("moves just that window", inventory)
 
 
 if __name__ == "__main__":

@@ -2,23 +2,15 @@
 set -euo pipefail
 
 dock="components/Dock.qml"
-add_pin="components/DockAddPinItem.qml"
 new_workspace="components/DockNewWorkspaceDropTarget.qml"
 drag="components/DockWorkspaceDrag.qml"
 actions="components/DockWindowActions.qml"
 
-[[ -f "$add_pin" ]]
 [[ -f "$new_workspace" ]]
 
-# A dedicated, always-visible pin affordance sits beside Dock Controls and owns
-# the app-picker anchor instead of hiding pinning exclusively in the menu.
-rg -q 'DockAddPinItem \{' "$dock"
-rg -q 'id:\s*addPinItem' "$dock"
-rg -q 'onActivated:\s*root\.openAppPicker\(addPinItem\)' "$dock"
-rg -q 'anchorItem:\s*addPinItem' "$dock"
-rg -q 'objectName:\s*"dock-add-pin"' "$add_pin"
-rg -q 'Accessible\.name:\s*"Add pinned application"' "$add_pin"
-rg -q 'iconName:\s*"plus"' "$add_pin"
+# Pinning lives in the Dock Controls menu; no standalone + slot in the dock.
+! rg -q 'DockAddPinItem' "$dock"
+[[ ! -f components/DockAddPinItem.qml ]]
 
 # Monitor prefixes carry information only when multiple live monitors exist.
 rg -q 'showMonitorPrefixes:\s*hyprMonitors\.length > 1' "$dock"

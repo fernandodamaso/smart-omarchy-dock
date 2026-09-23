@@ -229,6 +229,7 @@ Item {
               description: String(modelData.label || "")
               connector: String(modelData.connector || "")
               focused: sectionRow.sectionIdentity === root.focusedMonitor
+              monitorNumber: sectionRow.index + 1
               position: "bottom"
               slotSize: root.slotSize
             }
