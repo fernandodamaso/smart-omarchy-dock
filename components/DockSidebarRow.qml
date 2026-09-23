@@ -117,31 +117,12 @@ Item {
   readonly property var treeLayout: InteractionModel.sidebarTreeGuideLayout(root.workspaceCardInset)
   readonly property bool insideWorkspaceCard: kind !== "monitor" && kind !== "section"
     && (kind === "workspace" || !!row.workspaceKey)
-  // Populated expanded workspaces put the badge on the first child and shift
-  // the art column by the *actual* (clamped) badge width — not a reserved max.
+  // Populated expanded workspaces put the badge on the first child.
   readonly property bool inlineWorkspaceLayout: !root.collapsed
     && (root.leadingWorkspaceBadgeVisible || row.inlineWorkspaceGroup === true)
-  // One measured chip width per workspace, owned by the viewport, so the badge
-  // and every guide/artwork/selection inset agree across all rows of the
-  // workspace — including rows rendered while the leading delegate is
-  // scrolled out of view. Nothing re-estimates the label per row.
-  readonly property string inlineWorkspaceKey: {
-    if (!root.inlineWorkspaceLayout) return ""
-    if (root.leadingWorkspace) return String(root.leadingWorkspace.key)
-    return String(row.workspaceKey || "")
-  }
-  readonly property real inlineBadgeLayoutWidth: {
-    if (!root.inlineWorkspaceLayout) return 0
-    var key = root.inlineWorkspaceKey
-    var widths = root.viewport ? root.viewport.inlineWorkspaceBadgeWidths : null
-    var measured = key && widths ? Number(widths[key]) : NaN
-    if (isFinite(measured) && measured > 0) return measured
-    // Probe not ready yet (first frame / hostless harness): keep the shared
-    // floor so rows still agree with each other instead of diverging.
-    return 24
-  }
   readonly property var inlineWorkspaceGeometry: InteractionModel.sidebarInlineWorkspaceGeometry(
-    root.workspaceCardInset, Style.space, root.inlineBadgeLayoutWidth)
+    root.workspaceCardInset, Style.space)
+  readonly property real inlineBadgeLayoutWidth: root.inlineWorkspaceGeometry.badgeWidth
   // Empty workspace cards must not draw a fake header→children stem.
   readonly property bool workspaceHasChildren: {
     if (kind !== "workspace") return false
@@ -211,15 +192,19 @@ Item {
     return String(row.label || "")
   }
   // Prefer shared model display label (id:10 → Work); identity is fallback only.
-  readonly property string workspaceBadgeText: kind === "workspace"
+  readonly property string workspaceFullName: kind === "workspace"
     ? InteractionModel.workspaceBadgeLabel(row.workspaceIdentity || "", row.label || "")
     : ""
+  readonly property string workspaceBadgeText: InteractionModel.compactWorkspaceBadgeLabel(
+    root.workspaceFullName)
   readonly property var leadingWorkspace: !root.collapsed && row.leadingWorkspace
     ? row.leadingWorkspace : null
   readonly property bool leadingWorkspaceBadgeVisible: !!root.leadingWorkspace
-  readonly property string leadingWorkspaceBadgeText: root.leadingWorkspace
+  readonly property string leadingWorkspaceFullName: root.leadingWorkspace
     ? InteractionModel.workspaceBadgeLabel(root.leadingWorkspace.workspaceIdentity || "",
       root.leadingWorkspace.label || "") : ""
+  readonly property string leadingWorkspaceBadgeText: InteractionModel.compactWorkspaceBadgeLabel(
+    root.leadingWorkspaceFullName)
   readonly property string inlineWorkspaceBadgeKey: root.leadingWorkspace
     ? String(root.leadingWorkspace.key || "") : ""
   readonly property bool inlineWorkspaceBadgeFocused: leadingWorkspaceBadge.activeFocus
@@ -233,7 +218,7 @@ Item {
   // Rail keeps the compact two-code-point token; tooltips/expanded keep full name.
   readonly property string workspaceRailLabel: {
     if (kind !== "workspace") return ""
-    var full = root.workspaceBadgeText || String(row.label || root.liveTitle || "")
+    var full = root.workspaceFullName || String(row.label || root.liveTitle || "")
     return InteractionModel.compactWorkspaceBadgeLabel(full)
   }
   readonly property bool focusedWindow: kind === "window" && row.toplevel && row.toplevel.activated === true
@@ -262,7 +247,7 @@ Item {
     if (kind === "monitor")
       return root.monitorTitle + (root.monitorConnector ? " · " + root.monitorConnector : "")
     if (kind === "workspace")
-      return "Workspace " + root.workspaceBadgeText
+      return "Workspace " + root.workspaceFullName
         + (row.active ? " · Active" : "")
         + (row.monitorIdentity ? " · Monitor " + row.monitorIdentity : "")
     if (kind === "browser-tab")
@@ -303,8 +288,8 @@ Item {
     return titleLabel
       + (kind === "application" && windowCount > 1 ? " · " + windowCount : "")
       + herdrCountBits
-      + (root.leadingWorkspaceBadgeText
-        ? " · Workspace " + root.leadingWorkspaceBadgeText
+      + (root.leadingWorkspaceFullName
+        ? " · Workspace " + root.leadingWorkspaceFullName
         : (row.workspaceIdentity ? " · Workspace " + row.workspaceIdentity : ""))
       + (row.monitorIdentity ? " · Monitor " + row.monitorIdentity : "")
       + (state.fullscreen ? " · Fullscreen" : "")
@@ -712,18 +697,13 @@ Item {
       visible: root.kind === "workspace" && !root.collapsed
       x: root.treeLayout.badgeLeft
       anchors.verticalCenter: parent.verticalCenter
-      width: {
-        var natural = badgeLabel.implicitWidth + Style.space(8)
-        var available = Math.max(24, content.width - x - root.padding)
-        return Math.min(available, Math.max(24, natural))
-      }
-      height: Style.space(20)
+      width: Style.space(22)
+      height: Style.space(22)
       radius: Style.space(4)
-      color: Util.alpha(Color.foreground, 0.08)
+      color: "transparent"
       border.width: 1
       border.color: root.row.active
-        ? Util.alpha(Color.accent, 0.50)
-        : Util.alpha(Color.foreground, 0.14)
+        ? Color.accent : Util.alpha(Color.foreground, 0.24)
       Text {
         id: badgeLabel
         anchors.centerIn: parent
@@ -754,17 +734,15 @@ Item {
       activeFocusOnTab: true
       x: root.inlineWorkspaceGeometry.badgeX
       anchors.verticalCenter: parent.verticalCenter
-      // Single viewport-measured width: the rendered chip, every guide column,
-      // artwork slot and selection inset in this workspace use the same value.
+      // The badge and every sibling row consume the same fixed column.
       width: root.inlineBadgeLayoutWidth
-      height: Style.space(20)
+      height: Style.space(22)
       radius: Style.space(4)
-      color: Util.alpha(Color.foreground, 0.08)
+      color: "transparent"
       border.width: 1
       border.color: (leadingWorkspaceBadge.activeFocus
           || (root.leadingWorkspace && root.leadingWorkspace.active))
-        ? Util.alpha(Color.accent, 0.50)
-        : Util.alpha(Color.foreground, 0.14)
+        ? Color.accent : Util.alpha(Color.foreground, 0.24)
       Text {
         id: leadingWorkspaceBadgeLabel
         anchors.centerIn: parent
@@ -781,7 +759,17 @@ Item {
         renderType: Text.NativeRendering
       }
       Accessible.role: Accessible.Button
-      Accessible.name: "Workspace " + root.leadingWorkspaceBadgeText
+      Accessible.name: "Workspace " + root.leadingWorkspaceFullName
+      HoverHandler { id: leadingBadgeHover }
+      DockToolTip {
+        anchorItem: leadingWorkspaceBadge
+        position: root.controller.edge
+        requestedVisible: leadingBadgeHover.hovered
+          && root.leadingWorkspaceBadgeText !== root.leadingWorkspaceFullName
+        text: root.leadingWorkspaceFullName
+        fontFamily: Style.font.family
+        fontSize: Style.font.bodySmall
+      }
       Accessible.onPressAction: {
         var target = root.controller.captureTarget(root.inlineWorkspaceBadgeKey)
         if (target && root.viewport)
@@ -1304,39 +1292,34 @@ Item {
       }
     }
 
-    // Alert count compact badge — after state icons (windows) or immediately
-    // after title (tabs); before mute eye / fold chevron. Exact count stays in
+    // Alert count pill at the right edge before the fold chevron. Exact count stays in
     // Accessible.name; displayed text is "2" / "99+" (no parentheses).
     Rectangle {
       id: alertCount
       objectName: "sidebar-alert-count"
       readonly property int reservedWidth: visible ? width : 0
-      visible: !root.collapsed && root.attention.countVisible
+      visible: InteractionModel.sidebarCountPillVisible(root.kind, root.collapsed,
+          root.attention.countVisible, root.tabsExpandable, root.row.tabsFolded)
         && root.attention.text !== ""
         && (root.kind === "window" || root.kind === "application"
           || root.kind === "browser-tab" || root.kind === "launcher")
+        && (root.kind !== "application" || root.row.folded === true)
       height: Math.max(Style.space(16), alertCountLabel.implicitHeight + Style.space(2))
       width: alertCountLabel.implicitWidth + Style.space(4) * 2
-      radius: Style.space(3)
-      color: Util.alpha(Color.accent, Math.min(0.14, Style.selectedFillAlpha))
-      border.width: Style.space(1)
-      border.color: Util.alpha(Color.accent, Math.min(0.40, Style.hoverBorderAlpha + 0.15))
+      radius: height / 2
+      color: Color.accent
       anchors.verticalCenter: parent.verticalCenter
-      x: {
-        if (root.nestedTab)
-          return label.x + Math.min(label.implicitWidth, label.width) + Style.space(4)
-        if (stateStrip.visible)
-          return stateStrip.x + stateStrip.width + Style.space(4)
-        if (countBadge.visible)
-          return countBadge.x + countBadge.width + Style.space(4)
-        return label.x + Math.min(label.implicitWidth, label.width) + Style.space(4)
-      }
+      x: content.width - (root.insideWorkspaceCard ? root.workspaceCardInset : root.padding)
+        - (fold.visible ? fold.width : 0) - (tabsFold.visible ? tabsFold.width : 0)
+        - (herdrFold.visible ? herdrFold.width : 0)
+        - (alertMute.visible ? alertMute.width + Style.space(4) : 0)
+        - width - Style.space(4)
       Text {
         id: alertCountLabel
         anchors.centerIn: parent
         text: root.attention.text
         textFormat: Text.PlainText
-        color: root.attention.severity === "urgent" ? Color.urgent : Color.accent
+        color: Color.background
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall
         font.bold: true
@@ -1430,18 +1413,19 @@ Item {
     Rectangle {
       id: countBadge
       visible: root.kind === "application" && root.windowCount > 1 && !root.collapsed
+        && root.row.folded === true && !alertCount.visible
       anchors.verticalCenter: parent.verticalCenter
-      x: label.x + Math.min(label.implicitWidth, label.width) + Style.space(6)
+      x: fold.x - width - Style.space(4)
       width: Math.max(Style.space(16), countLabel.implicitWidth + Style.space(8))
       height: Style.space(16)
-      radius: Style.space(4)
-      color: Util.alpha(Color.foreground, 0.10)
+      radius: height / 2
+      color: Color.accent
       Text {
         id: countLabel
         anchors.centerIn: parent
         text: String(root.windowCount)
         textFormat: Text.PlainText
-        color: Color.muted
+        color: Color.background
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
       }

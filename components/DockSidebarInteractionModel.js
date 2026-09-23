@@ -97,6 +97,11 @@ function compactWorkspaceBadgeLabel(fullLabel) {
   return Array.from(label).slice(0, 2).join("")
 }
 
+function sidebarCountPillVisible(kind, collapsed, countVisible, tabsExpandable, tabsFolded) {
+  return !collapsed && countVisible === true
+    && !(kind === "window" && tabsExpandable === true && tabsFolded !== true)
+}
+
 // Index of the currently focused physical monitor in topology-strip order
 // (physical x/y via physicalMonitorStrip). Same on every header — not sectionIndex.
 function focusedMonitorStripIndex(strip) {
@@ -126,7 +131,7 @@ function topologyStripWidth(count) {
 }
 
 // Tree guide columns relative to workspace card left (viewport.workspaceCardInset).
-// Badge at left+4, min-24 center at left+16 = guide0; depth-1 icon at guide0+19;
+// Badge at left+4, fixed-22 center at left+15 = guide0; depth-1 icon at guide0+19;
 // each deeper depth +20. iconHalf is half of the 18px expanded artwork icon,
 // used to center child guide columns on the parent's rendered window icon.
 function sidebarTreeGuideLayout(workspaceCardInset) {
@@ -135,7 +140,7 @@ function sidebarTreeGuideLayout(workspaceCardInset) {
   return {
     workspaceLeft: left,
     badgeLeft: left + 4,
-    guide0: left + 16,
+    guide0: left + 15,
     depthStep: 20,
     iconOffset: 19,
     iconHalf: 9
@@ -166,57 +171,12 @@ function sidebarTreeGuideColumnX(workspaceCardInset, depth, guideOffset, stemOff
   return sidebarTreeIconX(workspaceCardInset, d - 1) + artShift + layout.iconHalf
 }
 
-// Clamp ceiling for the inline workspace badge. Long names elide past this;
-// layout uses the *actual* (clamped) badge width so short names sit tight.
-function sidebarInlineWorkspaceBadgeMaxWidth(space) {
-  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
-  return Math.max(24, sp(64))
-}
-
-// Workspace-wide right-chrome budget for inline chips. Fold/tabs/herdr
-// chevrons differ per row, but the shared chip must not: reserving a different
-// budget per row is what made first and following rows disagree. Reserve the
-// widest per-row control stack once so every row of a workspace clamps the
-// measured chip against the same available width.
-function sidebarInlineWorkspaceBadgeAvailableWidth(contentWidth, workspaceCardInset, space) {
-  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
-  var width = Number(contentWidth)
-  if (!isFinite(width) || width <= 0) return 0
-  var layout = sidebarTreeGuideLayout(workspaceCardInset)
-  var chrome = sp(8) + sp(28) + sp(28) // row padding + two chevron controls
-  return Math.max(24, width - layout.badgeLeft - chrome)
-}
-
-// The one chip-width contract for every row of an inline workspace: real font
-// advance (textWidth = measured implicitWidth) + padding, clamped to the 24px
-// floor, the shared ceiling, and the workspace-wide available slot. The
-// rendered badge and all guide/artwork/selection geometry consume this value;
-// no row re-estimates it from the label.
-function sidebarInlineWorkspaceBadgeLayoutWidth(textWidth, availableWidth, space) {
-  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
-  var measured = Number(textWidth)
-  if (!isFinite(measured) || measured < 0) measured = 0
-  var natural = Math.max(24, measured + sp(8))
-  var width = Math.min(sidebarInlineWorkspaceBadgeMaxWidth(space), natural)
-  var available = Number(availableWidth)
-  if (isFinite(available) && available > 0) width = Math.min(Math.max(24, available), width)
-  return Math.max(24, width)
-}
-
-// Shared geometry for populated workspaces that put the badge on the first
-// visible child row. badgeWidth is the single measured chip width shared by
-// every row of the workspace (sidebarInlineWorkspaceBadgeLayoutWidth);
-// defaults to the 24px minimum so missing widths do not shove icons right.
-// guideOffset shifts the artwork column; stemOffset shifts vertical guide
-// columns so they stay under the badge center (not under the icons).
-function sidebarInlineWorkspaceGeometry(workspaceCardInset, space, badgeWidth) {
+// Fixed badge column shared by every child row, including named workspaces.
+// guideOffset shifts artwork; stemOffset keeps guides under the badge center.
+function sidebarInlineWorkspaceGeometry(workspaceCardInset, space) {
   var layout = sidebarTreeGuideLayout(workspaceCardInset)
   var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
-  var maxW = sidebarInlineWorkspaceBadgeMaxWidth(space)
-  var bw = Number(badgeWidth)
-  if (!isFinite(bw) || bw <= 0) bw = 24
-  if (bw > maxW) bw = maxW
-  if (bw < 24) bw = 24
+  var bw = sp(22)
   var gap = sp(8)
   var iconGap = sp(4)
   var iconSize = 18
@@ -226,12 +186,12 @@ function sidebarInlineWorkspaceGeometry(workspaceCardInset, space, badgeWidth) {
   var normalArt = sidebarTreeIconX(workspaceCardInset, 1)
   return {
     badgeX: badgeX,
+    badgeWidth: bw,
     artX: artX,
     stemX: stemX,
     labelX: artX + iconSize + iconGap,
     guideOffset: artX - normalArt,
-    stemOffset: stemX - layout.guide0,
-    badgeMaxWidth: maxW
+    stemOffset: stemX - layout.guide0
   }
 }
 
