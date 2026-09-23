@@ -72,7 +72,7 @@ def production_blocks():
             r"(?=^  readonly property bool (?:workspaceMonitorDragSourceActive|headerInputSuppressed):)",
             group_source, re.MULTILINE).group(0).rstrip(),
         "tap": qml_block(
-            group_source, "TapHandler {", contains="onPressedChanged: if (pressed)",
+            group_source, "TapHandler {", contains="acceptedModifiers: Qt.NoModifier",
             indent=4),
         "escape": qml_block(
             group_source, "Keys.onEscapePressed:",
@@ -207,7 +207,7 @@ Item {{
       property int activations: 0
       property bool monitorHandlerEnabled: header.monitorHandlerEnabled
       property bool numberActiveFocus: header.activeFocus
-      signal activated()
+      signal activated(bool pullToMonitor)
       onActivated: activations++
       {group["escape"]}
       {group["cancel"]}
@@ -311,10 +311,18 @@ Item {{
     property var activeToplevel: null
     property var lastActivationMonitor: null
     property var lastWorkspaceTargetOverride: null
+    property int pullCalls: 0
     function activateToplevel(toplevel, originOnly, activationMonitor, focusAfterRestore, workspaceTargetOverride) {{
       activationCalls++
       lastActivationMonitor = activationMonitor
       lastWorkspaceTargetOverride = workspaceTargetOverride
+      return true
+    }}
+    function pullToplevelToMonitorWorkspace(toplevel, originOnly, monitor) {{
+      activationCalls++
+      pullCalls++
+      lastActivationMonitor = monitor
+      lastWorkspaceTargetOverride = undefined
       return true
     }}
   }}
@@ -407,8 +415,11 @@ Item {{
     function test_iconCtrlClickRecordsDockMonitor() {{
       var icon = freshIcon()
       icon.activationMonitor = "id:fixture-monitor"
+      iconActions.pullCalls = 0
       mouseClick(icon, 30, 30, Qt.LeftButton, Qt.ControlModifier)
       compare(icon.activationCalls, 1)
+      // Ctrl moves just the window into the clicked monitor's active workspace.
+      compare(iconActions.pullCalls, 1)
       compare(iconActions.lastActivationMonitor, "id:fixture-monitor")
       compare(iconActions.lastWorkspaceTargetOverride, undefined)
     }}
