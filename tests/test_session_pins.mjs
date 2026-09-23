@@ -35,8 +35,8 @@ function fixture(usingLua = false) {
     { id: -2, name: 'project space', monitorID: 0 }
   ]
   const monitors = [
-    { id: 0, name: 'DP-1' },
-    { id: 1, name: 'DP-2' }
+    { id: 0, name: 'DP-1', activeWorkspace: { id: 3 } },
+    { id: 1, name: 'DP-2', activeWorkspace: { id: 4 } }
   ]
   const requests = []
   const detached = []
@@ -153,6 +153,190 @@ function fixture(usingLua = false) {
   assert.equal(a.unpinWorkspaceFromMonitor('id:3'), true)
   assert.ok(a.workspaceOnMonitorRequests(3, 'id:1').length > 1,
     'unpinned workspace retains the existing pull behavior')
+}
+
+// Ctrl on a window pulls only that window onto the clicked monitor's live
+// workspace; a window already home focuses without moving.
+for (const usingLua of [false, true]) {
+  const f = usingLua ? fixture(true) : fixture(false)
+  const tag = usingLua ? 'lua' : 'legacy'
+  const { actions: a, A, C, requests, detached } = f
+  const focusA = usingLua
+    ? 'hl.dsp.focus({ window = "address:0xa1" })' : 'focuswindow address:0xa1'
+  const focusC = usingLua
+    ? 'hl.dsp.focus({ window = "address:0xc3" })' : 'focuswindow address:0xc3'
+  const moveC = usingLua
+    ? 'hl.dsp.window.move({ window = "address:0xc3", workspace = "3", follow = false })'
+    : 'movetoworkspacesilent 3,address:0xc3'
+  function clearAll() {
+    requests.length = 0
+    detached.length = 0
+  }
+
+  clearAll()
+  assert.equal(a.pullToplevelToMonitorWorkspace(A, true, 'id:0'), true)
+  assert.deepEqual(requests, [focusA],
+    `pull with the window already home focuses only (${tag})`)
+  assert.equal(detached.length, 0)
+
+  clearAll()
+  assert.equal(a.pullToplevelToMonitorWorkspace(C, true, 'id:0'), true)
+  assert.deepEqual(requests, [moveC, focusC],
+    `pull moves only the window to the monitor workspace (${tag})`)
+  assert.equal(detached.length, 0)
+
+  clearAll()
+  assert.equal(a.pinWindowToWorkspace(A), true)
+  assert.equal(a.pullToplevelToMonitorWorkspace(A, true, 'id:1'), false,
+    'a pinned window refuses the Ctrl pull')
+  assert.equal(requests.length, 0)
+  assert.equal(detached.length, 0)
+  assert.equal(a.unpinWindowFromWorkspace(A), true)
+
+  clearAll()
+  assert.equal(a.pullToplevelToMonitorWorkspace(A, true, 'id:99'), false)
+  assert.equal(a.pullToplevelToMonitorWorkspace(A, true, ''), false)
+  assert.equal(requests.length, 0)
+  assert.equal(detached.length, 0)
+
+  clearAll()
+  assert.equal(a.minimizeToplevel(C, true), true)
+  f.handles[2].lastIpcObject.workspace = { name: 'special:smartdock-minimized' }
+  clearAll()
+  assert.equal(a.pullToplevelToMonitorWorkspace(C, true, 'id:0'), true)
+  const focusHome = usingLua
+    ? 'hl.dsp.focus({ workspace = "3" })' : 'workspace 3'
+  const restoreHome = usingLua
+    ? 'hl.dsp.window.move({ window = "address:0xc3", workspace = "3", follow = true })'
+    : 'movetoworkspace 3,address:0xc3'
+  if (usingLua) {
+    assert.deepEqual(requests, [
+      `function() ${[focusHome, restoreHome, focusC].map(step => `hl.dispatch(${step})`).join('; ')} end`
+    ], `pull restores a minimized window on the monitor workspace (${tag})`)
+    assert.equal(detached.length, 0)
+  } else {
+    assert.deepEqual(requests, [],
+      `pull restore does not race IPC sockets (${tag})`)
+    assert.deepEqual(detached.map(command => Array.from(command)), [[
+      'hyprctl', '--batch', [focusHome, restoreHome, focusC]
+        .map(step => `dispatch ${step}`).join('; ')
+    ]], `pull restores a minimized window on the monitor workspace (${tag})`)
+  }
+}
+
+// Sidebar Ctrl routing through the real controller: window+Ctrl moves only
+// the window, workspace+Ctrl pulls the workspace, plain clicks stay in place.
+function sidebarScope(f) {
+  const scope = methods('DockSidebarController.qml', { DockModel })
+  Object.assign(scope, {
+    interactionBusy: false,
+    focusReturnTarget: null,
+    windowActions: f.actions,
+    targetIsCurrent: () => true,
+    connectorIsMapped: name => name === 'DP-1' || name === 'DP-2',
+    toggleApplication: () => false
+  })
+  return scope
+}
+for (const usingLua of [false, true]) {
+  const f = usingLua ? fixture(true) : fixture(false)
+  const tag = usingLua ? 'lua' : 'legacy'
+  const { actions: a, A, C, requests, detached } = f
+  const sidebar = sidebarScope(f)
+  function clearAll() {
+    requests.length = 0
+    detached.length = 0
+  }
+  function expectRouted(steps, label) {
+    if (usingLua) {
+      assert.deepEqual(requests, [
+        `function() ${steps.map(step => `hl.dispatch(${step})`).join('; ')} end`
+      ], label)
+      assert.equal(detached.length, 0, `${label} does not spawn hyprctl`)
+    } else {
+      assert.deepEqual(requests, [], `${label} does not race IPC sockets`)
+      assert.deepEqual(detached.map(command => Array.from(command)), [[
+        'hyprctl', '--batch', steps.map(step => `dispatch ${step}`).join('; ')
+      ]], label)
+    }
+  }
+  const focusA = usingLua
+    ? 'hl.dsp.focus({ window = "address:0xa1" })' : 'focuswindow address:0xa1'
+  const focusC = usingLua
+    ? 'hl.dsp.focus({ window = "address:0xc3" })' : 'focuswindow address:0xc3'
+  const moveC = usingLua
+    ? 'hl.dsp.window.move({ window = "address:0xc3", workspace = "3", follow = false })'
+    : 'movetoworkspacesilent 3,address:0xc3'
+  const focusWs = target => usingLua
+    ? `hl.dsp.focus({ workspace = "${target}" })` : `workspace ${target}`
+
+  // Window with Ctrl on DP-1 (live workspace id:3): move only the window.
+  clearAll()
+  assert.equal(sidebar.activateTarget(
+    { kind: 'window', key: 'win-c', toplevel: C, address: '0xc3' }, true, 'DP-1'), true)
+  assert.deepEqual(requests, [moveC, focusC],
+    `sidebar window+Ctrl moves only the window (${tag})`)
+  assert.doesNotMatch(requests.join(' '), /moveworkspace/i,
+    `sidebar window+Ctrl never moves a workspace (${tag})`)
+  assert.equal(detached.length, 0)
+
+  // Plain window click: focus in place.
+  clearAll()
+  assert.equal(sidebar.activateTarget(
+    { kind: 'window', key: 'win-a', toplevel: A, address: '0xa1' }, false, 'DP-1'), true)
+  assert.deepEqual(requests, [focusA],
+    `sidebar plain window click focuses in place (${tag})`)
+  assert.equal(detached.length, 0)
+
+  // Workspace with Ctrl pulls the workspace to the clicked monitor. The
+  // named workspace lives on DP-1, so Ctrl on DP-2 routes a monitor pull.
+  clearAll()
+  assert.equal(sidebar.activateTarget(
+    { kind: 'workspace', key: 'ws-proj', workspaceIdentity: 'name:project space' },
+    true, 'DP-2'), true)
+  expectRouted([focusWs('name:project space'), usingLua
+    ? 'hl.dsp.workspace.move({ workspace = "name:project space", monitor = "1" })'
+    : 'movecurrentworkspacetomonitor 1', focusWs('name:project space')],
+  `sidebar workspace+Ctrl pulls the workspace to the monitor (${tag})`)
+
+  // Ctrl on the workspace's current monitor focuses without moving.
+  clearAll()
+  assert.equal(sidebar.activateTarget(
+    { kind: 'workspace', key: 'ws-proj', workspaceIdentity: 'name:project space' },
+    true, 'DP-1'), true)
+  assert.deepEqual(requests, [focusWs('name:project space')],
+    `sidebar workspace+Ctrl on the home monitor focuses in place (${tag})`)
+  assert.equal(detached.length, 0)
+
+  // Numeric workspace rows carry id:-form identities; the controller converts
+  // to a command target before routing, so workspace+Ctrl pulls the workspace
+  // like named workspaces. id:4 lives on DP-2, so Ctrl on DP-1 routes a pull.
+  clearAll()
+  assert.equal(sidebar.activateTarget(
+    { kind: 'workspace', key: 'ws-4', workspaceIdentity: 'id:4' },
+    true, 'DP-1'), true)
+  expectRouted([focusWs('4'), usingLua
+    ? 'hl.dsp.workspace.move({ workspace = "4", monitor = "0" })'
+    : 'moveworkspacetomonitor 4 0', focusWs('4')],
+  `sidebar workspace+Ctrl pulls the numeric workspace to the monitor (${tag})`)
+
+  // Plain workspace click: focus in place.
+  clearAll()
+  assert.equal(sidebar.activateTarget(
+    { kind: 'workspace', key: 'ws-4', workspaceIdentity: 'id:4' }, false, 'DP-1'), true)
+  assert.deepEqual(requests, [focusWs('4')],
+    `sidebar plain workspace click focuses in place (${tag})`)
+  assert.equal(detached.length, 0)
+
+  // An unmapped panel connector authorizes nothing.
+  clearAll()
+  assert.equal(sidebar.activateTarget(
+    { kind: 'window', key: 'win-c', toplevel: C, address: '0xc3' }, true, 'GHOST'), false)
+  assert.equal(sidebar.activateTarget(
+    { kind: 'workspace', key: 'ws-4', workspaceIdentity: 'id:4' }, true, 'GHOST'), false)
+  assert.equal(requests.length, 0)
+  assert.equal(detached.length, 0)
+  assert.equal(a, sidebar.windowActions, 'sidebar routes through the shared controller')
 }
 
 // Explicit workspace relocation is silent: one move, never focus→move→focus.
@@ -305,6 +489,10 @@ assert.match(headerActivationBody, /windowActions\.workspaceOnMonitorRequests/,
   'workspace-header activation must use the central monitor-pin policy')
 assert.doesNotMatch(headerActivationBody, /moveWorkspaceToMonitorRequest|moveCurrentWorkspaceToMonitorRequest/,
   'workspace-header activation must not bypass the central monitor-pin policy')
+assert.match(dockSource, /onActivated: pullToMonitor =>/,
+  'plain header clicks focus in place while Ctrl pulls to the dock monitor')
+assert.match(dockSource, /windowActions\.focusWorkspaceInPlace\(target\)/,
+  'plain header clicks must use the shared in-place focus')
 assert.match(dockSource, /windowActions\.activateToplevel/,
   'dock app/preview activation must retain the shared exact-window activation controller')
 

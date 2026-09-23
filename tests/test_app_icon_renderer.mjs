@@ -32,7 +32,7 @@ function binding(name) {
 }
 
 const badgeGeometry = vm.createContext({ width: 40, height: 40, Math })
-assert.equal(vm.runInContext(binding('profileBadgeSize'), badgeGeometry), 17.6,
+assert.ok(Math.abs(vm.runInContext(binding('profileBadgeSize'), badgeGeometry) - 13.6) < 1e-9,
   'a 40px icon needs a recognizable profile badge')
 badgeGeometry.width = 20
 badgeGeometry.height = 20

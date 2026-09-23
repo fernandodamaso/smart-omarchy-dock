@@ -93,6 +93,23 @@ TestCase {
     compare(DockModel.resolveApplicationPointerAction(config, "unknown", {}), "none")
   }
 
+  function test_controlModifierCarriesNoActionOverrideAtModelLayer() {
+    // The Ctrl pull intent lives in DockItem/DockWindowActions; the model
+    // vocabulary resolves Ctrl+left exactly like a plain left click.
+    var config = {
+      clickAction: "focus-or-launch",
+      middleClickAction: "focus-or-launch"
+    }
+    compare(DockModel.resolveApplicationPointerAction(config, "left", { control: true }),
+      DockModel.resolveApplicationPointerAction(config, "left", {}))
+    compare(DockModel.resolveApplicationPointerAction(config, "middle", { control: true }),
+      DockModel.resolveApplicationPointerAction(config, "middle", {}))
+    var ctrlAction = DockModel.resolveApplicationPointerAction(
+      config, "left", { control: true })
+    verify(DockModel.applicationActionCanRun(ctrlAction, 1))
+    verify(DockModel.applicationActionCanRun(ctrlAction, 0))
+  }
+
   function test_rejectsClosedApplicationActionsExceptLaunchCompatibleActions() {
     verify(!DockModel.applicationActionCanRun("none", 0))
     verify(!DockModel.applicationActionCanRun("minimize-restore", 0))

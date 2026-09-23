@@ -31,6 +31,16 @@ const actions = methods('DockWindowActions.qml', {
   ToplevelManager: { toplevels: { values: windows } },
   Quickshell: { execDetached: command => batches.push(command) },
   Hyprland: { toplevels: { values: handles }, focusedWorkspace: { id: 3 },
+    workspaces: { values: [
+      { id: 4, name: '4', monitorID: 1 },
+      { id: 5, name: '5', monitorID: 1 },
+      { id: 7, name: '7', monitorID: 0 },
+      { id: 9, name: '9', monitorID: 1 }
+    ] },
+    monitors: { values: [
+      { id: 0, name: 'DP-1', activeWorkspace: { id: 7 } },
+      { id: 1, name: 'DP-2', activeWorkspace: { id: 9 } }
+    ] },
     usingLua: false, dispatch: request => requests.push(request) }
 })
 const item = methods('DockItem.qml', { DockModel, DockWindowModel, windowActions: actions,
@@ -138,11 +148,9 @@ expectRequests(requests, [
 clearSubmissions()
 assert.equal(item.dispatchPointerAction('left', { control: true }), true)
 expectRequests(requests, [
-  'function() hl.dispatch(hl.dsp.focus({ workspace = "9" })); '
-    + 'hl.dispatch(hl.dsp.workspace.move({ workspace = "9", monitor = "0" })); '
-    + 'hl.dispatch(hl.dsp.focus({ workspace = "9" })); '
-    + 'hl.dispatch(hl.dsp.focus({ window = "address:0x1" })) end'
-], 'Ctrl+click cross-monitor activation is one ordered compositor submission')
+  'hl.dsp.window.move({ window = "address:0x1", workspace = "7", follow = false })',
+  'hl.dsp.focus({ window = "address:0x1" })'
+], 'Ctrl+click moves only the focused window to the dock monitor workspace')
 for (const usingLua of [false, true]) {
   hyprland.usingLua = usingLua
   const moveWorkspace = target => usingLua
@@ -161,9 +169,17 @@ for (const usingLua of [false, true]) {
     ? `hl.dsp.window.move({ window = "address:${address}", workspace = "${workspace}", follow = true })`
     : `movetoworkspace ${workspace},address:${address}`
   function expectInPlace(request, label) {
-    expectRequests(requests, [request], label)
+    expectRequests(requests, Array.isArray(request) ? request : [request], label)
     expectRequests(batches, [], `${label} does not spawn hyprctl`)
   }
+  // Ctrl on a window pulls only that window onto the dock monitor's live
+  // workspace (id:7 here); the window's old workspace never moves.
+  const moveWindowToDock = usingLua
+    ? 'hl.dsp.window.move({ window = "address:0x1", workspace = "7", follow = false })'
+    : 'movetoworkspacesilent 7,address:0x1'
+  const focusDockWorkspace = usingLua
+    ? 'hl.dsp.focus({ workspace = "7" })'
+    : 'workspace 7'
 
   clearSubmissions()
   dock.focusWorkspaceOnDockMonitor('name:Design work')
@@ -184,6 +200,17 @@ for (const usingLua of [false, true]) {
     `workspace switch spawns nothing without monitor (${usingLua ? 'lua' : 'legacy'})`)
   dock.dockHyprMonitor = previousMonitor
 
+  clearSubmissions()
+  assert.equal(actions.focusWorkspaceInPlace('9'), true)
+  expectInPlace(focusWorkspace('9'),
+    `plain header click focuses the workspace in place (${usingLua ? 'lua' : 'legacy'})`)
+
+  clearSubmissions()
+  dock.focusWorkspaceOnDockMonitor('9')
+  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
+    focusWorkspace('9')], usingLua,
+    `Ctrl header click pulls the workspace to the dock monitor (${usingLua ? 'lua' : 'legacy'})`)
+
   handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
   actions.minimizedOrigins = {}
   clearSubmissions()
@@ -198,21 +225,16 @@ for (const usingLua of [false, true]) {
 
   clearSubmissions()
   assert.equal(item.dispatchPointerAction('left', { control: true }), true)
-  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
-    focusWorkspace('9'), focusWindow('0x1')], usingLua,
-    `Ctrl+click icon activation (${usingLua ? 'lua' : 'legacy'})`)
+  expectInPlace([moveWindowToDock, focusWindow('0x1')],
+    `Ctrl+click icon activation moves only the window to the dock monitor workspace (${usingLua ? 'lua' : 'legacy'})`)
 
   item.workspaceActivationTarget = 'name:Design work'
   handles[0].lastIpcObject = { monitor: 1 }
   actions.minimizedOrigins = {}
   clearSubmissions()
   assert.equal(item.dispatchPointerAction('left', { control: true }), true)
-  expectSequence(usingLua
-    ? [focusWorkspace('name:Design work'), moveWorkspace('name:Design work'),
-        focusWorkspace('name:Design work'), focusWindow('0x1')]
-    : [focusWorkspace('name:Design work'), moveCurrentWorkspace,
-        focusWorkspace('name:Design work'), focusWindow('0x1')], usingLua,
-    `card-window Ctrl+click uses card workspace override (${usingLua ? 'lua' : 'legacy'})`)
+  expectInPlace([moveWindowToDock, focusWindow('0x1')],
+    `card-window Ctrl+click ignores the card workspace override and pulls to the monitor workspace (${usingLua ? 'lua' : 'legacy'})`)
 
   for (const cardTarget of [9, 'name:Design work']) {
     for (const modifiers of [undefined, null, {}, { control: false }]) {
@@ -230,9 +252,24 @@ for (const usingLua of [false, true]) {
 
   clearSubmissions()
   assert.equal(item.dispatchPointerAction('middle', { control: true }), true)
-  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
-    focusWorkspace('9'), focusWindow('0x1')], usingLua,
-    `Ctrl+middle click icon activation (${usingLua ? 'lua' : 'legacy'})`)
+  expectInPlace(focusWindow('0x1'),
+    `Ctrl+middle click keeps plain focus without monitor routing (${usingLua ? 'lua' : 'legacy'})`)
+
+  // Non-left inputs still carry the card workspace override, so Ctrl+middle
+  // on a card window keeps its previous workspace-pull behavior.
+  item.workspaceActivationTarget = 'name:Design work'
+  handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+  actions.minimizedOrigins = {}
+  clearSubmissions()
+  assert.equal(item.dispatchPointerAction('middle', { control: true }), true)
+  expectSequence(usingLua
+    ? [focusWorkspace('name:Design work'), moveWorkspace('name:Design work'),
+        focusWorkspace('name:Design work'), focusWindow('0x1')]
+    : [focusWorkspace('name:Design work'), moveCurrentWorkspace,
+        focusWorkspace('name:Design work'), focusWindow('0x1')], usingLua,
+    `card-window Ctrl+middle keeps the card workspace override (${usingLua ? 'lua' : 'legacy'})`)
+  item.workspaceActivationTarget = ''
+  handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
 
   clearSubmissions()
   assert.equal(preview.activateToplevel(windows[0]), true)
@@ -241,9 +278,8 @@ for (const usingLua of [false, true]) {
 
   clearSubmissions()
   assert.equal(preview.activateToplevel(windows[0], true), true)
-  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
-    focusWorkspace('9'), focusWindow('0x1')], usingLua,
-    `Ctrl+click preview activation (${usingLua ? 'lua' : 'legacy'})`)
+  expectInPlace([moveWindowToDock, focusWindow('0x1')],
+    `Ctrl+click preview activation moves only that window (${usingLua ? 'lua' : 'legacy'})`)
 
   actions.activeToplevel = windows[0]
   clearSubmissions()
@@ -253,9 +289,8 @@ for (const usingLua of [false, true]) {
 
   clearSubmissions()
   assert.equal(item.dispatchPointerAction('left', { control: true }), true)
-  expectSequence([focusWorkspace('9'), moveWorkspace('9'),
-    focusWorkspace('9'), focusWindow('0x1')], usingLua,
-    `Ctrl+click active-other-monitor icon activation (${usingLua ? 'lua' : 'legacy'})`)
+  expectInPlace([moveWindowToDock, focusWindow('0x1')],
+    `Ctrl+click active-other-monitor icon activation moves only the window (${usingLua ? 'lua' : 'legacy'})`)
 
   handles[0].lastIpcObject = {
     workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
@@ -270,9 +305,9 @@ for (const usingLua of [false, true]) {
     workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
   clearSubmissions()
   assert.equal(item.dispatchPointerAction('left', { control: true }), true)
-  expectSequence([focusWorkspace('4'), moveWorkspace('4'),
-    focusWorkspace('4'), restoreWindow('0x1', '4')], usingLua,
-    `Ctrl+click minimized icon activation (${usingLua ? 'lua' : 'legacy'})`)
+  expectSequence([focusDockWorkspace, restoreWindow('0x1', '7'),
+    focusWindow('0x1')], usingLua,
+    `Ctrl+click minimized icon activation restores on the dock monitor workspace (${usingLua ? 'lua' : 'legacy'})`)
 
   actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
   handles[0].lastIpcObject = {
@@ -287,9 +322,9 @@ for (const usingLua of [false, true]) {
     workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
   clearSubmissions()
   assert.equal(preview.activateToplevel(windows[0], true), true)
-  expectSequence([focusWorkspace('4'), moveWorkspace('4'),
-    focusWorkspace('4'), restoreWindow('0x1', '4')], usingLua,
-    `Ctrl+click minimized preview activation (${usingLua ? 'lua' : 'legacy'})`)
+  expectSequence([focusDockWorkspace, restoreWindow('0x1', '7'),
+    focusWindow('0x1')], usingLua,
+    `Ctrl+click minimized preview activation restores on the dock monitor workspace (${usingLua ? 'lua' : 'legacy'})`)
 
   handles[0].lastIpcObject = {
     workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
@@ -348,6 +383,129 @@ for (const usingLua of [false, true]) {
   item.runningToplevels = [windows[0]]
   item.runningCount = 1
 }
+
+// pullToplevelToMonitorWorkspace: Ctrl on a window moves only that window to
+// the activating monitor's live workspace (id:7 on id:0 here). The window's
+// old workspace never moves.
+for (const usingLua of [false, true]) {
+  hyprland.usingLua = usingLua
+  const tag = usingLua ? 'lua' : 'legacy'
+  const pullMove = usingLua
+    ? 'hl.dsp.window.move({ window = "address:0x1", workspace = "7", follow = false })'
+    : 'movetoworkspacesilent 7,address:0x1'
+  const pullFocusWorkspace = usingLua
+    ? 'hl.dsp.focus({ workspace = "7" })' : 'workspace 7'
+  const pullRestore = usingLua
+    ? 'hl.dsp.window.move({ window = "address:0x1", workspace = "7", follow = true })'
+    : 'movetoworkspace 7,address:0x1'
+  const pullFocusWindow = usingLua
+    ? 'hl.dsp.focus({ window = "address:0x1" })' : 'focuswindow address:0x1'
+
+  // Already on the target workspace: focus only, no move.
+  handles[0].lastIpcObject = { workspace: { id: 7 }, monitor: 0 }
+  actions.minimizedOrigins = {}
+  actions.windowWorkspacePins = {}
+  clearSubmissions()
+  assert.equal(actions.pullToplevelToMonitorWorkspace(windows[0], true, 'id:0'), true)
+  expectRequests(requests, [pullFocusWindow],
+    `pull with the window already home focuses only (${tag})`)
+  expectRequests(batches, [],
+    `pull with the window already home spawns nothing (${tag})`)
+
+  // Normal move: silent window move, then focus.
+  handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+  clearSubmissions()
+  assert.equal(actions.pullToplevelToMonitorWorkspace(windows[0], true, 'id:0'), true)
+  expectRequests(requests, [pullMove, pullFocusWindow],
+    `pull moves only the window to the monitor workspace (${tag})`)
+  expectRequests(batches, [], `pull does not spawn hyprctl (${tag})`)
+
+  // Minimized: the origin is rewritten to the destination, then restored there.
+  handles[0].lastIpcObject = {
+    workspace: { name: 'special:smartdock-minimized' }, monitor: 1 }
+  actions.minimizedOrigins = { '0x1': { workspace: '4', monitor: 'id:1' } }
+  clearSubmissions()
+  assert.equal(actions.pullToplevelToMonitorWorkspace(windows[0], true, 'id:0'), true)
+  if (usingLua) {
+    expectRequests(requests, [
+      `function() ${[pullFocusWorkspace, pullRestore, pullFocusWindow]
+        .map(step => `hl.dispatch(${step})`).join('; ')} end`
+    ], `pull restores a minimized window on the monitor workspace (${tag})`)
+    expectRequests(batches, [],
+      `pull restore does not spawn hyprctl (${tag})`)
+  } else {
+    expectRequests(requests, [],
+      `pull restore does not race IPC sockets (${tag})`)
+    expectRequests(batches.map(command => Array.from(command)), [[
+      'hyprctl', '--batch', [pullFocusWorkspace, pullRestore, pullFocusWindow]
+        .map(step => `dispatch ${step}`).join('; ')
+    ]], `pull restores a minimized window on the monitor workspace (${tag})`)
+  }
+
+  // Pin-refused: a pinned window never moves and never focuses.
+  handles[0].lastIpcObject = { workspace: { id: 9 }, monitor: 1 }
+  actions.minimizedOrigins = {}
+  actions.windowWorkspacePins = {}
+  assert.equal(actions.pinWindowToWorkspace(windows[0]), true)
+  clearSubmissions()
+  assert.equal(actions.pullToplevelToMonitorWorkspace(windows[0], true, 'id:0'), false)
+  expectRequests(requests, [], `pin-refused pull dispatches nothing (${tag})`)
+  expectRequests(batches, [], `pin-refused pull spawns nothing (${tag})`)
+  actions.windowWorkspacePins = {}
+
+  // Unknown monitor: no destination, no dispatch.
+  clearSubmissions()
+  assert.equal(actions.pullToplevelToMonitorWorkspace(windows[0], true, 'id:99'), false)
+  assert.equal(actions.pullToplevelToMonitorWorkspace(windows[0], true, ''), false)
+  expectRequests(requests, [],
+    `pull to an unknown monitor dispatches nothing (${tag})`)
+  expectRequests(batches, [],
+    `pull to an unknown monitor spawns nothing (${tag})`)
+}
+
+// Ctrl-click with no running windows still launches.
+const savedEntry = item.entry
+const launched = []
+item.entry = { name: 'Google Chrome', execute: () => launched.push('launched') }
+item.runningToplevels = []
+item.runningCount = 0
+clearSubmissions()
+assert.equal(item.dispatchPointerAction('left', { control: true }), true)
+assert.deepEqual(launched, ['launched'], 'Ctrl+click with no windows launches')
+expectRequests(requests, [], 'launch dispatches nothing')
+expectRequests(batches, [], 'launch spawns nothing')
+item.entry = savedEntry
+item.runningToplevels = [windows[0]]
+item.runningCount = 1
+
+// Ctrl-click routing contract: plain header/strip clicks focus in place,
+// Ctrl pulls the workspace; Ctrl on a window pulls only that window.
+const dockQml = read('Dock.qml')
+assert.match(dockQml, /onActivated: pullToMonitor =>/)
+assert.match(dockQml, /root\.windowActions\.focusWorkspaceInPlace\(target\)/)
+assert.match(dockQml, /onWorkspaceRequested: \(workspaceId, pullToMonitor\) =>/)
+assert.match(dockQml, /readonly property int pinnedIconGap/)
+assert.match(dockQml, /spacing: Math\.max\(0, root\.pinnedIconGap - \(root\.itemSize - root\.iconSize\)\)/)
+const groupSource = read('DockWorkspaceGroup.qml')
+assert.match(groupSource, /signal activated\(bool pullToMonitor\)/)
+assert.match(groupSource, /acceptedModifiers: Qt\.NoModifier/)
+assert.match(groupSource, /acceptedModifiers: Qt\.ControlModifier/)
+assert.match(groupSource, /root\.activated\(false\)/)
+assert.match(groupSource, /root\.activated\(true\)/)
+assert.match(groupSource, /font\.pixelSize: Style\.font\.body/)
+assert.match(groupSource, /font\.weight: Font\.DemiBold/)
+const stripSource = read('DockWorkspaceStrip.qml')
+assert.match(stripSource, /signal workspaceRequested\(int workspaceId, bool pullToMonitor\)/)
+assert.match(stripSource, /workspaceRequested\(workspaceCell\.workspaceId, false\)/)
+assert.match(stripSource, /workspaceRequested\(workspaceCell\.workspaceId, true\)/)
+const previewSource = read('DockWindowPreview.qml')
+assert.match(previewSource,
+  /pullToplevelToMonitorWorkspace\(\s*toplevel, root\.originOnly, root\.activationMonitor\)/)
+const itemSource = read('DockItem.qml')
+assert.match(itemSource,
+  /pullToplevelToMonitorWorkspace\(\s*root\.runningToplevels\[root\.lastActivatedToplevel\]/)
+assert.doesNotMatch(itemSource, /keys\.control === true \|\| \(input !== "left"/,
+  'Ctrl+left no longer injects a workspace pull; it moves only the window')
 assert.equal(read('Dock.qml').includes('indexOf(modelData)'), false)
 assert.equal(read('Dock.qml').includes('workspaceScopeKey(root.screen.name, modelData.presentationId)'), true)
 // Fullscreen presentation is scoped by workspace-card identity. Global
@@ -548,7 +706,8 @@ function dockGeometry(options = {}) {
 for (const iconSize of [24, 31, 64, 96]) for (const magnification of [1, 1.2, 2])
   for (const groupedFullscreenModeActive of [false, true]) {
     const g = dockGeometry({ iconSize, magnification, groupedFullscreenModeActive })
-    assert.equal(g.surfaceX + g.surfaceWidth - g.visibleRight, 4, 'visible right inset is exactly 4px')
+    assert.equal(g.surfaceX + g.surfaceWidth - g.visibleRight, g.root.mainPadding,
+      'visible right inset matches the leading padding')
     assert.equal(g.surfaceX * 2 + g.surfaceWidth, g.panelWidth, 'visible surface is centered')
     assert.equal(g.layoutWidth, g.root.compactMainExtent, 'logical layout retains its original width')
     assert.equal(g.viewportWidth, g.desiredWidth, 'magnification viewport is not reduced')

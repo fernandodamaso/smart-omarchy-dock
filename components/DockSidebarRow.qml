@@ -821,6 +821,9 @@ Item {
       height: root.iconSize
       x: root.collapsed ? (content.width - width) / 2 : root.artX
       y: root.collapsed ? Style.space(10) : Math.round((content.height - height) / 2)
+      roundedArtwork: false
+      badgeRingColor: root.insideWorkspaceCard && root.viewport
+        ? root.viewport.workspaceFill : Color.background
       desktopId: String(root.row.desktopId || "")
       desktopIcon: root.entry ? String(root.entry.icon || "") : ""
       iconOverrides: root.controller.settings.iconOverrides || ({})

@@ -31,7 +31,7 @@ TestCase {
     compare(indicator.width, 4)
     compare(indicator.height, 4)
     compare(indicator.markerColor, indicator.runningColor)
-    compare(indicator.markerOpacity, 0.46)
+    compare(indicator.markerOpacity, 0.72)
   }
 
   function test_focusedUsesDistinctLongMarker() {

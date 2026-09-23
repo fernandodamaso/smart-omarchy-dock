@@ -27,7 +27,8 @@ plain. Raw Qt modifiers are available in the viewport's activation signal.
 
 Plain clicks and Enter activate the exact live window without requesting a
 workspace move. Ctrl+left-click canonicalizes the captured host connector and
-uses the merged `DockWindowActions.activateToplevel` route. Window and workspace
+uses the shared `pullToplevelToMonitorWorkspace` route, moving just that window
+to the clicked monitor's active workspace before focusing it. Window and workspace
 pins, minimized origins, named workspaces, exact-handle liveness and same-monitor
 behavior remain owned by that service. No focus-derived monitor or frozen card
 workspace override is substituted. Enter remains plain even while Ctrl is held.
@@ -36,9 +37,10 @@ Unknown window locations remain reachable by their live native handles; actions
 requiring a trustworthy location are disabled. Address reuse, hidden-app changes,
 closure and a changed captured connector cannot retarget a delayed click.
 
-Sidebar workspace headers use the new small shared `focusWorkspaceInPlace`
-adapter. They focus the current native owner and never borrow the classic
-workspace-header/wheel pull path. Classic header, wheel, pointer action settings,
+Sidebar workspace headers focus in place on plain click and Enter through the
+shared `focusWorkspaceInPlace` adapter. Ctrl+click validates the captured
+connector and pulls the workspace onto that monitor through
+`workspaceOnMonitorRequests`. Classic header, wheel, pointer action settings,
 menus and cross-dock drag behavior are unchanged.
 
 ## Menus and keyboard
@@ -136,7 +138,7 @@ SB-06 must run the following on the final combined SB-03/04/05 candidate:
    Ctrl held before pointer entry/released before a subsequent plain click,
    same-monitor activation, named workspaces, folded application/rail members,
    pins, minimized origins and target closure/address reuse.
-2. Header focus versus explicit whole-workspace moves; menu exact targeting,
+2. Plain header focus versus Ctrl whole-workspace moves; menu exact targeting,
    no hover retargeting, live owner invalidation, inward popup bounds on both
    edges/bottom rows, large fonts and fractional scaling.
 3. Actual pointer window/workspace drags, clipped/scrolled destination rows,

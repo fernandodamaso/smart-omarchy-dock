@@ -794,6 +794,8 @@ FocusScope {
       visible: parent.sourceRow && parent.sourceRow.kind === "window"
       width: 22; height: 22
       anchors.verticalCenter: parent.verticalCenter
+      roundedArtwork: false
+      badgeRingColor: root.workspaceFill
       desktopId: parent.sourceRow ? String(parent.sourceRow.desktopId || "") : ""
       desktopIcon: parent.sourceRow && parent.sourceRow.item && parent.sourceRow.item.entry
         ? String(parent.sourceRow.item.entry.icon || "") : ""

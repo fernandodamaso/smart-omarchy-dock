@@ -36,6 +36,19 @@
 
 ### Changed
 
+- Workspace and window activation is now opt-in for moves, in both the dock
+  and the sidebar: a plain workspace-name click focuses the workspace where
+  it already is, while Ctrl+click pulls it onto the clicked monitor and
+  focuses it. A plain window click focuses the window where it is, while
+  Ctrl+click moves just that window (the one a plain click would focus, so
+  repeated Ctrl-clicks on a multi-window icon cycle through its windows) to
+  the clicked monitor's active workspace and focuses it.
+- Grouped workspace names now render at `Style.font.body` with
+  `Font.DemiBold`, matching the monitor label, and grouped pinned icons sit
+  16 px apart, matching the sidebar pinned strip.
+- Removed the standalone + (add pinned application) slot beside Dock Controls;
+  pin apps from the Dock Controls menu's **Add Pinned Application** entry instead.
+
 - Dock presentation has two modes: the classic bottom dock and the sidebar
   (the dock's left vertical presentation), resolved per monitor so both can
   render side by side. Drag empty dock background left to switch that monitor

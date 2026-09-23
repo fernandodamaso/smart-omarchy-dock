@@ -890,12 +890,24 @@ Item {
       if (control === true) {
         monitor = root.windowActions.canonicalMonitorIdentity(monitor)
         if (!monitor) return false
+        accepted = root.windowActions.pullToplevelToMonitorWorkspace(target.toplevel, true, monitor)
+      } else {
+        accepted = root.windowActions.activateToplevel(target.toplevel, true, monitor, true)
       }
-      accepted = root.windowActions.activateToplevel(target.toplevel, true, monitor, true)
     } else if (target.kind === "browser-tab") {
       accepted = root.activateBrowserTab(target)
     } else if (target.kind === "workspace") {
-      accepted = root.windowActions.focusWorkspaceInPlace(target.workspaceIdentity)
+      if (control === true) {
+        var workspaceMonitor = String(clickedConnector || "")
+        if (!root.connectorIsMapped(workspaceMonitor)) return false
+        workspaceMonitor = root.windowActions.canonicalMonitorIdentity(workspaceMonitor)
+        if (!workspaceMonitor) return false
+        var workspaceTarget = root.windowActions.workspaceCommandTarget(target.workspaceIdentity)
+        if (!workspaceTarget) return false
+        accepted = root.windowActions.dispatchRequests(root.windowActions.workspaceOnMonitorRequests(workspaceTarget, workspaceMonitor))
+      } else {
+        accepted = root.windowActions.focusWorkspaceInPlace(target.workspaceIdentity)
+      }
     } else if (target.kind === "application") {
       return root.toggleApplication(target.key)
     } else if (target.kind === "launcher") {

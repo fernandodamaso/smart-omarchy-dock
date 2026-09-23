@@ -21,7 +21,7 @@ Item {
   required property int iconSize
   required property string position
   property bool animationsEnabled: true
-  signal workspaceRequested(int workspaceId)
+  signal workspaceRequested(int workspaceId, bool pullToMonitor)
 
   function workspaceForId(id) {
     var values = workspaces || []
@@ -140,7 +140,16 @@ Item {
           horizontalPadding: 4
           verticalPadding: 3
           enabled: workspaceSlot.modelData.present
-          onClicked: root.workspaceRequested(workspaceCell.workspaceId)
+          onClicked: root.workspaceRequested(workspaceCell.workspaceId, false)
+        }
+
+        TapHandler {
+          enabled: workspaceSlot.modelData.present
+          acceptedButtons: Qt.LeftButton
+          acceptedModifiers: Qt.ControlModifier
+          grabPermissions: PointerHandler.CanTakeOverFromItems
+            | PointerHandler.CanTakeOverFromHandlersOfDifferentType
+          onTapped: root.workspaceRequested(workspaceCell.workspaceId, true)
         }
 
         Rectangle {

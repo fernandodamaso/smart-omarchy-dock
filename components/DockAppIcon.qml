@@ -2,6 +2,7 @@ import QtQuick
 import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Widgets
+import qs.Commons
 import "DockIconModel.js" as DockIconModel
 
 Item {
@@ -16,6 +17,8 @@ Item {
   property string profileName: ""
   property string profileAvatarPath: ""
   property bool profileBadgesEnabled: true
+  property bool roundedArtwork: true
+  property color badgeRingColor: Color.background
 
   readonly property string overrideKey: DockIconModel.normalizeOverrideKey(profileKey
     ? DockIconModel.profileOverrideKey(desktopId, profileKey) : "")
@@ -42,7 +45,7 @@ Item {
     && !profileBadgeActive && artwork.status === Image.Ready
   readonly property bool profileBadgeAvatarVisible: profileBadgeVisible
     && profileAvatarPath !== ""
-  readonly property real profileBadgeSize: Math.max(12, Math.min(width, height) * 0.44)
+  readonly property real profileBadgeSize: Math.max(12, Math.min(width, height) * 0.34)
   readonly property bool profileBadgeActive: !reloadPending
     && attemptedProfileOverride !== ""
     && String(artwork.source) === attemptedProfileOverride
@@ -129,8 +132,23 @@ Item {
     // Fixed decoding budget: caller geometry and magnification only scale paint.
     backer.sourceSize: Qt.size(512, 512)
     backer.fillMode: Image.PreserveAspectFit
-    visible: status === Image.Ready && !root.terminalFallback
+    visible: !root.roundedArtwork && status === Image.Ready && !root.terminalFallback
     onStatusChanged: if (status === Image.Error) root.rejectSource(String(source))
+  }
+
+  Rectangle {
+    id: artworkMask
+
+    anchors.fill: artwork
+    radius: width * 0.22
+    visible: false
+  }
+
+  OpacityMask {
+    anchors.fill: artwork
+    source: artwork
+    maskSource: artworkMask
+    visible: root.roundedArtwork && artwork.status === Image.Ready && !root.terminalFallback
   }
 
   // Profile badge: the profile's own photo, or an initial circle when the
@@ -138,13 +156,13 @@ Item {
   Rectangle {
     anchors.bottom: parent.bottom
     anchors.right: parent.right
-    anchors.margins: Math.max(1, parent.width * 0.04)
+    anchors.margins: -Math.round(parent.width * 0.08)
     width: root.profileBadgeSize
     height: width
     radius: width / 2
     visible: root.profileBadgeVisible
-    border.width: Math.max(1, width * 0.09)
-    border.color: "white"
+    border.width: Math.max(2, width * 0.09)
+    border.color: root.badgeRingColor
     color: root.profileBadgeAvatarVisible ? "#ffffff"
       : DockIconModel.badgeColor(root.profileName || root.profileKey)
 

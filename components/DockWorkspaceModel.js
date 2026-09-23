@@ -113,6 +113,23 @@ function monitorGroupForWorkspace(monitorGroups, workspaceIdentity, present) {
   return null
 }
 
+function monitorGroupIndexForMonitor(monitorGroups, monitorIdentity) {
+  var identity = String(monitorIdentity || "")
+  if (!identity) return -1
+  var values = monitorGroups || []
+  for (var i = 0; i < values.length; ++i) {
+    var group = values[i]
+    if (group && String(group.identity || "") === identity) return i
+  }
+  return -1
+}
+
+function monitorGroupForMonitor(monitorGroups, monitorIdentity) {
+  var position = monitorGroupIndexForMonitor(monitorGroups, monitorIdentity)
+  if (position < 0) return null
+  return (monitorGroups || [])[position]
+}
+
 function projectMonitorDrag(presentation, drag, visibleMonitorIdentity) {
   if (!presentation || !drag || !drag.workspaceIdentity
       || !drag.sourceMonitor || !drag.targetMonitor

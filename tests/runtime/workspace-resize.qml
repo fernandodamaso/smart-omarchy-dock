@@ -83,6 +83,11 @@ ShellRoot {
     return null
   }
 
+  function checkNoDivider(group, context) {
+    if (dividerFor(group) !== null)
+      throw new Error("Workspace cards must not contain an internal divider (" + context + ")")
+  }
+
   function workspaceLayoutFor(item) {
     if (item && item.overflowing !== undefined && item.desiredWidth !== undefined)
       return item
@@ -100,14 +105,11 @@ ShellRoot {
       settle(dock.contentItem)
       settle(transitionGroup)
       checkCompactLabels()
-      var divider = dividerFor(transitionGroup)
-      if (!divider || divider.visible)
-        throw new Error("Empty workspace cards must hide their internal divider")
+      checkNoDivider(transitionGroup, "empty")
       var emptyWidth = transitionGroup.width
       transitionGroup.hasApp = true
       settle(transitionGroup)
-      if (!divider.visible || divider.x + divider.width > transitionGroup.width)
-        throw new Error("Populated workspace cards must retain an internal divider")
+      checkNoDivider(transitionGroup, "populated")
       var fullWidth = transitionGroup.width
       transitionGroup.appWidth = 0.01
       settle(transitionGroup)
@@ -119,8 +121,7 @@ ShellRoot {
         throw new Error("Workspace padding must follow icon occupancy")
       transitionGroup.hasApp = false
       settle(transitionGroup)
-      if (divider.visible)
-        throw new Error("Removing the last app must hide the internal divider")
+      checkNoDivider(transitionGroup, "removed last app")
       var before = dock.implicitWidth
       var groups = []
       for (var i = 1; i <= 8; ++i)

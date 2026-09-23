@@ -557,7 +557,7 @@ Input precedence is intentionally strict:
 
 - Right click always opens the existing application context menu.
 - Left click with no modifier uses `clickAction`.
-- Ctrl+Left click uses the same `clickAction`; `focus-or-launch` explicitly moves that window's workspace onto the clicked dock monitor. Plain Left click focuses the exact window in place, including window icons inside grouped workspace cards. The dock uses on-demand keyboard focus so Ctrl can be held before entering it.
+- Ctrl+Left click uses the same `clickAction`; with `focus-or-launch` on a running group it moves just the window a plain click would focus to the clicked dock monitor's active workspace, then focuses it. Plain Left click focuses the exact window in place, including window icons inside grouped workspace cards. The dock uses on-demand keyboard focus so Ctrl can be held before entering it.
 - Middle click with no modifier uses `middleClickAction`.
 - Ctrl+Middle click uses the same `middleClickAction`, including the workspace pull when that action is `focus-or-launch`.
 - Vertical-dominant scrolling uses `scrollAction`; horizontal/tied gestures pass through.
@@ -576,7 +576,8 @@ The current action semantics are:
 - `close`: request graceful closure of every live grouped member.
 - `focus-or-launch`: unmodified clicks focus successive windows in a running
   group in dock order without moving workspaces; a closed pinned application
-  launches. Ctrl+click also moves that window's workspace onto the clicked dock.
+  launches. Ctrl+click moves just the window a plain click would focus (same
+  cycling order) to the clicked dock monitor's active workspace and focuses it.
 
 Existing configuration files need no migration. If either action key is absent,
 it normalizes to its default; an absent or invalid legacy `clickAction`
@@ -657,7 +658,7 @@ source while the remaining FDM-809 sources continue to work.
 
 The first dock icon is always the dock controls icon and is not part of
 `pinned`. Clicking it opens the controls menu; **Open App Launcher** runs
-`controlCommand`, while the menu also exposes Add Application and the auto-hide
+`controlCommand`, while the menu also exposes Add Pinned Application and the auto-hide
 toggle. Application context menus contain only application and window actions.
 For example, with the Omarchy app-launcher plugin already installed:
 
@@ -782,10 +783,10 @@ members; hide and launcher pinning remain application-wide. Pinned reordering
 and redundant per-icon workspace labels are disabled in grouped mode; running-
 window dragging is described below.
 
-Clicking a grouped workspace header uses one shared workspace-on-monitor path
-and by default pulls that workspace to the clicked dock before focusing it. Plain
-window-icon activation focuses the exact window in place; Ctrl+click explicitly
-permits pulling its workspace to the clicked dock. SmartDock also has
+Clicking a grouped workspace header focuses that workspace where it already is.
+Ctrl+click pulls that workspace to the clicked dock before focusing it. Plain
+window-icon activation focuses the exact window in place; Ctrl+click moves just
+that window to the clicked dock monitor's active workspace and focuses it. SmartDock also has
 **session-only movement pins** owned by the
 shared window-action controller: an individual window can be pinned to its
 current reliable workspace from its context menu. The controller also retains
@@ -826,8 +827,8 @@ to a workspace.
 
 Crowded cards and monitor prefixes stay in one bounded horizontal viewport. Use
 the previous/next buttons with a mouse; app wheel cycling keeps its configured
-behavior. Dock Controls, the dedicated **Add pinned application** (+) button, and
-optional Trash stay fixed. The + button opens the existing searchable app picker. A workspace switch reveals
+behavior. Dock Controls and optional Trash stay fixed. The Dock Controls menu's **Add Pinned
+Application** entry opens the searchable app picker. A workspace switch reveals
 only the globally primary card's real header, not its monitor prefix; manual
 scroll and drag suppression remain authoritative. Scrolling a popup's icon out
 of view closes the popup. Compact and full-length layouts retain magnification

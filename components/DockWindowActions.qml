@@ -665,6 +665,31 @@ Item {
     return true
   }
 
+  function pullToplevelToMonitorWorkspace(toplevel, originOnly, monitor) {
+    var requested = canonicalMonitorIdentity(monitor)
+    if (!requested) return false
+    var monitors = currentMonitors()
+    var workspace = ""
+    for (var monitorIndex = 0; monitorIndex < monitors.length; ++monitorIndex) {
+      if (canonicalMonitorIdentity(monitors[monitorIndex]) !== requested) continue
+      workspace = DockWindowModel.workspaceIdentity(
+        DockWindowModel.monitorActiveWorkspace(monitors[monitorIndex]))
+      break
+    }
+    if (!workspace) return false
+    if (reliableWorkspaceForToplevel(toplevel) === workspace)
+      return activateToplevel(toplevel, originOnly, "", true)
+    var address = addressFor(toplevel)
+    var minimized = isMinimized(toplevel)
+    var focusRequest = minimized ? ""
+      : DockModel.focusWindowRequest(address, Hyprland.usingLua)
+    if (!minimized && !focusRequest) return false
+    if (!moveToplevelToWorkspace(toplevel, address, workspace)) return false
+    if (minimized)
+      return activateToplevel(toplevel, originOnly, requested, true)
+    return dispatchRequest(focusRequest)
+  }
+
   function workspaceMonitorPin(workspace) {
     var identity = canonicalWorkspaceIdentity(workspace)
     if (!identity) return null

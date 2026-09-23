@@ -15,6 +15,6 @@ Item {
     anchors.centerIn: parent
     width: root.vertical ? Math.max(18, root.iconSize * 0.62) : 1
     height: root.vertical ? 1 : Math.max(18, root.iconSize * 0.62)
-    color: Util.alpha(Color.menu.border, 0.52)
+    color: Util.alpha(Color.foreground, 0.14)
   }
 }
