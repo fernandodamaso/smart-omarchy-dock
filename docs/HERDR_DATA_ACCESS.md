@@ -137,7 +137,9 @@ Sidebar click-to-focus requires **Herdr 0.9.1+**. On 0.9.0, `agent.focus`
 updates server focus and marks agents seen, but does not move attached TUI
 clients to the target pane (fixed upstream in 0.9.1). Multi-panel tab headers
 focus that Herdr tab by targeting the first nested panel's pane id; single-panel
-tabs and agent rows target their own pane.
+tabs and agent rows target their own pane. When a window's only tab with agents
+has more than one agent, those agents list directly under the window with no
+tab header; a second tab with agents restores the header.
 
 Structural invalidations include the current Herdr workspace/tab/pane/layout
 event families, including `workspace.metadata_updated` and `pane.updated`.
