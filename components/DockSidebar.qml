@@ -368,7 +368,7 @@ PanelWindow {
             anchors.centerIn: parent
             width: 14
             height: 14
-            iconName: "plus"
+            iconName: "layout-grid"
             iconSize: 14
             tint: Color.foreground
             visible: widgetManage.visible
@@ -478,7 +478,7 @@ PanelWindow {
             ? Style.pressedFillFor(Color.foreground, Color.accent)
             : (launcherHover.hovered || launcher.activeFocus)
               ? root.sidebarAppearance.workspaceHoverFill
-              : root.sidebarAppearance.workspaceFill
+              : Qt.tint(root.sidebarAppearance.workspaceFill, Style.normalFill)
           borderSpec: launcher.activeFocus
             ? Border.controlSpec("focus", Color.foreground, Color.accent)
             : Border.none()
@@ -518,7 +518,7 @@ PanelWindow {
           height: 14
           iconName: "chevron-right"
           iconSize: 14
-          tint: Util.alpha(Color.foreground, 0.55)
+          tint: Color.foreground
         }
         HoverHandler { id: launcherHover }
         TapHandler {

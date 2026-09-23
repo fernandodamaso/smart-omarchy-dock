@@ -246,8 +246,8 @@ assert.equal(Interaction.focusedMonitorStripOrdinal([
 assert.equal(Interaction.focusedMonitorStripOrdinal([
   { focused: false }, { focused: false }
 ]), '')
-assert.equal(Interaction.topologyStripWidth(2), 13 * 2 + 3)
-assert.equal(Interaction.topologyStripWidth(4), 13 * 4 + 9)
+assert.equal(Interaction.topologyStripWidth(2), 14 * 2 + 3)
+assert.equal(Interaction.topologyStripWidth(4), 14 * 4 + 9)
 assert.equal(Interaction.topologyStripWidth(5), 24)
 assert.match(rowQml, /physicalMonitorStrip/,
   'row builds miniatures from physicalMonitorStrip, not card section order')
@@ -622,7 +622,7 @@ assert.equal(Interaction.sidebarWindowSecondaryTitle({
   kind:'window', entryName:'Terminal', windowTitle:'nvim main.rs'
 }), '', 'ordinary titles have no path subtitle')
 
-// Phase 3: 13×9 topology strip still leaves positive elide room for monitor
+// Phase 3: 14×10 topology strip still leaves positive elide room for monitor
 // titles at the live ~271px and 300px content widths (glyph+gaps+strip).
 const monitorPad = 8
 const monitorGlyph = 24

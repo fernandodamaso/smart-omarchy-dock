@@ -144,8 +144,6 @@ Item {
   }
   readonly property int monitorStripCount: monitorTopologyStrip.length
   readonly property int monitorSectionIndex: Number(row.sectionIndex || 0)
-  readonly property int focusedMonitorStripIndex: InteractionModel.focusedMonitorStripIndex(
-    root.monitorTopologyStrip)
   readonly property string monitorStripOrdinal: InteractionModel.focusedMonitorStripOrdinal(
     root.monitorTopologyStrip)
   // Browser parents keep a stable desktop-entry label; identity still works when
@@ -994,22 +992,30 @@ Item {
         Repeater {
           model: root.monitorStripCount <= 4 ? root.monitorStripCount : 0
           Item {
+            id: monitorMini
             required property int index
-            readonly property bool focusedMonitor: index === root.focusedMonitorStripIndex
-            width: 13
-            height: 9
+            readonly property var monitorData: root.monitorTopologyStrip[index] || ({})
+            readonly property bool focusedMonitor: monitorData.focused === true
+            width: 14
+            height: 10
+            Accessible.name: InteractionModel.monitorTopologyTooltip(monitorData)
             Rectangle {
               anchors.centerIn: parent
-              width: 13
-              height: 9
+              width: 14
+              height: 10
               radius: 2
-              color: parent.focusedMonitor
-                ? Util.alpha(Color.accent, 0.14)
-                : "transparent"
-              border.width: 1
-              border.color: parent.focusedMonitor
-                ? Util.alpha(Color.accent, 0.70)
-                : Util.alpha(Color.foreground, 0.28)
+              color: parent.focusedMonitor ? Color.accent : "transparent"
+              border.width: parent.focusedMonitor ? 0 : 1
+              border.color: Util.alpha(Color.foreground, 0.42)
+            }
+            HoverHandler { id: monitorMiniHover }
+            DockToolTip {
+              anchorItem: monitorMini
+              position: root.controller.edge
+              requestedVisible: monitorMiniHover.hovered
+              text: monitorMini.Accessible.name
+              fontFamily: Style.font.family
+              fontSize: Style.font.bodySmall
             }
           }
         }
@@ -1243,20 +1249,15 @@ Item {
             height: parent.height
             Item {
               objectName: "sidebar-herdr-counter-marker"
-              width: 7
-              height: 7
+              width: 10
+              height: 10
               anchors.verticalCenter: parent.verticalCenter
-
-              Rectangle {
-                objectName: "sidebar-herdr-counter-static-dot"
-                anchors.centerIn: parent
-                width: 7
-                height: 7
-                radius: 4
-                color: root.herdrStatusHollow(counterItem.modelData.status)
-                  ? "transparent" : root.herdrStatusColor(counterItem.modelData.status)
-                border.width: root.herdrStatusHollow(counterItem.modelData.status) ? 1 : 0
-                border.color: Color.muted
+              DockLucideIcon {
+                objectName: "sidebar-herdr-counter-icon"
+                anchors.fill: parent
+                iconName: "bot"
+                iconSize: 10
+                tint: root.herdrStatusColor(counterItem.modelData.status)
               }
             }
             Text {
@@ -1270,13 +1271,14 @@ Item {
               renderType: Text.NativeRendering
             }
           }
+          Accessible.name: InteractionModel.herdrCounterAccessibleText(
+            counterItem.modelData.count, counterItem.modelData.status)
           HoverHandler { id: counterHover }
           DockToolTip {
             anchorItem: counterItem
             position: root.controller.edge
             requestedVisible: counterHover.hovered
-            text: InteractionModel.herdrStatusAccessibleText(counterItem.modelData.status)
-              + " · " + String(counterItem.modelData.count)
+            text: counterItem.Accessible.name
             fontFamily: Style.font.family
             fontSize: Style.font.bodySmall
           }

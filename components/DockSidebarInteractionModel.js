@@ -122,12 +122,24 @@ function focusedMonitorStripOrdinal(strip) {
   return (index + 1) + "/" + count
 }
 
-// Topology miniature strip width for label-elide estimates (13×9, gap 3).
+// Topology miniature strip width for label-elide estimates (14×10, gap 3).
 function topologyStripWidth(count) {
   var n = Number(count) || 0
   if (!(n > 0)) return 0
   if (n > 4) return 24
-  return n * 13 + Math.max(0, n - 1) * 3
+  return n * 14 + Math.max(0, n - 1) * 3
+}
+
+function monitorTopologyTooltip(monitor) {
+  var item = monitor || ({})
+  return "Monitor " + String(item.connector || item.identity || "unknown")
+    + (item.focused === true ? " · focused" : "")
+}
+
+function herdrCounterAccessibleText(count, status) {
+  var n = Number(count) || 0
+  return n + " agent" + (n === 1 ? "" : "s") + " "
+    + HerdrModel.statusLabel(status).toLowerCase()
 }
 
 // Tree guide columns relative to workspace card left (viewport.workspaceCardInset).

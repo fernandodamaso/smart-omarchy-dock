@@ -13,7 +13,7 @@ import "../components/DockHerdrModel.js" as HerdrModel
 //
 // This harness mirrors production layout equations byte-for-byte:
 // - InteractionModel.sidebarTreeIconX (20px depthStep)
-// - parent label after 18px icon + Style-equivalent 8px gap
+// - parent label after 18px icon + Style-equivalent 4px gap
 // - workspace-card right inset in fold/counter chrome
 // - herdrCompactLabelWidths for name reservation
 // - right-anchored full-width counters (no clip)
@@ -231,16 +231,16 @@ TestCase {
                 height: parent.height
                 Item {
                   objectName: "sidebar-herdr-counter-marker"
-                  width: 7
-                  height: 7
+                  width: 10
+                  height: 10
                   anchors.verticalCenter: parent.verticalCenter
-                  Rectangle {
-                    objectName: "sidebar-herdr-counter-static-dot"
+                  DockLucideIcon {
+                    objectName: "sidebar-herdr-counter-icon"
                     anchors.centerIn: parent
-                    width: 7; height: 7; radius: 4
-                    color: counterItem.modelData.status === "unknown" ? "transparent" : "#7aa2f7"
-                    border.width: counterItem.modelData.status === "unknown" ? 1 : 0
-                    border.color: "#888"
+                    width: 10; height: 10
+                    iconName: "bot"
+                    iconSize: 10
+                    tint: "#7aa2f7"
                   }
                 }
                 Text {
@@ -251,6 +251,8 @@ TestCase {
                   font.pixelSize: 10
                 }
               }
+              Accessible.name: InteractionModel.herdrCounterAccessibleText(
+                counterItem.modelData.count, counterItem.modelData.status)
             }
           }
         }
@@ -365,12 +367,13 @@ TestCase {
     var delegates = counterDelegates(counters)
     compare(delegates.length, 1)
     var marker = findByName(delegates[0], "sidebar-herdr-counter-marker")
-    var staticDot = findByName(delegates[0], "sidebar-herdr-counter-static-dot")
+    var agentIcon = findByName(delegates[0], "sidebar-herdr-counter-icon")
     var label = findByName(chrome, "sidebar-label")
     var indicator = findByName(chrome, "sidebar-herdr-window-working-indicator")
-    verify(marker !== null && staticDot !== null && label !== null && indicator !== null)
-    compare(marker.width, 7)
-    compare(staticDot.visible, true)
+    verify(marker !== null && agentIcon !== null && label !== null && indicator !== null)
+    compare(marker.width, 10)
+    compare(agentIcon.iconName, "bot")
+    compare(delegates[0].Accessible.name, "2 agents working")
     compare(indicator.visible, true)
     compare(indicator.active, true)
     compare(indicator.x, chrome.labelX)
@@ -381,12 +384,12 @@ TestCase {
     chrome.interfaceAnimationsEnabled = false
     wait(0)
     compare(indicator.visible, false)
-    compare(staticDot.visible, true)
+    compare(agentIcon.visible, true)
 
     chrome.animationEligible = false
     wait(0)
     compare(indicator.visible, false)
-    compare(staticDot.visible, true)
+    compare(agentIcon.visible, true)
   }
 
   function test_agent_plain_text_kind_and_unknown_status() {
@@ -413,6 +416,8 @@ TestCase {
   }
 
   function test_agent_kind_capitalization_bounds() {
+    compare(InteractionModel.herdrCounterAccessibleText(1, "working"), "1 agent working")
+    compare(InteractionModel.herdrCounterAccessibleText(2, "idle"), "2 agents idle")
     var chrome = createTemporaryObject(chromeFactory, test, {
       width: 240,
       visible: true,
