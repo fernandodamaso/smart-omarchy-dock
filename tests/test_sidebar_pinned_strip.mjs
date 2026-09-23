@@ -45,4 +45,16 @@ assert.match(stripQml, /addPin\.focus = false/,
 assert.match(sidebarQml, /pinnedStrip\.overflowOpen/,
   'overflow participates in the panel interactionBusy lifecycle')
 
+// Hidden (+N) pins keep the visible tiles' context menu, including Unpin.
+assert.match(stripQml, /acceptedButtons: Qt\.RightButton\s*\n\s*onTapped: root\.openOverflowContext\(hiddenPin\.modelData\)/,
+  'right-click on an overflowed pin opens its context menu')
+assert.match(stripQml, /event\.key !== Qt\.Key_Menu\) return\s*\n\s*root\.openOverflowContext\(hiddenPin\.modelData\)/,
+  'Menu key on an overflowed pin opens its context menu')
+assert.match(stripQml, /root\.panel\.openContext\(root\.overflowMenuPin, overflowButton\)/,
+  'overflow context menu anchors to the +N button')
+assert.match(stripQml, /id: overflowButton[\s\S]{0,200}?pinStripOwned: true[\s\S]{0,200}?rowKey: root\.overflowMenuKey/,
+  '+N anchor carries strip ownership and the hidden pin rowKey for menu refresh')
+assert.match(stripQml, /hiddenPins\.some\(function\(pin\) \{ return String\(pin\.key \|\| ""\) === key \}\)/,
+  'anchor identity clears once the pin is no longer hidden, so refresh dismisses the menu')
+
 console.log('sidebar pinned strip layout: PASS')

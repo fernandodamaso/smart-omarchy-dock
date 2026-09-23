@@ -45,8 +45,14 @@ Item {
   property double overflowDismissedAt: 0
 
   HoverHandler { cursorShape: Qt.ArrowCursor }
-
-  HoverHandler { cursorShape: Qt.ArrowCursor }
+  // Hidden pin whose context menu is open. The popup closes when the menu
+  // opens, so the +N button stands in as the menu anchor for that pin.
+  property var overflowMenuPin: null
+  readonly property string overflowMenuKey: {
+    var key = overflowMenuPin ? String(overflowMenuPin.key || "") : ""
+    if (!key) return ""
+    return hiddenPins.some(function(pin) { return String(pin.key || "") === key }) ? key : ""
+  }
 
   property var prevPins: []
   property var shownKeys: []
@@ -68,6 +74,19 @@ Item {
 
   function close() {
     overflowOpen = false
+  }
+
+  // Right-click / Menu key on a hidden pin: same app menu (incl. Unpin) as
+  // a visible tile, anchored to +N and validated by its rowKey/ownership.
+  function openOverflowContext(pin) {
+    if (!pin) return false
+    overflowMenuPin = pin
+    close()
+    Qt.callLater(function() {
+      if (!root.overflowMenuKey) return
+      root.panel.openContext(root.overflowMenuPin, overflowButton)
+    })
+    return true
   }
 
   function toggleOverflow() {
@@ -397,6 +416,16 @@ Item {
         id: overflowButton
         objectName: "sidebar-pin-strip-overflow"
         property bool pinStripOwned: true
+        // Context-menu anchor identity for the hidden pin being managed.
+        readonly property string rowKey: root.overflowMenuKey
+        readonly property string desktopId: root.overflowMenuKey && root.overflowMenuPin
+          ? String(root.overflowMenuPin.desktopId || "") : ""
+        readonly property var entry: {
+          var pin = root.overflowMenuKey ? root.overflowMenuPin : null
+          if (!pin) return null
+          if (pin.item && pin.item.entry) return pin.item.entry
+          return desktopId ? DesktopEntries.byId(desktopId) : null
+        }
         width: root.cell
         height: root.cellHeight
         x: root.visibleCount * (root.cell + root.pinGap)
@@ -545,6 +574,15 @@ Item {
               onClicked: {
                 root.close()
                 root.activatePin(modelData)
+              }
+              Keys.onPressed: function(event) {
+                if (event.key !== Qt.Key_Menu) return
+                root.openOverflowContext(hiddenPin.modelData)
+                event.accepted = true
+              }
+              TapHandler {
+                acceptedButtons: Qt.RightButton
+                onTapped: root.openOverflowContext(hiddenPin.modelData)
               }
 
               DockAppIcon {
