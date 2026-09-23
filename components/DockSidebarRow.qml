@@ -1114,7 +1114,7 @@ Item {
       text: root.secondaryPath
       textFormat: Text.PlainText
       elide: Text.ElideRight
-      color: Color.muted
+      color: Util.alpha(Color.foreground, root.focusedWindow ? 0.78 : 0.62)
       font.family: Style.font.family
       font.pixelSize: Style.font.bodySmall
       renderType: Text.NativeRendering

@@ -71,6 +71,9 @@ assert.match(rowQml, /navigable:\s*InteractionModel\.rowHoverFillEligible\(root\
 assert.match(rowQml,
   /navigable:\s*\[["']window["'],\s*["']workspace["'],\s*["']application["'],\s*["']launcher["'],\s*["']browser-tab["']\]/,
   'herdr-agent activation stays outside the generic navigable kind list')
+assert.match(rowQml,
+  /secondaryPathLabel[\s\S]*?Util\.alpha\(Color\.foreground, root\.focusedWindow \? 0\.78 : 0\.62\)/,
+  'secondary window paths retain contrast on the focused accent fill')
 
 // Variable-height scroll restore uses heightMap; shared sidebarRowMetrics baselines
 const monitor0 = { kind: 'monitor', sectionIndex: 0, layoutGapBefore: '' }
