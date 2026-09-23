@@ -41,6 +41,7 @@ Item {
   clip: true
   readonly property var addPinButton: addPin
   property bool overflowOpen: false
+  property bool overflowOpenedByKeyboard: false
   property double overflowDismissedAt: 0
 
   HoverHandler { cursorShape: Qt.ArrowCursor }
@@ -81,10 +82,17 @@ Item {
   onWidthChanged: shownKeys = (pins || []).slice(0, visibleCount).map(function(pin) {
     return String(pin.key || "")
   })
-  onOverflowOpenChanged: if (overflowOpen) Qt.callLater(function() {
-    var first = hiddenRepeater.itemAt(0)
-    if (first) first.forceActiveFocus()
-  })
+  onOverflowOpenChanged: {
+    if (!overflowOpen) return
+    Qt.callLater(function() {
+      if (root.overflowOpenedByKeyboard) {
+        var first = hiddenRepeater.itemAt(0)
+        if (first) first.forceActiveFocus()
+        return
+      }
+      overflowFlickable.forceActiveFocus(Qt.MouseFocusReason)
+    })
+  }
 
   function copyStash(src) {
     var out = ({})
@@ -400,7 +408,18 @@ Item {
         Accessible.name: root.hiddenCount + " more pinned applications"
           selected: root.overflowOpen
           background: Style.normalFill
-        onClicked: root.toggleOverflow()
+        Keys.onPressed: function(event) {
+          if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter
+              && event.key !== Qt.Key_Space) return
+          root.overflowOpenedByKeyboard = true
+          root.toggleOverflow()
+          event.accepted = true
+        }
+        onClicked: {
+          root.overflowOpenedByKeyboard = false
+          root.toggleOverflow()
+          overflowButton.focus = false
+        }
       }
     }
 
@@ -483,11 +502,12 @@ Item {
       id: overflowSurface
       anchors.fill: parent
       color: Color.menu.background
-      borderSpec: Border.surfaceSpec(
-        "menu", "border", Color.menu.border, Style.normalBorderWidth)
+      borderSpec: Border.none()
+      radius: Style.cornerRadius
       clip: true
 
       Flickable {
+        id: overflowFlickable
         anchors.fill: parent
         anchors.leftMargin: overflowSurface.contentLeftInset
         anchors.rightMargin: overflowSurface.contentRightInset

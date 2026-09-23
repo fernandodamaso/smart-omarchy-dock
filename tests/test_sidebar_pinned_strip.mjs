@@ -22,9 +22,16 @@ assert.doesNotMatch(stripQml, /hiddenRunning|id:\s*runningDot/,
   'pinned tiles, overflow and popup rows have no running dots')
 assert.match(stripQml, /grabFocus:\s*true/,
   'overflow uses a focus-grabbing PopupWindow so sidebar clicks dismiss it')
-assert.match(stripQml,
-  /Border\.surfaceSpec\(\s*"menu", "border", Color\.menu\.border, Style\.normalBorderWidth\)/,
-  'overflow popup uses the neutral menu border')
+assert.match(stripQml, /borderSpec:\s*Border\.none\(\)/,
+  'overflow popup has no border')
+assert.match(stripQml, /radius:\s*Style\.cornerRadius/,
+  'overflow popup uses rounded native corners')
+assert.match(stripQml, /overflowButton\.focus = false/,
+  'the overflow action clears mouse-retained focus')
+assert.match(stripQml, /overflowOpenedByKeyboard[\s\S]*hiddenRepeater\.itemAt\(0\)[\s\S]*forceActiveFocus/,
+  'keyboard activation focuses the first overflow item')
+assert.match(stripQml, /overflowFlickable\.forceActiveFocus\(Qt\.MouseFocusReason\)/,
+  'pointer activation focuses the popup without selecting an item')
 assert.match(stripQml, /pinCell\.activeFocus && !pinCell\.mouseFocused/,
   'mouse-focused pinned tiles do not keep a stale focus fill')
 assert.match(stripQml, /pinCell\.mouseFocused = true[\s\S]*forceActiveFocus\(Qt\.MouseFocusReason\)/,
