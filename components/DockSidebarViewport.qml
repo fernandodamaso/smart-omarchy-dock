@@ -722,6 +722,7 @@ FocusScope {
           readonly property bool isWorkspace: modelData && modelData.kind === "workspace"
           readonly property var geom: isWorkspace ? root.sectionSpanRect(modelData) : { y: 0, height: 0 }
           visible: isWorkspace && geom.height > 0
+            && !InteractionModel.isMonitorFinalKey(modelData.lastKey, root.sectionSpans)
           x: root.workspaceCardInset + Style.space(4)
           y: geom.y
           width: Math.max(0, sectionChromeHost.width - (root.workspaceCardInset + Style.space(4)) * 2)

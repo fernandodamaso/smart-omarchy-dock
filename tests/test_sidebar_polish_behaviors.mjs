@@ -12,6 +12,8 @@ const controllerQml = read('components/DockSidebarController.qml')
 const sidebarQml = read('components/DockSidebar.qml')
 const viewportQml = read('components/DockSidebarViewport.qml')
 const keyboardQml = read('components/DockSidebarKeyboard.qml')
+const rowInputQml = read('components/DockSidebarRowInput.qml')
+const pinnedStripQml = read('components/DockSidebarPinnedStrip.qml')
 
 // rowFill / persistentFill composition priorities
 assert.equal(Interaction.composeRowFill({
@@ -321,15 +323,15 @@ assert.doesNotMatch(viewportQml, /activeMonitorBorder/,
     'minimized stays independent of IPC pin')
 }
 
-// Tree guide columns: 4px group padding, badge-centered guide, 14px depth.
+// Tree guide columns: 4px group padding, badge-centered guide, 20px depth.
 const guide = Interaction.sidebarTreeGuideLayout(5)
 assert.equal(guide.workspaceLeft, 5)
 assert.equal(guide.badgeLeft, 9)
 assert.equal(guide.guide0, 21)
 assert.equal(guide.iconHalf, 9, 'child columns center on the 18px window icon')
-assert.equal(Interaction.sidebarTreeIconX(5, 1), 35)
-assert.equal(Interaction.sidebarTreeIconX(5, 2), 49)
-assert.equal(Interaction.sidebarTreeIconX(5, 3), 63)
+assert.equal(Interaction.sidebarTreeIconX(5, 1), 40)
+assert.equal(Interaction.sidebarTreeIconX(5, 2), 60)
+assert.equal(Interaction.sidebarTreeIconX(5, 3), 80)
 
 // Rendered guide column: depth-1 stays on the badge column (stemOffset only);
 // every deeper row branches from the parent's rendered icon *center*
@@ -402,7 +404,7 @@ assert.equal(Interaction.sidebarTreeGuideColumnX(5, 3, 11, 4),
 
   const tight = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 24)
   assert.equal(tight.badgeX, 9)
-  assert.equal(tight.artX, 9 + 24 + 2)
+  assert.equal(tight.artX, 9 + 24 + 8)
   assert.equal(tight.stemX, 9 + 12)
   assert.equal(tight.labelX, tight.artX + 18 + 4)
   assert.equal(tight.guideOffset, tight.artX - Interaction.sidebarTreeIconX(5, 1))
@@ -411,7 +413,7 @@ assert.equal(Interaction.sidebarTreeGuideColumnX(5, 3, 11, 4),
     tight.stemOffset), tight.stemX,
     'the rendered depth-1 column matches the measured badge stem')
   const wide = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 64)
-  assert.equal(wide.artX, 9 + 64 + 2)
+  assert.equal(wide.artX, 9 + 64 + 8)
   assert.equal(wide.stemOffset, wide.stemX - guide.guide0)
   assert.ok(wide.stemOffset !== wide.guideOffset,
     'wide badge: stem and icon offsets differ')
@@ -430,12 +432,12 @@ assert.equal(Interaction.sidebarTreeGuideColumnX(5, 3, 11, 4),
 
   // The compact group keeps nested guides under the parent icon centre.
   const live = Interaction.sidebarInlineWorkspaceGeometry(11, sp, 24)
-  assert.equal(live.artX, 41)
-  assert.equal(live.guideOffset, 0)
+  assert.equal(live.artX, 47)
+  assert.equal(live.guideOffset, 1)
   assert.equal(Interaction.sidebarTreeGuideColumnX(11, 2, live.guideOffset,
-    live.stemOffset), 50, 'live depth-2 guide sits on the parent icon center')
+    live.stemOffset), 56, 'live depth-2 guide sits on the parent icon center')
   assert.equal(Interaction.sidebarTreeGuideColumnX(11, 3, live.guideOffset,
-    live.stemOffset), 64, 'live depth-3 guide uses the same center rule')
+    live.stemOffset), 76, 'live depth-3 guide uses the same center rule')
 }
 
 // Inline guide/alignment wiring: one viewport-owned measurement, badge-edge
@@ -482,6 +484,23 @@ assert.doesNotMatch(rowQml,
   'workspace badge input must stay enabled after beginRowDrag owns interactionBusy')
 assert.match(rowQml, /activeFocusOnTab: true/,
   'inline workspace badge is an explicit keyboard focus target')
+assert.match(rowQml,
+  /activeFocus: root\.activeFocus && root\.focusReason !== Qt\.MouseFocusReason/,
+  'mouse focus does not produce the stale row focus fill')
+assert.match(rowQml,
+  /borderSpec: root\.activeFocus && root\.focusReason !== Qt\.MouseFocusReason/,
+  'mouse focus does not produce the stale row focus border')
+assert.match(rowInputQml,
+  /id: hover[\s\S]{0,100}?cursorShape: Qt\.ArrowCursor/,
+  'ordinary rows override the panel-wide drag cursor')
+assert.match(sidebarQml,
+  /id: headerBar[\s\S]{0,140}?HoverHandler \{ cursorShape: Qt\.ArrowCursor \}/,
+  'header controls override the panel-wide drag cursor')
+assert.match(pinnedStripQml, /HoverHandler \{ cursorShape: Qt\.ArrowCursor \}/,
+  'the pinned area overrides the panel-wide drag cursor')
+assert.match(viewportQml,
+  /visible: isWorkspace && geom\.height > 0\s*&& !InteractionModel\.isMonitorFinalKey\(modelData\.lastKey, root\.sectionSpans\)/,
+  'the final workspace in each monitor does not draw a trailing divider')
 assert.match(rowQml,
   /id: leadingWorkspaceBadge[\s\S]{0,260}?readonly property string rowKey: root\.inlineWorkspaceBadgeKey/,
   'inline workspace badge exposes its workspace rowKey so context refresh keeps a valid menu open')

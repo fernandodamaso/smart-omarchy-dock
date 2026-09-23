@@ -12,7 +12,7 @@ import "../components/DockHerdrModel.js" as HerdrModel
 // Live/isolated Quickshell validation (checkpoint C) remains coordinator-owned.
 //
 // This harness mirrors production layout equations byte-for-byte:
-// - InteractionModel.sidebarTreeIconX (24px depthStep)
+// - InteractionModel.sidebarTreeIconX (20px depthStep)
 // - parent label after 18px icon + Style-equivalent 8px gap
 // - workspace-card right inset in fold/counter chrome
 // - herdrCompactLabelWidths for name reservation
@@ -327,8 +327,8 @@ TestCase {
     verify(counters !== null && fold !== null && label !== null && hit !== null)
     verify(counters.visible && fold.visible)
     compare(label.textFormat, Text.PlainText)
-    // Production depth-2 icon x with inset 10: guide0=26, artX=26+14+14=54.
-    compare(Math.round(chrome.artX), 54)
+    // Production depth-2 icon x with inset 10: guide0=26, artX=26+19+20=65.
+    compare(Math.round(chrome.artX), 65)
     assertAllCountersPainted(chrome, counters, fold)
 
     // Real click on the chevron MouseArea (not a local helper).

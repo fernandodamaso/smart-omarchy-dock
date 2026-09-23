@@ -36,6 +36,8 @@ Item {
   clip: true
   readonly property var addPinButton: addPin
 
+  HoverHandler { cursorShape: Qt.ArrowCursor }
+
   property var prevPins: []
   property var exitStash: ({})
   property bool stripReady: false

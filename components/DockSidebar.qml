@@ -287,6 +287,7 @@ PanelWindow {
         id: headerBar
         width: parent.width
         height: Style.space(44)
+        HoverHandler { cursorShape: Qt.ArrowCursor }
         Row {
           id: brandRow
           visible: !root.panelCollapsed

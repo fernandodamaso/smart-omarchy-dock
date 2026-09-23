@@ -5,12 +5,18 @@ const model = loadModel('DockSidebarModel')
 const layout = loadModel('DockSidebarInteractionModel')
 
 // At 256 px, the panel's 14 px inset plus these positions puts application
-// titles at 71 px and nested window titles at 85 px. Both sibling app rows
+// titles at 77 px and nested window titles at 97 px. Both sibling app rows
 // consume the same workspace geometry, regardless of which owns the badge.
 const inline = layout.sidebarInlineWorkspaceGeometry(5, n => n, 24)
-assert.equal(14 + inline.labelX, 71)
-assert.equal(14 + inline.labelX + layout.sidebarTreeGuideLayout(5).depthStep, 85)
+assert.equal(14 + inline.labelX, 77)
+assert.equal(14 + inline.labelX + layout.sidebarTreeGuideLayout(5).depthStep, 97)
 assert.equal(inline.badgeX, 9, 'workspace badge has 4 px inside the 5 px card inset')
+const inlineSelection = layout.sidebarSelectionInsets({
+  kind: 'window', collapsed: false, insideWorkspaceCard: true,
+  workspaceCardInset: 5, artX: inline.artX
+})
+assert.ok(inlineSelection.left >= inline.badgeX + 24 + 4,
+  'inline hover/focus fill leaves at least 4 px after the workspace badge')
 
 function g(screen, requested = 320, collapsed = false) {
   return model.screenGeometry(screen, requested, collapsed)

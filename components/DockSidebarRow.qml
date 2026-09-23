@@ -524,7 +524,7 @@ Item {
   readonly property color rowFill: InteractionModel.composeRowFill({
     dropTarget: root.kind === "monitor" ? false : root.dropTarget,
     pressed: root.kind === "monitor" ? false : root.input.pressed,
-    activeFocus: root.activeFocus,
+    activeFocus: root.activeFocus && root.focusReason !== Qt.MouseFocusReason,
     hovered: root.kind === "monitor" ? false
       : (root.input.hovered || passiveHover.hovered),
     navigable: InteractionModel.rowHoverFillEligible(root.kind, root.herdrActionable),
@@ -557,7 +557,8 @@ Item {
       anchors.rightMargin: root.selectionRight
       radius: Style.cornerRadius
       color: root.rowFill
-      borderSpec: root.activeFocus ? Border.controlSpec("focus", Color.foreground, Color.accent) : Border.none()
+      borderSpec: root.activeFocus && root.focusReason !== Qt.MouseFocusReason
+        ? Border.controlSpec("focus", Color.foreground, Color.accent) : Border.none()
       Behavior on color {
         enabled: root.animationsEnabled
         ColorAnimation { duration: 120 }

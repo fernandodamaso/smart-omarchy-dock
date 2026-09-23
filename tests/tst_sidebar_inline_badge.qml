@@ -66,7 +66,7 @@ TestCase {
     compare(following.labelX, leading.labelX, "labels align")
     compare(following.stemX, leading.stemX, "guide columns align")
     compare(leading.stemX, 9 + chip / 2, "the depth-1 stem sits on the chip center")
-    compare(leading.artX, leading.badgeX + chip + 2,
+    compare(leading.artX, leading.badgeX + chip + 8,
       "artwork and the horizontal connector begin past the chip's right edge")
   }
 
