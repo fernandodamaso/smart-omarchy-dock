@@ -397,12 +397,17 @@ assert.doesNotMatch(rowQml,
   'workspace badge input must stay enabled after beginRowDrag owns interactionBusy')
 assert.match(rowQml, /activeFocusOnTab: true/,
   'inline workspace badge is an explicit keyboard focus target')
+assert.doesNotMatch(rowQml, /focusReason/,
+  'plain Item has no focusReason; rows track pointer focus explicitly')
 assert.match(rowQml,
-  /activeFocus: root\.activeFocus && root\.focusReason !== Qt\.MouseFocusReason/,
+  /keyboardFocusVisible: root\.activeFocus && !root\.pointerFocused/,
+  'row focus decoration requires non-pointer focus')
+assert.match(rowQml, /activeFocus: root\.keyboardFocusVisible,/,
   'mouse focus does not produce the stale row focus fill')
-assert.match(rowQml,
-  /borderSpec: root\.activeFocus && root\.focusReason !== Qt\.MouseFocusReason/,
+assert.match(rowQml, /borderSpec: root\.keyboardFocusVisible/,
   'mouse focus does not produce the stale row focus border')
+assert.doesNotMatch(rowQml, /root\.forceActiveFocus\(Qt\.MouseFocusReason\);|onFocusRequested: root\.forceActiveFocus/,
+  'every row pointer focus path goes through focusFromPointer')
 assert.match(rowInputQml,
   /id: hover[\s\S]{0,100}?cursorShape: Qt\.ArrowCursor/,
   'ordinary rows override the panel-wide drag cursor')

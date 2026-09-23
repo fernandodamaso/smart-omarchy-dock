@@ -48,6 +48,7 @@ Item {
       var isTab = event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab
       var row = root.focusedRow()
       if (isTab && direction === 1 && inlineWorkspaceFocused) {
+        if (focusedItem.pointerFocused === true) focusedItem.pointerFocused = false
         focusedItem.forceActiveFocus(Qt.TabFocusReason)
         event.accepted = true
         return

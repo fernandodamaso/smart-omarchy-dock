@@ -325,8 +325,12 @@ FocusScope {
           && item.leadingWorkspaceBadgeVisible === true
           && typeof item.focusInlineWorkspaceBadge === "function")
         item.focusInlineWorkspaceBadge(Qt.TabFocusReason)
-      else
+      else {
+        // Keyboard navigation always shows focus, even on a row the pointer
+        // focused earlier.
+        if (item.pointerFocused === true) item.pointerFocused = false
         item.forceActiveFocus(Qt.TabFocusReason)
+      }
     }
     return item !== null
   }

@@ -209,6 +209,7 @@ Item {
   readonly property var inlineWorkspaceBadgeAnchor: leadingWorkspaceBadge
   function focusInlineWorkspaceBadge(reason) {
     if (!root.leadingWorkspaceBadgeVisible) return false
+    leadingWorkspaceBadge.pointerFocused = false
     leadingWorkspaceBadge.forceActiveFocus(
       reason === undefined ? Qt.TabFocusReason : reason)
     return leadingWorkspaceBadge.activeFocus
@@ -414,7 +415,19 @@ Item {
   Accessible.role: kind === "application" ? Accessible.Button : Accessible.ListItem
   Accessible.name: accessibleLabel
   Keys.forwardTo: root.viewport ? [root.viewport.keyboard] : []
-  onActiveFocusChanged: if (activeFocus) root.controller.focusedRowKey = root.rowKey
+  // Qt reports the focus reason only on Controls, not on a plain Item, so pointer
+  // focus is tracked explicitly: mouse-focused rows show no keyboard focus
+  // decoration when the OnDemand layer regains keyboard focus on re-entry.
+  property bool pointerFocused: false
+  readonly property bool keyboardFocusVisible: root.activeFocus && !root.pointerFocused
+  function focusFromPointer() {
+    root.pointerFocused = true
+    root.forceActiveFocus(Qt.MouseFocusReason)
+  }
+  onActiveFocusChanged: {
+    if (activeFocus) root.controller.focusedRowKey = root.rowKey
+    else root.pointerFocused = false
+  }
   opacity: root.controller.dragSession && root.controller.dragSession.target.key === root.rowKey ? 0.4 : 1
 
   // Right edge reserved for mute / fold chevrons. Matches fold/tabsFold
@@ -501,7 +514,7 @@ Item {
   readonly property color rowFill: InteractionModel.composeRowFill({
     dropTarget: root.kind === "monitor" ? false : root.dropTarget,
     pressed: root.kind === "monitor" ? false : root.input.pressed,
-    activeFocus: root.activeFocus && root.focusReason !== Qt.MouseFocusReason,
+    activeFocus: root.keyboardFocusVisible,
     hovered: root.kind === "monitor" ? false
       : (root.input.hovered || passiveHover.hovered),
     navigable: InteractionModel.rowHoverFillEligible(root.kind, root.herdrActionable),
@@ -534,7 +547,7 @@ Item {
       anchors.rightMargin: root.selectionRight
       radius: Style.cornerRadius
       color: root.rowFill
-      borderSpec: root.activeFocus && root.focusReason !== Qt.MouseFocusReason
+      borderSpec: root.keyboardFocusVisible
         ? Border.controlSpec("focus", Color.foreground, Color.accent) : Border.none()
       Behavior on color {
         enabled: root.animationsEnabled
@@ -722,6 +735,7 @@ Item {
       // Context refresh validates anchors by rowKey. This badge targets the
       // synthetic workspace row, not the child application/window row.
       readonly property string rowKey: root.inlineWorkspaceBadgeKey
+      property bool pointerFocused: false
       z: 4
       activeFocusOnTab: true
       x: root.inlineWorkspaceGeometry.badgeX
@@ -732,7 +746,7 @@ Item {
       radius: Style.space(4)
       color: "transparent"
       border.width: 1
-      border.color: (leadingWorkspaceBadge.activeFocus
+      border.color: ((leadingWorkspaceBadge.activeFocus && !leadingWorkspaceBadge.pointerFocused)
           || (root.leadingWorkspace && root.leadingWorkspace.focused))
         ? Color.accent : Util.alpha(Color.foreground, 0.24)
       Text {
@@ -768,8 +782,10 @@ Item {
           root.viewport.activate(target, false, root.panelConnector, Qt.NoModifier)
       }
       Keys.forwardTo: root.viewport ? [root.viewport.keyboard] : []
-      onActiveFocusChanged: if (activeFocus)
-        root.controller.focusedRowKey = root.rowKey
+      onActiveFocusChanged: {
+        if (activeFocus) root.controller.focusedRowKey = root.rowKey
+        else leadingWorkspaceBadge.pointerFocused = false
+      }
       DockSidebarRowInput {
         anchors.fill: parent
         controller: root.controller
@@ -779,7 +795,10 @@ Item {
         dragEnabled: true
         viewport: root.viewport
         enabled: leadingWorkspaceBadge.visible
-        onFocusRequested: leadingWorkspaceBadge.forceActiveFocus(Qt.MouseFocusReason)
+        onFocusRequested: {
+          leadingWorkspaceBadge.pointerFocused = true
+          leadingWorkspaceBadge.forceActiveFocus(Qt.MouseFocusReason)
+        }
         onActivated: function(target, control, connector, modifiers) {
           if (root.viewport) root.viewport.activate(target, control, connector, modifiers)
         }
@@ -1448,7 +1467,7 @@ Item {
       workspaceHeader: root.kind === "workspace"
       viewport: root.viewport
       enabled: root.navigable || root.herdrActionable
-      onFocusRequested: root.forceActiveFocus(Qt.MouseFocusReason)
+      onFocusRequested: root.focusFromPointer()
       onActivated: function(target, control, connector, modifiers) {
         if (root.viewport) root.viewport.activate(target, control, connector, modifiers)
       }
@@ -1470,7 +1489,7 @@ Item {
       tooltipText: root.row.folded ? "Expand " + root.liveTitle : "Fold " + root.liveTitle
       focusable: false
       enabled: !root.controller.interactionBusy
-      onClicked: { root.forceActiveFocus(Qt.MouseFocusReason); root.controller.toggleApplication(root.rowKey) }
+      onClicked: { root.focusFromPointer(); root.controller.toggleApplication(root.rowKey) }
       Item {
         anchors.centerIn: parent
         width: 14
@@ -1501,7 +1520,7 @@ Item {
       focusable: false
       enabled: !root.controller.interactionBusy
       onClicked: {
-        root.forceActiveFocus(Qt.MouseFocusReason)
+        root.focusFromPointer()
         root.controller.toggleWindowTabs(root.rowKey)
       }
       Item {
@@ -1535,7 +1554,7 @@ Item {
       focusable: false
       enabled: !root.controller.interactionBusy
       onClicked: {
-        root.forceActiveFocus(Qt.MouseFocusReason)
+        root.focusFromPointer()
         root.controller.toggleHerdrAgents(root.rowKey)
       }
       Item {
