@@ -1,16 +1,16 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import QtQuick.Shapes
 import qs.Commons
 import qs.Ui as Ui
+import "DockSidebarInteractionModel.js" as InteractionModel
 
 // Stable bottom pin shelf (Direction A). Settings.pinned order, including
-// running apps (focus-or-launch). Icons wrap to additional rows when the shelf
-// is too narrow for a single line. Strip-owned anchors for context.
+// running apps (focus-or-launch). Overflow keeps the add action on one row.
 //
-// Projection rebuilds replace the launchers array, so GridView add/remove
-// transitions never run. A local ListModel diffs keys and keeps exiting rows
-// alive long enough for opacity/scale Behaviors (same idea as the + button).
+// Projection rebuilds replace the launchers array. A local ListModel keeps
+// exiting rows alive for the existing opacity/scale transitions.
 Item {
   id: root
   required property var controller
@@ -21,24 +21,35 @@ Item {
   readonly property bool animationsEnabled:
     controller.settings.interfaceAnimationsEnabled !== false
   readonly property int animMs: animationsEnabled ? 180 : 0
-  readonly property real iconSize: 26
-  readonly property real cell: 36
-  readonly property real pinGap: Style.space(6)
-  readonly property real shelfPadX: Style.space(4)
+  readonly property real iconSize: 22
+  readonly property real cell: 32
+  readonly property real cellHeight: 36
+  readonly property real pinGap: Style.space(7)
   readonly property real shelfPadTop: Style.space(3)
   readonly property real shelfPadBottom: Style.space(5)
+  readonly property var layout: InteractionModel.pinnedStripLayout(
+    width, pins.length, cell, cell, pinGap)
+  readonly property int visibleCount: layout.visible
+  readonly property int hiddenCount: layout.hidden
+  readonly property var hiddenPins: pins.slice(visibleCount)
   // Rail hides the strip entirely — zero height and no residual gap.
-  implicitHeight: collapsed ? 0 : (shelfPadTop + Math.max(0, flow.implicitHeight)
-    + shelfPadBottom)
+  implicitHeight: collapsed ? 0 : (shelfPadTop + Style.space(1) + Style.space(30)
+    + cellHeight + shelfPadBottom)
   height: implicitHeight
   visible: !collapsed
   enabled: !collapsed
   clip: true
   readonly property var addPinButton: addPin
+  property bool overflowOpen: false
+  property bool overflowOpenedByKeyboard: false
+  property double overflowDismissedAt: 0
+
+  HoverHandler { cursorShape: Qt.ArrowCursor }
 
   HoverHandler { cursorShape: Qt.ArrowCursor }
 
   property var prevPins: []
+  property var shownKeys: []
   property var exitStash: ({})
   property bool stripReady: false
 
@@ -53,6 +64,36 @@ Item {
       if (String(list[i].key || "") === want) return list[i]
     }
     return root.exitStash[want] || null
+  }
+
+  function close() {
+    overflowOpen = false
+  }
+
+  function toggleOverflow() {
+    if (overflowOpen) {
+      close()
+      return
+    }
+    if (Date.now() - overflowDismissedAt < 250) return
+    overflowOpen = true
+  }
+
+  onHiddenCountChanged: if (hiddenCount === 0) close()
+  onCollapsedChanged: if (collapsed) close()
+  onWidthChanged: shownKeys = (pins || []).slice(0, visibleCount).map(function(pin) {
+    return String(pin.key || "")
+  })
+  onOverflowOpenChanged: {
+    if (!overflowOpen) return
+    Qt.callLater(function() {
+      if (root.overflowOpenedByKeyboard) {
+        var first = hiddenRepeater.itemAt(0)
+        if (first) first.forceActiveFocus()
+        return
+      }
+      overflowFlickable.forceActiveFocus(Qt.MouseFocusReason)
+    })
   }
 
   function copyStash(src) {
@@ -93,10 +134,12 @@ Item {
         var stash = root.copyStash(root.exitStash)
         stash[key] = prevByKey[key] || root.launcherFor(key) || stash[key] || null
         root.exitStash = stash
+        displayModel.setProperty(d, "exitSlot", root.shownKeys.indexOf(key))
         displayModel.setProperty(d, "exiting", true)
         if (!root.animationsEnabled) root.finishExit(key)
       } else if (nextByKey[key] && row.exiting === true) {
         displayModel.setProperty(d, "exiting", false)
+        displayModel.setProperty(d, "exitSlot", -1)
       }
     }
 
@@ -110,6 +153,7 @@ Item {
       displayModel.append({
         key: addKey,
         exiting: false,
+        exitSlot: -1,
         // Animate only after the shelf has painted once (avoid boot fanfare).
         animateIn: root.stripReady && root.animationsEnabled
       })
@@ -139,6 +183,9 @@ Item {
     if (changed) root.exitStash = cleaned
 
     root.prevPins = list
+    root.shownKeys = list.slice(0, root.visibleCount).map(function(pin) {
+      return String(pin.key || "")
+    })
   }
 
   onPinsChanged: syncDisplay()
@@ -151,159 +198,229 @@ Item {
     function onRefreshed() { root.syncDisplay() }
   }
 
-  Ui.BorderSurface {
-    anchors.fill: parent
-    radius: root.appearance.cardRadius
-    color: root.appearance.workspaceFill
-    borderSpec: Border.none()
-    enabled: false
-  }
-
-  Flow {
-    id: flow
-    objectName: "sidebar-pin-strip"
+  Ui.PanelSeparator {
+    id: divider
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.top: parent.top
     anchors.topMargin: root.shelfPadTop
-    anchors.leftMargin: root.shelfPadX
-    anchors.rightMargin: root.shelfPadX
-    spacing: root.pinGap
-    flow: Flow.LeftToRight
+  }
 
-    Repeater {
-      model: displayModel
-      delegate: Item {
-        id: pinCell
-        required property int index
-        required property string key
-        required property bool exiting
-        required property bool animateIn
-        readonly property var modelData: root.launcherFor(key)
-        readonly property string rowKey: String(key || "")
-        readonly property string desktopId: String((modelData && modelData.desktopId) || "")
-        readonly property var entry: {
-          var apps = DesktopEntries.applications.values || []
-          var revision = apps.length
-          if (modelData && modelData.item && modelData.item.entry) return modelData.item.entry
-          if (!pinCell.desktopId) return null
-          return DesktopEntries.byId(pinCell.desktopId)
+  Text {
+    id: sectionLabel
+    anchors.left: parent.left
+    anchors.top: divider.bottom
+    anchors.topMargin: Style.space(4)
+    height: Style.space(26)
+    verticalAlignment: Text.AlignVCenter
+    text: "PINNED"
+    textFormat: Text.PlainText
+    color: Color.muted
+    font.family: Style.font.family
+    font.pixelSize: Style.font.caption
+    font.bold: true
+  }
+
+  Item {
+    id: pinRow
+    objectName: "sidebar-pin-strip"
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: sectionLabel.bottom
+    height: root.cellHeight
+
+    Item {
+      id: pinArea
+      anchors.left: parent.left
+      anchors.right: addPin.left
+      anchors.rightMargin: root.pinGap
+      height: parent.height
+      clip: true
+
+      Repeater {
+        model: displayModel
+        delegate: Item {
+          id: pinCell
+          required property int index
+          required property string key
+          required property bool exiting
+          required property int exitSlot
+          required property bool animateIn
+          readonly property var modelData: root.launcherFor(key)
+          readonly property string rowKey: String(key || "")
+          readonly property string desktopId: String((modelData && modelData.desktopId) || "")
+          readonly property var entry: {
+            var apps = DesktopEntries.applications.values || []
+            var revision = apps.length
+            if (modelData && modelData.item && modelData.item.entry) return modelData.item.entry
+            if (!pinCell.desktopId) return null
+            return DesktopEntries.byId(pinCell.desktopId)
+          }
+          readonly property bool pinStripOwned: true
+          // Drive opacity/scale through a settled flag so Behaviors actually run
+          // (a direct binding to exiting alone skips the "from" frame on insert).
+          property bool settled: !animateIn
+          property bool mouseFocused: false
+          width: root.cell
+          height: root.cellHeight
+          x: (exiting && exitSlot >= 0 ? exitSlot : index) * (root.cell + root.pinGap)
+          transformOrigin: Item.Center
+          opacity: exiting ? 0 : (settled ? 1 : 0)
+          scale: exiting ? 0.55 : (settled ? 1 : 0.55)
+          visible: (index < root.visibleCount && !!modelData)
+            || (exiting && exitSlot >= 0)
+          focus: true
+          activeFocusOnTab: true
+          Accessible.role: Accessible.Button
+          Accessible.name: String((modelData && (modelData.label || modelData.desktopId)) || "Pinned application")
+
+          Behavior on opacity {
+            enabled: root.animationsEnabled
+            NumberAnimation { duration: root.animMs; easing.type: Easing.OutCubic }
+          }
+          Behavior on scale {
+            enabled: root.animationsEnabled
+            NumberAnimation { duration: root.animMs; easing.type: Easing.OutCubic }
+          }
+
+          Component.onCompleted: {
+            if (!pinCell.animateIn || !root.animationsEnabled) {
+              pinCell.settled = true
+              return
+            }
+            Qt.callLater(function() {
+              if (!pinCell || pinCell.exiting) return
+              pinCell.settled = true
+              if (pinCell.index >= 0 && pinCell.index < displayModel.count)
+                displayModel.setProperty(pinCell.index, "animateIn", false)
+            })
+          }
+
+          onExitingChanged: {
+            if (!exiting) return
+            if (!root.animationsEnabled) {
+              root.finishExit(pinCell.key)
+              return
+            }
+            exitDelay.restart()
+          }
+          onActiveFocusChanged: if (!activeFocus) mouseFocused = false
+
+          Timer {
+            id: exitDelay
+            interval: Math.max(root.animMs, 1)
+            repeat: false
+            onTriggered: root.finishExit(pinCell.key)
+          }
+
+          Keys.onPressed: function(event) {
+            if (!pinCell.modelData || pinCell.exiting) return
+            pinCell.mouseFocused = false
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+              root.activatePin(pinCell.modelData)
+              event.accepted = true
+            } else if (event.key === Qt.Key_Menu) {
+              root.panel.openContext(pinCell.modelData, pinCell)
+              event.accepted = true
+            }
+          }
+
+          // Shelf is the single block; cells only paint hover/press/focus fills.
+          Rectangle {
+            anchors.fill: parent
+            radius: root.appearance.cardRadius
+            color: pinPress.pressed ? Style.pressedFillFor(Color.foreground, Color.accent)
+              : (pinHover.hovered
+                  || (pinCell.activeFocus && !pinCell.mouseFocused))
+                ? Style.hoverFillFor(Color.foreground, Color.accent)
+                : Style.normalFill
+            Behavior on color {
+              enabled: root.animationsEnabled
+              ColorAnimation { duration: 120 }
+            }
+          }
+
+          DockAppIcon {
+            id: pinIcon
+            anchors.centerIn: parent
+            width: root.iconSize
+            height: root.iconSize
+            roundedArtwork: false
+            badgeRingColor: root.appearance.workspaceFill
+            desktopId: pinCell.desktopId
+            desktopIcon: pinCell.entry ? String(pinCell.entry.icon || "") : ""
+            iconOverrides: root.controller.settings.iconOverrides || ({})
+            reloadRevision: root.controller.host.iconReloadRevision || 0
+            profileBadgesEnabled: false
+            opacity: 1
+            scale: pinHover.hovered ? 1.08 : 1
+            Behavior on scale {
+              enabled: root.animationsEnabled
+              NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            }
+          }
+
+          HoverHandler { id: pinHover }
+          TapHandler {
+            id: pinPress
+            acceptedButtons: Qt.LeftButton
+            enabled: !!pinCell.modelData && !pinCell.exiting
+            onTapped: {
+              pinCell.mouseFocused = true
+              pinCell.forceActiveFocus(Qt.MouseFocusReason)
+              root.activatePin(pinCell.modelData)
+            }
+          }
+          TapHandler {
+            acceptedButtons: Qt.RightButton
+            enabled: !!pinCell.modelData && !pinCell.exiting
+            onTapped: {
+              pinCell.mouseFocused = true
+              pinCell.forceActiveFocus(Qt.MouseFocusReason)
+              root.panel.openContext(pinCell.modelData, pinCell)
+            }
+          }
+          DockToolTip {
+            anchorItem: pinCell
+            position: "bottom"
+            requestedVisible: pinHover.hovered && !root.controller.rowDragActive
+              && !!pinCell.modelData && !pinCell.exiting
+            text: String((pinCell.modelData && (pinCell.modelData.label || pinCell.modelData.desktopId)) || "Pinned app")
+              + (pinCell.modelData && pinCell.modelData.running ? " · Running" : "")
+            fontFamily: Style.font.family
+            fontSize: Style.font.bodySmall
+          }
         }
-        readonly property bool pinStripOwned: true
-        // Drive opacity/scale through a settled flag so Behaviors actually run
-        // (a direct binding to exiting alone skips the "from" frame on insert).
-        property bool settled: !animateIn
+      }
+
+      Ui.Button {
+        id: overflowButton
+        objectName: "sidebar-pin-strip-overflow"
+        property bool pinStripOwned: true
         width: root.cell
-        height: root.cell
-        transformOrigin: Item.Center
-        opacity: exiting ? 0 : (settled ? 1 : 0)
-        scale: exiting ? 0.55 : (settled ? 1 : 0.55)
-        visible: !!modelData || exiting
-        focus: true
-        activeFocusOnTab: true
+        height: root.cellHeight
+        x: root.visibleCount * (root.cell + root.pinGap)
+        visible: root.hiddenCount > 0
+        focusable: true
+        enabled: !root.controller.interactionBusy || root.overflowOpen
+        text: "+" + root.hiddenCount
+        fontSize: Style.font.bodySmall
+        tooltipText: "More pinned applications"
         Accessible.role: Accessible.Button
-        Accessible.name: String((modelData && (modelData.label || modelData.desktopId)) || "Pinned application")
-
-        Behavior on opacity {
-          enabled: root.animationsEnabled
-          NumberAnimation { duration: root.animMs; easing.type: Easing.OutCubic }
-        }
-        Behavior on scale {
-          enabled: root.animationsEnabled
-          NumberAnimation { duration: root.animMs; easing.type: Easing.OutCubic }
-        }
-
-        Component.onCompleted: {
-          if (!pinCell.animateIn || !root.animationsEnabled) {
-            pinCell.settled = true
-            return
-          }
-          Qt.callLater(function() {
-            if (!pinCell || pinCell.exiting) return
-            pinCell.settled = true
-            if (pinCell.index >= 0 && pinCell.index < displayModel.count)
-              displayModel.setProperty(pinCell.index, "animateIn", false)
-          })
-        }
-
-        onExitingChanged: {
-          if (!exiting) return
-          if (!root.animationsEnabled) {
-            root.finishExit(pinCell.key)
-            return
-          }
-          exitDelay.restart()
-        }
-
-        Timer {
-          id: exitDelay
-          interval: Math.max(root.animMs, 1)
-          repeat: false
-          onTriggered: root.finishExit(pinCell.key)
-        }
-
+        Accessible.name: root.hiddenCount + " more pinned applications"
+          selected: root.overflowOpen
+          background: Style.normalFill
         Keys.onPressed: function(event) {
-          if (!pinCell.modelData || pinCell.exiting) return
-          if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
-            root.activatePin(pinCell.modelData)
-            event.accepted = true
-          } else if (event.key === Qt.Key_Menu) {
-            root.panel.openContext(pinCell.modelData, pinCell)
-            event.accepted = true
-          }
+          if (event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter
+              && event.key !== Qt.Key_Space) return
+          root.overflowOpenedByKeyboard = true
+          root.toggleOverflow()
+          event.accepted = true
         }
-
-        // Shelf is the single block; cells only paint hover/press/focus fills.
-        Rectangle {
-          anchors.fill: parent
-          radius: root.appearance.cardRadius
-          color: pinPress.pressed ? Style.pressedFillFor(Color.foreground, Color.accent)
-            : pinHover.hovered || pinCell.activeFocus ? root.appearance.workspaceHoverFill
-            : "transparent"
-        }
-
-        DockAppIcon {
-          id: pinIcon
-          anchors.centerIn: parent
-          width: root.iconSize
-          height: root.iconSize
-          roundedArtwork: false
-          badgeRingColor: root.appearance.workspaceFill
-          desktopId: pinCell.desktopId
-          desktopIcon: pinCell.entry ? String(pinCell.entry.icon || "") : ""
-          iconOverrides: root.controller.settings.iconOverrides || ({})
-          reloadRevision: root.controller.host.iconReloadRevision || 0
-          profileBadgesEnabled: false
-          opacity: pinCell.modelData && pinCell.modelData.running ? 1 : 0.92
-        }
-
-        HoverHandler { id: pinHover }
-        TapHandler {
-          id: pinPress
-          acceptedButtons: Qt.LeftButton
-          enabled: !!pinCell.modelData && !pinCell.exiting
-          onTapped: {
-            pinCell.forceActiveFocus(Qt.MouseFocusReason)
-            root.activatePin(pinCell.modelData)
-          }
-        }
-        TapHandler {
-          acceptedButtons: Qt.RightButton
-          enabled: !!pinCell.modelData && !pinCell.exiting
-          onTapped: {
-            pinCell.forceActiveFocus(Qt.MouseFocusReason)
-            root.panel.openContext(pinCell.modelData, pinCell)
-          }
-        }
-        DockToolTip {
-          anchorItem: pinCell
-          position: "bottom"
-          requestedVisible: pinHover.hovered && !root.controller.rowDragActive
-            && !!pinCell.modelData && !pinCell.exiting
-          text: String((pinCell.modelData && (pinCell.modelData.label || pinCell.modelData.desktopId)) || "Pinned app")
-            + (pinCell.modelData && pinCell.modelData.running ? " · Running" : "")
-          fontFamily: Style.font.family
-          fontSize: Style.font.bodySmall
+        onClicked: {
+          root.overflowOpenedByKeyboard = false
+          root.toggleOverflow()
+          overflowButton.focus = false
         }
       }
     }
@@ -313,14 +430,19 @@ Item {
       objectName: "sidebar-pin-strip-add"
       property bool pinStripOwned: true
       width: root.cell
-      height: root.cell
+      height: root.cellHeight
+      anchors.right: parent.right
+      anchors.top: parent.top
       visible: !root.collapsed
       iconText: ""
       tooltipText: "Add a pinned application"
       Accessible.name: "Add pinned application"
       focusable: true
       enabled: !root.controller.interactionBusy
-      onClicked: root.panel.openPinPicker(addPin)
+      onClicked: {
+        root.panel.openPinPicker(addPin)
+        addPin.focus = false
+      }
       DockLucideIcon {
         anchors.centerIn: parent
         width: 13
@@ -329,13 +451,132 @@ Item {
         iconSize: 13
         tint: Color.foreground
       }
-      Rectangle {
+      Shape {
         anchors.fill: parent
-        radius: root.appearance.cardRadius
-        color: "transparent"
-        border.width: 1
-        border.color: Util.alpha(Color.foreground, 0.24)
         enabled: false
+        ShapePath {
+          strokeColor: Util.alpha(Color.foreground, 0.28)
+          strokeWidth: 1
+          strokeStyle: ShapePath.DashLine
+          dashPattern: [4, 3]
+          fillColor: "transparent"
+          PathSvg { path: "M 8 0 H 24 Q 32 0 32 8 V 28 Q 32 36 24 36 H 8 Q 0 36 0 28 V 8 Q 0 0 8 0 Z" }
+        }
+      }
+    }
+  }
+
+  PopupWindow {
+    id: overflowPopup
+    visible: root.overflowOpen && !root.collapsed && root.hiddenCount > 0
+    implicitWidth: Style.space(184)
+    implicitHeight: Math.min(root.hiddenCount * Style.space(32), Style.space(256))
+    color: "transparent"
+    grabFocus: true
+
+    anchor {
+      window: overflowButton.QsWindow.window
+      adjustment: PopupAdjustment.Slide
+      edges: Edges.Top | Edges.Left
+      gravity: Edges.Bottom | Edges.Right
+      rect.width: 1
+      rect.height: 1
+      onAnchoring: {
+        if (!overflowPopup.anchor.window) return
+        var edge = root.controller.edge
+        var x = edge === "left" ? overflowButton.width + Style.space(8)
+          : -overflowPopup.implicitWidth - Style.space(8)
+        var y = overflowButton.height / 2 - overflowPopup.implicitHeight / 2
+        var point = overflowPopup.anchor.window.contentItem.mapFromItem(overflowButton, x, y)
+        overflowPopup.anchor.rect.x = Math.round(point.x)
+        overflowPopup.anchor.rect.y = Math.round(Math.max(Style.space(8), Math.min(
+          point.y, overflowPopup.anchor.window.height - overflowPopup.implicitHeight - Style.space(8))))
+      }
+    }
+
+    onVisibleChanged: {
+      if (visible) return
+      if (root.overflowOpen) root.overflowDismissedAt = Date.now()
+      root.close()
+    }
+
+    Ui.BorderSurface {
+      id: overflowSurface
+      anchors.fill: parent
+      color: Color.menu.background
+      borderSpec: Border.none()
+      radius: Style.cornerRadius
+      clip: true
+
+      Flickable {
+        id: overflowFlickable
+        anchors.fill: parent
+        anchors.leftMargin: overflowSurface.contentLeftInset
+        anchors.rightMargin: overflowSurface.contentRightInset
+        anchors.topMargin: overflowSurface.contentTopInset
+        anchors.bottomMargin: overflowSurface.contentBottomInset
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        contentWidth: width
+        contentHeight: hiddenColumn.implicitHeight
+        Keys.onEscapePressed: root.close()
+
+        Column {
+          id: hiddenColumn
+          width: parent.width
+
+          Repeater {
+            id: hiddenRepeater
+            model: root.hiddenPins
+            delegate: Ui.Button {
+              id: hiddenPin
+              required property var modelData
+              readonly property string desktopId: String(modelData.desktopId || "")
+              readonly property var entry: modelData.item && modelData.item.entry
+                ? modelData.item.entry : DesktopEntries.byId(desktopId)
+              width: hiddenColumn.width
+              height: Style.space(32)
+              focusable: true
+              leftAlign: true
+              text: ""
+              Accessible.role: Accessible.MenuItem
+              Accessible.name: String(modelData.label || desktopId)
+                + (modelData.running ? " · Running" : "")
+              onClicked: {
+                root.close()
+                root.activatePin(modelData)
+              }
+
+              DockAppIcon {
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(18)
+                height: width
+                roundedArtwork: false
+                badgeRingColor: Color.menu.background
+                desktopId: hiddenPin.desktopId
+                desktopIcon: hiddenPin.entry ? String(hiddenPin.entry.icon || "") : ""
+                iconOverrides: root.controller.settings.iconOverrides || ({})
+                reloadRevision: root.controller.host.iconReloadRevision || 0
+                profileBadgesEnabled: false
+              }
+              Text {
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(36)
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                text: String(hiddenPin.modelData.label || hiddenPin.desktopId)
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+                color: Color.menu.text
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+              }
+            }
+          }
+        }
       }
     }
   }

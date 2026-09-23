@@ -443,6 +443,16 @@ function clampPopupAnchor(position, point, windowSize, popupSize) {
   return next
 }
 
+function pinnedStripLayout(rowWidth, pinCount, tileWidth, addWidth, gap) {
+  var count = Math.max(0, Math.floor(Number(pinCount) || 0))
+  var tile = Math.max(1, Number(tileWidth) || 1)
+  var spacing = Math.max(0, Number(gap) || 0)
+  var slots = Math.max(0, Math.floor((Number(rowWidth) - Number(addWidth))
+    / (tile + spacing)))
+  var visible = count <= slots ? count : Math.max(0, slots - 1)
+  return { slots: slots, visible: visible, hidden: count - visible }
+}
+
 // ListView inline anchors dismiss on leave/destroy; footer anchors may reanchor.
 function pickerAnchorDecision(anchor, options) {
   var opts = options || {}
