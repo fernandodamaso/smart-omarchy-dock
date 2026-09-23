@@ -829,10 +829,63 @@ function project(input) {
       return
     }
     // Actionable agents require verified association + a live ready snapshot.
-    // Nesting is tab → panels (workspace stays on the secondary line).
+    // Nesting is tab → panels (workspace stays on the secondary line), except a
+    // window with exactly one tab with agents lists that tab's agents directly
+    // under the window with no tab header.
     if (herdrSnapshot && agents.length > 0) {
       var groups = HerdrModel.groupAgentsForTree(agents)
-      groups.forEach(function(workspace) {
+      function emitAgentRow(workspace, tab, tabRowKey, agent) {
+        var agentId = String(agent.id || "")
+        if (!agentId) return
+        var agentKind = agent.agent || ""
+        var agentPayload = Object.assign({}, agent, {
+          workspaceLabel: agent.workspaceLabel || workspace.label || "",
+          agent: agentKind
+        })
+        row({
+          kind: "herdr-agent",
+          key: JSON.stringify(["herdr-agent", window.key, agentId]),
+          windowKey: window.key,
+          providerEpoch: epoch,
+          serverId: serverId,
+          transport: serverMeta.transport,
+          host: serverMeta.host,
+          session: serverMeta.session,
+          serverLabel: serverMeta.serverLabel,
+          focusAgentSupported: serverMeta.focusAgentSupported,
+          serverConnectionGeneration: serverMeta.serverConnectionGeneration,
+          herdrWorkspaceId: workspace.id,
+          herdrTabId: tab.id,
+          herdrTabKey: tabRowKey,
+          agentId: agentId,
+          connectionGeneration: agent.connectionGeneration,
+          paneId: agent.paneId,
+          terminalId: agent.terminalId || "",
+          title: HerdrModel.displayAgentTitle(agent),
+          subtitle: HerdrModel.displayAgentSecondary(agentPayload),
+          agentKind: agentKind,
+          workspaceLabel: agentPayload.workspaceLabel,
+          tabTitle: tab.title || agent.tabTitle || "",
+          status: HerdrModel.normalizeStatus(agent.status),
+          nested: true,
+          actionable: serverMeta.focusAgentSupported
+            && herdrAgentIdentityValid(agent, server),
+          toplevel: window.toplevel,
+          address: window.address,
+          desktopId: window.desktopId,
+          workspaceIdentity: window.workspaceIdentity,
+          monitorIdentity: window.monitorIdentity
+        })
+      }
+      var tabCount = groups.reduce(function(n, ws) { return n + ws.tabs.length }, 0)
+      var soleWorkspace = tabCount === 1
+        ? groups.find(function(ws) { return ws.tabs.length > 0 }) : null
+      var soleTab = soleWorkspace ? soleWorkspace.tabs[0] : null
+      if (soleTab && soleTab.agents.length >= 2) {
+        soleTab.agents.forEach(function(agent) {
+          emitAgentRow(soleWorkspace, soleTab, "", agent)
+        })
+      } else groups.forEach(function(workspace) {
         workspace.tabs.forEach(function(tab) {
           var tabRowKey = JSON.stringify([
             "herdr-tab", window.key, workspace.id, tab.id
@@ -913,47 +966,7 @@ function project(input) {
             }))
           }
           tab.agents.forEach(function(agent) {
-            var agentId = String(agent.id || "")
-            if (!agentId) return
-            var agentKind = agent.agent || ""
-            var agentPayload = Object.assign({}, agent, {
-              workspaceLabel: agent.workspaceLabel || workspace.label || "",
-              agent: agentKind
-            })
-            row({
-              kind: "herdr-agent",
-              key: JSON.stringify(["herdr-agent", window.key, agentId]),
-              windowKey: window.key,
-              providerEpoch: epoch,
-              serverId: serverId,
-              transport: serverMeta.transport,
-              host: serverMeta.host,
-              session: serverMeta.session,
-              serverLabel: serverMeta.serverLabel,
-              focusAgentSupported: serverMeta.focusAgentSupported,
-              serverConnectionGeneration: serverMeta.serverConnectionGeneration,
-              herdrWorkspaceId: workspace.id,
-              herdrTabId: tab.id,
-              herdrTabKey: tabRowKey,
-              agentId: agentId,
-              connectionGeneration: agent.connectionGeneration,
-              paneId: agent.paneId,
-              terminalId: agent.terminalId || "",
-              title: HerdrModel.displayAgentTitle(agent),
-              subtitle: HerdrModel.displayAgentSecondary(agentPayload),
-              agentKind: agentKind,
-              workspaceLabel: agentPayload.workspaceLabel,
-              tabTitle: tab.title || agent.tabTitle || "",
-              status: HerdrModel.normalizeStatus(agent.status),
-              nested: true,
-              actionable: serverMeta.focusAgentSupported
-                && herdrAgentIdentityValid(agent, server),
-              toplevel: window.toplevel,
-              address: window.address,
-              desktopId: window.desktopId,
-              workspaceIdentity: window.workspaceIdentity,
-              monitorIdentity: window.monitorIdentity
-            })
+            emitAgentRow(workspace, tab, tabRowKey, agent)
           })
         })
       })
