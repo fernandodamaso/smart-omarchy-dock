@@ -98,6 +98,16 @@ form/action control when the existing Widget framework owns it. New Widget UI
 should compose `components/widgets/` primitives first; custom presentation code
 must be justified by a contract the kit does not already cover.
 
+External Widget packages are a different source boundary from SmartDock core.
+Create them in a separate repository/directory with `smartdock widget create`,
+install or select development sources with the `smartdock widget` package API,
+and import the public `SmartDock.WidgetKit 1.0` module. Never develop external
+Widget source inside the canonical SmartDock checkout, an installed Omarchy
+plugin deployment, or `${XDG_DATA_HOME:-$HOME/.local/share}/smartdock`.
+`dock.json` stores Widget IDs only; package paths and executable QML are owned
+by the package registry under the SmartDock XDG data root. See
+`docs/WIDGET_PACKAGES.md`.
+
 ## Configuration workflow
 
 Use `smartdock status --json`, `smartdock config schema --json`, and

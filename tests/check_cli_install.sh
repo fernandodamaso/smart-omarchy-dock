@@ -22,6 +22,9 @@ cli_install
 cli_install
 test -x "$XDG_BIN_HOME/smartdock"
 test -f "$XDG_DATA_HOME/smartdock-cli/scripts/smartdock_cli.py"
+test -f "$XDG_DATA_HOME/smartdock-cli/scripts/smartdock_widget.py"
+test -f "$XDG_DATA_HOME/smartdock-cli/SmartDock/WidgetKit/qmldir"
+test -f "$XDG_DATA_HOME/smartdock-cli/components/widgets/WidgetSection.qml"
 test -f "$XDG_DATA_HOME/smartdock-cli/config/settings-schema.json"
 test -f "$XDG_DATA_HOME/smartdock-cli/config/dock.json"
 test -f "$XDG_DATA_HOME/smartdock-cli/docs/AGENT_CONFIGURATION.md"
@@ -35,7 +38,10 @@ test ! -e "$QS_INSTALL_LOG"
 "$XDG_BIN_HOME/smartdock" agent-guide >/dev/null
 "$XDG_BIN_HOME/smartdock" help >/dev/null
 "$XDG_BIN_HOME/smartdock" dev --help >/dev/null
+"$XDG_BIN_HOME/smartdock" widget --help >/dev/null
+"$XDG_BIN_HOME/smartdock" widget list --json >/dev/null
 test -f "$XDG_DATA_HOME/smartdock-cli/docs/DEV_SWITCH.md"
+test -f "$XDG_DATA_HOME/smartdock-cli/docs/WIDGET_PACKAGES.md"
 test ! -e "$QS_INSTALL_LOG"
 if bash "$repo/uninstall.sh" --cli-only --purge; then
   echo 'Client-only purge must be rejected' >&2
@@ -52,6 +58,8 @@ cli_remove
 test -x "$XDG_BIN_HOME/smartdock"
 test -f "$XDG_DATA_HOME/smartdock/shell.qml"
 test -f "$XDG_DATA_HOME/smartdock/scripts/smartdock_cli.py"
+test -f "$XDG_DATA_HOME/smartdock/scripts/smartdock_widget.py"
+test -f "$XDG_DATA_HOME/smartdock/SmartDock/WidgetKit/qmldir"
 test "$source_before" = "$(cat "$XDG_DATA_HOME/smartdock/.source-dir")"
 test "$config_before" = "$(cat "$XDG_CONFIG_HOME/smartdock/dock.json")"
 "$XDG_BIN_HOME/smartdock" agent-guide >/dev/null

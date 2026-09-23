@@ -78,13 +78,18 @@ install_client_bundle() {
   local destination="$1"
   install -d "$destination/scripts" "$destination/config" "$destination/docs" "$bin_home"
   if [[ "$source_dir" != "$destination" ]]; then
+    rm -rf -- "$destination/components/widgets" "$destination/SmartDock"
+    install -d "$destination/components"
+    cp -R -- "$source_dir/components/widgets" "$destination/components/widgets"
+    cp -R -- "$source_dir/SmartDock" "$destination/SmartDock"
     install -m 0644 "$source_dir/scripts/smartdock_cli.py" "$destination/scripts/smartdock_cli.py"
     install -m 0644 "$source_dir/scripts/smartdock_dev.py" "$destination/scripts/smartdock_dev.py"
+    install -m 0644 "$source_dir/scripts/smartdock_widget.py" "$destination/scripts/smartdock_widget.py"
     install -m 0755 "$source_dir/scripts/smartdock_seed_demo_widgets.py" "$destination/scripts/smartdock_seed_demo_widgets.py"
     install -m 0644 "$source_dir/config/settings-schema.json" "$destination/config/settings-schema.json"
     install -m 0644 "$source_dir/config/dock.json" "$destination/config/dock.json"
     local document
-    for document in AGENT_CONFIGURATION.md CLI_REFERENCE.md CONFIGURATION.md CLI_RUNTIME_CHECKS.md DEV_SWITCH.md HERDR_DATA_ACCESS.md; do
+    for document in AGENT_CONFIGURATION.md CLI_REFERENCE.md CONFIGURATION.md CLI_RUNTIME_CHECKS.md DEV_SWITCH.md HERDR_DATA_ACCESS.md SIDEBAR_WIDGETS.md WIDGET_COMPONENTS.md WIDGET_PACKAGES.md; do
       install -m 0644 "$source_dir/docs/$document" "$destination/docs/$document"
     done
     install -m 0755 "$source_dir/uninstall.sh" "$destination/uninstall.sh"
@@ -133,10 +138,12 @@ command -v python3 >/dev/null 2>&1 || { echo 'Python 3 is required for the CLI.'
 install -d "$app_dir" "$config_dir" "$bin_home" "$desktop_dir"
 if [[ "$source_dir" != "$app_dir" ]]; then
   rm -rf -- "$app_dir/components"
+  rm -rf -- "$app_dir/SmartDock"
   rm -rf -- "$app_dir/assets"
   rm -rf -- "$app_dir/provider/herdr"
   install -d "$app_dir/provider"
   cp -R -- "$source_dir/components" "$app_dir/components"
+  cp -R -- "$source_dir/SmartDock" "$app_dir/SmartDock"
   cp -R -- "$source_dir/assets" "$app_dir/assets"
   cp -R -- "$source_dir/provider/herdr" "$app_dir/provider/herdr"
   chmod 0755 "$app_dir/provider/herdr/bin/smartdock-herdr-helper" \
