@@ -141,8 +141,7 @@ PanelWindow {
     var row = target && target.key ? (root.controller.rowsByKey[target.key] || target) : target
     if (!root.controller.targetIsCurrent(row || target)) return false
     // Nested Herdr rows have no app/window menu.
-    if (row && (row.kind === "herdr-agent" || row.kind === "herdr-tab"
-        || row.kind === "herdr-state"))
+    if (row && (row.kind === "herdr-agent" || row.kind === "herdr-state"))
       return false
     // Tab rows have no app menu of their own; reuse the owning window.
     if (row && row.kind === "browser-tab") {

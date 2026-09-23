@@ -374,22 +374,13 @@ function annotateTreeAndSpans(result) {
       row.treeDepth = windowParent ? Number(windowParent.treeDepth || 0) + 1 : 2
       continue
     }
-    if (row.kind === "herdr-tab") {
-      var tabWindow = rowByKey[row.windowKey] || null
+    if (row.kind === "herdr-agent") {
+      var agentParent = rowByKey[row.windowKey] || null
       row.monitorKey = monitorKey
       row.workspaceKey = inlineWorkspace ? inlineWorkspace.key : workspaceKey
       row.inlineWorkspaceGroup = !!inlineWorkspace
       row.parentKey = row.windowKey || ""
-      row.treeDepth = tabWindow ? Number(tabWindow.treeDepth || 0) + 1 : 2
-      continue
-    }
-    if (row.kind === "herdr-agent") {
-      var agentParent = rowByKey[row.herdrTabKey] || rowByKey[row.windowKey] || null
-      row.monitorKey = monitorKey
-      row.workspaceKey = inlineWorkspace ? inlineWorkspace.key : workspaceKey
-      row.inlineWorkspaceGroup = !!inlineWorkspace
-      row.parentKey = row.herdrTabKey || row.windowKey || ""
-      row.treeDepth = agentParent ? Number(agentParent.treeDepth || 0) + 1 : 3
+      row.treeDepth = agentParent ? Number(agentParent.treeDepth || 0) + 1 : 2
     }
   }
 
@@ -516,7 +507,7 @@ function remapFocusKey(key, visibleRows, rowsByKey) {
   var row = rowsByKey && rowsByKey[key]
   if (!row) return recoverAnchor({ key: key, offset: 0 }, [], rows).key
   if (row.kind === "browser-tab" || row.kind === "herdr-agent"
-      || row.kind === "herdr-tab" || row.kind === "herdr-state") {
+      || row.kind === "herdr-state") {
     var windowKey = row.windowKey || ""
     if (windowKey && rows.some(function(candidate) { return candidate.key === windowKey }))
       return windowKey
@@ -829,12 +820,11 @@ function project(input) {
       return
     }
     // Actionable agents require verified association + a live ready snapshot.
-    // Nesting is tab → panels (workspace stays on the secondary line), except a
-    // window with exactly one tab with agents lists that tab's agents directly
-    // under the window with no tab header.
+    // Preserve workspace → tab → pane order while rendering every pane directly
+    // under the associated window. Workspace stays on the secondary line.
     if (herdrSnapshot && agents.length > 0) {
       var groups = HerdrModel.groupAgentsForTree(agents)
-      function emitAgentRow(workspace, tab, tabRowKey, agent) {
+      function emitAgentRow(workspace, tab, agent) {
         var agentId = String(agent.id || "")
         if (!agentId) return
         var agentKind = agent.agent || ""
@@ -856,7 +846,6 @@ function project(input) {
           serverConnectionGeneration: serverMeta.serverConnectionGeneration,
           herdrWorkspaceId: workspace.id,
           herdrTabId: tab.id,
-          herdrTabKey: tabRowKey,
           agentId: agentId,
           connectionGeneration: agent.connectionGeneration,
           paneId: agent.paneId,
@@ -877,96 +866,10 @@ function project(input) {
           monitorIdentity: window.monitorIdentity
         })
       }
-      var tabCount = groups.reduce(function(n, ws) { return n + ws.tabs.length }, 0)
-      var soleWorkspace = tabCount === 1
-        ? groups.find(function(ws) { return ws.tabs.length > 0 }) : null
-      var soleTab = soleWorkspace ? soleWorkspace.tabs[0] : null
-      if (soleTab && soleTab.agents.length >= 2) {
-        soleTab.agents.forEach(function(agent) {
-          emitAgentRow(soleWorkspace, soleTab, "", agent)
-        })
-      } else groups.forEach(function(workspace) {
+      groups.forEach(function(workspace) {
         workspace.tabs.forEach(function(tab) {
-          var tabRowKey = JSON.stringify([
-            "herdr-tab", window.key, workspace.id, tab.id
-          ])
-          var shared = {
-            kind: "herdr-tab",
-            key: tabRowKey,
-            windowKey: window.key,
-            providerEpoch: epoch,
-            serverId: serverId,
-            transport: serverMeta.transport,
-            host: serverMeta.host,
-            session: serverMeta.session,
-            serverLabel: serverMeta.serverLabel,
-            focusAgentSupported: serverMeta.focusAgentSupported,
-            serverConnectionGeneration: serverMeta.serverConnectionGeneration,
-            herdrWorkspaceId: workspace.id,
-            herdrTabId: tab.id,
-            nested: true,
-            toplevel: window.toplevel,
-            address: window.address,
-            desktopId: window.desktopId,
-            workspaceIdentity: window.workspaceIdentity,
-            monitorIdentity: window.monitorIdentity
-          }
-          if (tab.agents.length === 1) {
-            var sole = tab.agents[0]
-            var soleKind = sole.agent || ""
-            var solePayload = Object.assign({}, sole, {
-              workspaceLabel: sole.workspaceLabel || workspace.label || "",
-              agent: soleKind
-            })
-            row(Object.assign({}, shared, {
-              title: tab.title || HerdrModel.displayAgentTitle(sole),
-              subtitle: HerdrModel.displayAgentSecondary(solePayload),
-              agentId: String(sole.id || ""),
-              connectionGeneration: sole.connectionGeneration,
-              paneId: sole.paneId,
-              terminalId: sole.terminalId || "",
-              agentKind: soleKind,
-              workspaceLabel: solePayload.workspaceLabel,
-              tabTitle: tab.title || "",
-              status: HerdrModel.normalizeStatus(sole.status),
-              actionable: serverMeta.focusAgentSupported
-                && herdrAgentIdentityValid(sole, server),
-              groupHeader: false
-            }))
-            return
-          }
-          // Multi-panel tab header: keep group styling, but focus the tab via
-          // the first panel's pane (agent.focus moves the client onto that tab).
-          var focusPane = null
-          for (var fi = 0; fi < tab.agents.length; fi++) {
-            var candidate = tab.agents[fi]
-            if (herdrAgentIdentityValid(candidate, server)) {
-              focusPane = candidate
-              break
-            }
-          }
-          if (focusPane) {
-            row(Object.assign({}, shared, {
-              title: tab.title || "Tab",
-              subtitle: "",
-              agentId: String(focusPane.id || ""),
-              connectionGeneration: focusPane.connectionGeneration,
-              paneId: focusPane.paneId,
-              terminalId: focusPane.terminalId || "",
-              tabTitle: tab.title || "",
-              actionable: serverMeta.focusAgentSupported,
-              groupHeader: true
-            }))
-          } else {
-            row(Object.assign({}, shared, {
-              title: tab.title || "Tab",
-              subtitle: "",
-              actionable: false,
-              groupHeader: true
-            }))
-          }
           tab.agents.forEach(function(agent) {
-            emitAgentRow(workspace, tab, tabRowKey, agent)
+            emitAgentRow(workspace, tab, agent)
           })
         })
       })

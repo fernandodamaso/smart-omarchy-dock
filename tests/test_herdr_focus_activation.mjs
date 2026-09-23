@@ -6,8 +6,7 @@ function herdrFixture() {
   const windowRow = f.controller.projection.rows[0]
   const windowKey = windowRow.key
   const agentKey = JSON.stringify(['herdr-agent', windowKey, 'srv:1:pane-a'])
-  const tabKey = JSON.stringify(['herdr-tab', windowKey, 'ws1', 'tab1'])
-  const multiTabKey = JSON.stringify(['herdr-tab', windowKey, 'ws1', 'tab2'])
+  const secondAgentKey = JSON.stringify(['herdr-agent', windowKey, 'srv:1:pane-b'])
   const shared = {
     windowKey,
     providerEpoch: 'epoch-1',
@@ -32,24 +31,15 @@ function herdrFixture() {
     terminalId: 'term-a',
     actionable: true,
   })
-  const soleTab = Object.assign({}, shared, {
-    kind: 'herdr-tab',
-    key: tabKey,
+  const secondAgent = Object.assign({}, shared, {
+    kind: 'herdr-agent',
+    key: secondAgentKey,
     agentId: 'srv:1:pane-b',
     paneId: 'pane-b',
     terminalId: 'term-b',
     actionable: true,
   })
-  const multiTab = Object.assign({}, shared, {
-    kind: 'herdr-tab',
-    key: multiTabKey,
-    agentId: 'srv:1:pane-m',
-    paneId: 'pane-m',
-    terminalId: 'term-m',
-    actionable: true,
-    groupHeader: true,
-  })
-  f.controller.projection.rows.push(agentRow, soleTab, multiTab)
+  f.controller.projection.rows.push(agentRow, secondAgent)
   f.controller.herdrAssociations = { byWindowKey: { [windowKey]: 'srv' }, unmatchedServerIds: [] }
   const focusCalls = []
   let focusSeq = 0
@@ -64,8 +54,7 @@ function herdrFixture() {
   f.controller.widgetView = () => ({ provider })
   f.focusCalls = focusCalls
   f.agentRow = agentRow
-  f.soleTab = soleTab
-  f.multiTab = multiTab
+  f.secondAgent = secondAgent
   f.windowKey = windowKey
   return f
 }
@@ -120,7 +109,7 @@ assert.equal(gone.focusCalls.length, 0)
 // A then B: delayed A must not raise after B.
 const race = herdrFixture()
 const a = race.controller.captureTarget(race.agentRow.key)
-const b = race.controller.captureTarget(race.soleTab.key)
+const b = race.controller.captureTarget(race.secondAgent.key)
 assert.equal(race.controller.activateTarget(a, false, 'DP-1', 0), true)
 assert.equal(race.controller.activateTarget(b, false, 'DP-1', 0), true)
 assert.equal(race.focusCalls.length, 2)
@@ -144,20 +133,6 @@ assert.equal(fail.controller.herdrFocusErrorFor(fail.agentRow.key), 'agent_gone'
 assert.deepEqual(Object.keys(fail.controller.pendingFocusByRequest), [])
 assert.deepEqual(Object.keys(fail.controller.pendingFocusByAgent), [])
 
-const tab = herdrFixture()
-const tabTarget = tab.controller.captureTarget(tab.soleTab.key)
-assert.ok(tabTarget)
-assert.equal(tab.controller.activateTarget(tabTarget, false, 'DP-1', 0), true)
-assert.equal(tab.focusCalls[0].paneId, 'pane-b')
-
-// Multi-panel tab header focuses via its representative pane.
-const multi = herdrFixture()
-const multiTarget = multi.controller.captureTarget(multi.multiTab.key)
-assert.ok(multiTarget, 'multi-panel tab header is actionable')
-assert.equal(multiTarget.paneId, 'pane-m')
-assert.equal(multi.controller.activateTarget(multiTarget, false, 'DP-1', 0), true)
-assert.equal(multi.focusCalls[0].paneId, 'pane-m')
-
 // Capability false or absent: visible row data may exist, but capture/focus is inert.
 const unsupported = herdrFixture()
 unsupported.agentRow.actionable = false
@@ -167,8 +142,8 @@ assert.equal(unsupported.focusCalls.length, 0)
 assert.deepEqual(Object.keys(unsupported.controller.pendingFocusByRequest), [])
 
 const absent = herdrFixture()
-delete absent.soleTab.focusAgentSupported
-assert.equal(absent.controller.captureTarget(absent.soleTab.key), null)
+delete absent.secondAgent.focusAgentSupported
+assert.equal(absent.controller.captureTarget(absent.secondAgent.key), null)
 assert.equal(absent.focusCalls.length, 0)
 
 // Reconnect/generation change invalidates an already captured action identity.
