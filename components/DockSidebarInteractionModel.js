@@ -463,8 +463,9 @@ function contextMenuMembers(target, anchor) {
 function sidebarWindowDisplayTitle(input) {
   var source = input || ({})
   var kind = String(source.kind || "")
+  var display = ""
   if (kind === "browser-tab")
-    return String(source.tabTitle || "").trim() || "Tab"
+    display = String(source.tabTitle || "").trim() || "Tab"
   if (kind === "herdr-tab")
     return String(source.title || "").trim() || "Tab"
   if (kind === "herdr-agent" || kind === "herdr-state")
@@ -472,14 +473,15 @@ function sidebarWindowDisplayTitle(input) {
   var windowTitle = String(source.windowTitle || "").trim() || "Untitled window"
   if (kind === "window" && source.isHerdr === true) {
     var herdrLabel = String(source.herdrLabel || "").trim()
-    return herdrLabel || "Herdr"
-  }
-  if (kind === "window" && source.isBrowser === true) {
+    display = herdrLabel || "Herdr"
+  } else if (kind === "window" && source.isBrowser === true) {
     var entryName = String(source.entryName || "").trim()
-    if (entryName) return entryName
-  }
-  if (kind === "window") return windowTitle
-  return String(source.label || "")
+    display = entryName || windowTitle
+  } else if (kind === "window") display = windowTitle
+  if (kind !== "window" && kind !== "browser-tab") return String(source.label || "")
+  var prefix = "(" + String(source.pillCount) + ") "
+  return source.countPillVisible === true && display.indexOf(prefix) === 0
+    ? display.slice(prefix.length) : display
 }
 
 function sidebarWindowTooltipTitle(input) {
@@ -489,7 +491,7 @@ function sidebarWindowTooltipTitle(input) {
   if (source.kind === "window" && (source.isBrowser === true || source.isHerdr === true)
       && display && windowTitle && display !== windowTitle)
     return display + " · " + windowTitle
-  return display || windowTitle
+  return windowTitle || display
 }
 
 // Familiar agent-kind capitalization for compact rows (Codex / Claude / Cursor).

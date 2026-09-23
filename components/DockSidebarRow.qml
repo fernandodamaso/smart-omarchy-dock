@@ -184,7 +184,9 @@ Item {
         herdrLabel: String(row.herdrDisplayLabel || ""),
         entryName: root.entry ? String(root.entry.name || "") : String(row.label || ""),
         windowTitle: root.windowTitle,
-        tabTitle: kind === "browser-tab" ? String(row.title || "") : ""
+        tabTitle: kind === "browser-tab" ? String(row.title || "") : "",
+        pillCount: root.attention.count,
+        countPillVisible: alertCount.visible
       })
     if (kind === "application") return String(row.label || "")
     if (kind === "monitor") return root.monitorTitle
@@ -251,7 +253,7 @@ Item {
         + (row.active ? " · Active" : "")
         + (row.monitorIdentity ? " · Monitor " + row.monitorIdentity : "")
     if (kind === "browser-tab")
-      return (row.active === true ? "Active tab: " : "Tab: ") + liveTitle + alertBits
+      return (row.active === true ? "Active tab: " : "Tab: ") + root.windowTitle + alertBits
         + (attention.muted ? " · Alerts excluded from totals" : "")
     if (kind === "herdr-agent"
         || (kind === "herdr-tab" && row.groupHeader !== true))
@@ -1718,6 +1720,7 @@ Item {
       && !muteHover.hovered
       && (root.kind === "monitor" || root.kind === "workspace"
         || root.collapsed || (label.visible && label.truncated)
+        || (root.kind === "browser-tab" && root.liveTitle !== root.windowTitle)
         || (monitorLabels.visible && monitorLabels.children[0] && monitorLabels.children[0].truncated)
         || (workspaceBadge.visible && badgeLabel.truncated)
         || (railWorkspaceBadge.visible && railBadgeLabel.truncated))

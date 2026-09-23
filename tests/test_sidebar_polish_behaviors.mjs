@@ -581,6 +581,21 @@ assert.equal(Interaction.sidebarWindowDisplayTitle({
   kind: 'browser-tab', isBrowser: true,
   entryName: 'Google Chrome', windowTitle: 'Chrome', tabTitle: 'Linear'
 }), 'Linear', 'tab children keep individual titles')
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind: 'browser-tab', tabTitle: '(5) Instagram', pillCount: 5, countPillVisible: true
+}), 'Instagram', 'matching visible pill removes one duplicate prefix')
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind: 'browser-tab', tabTitle: '(5) (5) Instagram', pillCount: 5, countPillVisible: true
+}), '(5) Instagram', 'only one prefix is removed')
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind: 'window', windowTitle: '(2024) Report', pillCount: 5, countPillVisible: true
+}), '(2024) Report', 'unrelated leading numbers remain')
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind: 'window', windowTitle: '(5) Report', pillCount: 5, countPillVisible: false
+}), '(5) Report', 'hidden pills do not change titles')
+assert.equal(Interaction.sidebarWindowTooltipTitle({
+  kind: 'browser-tab', displayTitle: 'Instagram', windowTitle: '(5) Instagram'
+}), '(5) Instagram', 'tooltip preserves the raw title after count cleanup')
 assert.equal(Interaction.sidebarWindowTooltipTitle({
   kind: 'window', isBrowser: true,
   displayTitle: 'Google Chrome', windowTitle: 'Inbox - Gmail - Google Chrome'
