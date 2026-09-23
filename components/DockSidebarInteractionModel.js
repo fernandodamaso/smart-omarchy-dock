@@ -97,6 +97,11 @@ function compactWorkspaceBadgeLabel(fullLabel) {
   return Array.from(label).slice(0, 2).join("")
 }
 
+function sidebarCountPillVisible(kind, collapsed, countVisible, tabsExpandable, tabsFolded) {
+  return !collapsed && countVisible === true
+    && !(kind === "window" && tabsExpandable === true && tabsFolded !== true)
+}
+
 // Index of the currently focused physical monitor in topology-strip order
 // (physical x/y via physicalMonitorStrip). Same on every header — not sectionIndex.
 function focusedMonitorStripIndex(strip) {
@@ -107,37 +112,52 @@ function focusedMonitorStripIndex(strip) {
   return -1
 }
 
-// Shared >4 fallback: focused physical ordinal N/M (identical on every header).
-function focusedMonitorStripOrdinal(strip) {
+function monitorStripIndexFor(strip, identity, connector) {
   var list = strip || []
-  var count = list.length
-  if (!(count > 0)) return ""
-  var index = focusedMonitorStripIndex(list)
-  if (index < 0) return ""
-  return (index + 1) + "/" + count
+  var wantedIdentity = String(identity || "")
+  var wantedConnector = String(connector || "")
+  for (var i = 0; i < list.length; ++i) {
+    var item = list[i] || ({})
+    if ((wantedIdentity && String(item.identity || "") === wantedIdentity)
+        || (wantedConnector && String(item.connector || "") === wantedConnector))
+      return i
+  }
+  return -1
 }
 
-// Topology miniature strip width for label-elide estimates (13×9, gap 3).
+// Topology miniature strip width for label-elide estimates (14×10, gap 3).
 function topologyStripWidth(count) {
   var n = Number(count) || 0
   if (!(n > 0)) return 0
   if (n > 4) return 24
-  return n * 13 + Math.max(0, n - 1) * 3
+  return n * 14 + Math.max(0, n - 1) * 3
+}
+
+function monitorTopologyTooltip(monitor) {
+  var item = monitor || ({})
+  return "Monitor " + String(item.connector || item.identity || "unknown")
+    + (item.focused === true ? " · focused" : "")
+}
+
+function herdrCounterAccessibleText(count, status) {
+  var n = Number(count) || 0
+  return n + " agent" + (n === 1 ? "" : "s") + " "
+    + HerdrModel.statusLabel(status).toLowerCase()
 }
 
 // Tree guide columns relative to workspace card left (viewport.workspaceCardInset).
-// Badge at left+8, min-24 center at left+20 = guide0; depth-1 icon at guide0+12;
-// each deeper depth +24. iconHalf is half of the 18px expanded artwork icon,
+// Badge at left+4, fixed-22 center at left+15 = guide0; depth-1 icon at guide0+19;
+// each deeper depth +20. iconHalf is half of the 18px expanded artwork icon,
 // used to center child guide columns on the parent's rendered window icon.
 function sidebarTreeGuideLayout(workspaceCardInset) {
   var left = Number(workspaceCardInset)
   if (!isFinite(left)) left = 0
   return {
     workspaceLeft: left,
-    badgeLeft: left + 8,
-    guide0: left + 20,
-    depthStep: 24,
-    iconOffset: 12,
+    badgeLeft: left + 4,
+    guide0: left + 15,
+    depthStep: 20,
+    iconOffset: 19,
     iconHalf: 9
   }
 }
@@ -166,59 +186,14 @@ function sidebarTreeGuideColumnX(workspaceCardInset, depth, guideOffset, stemOff
   return sidebarTreeIconX(workspaceCardInset, d - 1) + artShift + layout.iconHalf
 }
 
-// Clamp ceiling for the inline workspace badge. Long names elide past this;
-// layout uses the *actual* (clamped) badge width so short names sit tight.
-function sidebarInlineWorkspaceBadgeMaxWidth(space) {
-  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
-  return Math.max(24, sp(64))
-}
-
-// Workspace-wide right-chrome budget for inline chips. Fold/tabs/herdr
-// chevrons differ per row, but the shared chip must not: reserving a different
-// budget per row is what made first and following rows disagree. Reserve the
-// widest per-row control stack once so every row of a workspace clamps the
-// measured chip against the same available width.
-function sidebarInlineWorkspaceBadgeAvailableWidth(contentWidth, workspaceCardInset, space) {
-  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
-  var width = Number(contentWidth)
-  if (!isFinite(width) || width <= 0) return 0
-  var layout = sidebarTreeGuideLayout(workspaceCardInset)
-  var chrome = sp(8) + sp(28) + sp(28) // row padding + two chevron controls
-  return Math.max(24, width - layout.badgeLeft - chrome)
-}
-
-// The one chip-width contract for every row of an inline workspace: real font
-// advance (textWidth = measured implicitWidth) + padding, clamped to the 24px
-// floor, the shared ceiling, and the workspace-wide available slot. The
-// rendered badge and all guide/artwork/selection geometry consume this value;
-// no row re-estimates it from the label.
-function sidebarInlineWorkspaceBadgeLayoutWidth(textWidth, availableWidth, space) {
-  var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
-  var measured = Number(textWidth)
-  if (!isFinite(measured) || measured < 0) measured = 0
-  var natural = Math.max(24, measured + sp(8))
-  var width = Math.min(sidebarInlineWorkspaceBadgeMaxWidth(space), natural)
-  var available = Number(availableWidth)
-  if (isFinite(available) && available > 0) width = Math.min(Math.max(24, available), width)
-  return Math.max(24, width)
-}
-
-// Shared geometry for populated workspaces that put the badge on the first
-// visible child row. badgeWidth is the single measured chip width shared by
-// every row of the workspace (sidebarInlineWorkspaceBadgeLayoutWidth);
-// defaults to the 24px minimum so missing widths do not shove icons right.
-// guideOffset shifts the artwork column; stemOffset shifts vertical guide
-// columns so they stay under the badge center (not under the icons).
-function sidebarInlineWorkspaceGeometry(workspaceCardInset, space, badgeWidth) {
+// Fixed badge column shared by every child row, including named workspaces.
+// guideOffset shifts artwork; stemOffset keeps guides under the badge center.
+function sidebarInlineWorkspaceGeometry(workspaceCardInset, space) {
   var layout = sidebarTreeGuideLayout(workspaceCardInset)
   var sp = typeof space === "function" ? space : function (n) { return Number(n) || 0 }
-  var maxW = sidebarInlineWorkspaceBadgeMaxWidth(space)
-  var bw = Number(badgeWidth)
-  if (!isFinite(bw) || bw <= 0) bw = 24
-  if (bw > maxW) bw = maxW
-  if (bw < 24) bw = 24
-  var gap = sp(6) + 5
-  var iconGap = sp(8)
+  var bw = sp(22)
+  var gap = sp(8)
+  var iconGap = sp(4)
   var iconSize = 18
   var badgeX = layout.badgeLeft
   var stemX = badgeX + bw / 2
@@ -226,12 +201,12 @@ function sidebarInlineWorkspaceGeometry(workspaceCardInset, space, badgeWidth) {
   var normalArt = sidebarTreeIconX(workspaceCardInset, 1)
   return {
     badgeX: badgeX,
+    badgeWidth: bw,
     artX: artX,
     stemX: stemX,
     labelX: artX + iconSize + iconGap,
     guideOffset: artX - normalArt,
-    stemOffset: stemX - layout.guide0,
-    badgeMaxWidth: maxW
+    stemOffset: stemX - layout.guide0
   }
 }
 
@@ -251,8 +226,7 @@ function sidebarSelectionInsets(input) {
   if (o.kind === "workspace")
     return { left: inset, right: right }
   if (o.kind === "window" || o.kind === "application" || o.kind === "browser-tab"
-      || o.kind === "herdr-agent" || o.kind === "herdr-tab"
-      || o.kind === "herdr-state") {
+      || o.kind === "herdr-agent" || o.kind === "herdr-state") {
     var artX = Number(o.artX)
     if (!isFinite(artX)) artX = inset
     return { left: artX - 3, right: right }
@@ -275,10 +249,9 @@ function composeRowFill(state) {
   return s.persistentFill
 }
 
-// Hover fill for navigable rows plus actionable Herdr agents/tabs
-// (including multi-panel tab headers that focus the Herdr tab).
+// Hover fill for navigable rows plus actionable Herdr agents.
 function rowHoverFillEligible(kind, actionable) {
-  if (kind === "herdr-tab" || kind === "herdr-agent")
+  if (kind === "herdr-agent")
     return actionable === true
   return ["window", "workspace", "application", "launcher", "browser-tab"].indexOf(kind) >= 0
 }
@@ -364,7 +337,7 @@ function sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert) {
     else if (kind === "workspace") baseline = sp(30)
     else if (kind === "section") baseline = sp(22)
     else if (kind === "browser-tab" || kind === "herdr-agent"
-        || kind === "herdr-tab" || kind === "herdr-state") baseline = sp(28)
+        || kind === "herdr-state") baseline = sp(28)
     else baseline = alert ? sp(58) : sp(36)
   } else if (kind === "monitor") {
     baseline = sp(32)
@@ -372,9 +345,6 @@ function sidebarRowMetrics(row, collapsed, rowHeight, space, hasAlert) {
     baseline = sp(22)
   } else if (kind === "workspace") {
     baseline = sp(30)
-  } else if (kind === "herdr-tab" && row && row.actionable === true
-      && row.groupHeader !== true) {
-    baseline = sp(36)
   } else if (kind === "herdr-agent") {
     // Two-line title + workspace/kind secondary; keep compact vs window rows.
     baseline = sp(36)
@@ -468,6 +438,16 @@ function clampPopupAnchor(position, point, windowSize, popupSize) {
   return next
 }
 
+function pinnedStripLayout(rowWidth, pinCount, tileWidth, addWidth, gap) {
+  var count = Math.max(0, Math.floor(Number(pinCount) || 0))
+  var tile = Math.max(1, Number(tileWidth) || 1)
+  var spacing = Math.max(0, Number(gap) || 0)
+  var slots = Math.max(0, Math.floor((Number(rowWidth) - Number(addWidth))
+    / (tile + spacing)))
+  var visible = count <= slots ? count : Math.max(0, slots - 1)
+  return { slots: slots, visible: visible, hidden: count - visible }
+}
+
 // ListView inline anchors dismiss on leave/destroy; footer anchors may reanchor.
 function pickerAnchorDecision(anchor, options) {
   var opts = options || {}
@@ -503,33 +483,42 @@ function contextMenuMembers(target, anchor) {
 function sidebarWindowDisplayTitle(input) {
   var source = input || ({})
   var kind = String(source.kind || "")
+  var display = ""
   if (kind === "browser-tab")
-    return String(source.tabTitle || "").trim() || "Tab"
-  if (kind === "herdr-tab")
-    return String(source.title || "").trim() || "Tab"
+    display = String(source.tabTitle || "").trim() || "Tab"
   if (kind === "herdr-agent" || kind === "herdr-state")
     return String(source.title || "").trim() || (kind === "herdr-state" ? "Herdr" : "Coding agent")
   var windowTitle = String(source.windowTitle || "").trim() || "Untitled window"
   if (kind === "window" && source.isHerdr === true) {
     var herdrLabel = String(source.herdrLabel || "").trim()
-    return herdrLabel || "Herdr"
-  }
-  if (kind === "window" && source.isBrowser === true) {
+    display = herdrLabel || "Herdr"
+  } else if (kind === "window" && source.isBrowser === true) {
     var entryName = String(source.entryName || "").trim()
-    if (entryName) return entryName
-  }
-  if (kind === "window") return windowTitle
-  return String(source.label || "")
+    display = entryName || windowTitle
+  } else if (kind === "window")
+    display = sidebarWindowSecondaryTitle(source) ? String(source.entryName).trim() : windowTitle
+  if (kind !== "window" && kind !== "browser-tab") return String(source.label || "")
+  var prefix = "(" + String(source.pillCount) + ") "
+  return source.countPillVisible === true && display.indexOf(prefix) === 0
+    ? display.slice(prefix.length) : display
+}
+
+function sidebarWindowSecondaryTitle(input) {
+  var source = input || ({})
+  if (source.kind !== "window" || source.isBrowser === true || source.isHerdr === true
+      || !String(source.entryName || "").trim()) return ""
+  var title = String(source.windowTitle || "").trim()
+  return title === "~" || title.indexOf("~/") === 0 || title.indexOf("/") === 0
+    ? title : ""
 }
 
 function sidebarWindowTooltipTitle(input) {
   var source = input || ({})
   var display = String(source.displayTitle || "").trim()
   var windowTitle = String(source.windowTitle || "").trim()
-  if (source.kind === "window" && (source.isBrowser === true || source.isHerdr === true)
-      && display && windowTitle && display !== windowTitle)
+  if (source.kind === "window" && display && windowTitle && display !== windowTitle)
     return display + " · " + windowTitle
-  return display || windowTitle
+  return windowTitle || display
 }
 
 // Familiar agent-kind capitalization for compact rows (Codex / Claude / Cursor).

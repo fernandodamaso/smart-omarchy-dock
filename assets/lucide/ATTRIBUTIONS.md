@@ -8,7 +8,7 @@ The SVGs in this directory are from the Lucide icon library:
 
 Bundled icons include:
 
-- `app-window`, `arrow-right-left`, `chevron-left`, `chevron-right`, `earth`,
+- `app-window`, `arrow-right-left`, `bot`, `chevron-left`, `chevron-right`, `earth`,
   `eye`, `eye-off`, `focus`, `folder-open`, `layout-grid`, `maximize-2`,
   `minimize-2`, `minus`, `monitor`, `mouse-pointer-click`, `move`, `palette`,
   `panel-bottom`, `panel-left-close`, `panel-left-open`, `pin`, `pin-off`,

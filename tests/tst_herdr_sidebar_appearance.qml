@@ -12,8 +12,8 @@ import "../components/DockHerdrModel.js" as HerdrModel
 // Live/isolated Quickshell validation (checkpoint C) remains coordinator-owned.
 //
 // This harness mirrors production layout equations byte-for-byte:
-// - InteractionModel.sidebarTreeIconX (24px depthStep)
-// - parent label after 18px icon + Style-equivalent 8px gap
+// - InteractionModel.sidebarTreeIconX (20px depthStep)
+// - parent label after 18px icon + Style-equivalent 4px gap
 // - workspace-card right inset in fold/counter chrome
 // - herdrCompactLabelWidths for name reservation
 // - right-anchored full-width counters (no clip)
@@ -231,26 +231,29 @@ TestCase {
                 height: parent.height
                 Item {
                   objectName: "sidebar-herdr-counter-marker"
-                  width: 7
-                  height: 7
+                  width: 14
+                  height: 14
                   anchors.verticalCenter: parent.verticalCenter
-                  Rectangle {
-                    objectName: "sidebar-herdr-counter-static-dot"
+                  DockLucideIcon {
+                    objectName: "sidebar-herdr-counter-icon"
                     anchors.centerIn: parent
-                    width: 7; height: 7; radius: 4
-                    color: counterItem.modelData.status === "unknown" ? "transparent" : "#7aa2f7"
-                    border.width: counterItem.modelData.status === "unknown" ? 1 : 0
-                    border.color: "#888"
+                    width: 14; height: 14
+                    iconName: "bot"
+                    iconSize: 14
+                    tint: "#7aa2f7"
                   }
                 }
                 Text {
                   objectName: "sidebar-herdr-counter-text"
-                  anchors.verticalCenter: parent.verticalCenter
+                  height: parent.height
+                  verticalAlignment: Text.AlignVCenter
                   text: String(counterItem.modelData.count)
                   textFormat: Text.PlainText
-                  font.pixelSize: 10
+                  font.pixelSize: 12
                 }
               }
+              Accessible.name: InteractionModel.herdrCounterAccessibleText(
+                counterItem.modelData.count, counterItem.modelData.status)
             }
           }
         }
@@ -327,8 +330,8 @@ TestCase {
     verify(counters !== null && fold !== null && label !== null && hit !== null)
     verify(counters.visible && fold.visible)
     compare(label.textFormat, Text.PlainText)
-    // Production depth-2 icon x with inset 10: guide0=30, artX=30+12+24=66.
-    compare(Math.round(chrome.artX), 66)
+    // Production depth-2 icon x with inset 10: guide0=25, artX=25+19+20=64.
+    compare(Math.round(chrome.artX), 64)
     assertAllCountersPainted(chrome, counters, fold)
 
     // Real click on the chevron MouseArea (not a local helper).
@@ -366,12 +369,17 @@ TestCase {
     var delegates = counterDelegates(counters)
     compare(delegates.length, 1)
     var marker = findByName(delegates[0], "sidebar-herdr-counter-marker")
-    var staticDot = findByName(delegates[0], "sidebar-herdr-counter-static-dot")
+    var agentIcon = findByName(delegates[0], "sidebar-herdr-counter-icon")
     var label = findByName(chrome, "sidebar-label")
     var indicator = findByName(chrome, "sidebar-herdr-window-working-indicator")
-    verify(marker !== null && staticDot !== null && label !== null && indicator !== null)
-    compare(marker.width, 7)
-    compare(staticDot.visible, true)
+    verify(marker !== null && agentIcon !== null && label !== null && indicator !== null)
+    compare(marker.width, 14)
+    compare(agentIcon.iconName, "bot")
+    compare(Math.abs((agentIcon.y + agentIcon.height / 2)
+      - (findByName(delegates[0], "sidebar-herdr-counter-text").y
+        + findByName(delegates[0], "sidebar-herdr-counter-text").height / 2)) <= 1, true,
+      "robot and counter text are vertically centered")
+    compare(delegates[0].Accessible.name, "2 agents working")
 
     // Expanded Herdr rows already expose the animated working agents below,
     // so the duplicate parent animation stays hidden and reserves no space.
@@ -387,7 +395,7 @@ TestCase {
     compare(label.x, indicator.x + indicator.width + chrome.windowWorkingIndicatorGap)
     verify(label.x + label.width <= counters.x + 0.5)
     verify(chrome.accessibleLabel.indexOf("Working 2") >= 0)
-    compare(staticDot.visible, true)
+    compare(agentIcon.visible, true)
 
     chrome.herdrFolded = false
     wait(0)
@@ -399,13 +407,13 @@ TestCase {
     chrome.interfaceAnimationsEnabled = false
     wait(0)
     compare(indicator.visible, false)
-    compare(staticDot.visible, true)
+    compare(agentIcon.visible, true)
 
     chrome.interfaceAnimationsEnabled = true
     chrome.animationEligible = false
     wait(0)
     compare(indicator.visible, false)
-    compare(staticDot.visible, true)
+    compare(agentIcon.visible, true)
   }
 
   function test_agent_plain_text_kind_and_unknown_status() {
@@ -432,6 +440,8 @@ TestCase {
   }
 
   function test_agent_kind_capitalization_bounds() {
+    compare(InteractionModel.herdrCounterAccessibleText(1, "working"), "1 agent working")
+    compare(InteractionModel.herdrCounterAccessibleText(2, "idle"), "2 agents idle")
     var chrome = createTemporaryObject(chromeFactory, test, {
       width: 240,
       visible: true,
