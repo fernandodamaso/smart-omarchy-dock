@@ -36,6 +36,10 @@
 
 ### Changed
 
+- Sidebar Herdr nesting shows a tab header only when the window has more than
+  one tab with agents. A single multi-agent tab lists its agents directly under
+  the Herdr window with stable agent keys; opening a second tab regroups them
+  under the header.
 - Dock presentation has two modes: the classic bottom dock and the sidebar
   (the dock's left vertical presentation), resolved per monitor so both can
   render side by side. Drag empty dock background left to switch that monitor

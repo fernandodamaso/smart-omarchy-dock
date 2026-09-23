@@ -1202,3 +1202,170 @@ console.log('herdr sidebar model projection: PASS')
 }
 
 console.log('herdr sidebar model appearance: PASS')
+
+// --- Single-tab flatten: one tab with agents lists agents under the window ---
+{
+  const f = sidebarFixture()
+  const desktop = desktopModel.build(f.input)
+  const registry = Sidebar.reconcileHandles({ nextToken: 1, entries: [] }, f.toplevels)
+  const termEntry = registry.entries.find((_, i) => f.toplevels[i].id === 'terminal')
+  assert.ok(termEntry)
+  const windowKey = termEntry.key
+  function projectAgents(agents, completeness = { state: 'complete' }) {
+    return plain(Sidebar.project({
+      desktop,
+      screens: f.screens,
+      monitors: f.monitors,
+      monitorOrder: [],
+      pinned: f.settings.pinned,
+      hiddenApplications: f.settings.hiddenApplications,
+      registry,
+      folds: ({}),
+      collapsed: false,
+      herdrSnapshot: {
+        providerEpoch: 'epoch-flat',
+        servers: [{
+          id: 'local-matched', health: 'live', label: 'Matched',
+          transport: 'local', host: 'local', session: 'default',
+          connectionGeneration: 1, capabilities: { focusAgent: true },
+        }],
+        agents,
+        liveCounts: { agents: agents.length, complete: true },
+        completeness,
+      },
+      herdrAssociations: {
+        byWindowKey: { [windowKey]: 'local-matched' },
+        unmatchedServerIds: [],
+      },
+      herdrAssociationsVerified: true,
+    }))
+  }
+  const soloAgents = [
+    {
+      id: 'local-matched:1:pane-a',
+      serverId: 'local-matched',
+      connectionGeneration: 1,
+      paneId: 'pane-a',
+      terminalId: 'term-a',
+      name: 'Agent Alpha',
+      workspaceId: 'w1',
+      tabId: 'w1:t-solo',
+      tabTitle: 'Solo tab',
+      workspaceLabel: 'smart-omarchy-dock',
+      agent: 'codex',
+      status: 'working',
+    },
+    {
+      id: 'local-matched:1:pane-b',
+      serverId: 'local-matched',
+      connectionGeneration: 1,
+      paneId: 'pane-b',
+      name: 'Agent Beta',
+      workspaceId: 'w1',
+      tabId: 'w1:t-solo',
+      tabTitle: 'Solo tab',
+      workspaceLabel: 'smart-omarchy-dock',
+      agent: 'claude',
+      status: 'idle',
+    },
+  ]
+  const flat = projectAgents(soloAgents)
+  const flatParent = flat.rows.find(row => row.key === windowKey)
+  assert.ok(flatParent)
+  const flatTabs = flat.rows.filter(row => row.kind === 'herdr-tab' && row.windowKey === windowKey)
+  assert.equal(flatTabs.length, 0, 'single multi-agent tab must not emit a tab header')
+  const flatAgents = flat.rows.filter(row => row.kind === 'herdr-agent' && row.windowKey === windowKey)
+  assert.equal(flatAgents.length, 2)
+  // Sorted: working then idle; titles are agent titles, not the tab title.
+  assert.deepEqual(flatAgents.map(row => row.title), ['Agent Alpha', 'Agent Beta'])
+  assert.deepEqual(flatAgents.map(row => row.agentId),
+    ['local-matched:1:pane-a', 'local-matched:1:pane-b'])
+  assert.deepEqual(flatAgents.map(row => row.paneId), ['pane-a', 'pane-b'])
+  flatAgents.forEach(row => {
+    assert.equal(row.parentKey, windowKey)
+    assert.equal(row.treeDepth, flatParent.treeDepth + 1)
+    assert.equal(row.herdrTabKey, '')
+    assert.equal(row.tabTitle, 'Solo tab')
+    assert.equal(row.actionable, true)
+  })
+  assert.equal(flatAgents[0].subtitle, 'smart-omarchy-dock - Codex')
+  assert.equal(flatAgents[1].subtitle, 'smart-omarchy-dock - Claude')
+
+  // Transition: adding a second tab regroups the same agent keys under a header.
+  const twoTabAgents = soloAgents.concat([{
+    id: 'local-matched:1:pane-c',
+    serverId: 'local-matched',
+    connectionGeneration: 1,
+    paneId: 'pane-c',
+    name: 'Agent Gamma',
+    workspaceId: 'w1',
+    tabId: 'w1:t-second',
+    tabTitle: 'Second tab',
+    workspaceLabel: 'smart-omarchy-dock',
+    agent: 'opencode',
+    status: 'blocked',
+  }])
+  const grouped = projectAgents(twoTabAgents)
+  const groupedAgents = grouped.rows.filter(row => row.kind === 'herdr-agent' && row.windowKey === windowKey)
+  const groupedHeaders = grouped.rows.filter(row =>
+    row.kind === 'herdr-tab' && row.windowKey === windowKey && row.groupHeader === true)
+  assert.equal(groupedHeaders.length, 1)
+  assert.equal(groupedHeaders[0].title, 'Solo tab')
+  assert.equal(groupedAgents.length, 2)
+  const secondTab = grouped.rows.find(row =>
+    row.kind === 'herdr-tab' && row.windowKey === windowKey && row.title === 'Second tab')
+  assert.ok(secondTab, 'single-agent second tab stays a herdr-tab row')
+  assert.equal(secondTab.groupHeader, false)
+  assert.equal(secondTab.paneId, 'pane-c')
+  // Same stable agent keys in both modes.
+  assert.deepEqual(
+    groupedAgents.map(row => row.key).sort(),
+    flatAgents.map(row => row.key).sort(),
+  )
+  const regroupedAlpha = groupedAgents.find(row => row.agentId === 'local-matched:1:pane-a')
+  assert.ok(regroupedAlpha)
+  assert.equal(regroupedAlpha.parentKey, groupedHeaders[0].key)
+  assert.ok(regroupedAlpha.treeDepth > groupedHeaders[0].treeDepth)
+
+  // One tab with one agent stays a single actionable herdr-tab row.
+  const single = projectAgents([soloAgents[0]])
+  const singleTabs = single.rows.filter(row => row.kind === 'herdr-tab' && row.windowKey === windowKey)
+  const singleAgents = single.rows.filter(row => row.kind === 'herdr-agent' && row.windowKey === windowKey)
+  assert.equal(singleTabs.length, 1)
+  assert.equal(singleAgents.length, 0)
+  assert.equal(singleTabs[0].groupHeader, false)
+  assert.equal(singleTabs[0].paneId, 'pane-a')
+
+  // One tab in each of two workspaces counts as two tabs and stays grouped.
+  const crossWorkspace = projectAgents([soloAgents[0], Object.assign({}, soloAgents[1], {
+    workspaceId: 'w2',
+    tabId: 'w2:t-other',
+    tabTitle: 'Other workspace tab',
+    workspaceLabel: 'other-repo',
+  })])
+  const crossTabs = crossWorkspace.rows.filter(row =>
+    row.kind === 'herdr-tab' && row.windowKey === windowKey)
+  assert.equal(crossTabs.length, 2)
+  assert.equal(crossWorkspace.rows.filter(row =>
+    row.kind === 'herdr-agent' && row.windowKey === windowKey).length, 0)
+
+  // Partial inventory still reports its state row after the flattened agents.
+  const partial = projectAgents(soloAgents, { state: 'partial' })
+  const partialChildren = partial.rows.filter(row =>
+    row.windowKey === windowKey && row.kind !== 'window')
+  assert.deepEqual(partialChildren.map(row => row.kind),
+    ['herdr-agent', 'herdr-agent', 'herdr-state'])
+  assert.equal(partialChildren[2].status, 'partial')
+
+  // Id-less agents are dropped by grouping, so they never count toward flattening.
+  const idless = projectAgents([soloAgents[0], Object.assign({}, soloAgents[1], { id: '' })])
+  const idlessTabs = idless.rows.filter(row =>
+    row.kind === 'herdr-tab' && row.windowKey === windowKey)
+  assert.equal(idlessTabs.length, 1)
+  assert.equal(idlessTabs[0].groupHeader, false)
+  assert.equal(idlessTabs[0].paneId, 'pane-a')
+  assert.equal(idless.rows.filter(row =>
+    row.kind === 'herdr-agent' && row.windowKey === windowKey).length, 0)
+}
+
+console.log('herdr single-tab flatten: PASS')
