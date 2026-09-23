@@ -50,7 +50,9 @@ Item {
   }
 
   function entrySource(row) {
-    return "file://" + root.packageRoot + "/" + row.entryPath
+    var packageUrl = String(root.packageRoot)
+    if (packageUrl.indexOf("file:") !== 0) packageUrl = "file://" + packageUrl
+    return packageUrl + "/" + row.entryPath
       + "?smartdockRev=" + row.entryRevision
   }
 

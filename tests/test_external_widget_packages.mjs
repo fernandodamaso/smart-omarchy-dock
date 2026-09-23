@@ -33,6 +33,10 @@ assert.match(external, /StandardPaths\.writableLocation\(StandardPaths\.GenericD
   'external packages must resolve from the SmartDock-owned XDG data store');
 assert.match(external, /\/smartdock\/widgets/,
   'the runtime registry must stay under the SmartDock Widget package root');
+assert.match(external, /if \(packageUrl\.indexOf\("file:"\) !== 0\) packageUrl = "file:\/\/" \+ packageUrl/,
+  'runtime entry URLs must preserve StandardPaths file URLs without adding a second scheme');
+assert.doesNotMatch(external, /return\s+"file:\/\/"\s*\+\s*root\.packageRoot/,
+  'runtime entry URLs must never become file://file/// paths');
 assert.match(external, /acquire:\s*function\(owner\)/,
   'external descriptors use the existing host-owned lease API');
 assert.doesNotMatch(external, /dock\.json|sidebarWidgets/,
