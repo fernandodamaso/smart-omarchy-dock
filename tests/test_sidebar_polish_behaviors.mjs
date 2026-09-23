@@ -605,6 +605,22 @@ assert.equal(Interaction.sidebarWindowTooltipTitle({
   kind: 'window', isBrowser: false,
   displayTitle: 'nvim main.rs', windowTitle: 'nvim main.rs'
 }), 'nvim main.rs', 'non-browser tooltip stays the window title')
+for (const path of ['~', '~/src', '/etc']) {
+  const input = {kind:'window', entryName:'Terminal', windowTitle:path}
+  assert.equal(Interaction.sidebarWindowDisplayTitle(input), 'Terminal',
+    `a path-only title ${path} uses the entry name`)
+  assert.equal(Interaction.sidebarWindowSecondaryTitle(input), path,
+    `a path-only title ${path} stays visible as secondary text`)
+  assert.equal(Interaction.sidebarWindowTooltipTitle({
+    ...input, displayTitle:'Terminal'
+  }), `Terminal · ${path}`, 'tooltip retains the raw path')
+}
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind:'window', entryName:'Terminal', windowTitle:'nvim main.rs'
+}), 'nvim main.rs', 'ordinary window titles remain primary')
+assert.equal(Interaction.sidebarWindowSecondaryTitle({
+  kind:'window', entryName:'Terminal', windowTitle:'nvim main.rs'
+}), '', 'ordinary titles have no path subtitle')
 
 // Phase 3: 13×9 topology strip still leaves positive elide room for monitor
 // titles at the live ~271px and 300px content widths (glyph+gaps+strip).

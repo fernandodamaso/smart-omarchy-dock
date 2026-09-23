@@ -477,19 +477,28 @@ function sidebarWindowDisplayTitle(input) {
   } else if (kind === "window" && source.isBrowser === true) {
     var entryName = String(source.entryName || "").trim()
     display = entryName || windowTitle
-  } else if (kind === "window") display = windowTitle
+  } else if (kind === "window")
+    display = sidebarWindowSecondaryTitle(source) ? String(source.entryName).trim() : windowTitle
   if (kind !== "window" && kind !== "browser-tab") return String(source.label || "")
   var prefix = "(" + String(source.pillCount) + ") "
   return source.countPillVisible === true && display.indexOf(prefix) === 0
     ? display.slice(prefix.length) : display
 }
 
+function sidebarWindowSecondaryTitle(input) {
+  var source = input || ({})
+  if (source.kind !== "window" || source.isBrowser === true || source.isHerdr === true
+      || !String(source.entryName || "").trim()) return ""
+  var title = String(source.windowTitle || "").trim()
+  return title === "~" || title.indexOf("~/") === 0 || title.indexOf("/") === 0
+    ? title : ""
+}
+
 function sidebarWindowTooltipTitle(input) {
   var source = input || ({})
   var display = String(source.displayTitle || "").trim()
   var windowTitle = String(source.windowTitle || "").trim()
-  if (source.kind === "window" && (source.isBrowser === true || source.isHerdr === true)
-      && display && windowTitle && display !== windowTitle)
+  if (source.kind === "window" && display && windowTitle && display !== windowTitle)
     return display + " · " + windowTitle
   return windowTitle || display
 }

@@ -193,6 +193,14 @@ Item {
     if (kind === "workspace") return root.workspaceBadgeText
     return String(row.label || "")
   }
+  readonly property string secondaryPath: kind === "window"
+    ? InteractionModel.sidebarWindowSecondaryTitle({
+        kind: kind,
+        isBrowser: root.isBrowserWindow,
+        isHerdr: root.herdrAssociated,
+        entryName: root.entry ? String(root.entry.name || "") : String(row.label || ""),
+        windowTitle: root.windowTitle
+      }) : ""
   // Prefer shared model display label (id:10 → Work); identity is fallback only.
   readonly property string workspaceFullName: kind === "workspace"
     ? InteractionModel.workspaceBadgeLabel(row.workspaceIdentity || "", row.label || "")
@@ -1053,11 +1061,12 @@ Item {
         }
         if (stateStrip.visible)
           leading += Style.space(6) + stateStrip.width
-        return Math.max(0, content.width - x - leading - root.padding
+        var available = Math.max(0, content.width - x - leading - root.padding
           - (root.insideWorkspaceCard ? root.workspaceCardInset : 0)
           - (fold.visible ? fold.width : 0)
           - (tabsFold.visible ? tabsFold.width : 0)
           - (root.showAlertControl ? Style.space(22) + Style.space(4) : 0))
+        return root.secondaryPath ? Math.min(label.implicitWidth, available * 0.45) : available
       }
       anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
@@ -1077,6 +1086,26 @@ Item {
       renderType: Text.NativeRendering
       verticalAlignment: Text.AlignVCenter
       transform: Translate { x: root.attentionNudgeX }
+    }
+
+    Text {
+      id: secondaryPathLabel
+      visible: !root.collapsed && root.secondaryPath !== ""
+      x: (stateStrip.visible ? stateStrip.x + stateStrip.width
+        : label.x + label.width) + Style.space(6)
+      width: Math.max(0, content.width - x - root.padding
+        - (root.insideWorkspaceCard ? root.workspaceCardInset : 0)
+        - (fold.visible ? fold.width : 0)
+        - (tabsFold.visible ? tabsFold.width : 0)
+        - (alertCount.visible ? alertCount.width + Style.space(4) : 0))
+      anchors.verticalCenter: parent.verticalCenter
+      text: root.secondaryPath
+      textFormat: Text.PlainText
+      elide: Text.ElideRight
+      color: Color.muted
+      font.family: Style.font.family
+      font.pixelSize: Style.font.bodySmall
+      renderType: Text.NativeRendering
     }
 
     // Working Herdr parents place the motion before their name, rather than
@@ -1721,6 +1750,7 @@ Item {
       && (root.kind === "monitor" || root.kind === "workspace"
         || root.collapsed || (label.visible && label.truncated)
         || (root.kind === "browser-tab" && root.liveTitle !== root.windowTitle)
+        || root.secondaryPath !== ""
         || (monitorLabels.visible && monitorLabels.children[0] && monitorLabels.children[0].truncated)
         || (workspaceBadge.visible && badgeLabel.truncated)
         || (railWorkspaceBadge.visible && railBadgeLabel.truncated))
