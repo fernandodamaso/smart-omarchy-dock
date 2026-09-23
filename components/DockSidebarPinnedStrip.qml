@@ -32,7 +32,6 @@ Item {
   readonly property int visibleCount: layout.visible
   readonly property int hiddenCount: layout.hidden
   readonly property var hiddenPins: pins.slice(visibleCount)
-  readonly property bool hiddenRunning: hiddenPins.some(function(pin) { return pin.running === true })
   // Rail hides the strip entirely — zero height and no residual gap.
   implicitHeight: collapsed ? 0 : (shelfPadTop + Style.space(1) + Style.space(30)
     + cellHeight + shelfPadBottom)
@@ -42,6 +41,9 @@ Item {
   clip: true
   readonly property var addPinButton: addPin
   property bool overflowOpen: false
+  property double overflowDismissedAt: 0
+
+  HoverHandler { cursorShape: Qt.ArrowCursor }
 
   property var prevPins: []
   property var shownKeys: []
@@ -63,6 +65,15 @@ Item {
 
   function close() {
     overflowOpen = false
+  }
+
+  function toggleOverflow() {
+    if (overflowOpen) {
+      close()
+      return
+    }
+    if (Date.now() - overflowDismissedAt < 250) return
+    overflowOpen = true
   }
 
   onHiddenCountChanged: if (hiddenCount === 0) close()
@@ -239,6 +250,7 @@ Item {
           // Drive opacity/scale through a settled flag so Behaviors actually run
           // (a direct binding to exiting alone skips the "from" frame on insert).
           property bool settled: !animateIn
+          property bool mouseFocused: false
           width: root.cell
           height: root.cellHeight
           x: (exiting && exitSlot >= 0 ? exitSlot : index) * (root.cell + root.pinGap)
@@ -282,6 +294,7 @@ Item {
             }
             exitDelay.restart()
           }
+          onActiveFocusChanged: if (!activeFocus) mouseFocused = false
 
           Timer {
             id: exitDelay
@@ -292,6 +305,7 @@ Item {
 
           Keys.onPressed: function(event) {
             if (!pinCell.modelData || pinCell.exiting) return
+            pinCell.mouseFocused = false
             if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
               root.activatePin(pinCell.modelData)
               event.accepted = true
@@ -305,9 +319,15 @@ Item {
           Rectangle {
             anchors.fill: parent
             radius: root.appearance.cardRadius
-          color: pinPress.pressed ? Style.pressedFillFor(Color.foreground, Color.accent)
-            : pinHover.hovered || pinCell.activeFocus ? root.appearance.workspaceHoverFill
-            : Style.normalFill
+            color: pinPress.pressed ? Style.pressedFillFor(Color.foreground, Color.accent)
+              : (pinHover.hovered
+                  || (pinCell.activeFocus && !pinCell.mouseFocused))
+                ? Style.hoverFillFor(Color.foreground, Color.accent)
+                : Style.normalFill
+            Behavior on color {
+              enabled: root.animationsEnabled
+              ColorAnimation { duration: 120 }
+            }
           }
 
           DockAppIcon {
@@ -323,17 +343,11 @@ Item {
             reloadRevision: root.controller.host.iconReloadRevision || 0
             profileBadgesEnabled: false
             opacity: 1
-          }
-
-          Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Style.space(2)
-            width: Style.space(4)
-            height: width
-            radius: width / 2
-            color: Color.accent
-            visible: !!pinCell.modelData && pinCell.modelData.running === true
+            scale: pinHover.hovered ? 1.08 : 1
+            Behavior on scale {
+              enabled: root.animationsEnabled
+              NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            }
           }
 
           HoverHandler { id: pinHover }
@@ -342,6 +356,7 @@ Item {
             acceptedButtons: Qt.LeftButton
             enabled: !!pinCell.modelData && !pinCell.exiting
             onTapped: {
+              pinCell.mouseFocused = true
               pinCell.forceActiveFocus(Qt.MouseFocusReason)
               root.activatePin(pinCell.modelData)
             }
@@ -350,6 +365,7 @@ Item {
             acceptedButtons: Qt.RightButton
             enabled: !!pinCell.modelData && !pinCell.exiting
             onTapped: {
+              pinCell.mouseFocused = true
               pinCell.forceActiveFocus(Qt.MouseFocusReason)
               root.panel.openContext(pinCell.modelData, pinCell)
             }
@@ -384,17 +400,7 @@ Item {
         Accessible.name: root.hiddenCount + " more pinned applications"
           selected: root.overflowOpen
           background: Style.normalFill
-        onClicked: root.overflowOpen = !root.overflowOpen
-        Rectangle {
-          anchors.horizontalCenter: parent.horizontalCenter
-          anchors.bottom: parent.bottom
-          anchors.bottomMargin: Style.space(2)
-          width: Style.space(4)
-          height: width
-          radius: width / 2
-          color: Color.accent
-          visible: root.hiddenRunning
-        }
+        onClicked: root.toggleOverflow()
       }
     }
 
@@ -412,7 +418,10 @@ Item {
       Accessible.name: "Add pinned application"
       focusable: true
       enabled: !root.controller.interactionBusy
-      onClicked: root.panel.openPinPicker(addPin)
+      onClicked: {
+        root.panel.openPinPicker(addPin)
+        addPin.focus = false
+      }
       DockLucideIcon {
         anchors.centerIn: parent
         width: 13
@@ -436,94 +445,113 @@ Item {
     }
   }
 
-  QtObject {
-    id: overflowBar
-    property string position: "bottom"
-    property var activePopout: null
-    function requestPopout(owner) { activePopout = owner }
-    function releasePopout(owner) { if (activePopout === owner) activePopout = null }
-  }
-
-  Ui.PopupCard {
+  PopupWindow {
     id: overflowPopup
-    anchorItem: overflowButton
-    owner: root
-    bar: overflowBar
-    open: root.overflowOpen && !root.collapsed && root.hiddenCount > 0
-    triggerMode: "click"
-    contentWidth: Style.space(184)
-    contentHeight: Math.min(root.hiddenCount * Style.space(32), Style.space(256))
-      + verticalContentInset
-    Flickable {
+    visible: root.overflowOpen && !root.collapsed && root.hiddenCount > 0
+    implicitWidth: Style.space(184)
+    implicitHeight: Math.min(root.hiddenCount * Style.space(32), Style.space(256))
+    color: "transparent"
+    grabFocus: true
+
+    anchor {
+      window: overflowButton.QsWindow.window
+      adjustment: PopupAdjustment.Slide
+      edges: Edges.Top | Edges.Left
+      gravity: Edges.Bottom | Edges.Right
+      rect.width: 1
+      rect.height: 1
+      onAnchoring: {
+        if (!overflowPopup.anchor.window) return
+        var edge = root.controller.edge
+        var x = edge === "left" ? overflowButton.width + Style.space(8)
+          : -overflowPopup.implicitWidth - Style.space(8)
+        var y = overflowButton.height / 2 - overflowPopup.implicitHeight / 2
+        var point = overflowPopup.anchor.window.contentItem.mapFromItem(overflowButton, x, y)
+        overflowPopup.anchor.rect.x = Math.round(point.x)
+        overflowPopup.anchor.rect.y = Math.round(Math.max(Style.space(8), Math.min(
+          point.y, overflowPopup.anchor.window.height - overflowPopup.implicitHeight - Style.space(8))))
+      }
+    }
+
+    onVisibleChanged: {
+      if (visible) return
+      if (root.overflowOpen) root.overflowDismissedAt = Date.now()
+      root.close()
+    }
+
+    Ui.BorderSurface {
+      id: overflowSurface
       anchors.fill: parent
+      color: Color.menu.background
+      borderSpec: Border.surfaceSpec(
+        "menu", "border", Color.menu.border, Style.normalBorderWidth)
       clip: true
-      contentWidth: width
-      contentHeight: hiddenColumn.implicitHeight
-      Keys.onEscapePressed: root.close()
 
-      Column {
-        id: hiddenColumn
-        width: parent.width
+      Flickable {
+        anchors.fill: parent
+        anchors.leftMargin: overflowSurface.contentLeftInset
+        anchors.rightMargin: overflowSurface.contentRightInset
+        anchors.topMargin: overflowSurface.contentTopInset
+        anchors.bottomMargin: overflowSurface.contentBottomInset
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        contentWidth: width
+        contentHeight: hiddenColumn.implicitHeight
+        Keys.onEscapePressed: root.close()
 
-        Repeater {
-          id: hiddenRepeater
-          model: root.hiddenPins
-          delegate: Ui.Button {
-            id: hiddenPin
-            required property var modelData
-            readonly property string desktopId: String(modelData.desktopId || "")
-            readonly property var entry: modelData.item && modelData.item.entry
-              ? modelData.item.entry : DesktopEntries.byId(desktopId)
-            width: hiddenColumn.width
-            height: Style.space(32)
-            focusable: true
-            leftAlign: true
-            text: ""
-            Accessible.role: Accessible.MenuItem
-            Accessible.name: String(modelData.label || desktopId)
-              + (modelData.running ? " · Running" : "")
-            onClicked: {
-              root.close()
-              root.activatePin(modelData)
-            }
+        Column {
+          id: hiddenColumn
+          width: parent.width
 
-            DockAppIcon {
-              anchors.left: parent.left
-              anchors.leftMargin: Style.space(8)
-              anchors.verticalCenter: parent.verticalCenter
-              width: Style.space(18)
-              height: width
-              roundedArtwork: false
-              badgeRingColor: Color.menu.background
-              desktopId: hiddenPin.desktopId
-              desktopIcon: hiddenPin.entry ? String(hiddenPin.entry.icon || "") : ""
-              iconOverrides: root.controller.settings.iconOverrides || ({})
-              reloadRevision: root.controller.host.iconReloadRevision || 0
-              profileBadgesEnabled: false
-            }
-            Text {
-              anchors.left: parent.left
-              anchors.leftMargin: Style.space(36)
-              anchors.right: runningDot.left
-              anchors.rightMargin: Style.space(6)
-              anchors.verticalCenter: parent.verticalCenter
-              text: String(hiddenPin.modelData.label || hiddenPin.desktopId)
-              textFormat: Text.PlainText
-              elide: Text.ElideRight
-              color: Color.menu.text
-              font.family: Style.font.family
-              font.pixelSize: Style.font.bodySmall
-            }
-            Rectangle {
-              id: runningDot
-              anchors.right: parent.right
-              anchors.rightMargin: Style.space(8)
-              anchors.verticalCenter: parent.verticalCenter
-              width: Style.space(5)
-              height: width
-              radius: width / 2
-              color: Color.accent
-              visible: hiddenPin.modelData.running === true
+          Repeater {
+            id: hiddenRepeater
+            model: root.hiddenPins
+            delegate: Ui.Button {
+              id: hiddenPin
+              required property var modelData
+              readonly property string desktopId: String(modelData.desktopId || "")
+              readonly property var entry: modelData.item && modelData.item.entry
+                ? modelData.item.entry : DesktopEntries.byId(desktopId)
+              width: hiddenColumn.width
+              height: Style.space(32)
+              focusable: true
+              leftAlign: true
+              text: ""
+              Accessible.role: Accessible.MenuItem
+              Accessible.name: String(modelData.label || desktopId)
+                + (modelData.running ? " · Running" : "")
+              onClicked: {
+                root.close()
+                root.activatePin(modelData)
+              }
+
+              DockAppIcon {
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(18)
+                height: width
+                roundedArtwork: false
+                badgeRingColor: Color.menu.background
+                desktopId: hiddenPin.desktopId
+                desktopIcon: hiddenPin.entry ? String(hiddenPin.entry.icon || "") : ""
+                iconOverrides: root.controller.settings.iconOverrides || ({})
+                reloadRevision: root.controller.host.iconReloadRevision || 0
+                profileBadgesEnabled: false
+              }
+              Text {
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(36)
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                text: String(hiddenPin.modelData.label || hiddenPin.desktopId)
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+                color: Color.menu.text
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+              }
             }
           }
         }

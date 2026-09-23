@@ -58,6 +58,7 @@ PanelWindow {
     + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
   readonly property real expandedHeaderRightInset: root.panelInnerPad
     + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
+  readonly property var pinStrip: pinnedStrip
   readonly property var pinStripAdd: pinnedStrip.addPinButton
   // Per-output clamp of the shared expanded-width preference.
   readonly property var panelGeometry: controller.geometryFor(screen)
@@ -121,6 +122,7 @@ PanelWindow {
   function closeSurfaces() {
     sidebarContext.dismiss()
     picker.visible = false
+    if (root.pinStrip) root.pinStrip.close()
     sidebarViewport.cancelInputs("surface-close")
     root.controller.cancelResize("surface-close")
     // A dying or hidden panel must not carry a half-finished mode gesture.
@@ -632,7 +634,8 @@ PanelWindow {
       if (root.menuEntry && typeof root.menuEntry.execute === "function") root.menuEntry.execute()
     }
     onVisibleChanged: root.controller.interactionBusy = visible || picker.visible
-      || root.controller.resizeActive || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
+      || pinnedStrip.overflowOpen || root.controller.resizeActive
+      || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
     onKeyboardDismissed: root.controller.releaseNavigationFocus()
   }
   Connections {
@@ -650,7 +653,8 @@ PanelWindow {
     onApplicationSelected: desktopId => root.host.pinApplication(desktopId)
     onVisibleChanged: {
       root.controller.interactionBusy = visible || sidebarContext.visible || root.controller.resizeActive
-        || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
+        || pinnedStrip.overflowOpen || root.controller.rowDragActive
+        || root.controller.widgetPopupId !== ""
       if (visible) root.controller.closeWidgetPopup()
       if (!visible) root.pickerAnchorItem = null
     }
@@ -660,6 +664,14 @@ PanelWindow {
     ignoreUnknownSignals: true
     function onVisibleChanged() { root.refreshPickerAnchor() }
     function onWidthChanged() { root.refreshPickerAnchor() }
+  }
+  Connections {
+    target: pinnedStrip
+    function onOverflowOpenChanged() {
+      root.controller.interactionBusy = pinnedStrip.overflowOpen || picker.visible
+        || sidebarContext.visible || root.controller.resizeActive
+        || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
+    }
   }
   Connections {
     target: root.controller
