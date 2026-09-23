@@ -721,31 +721,21 @@ FocusScope {
           required property int index
           readonly property bool isWorkspace: modelData && modelData.kind === "workspace"
           readonly property var geom: isWorkspace ? root.sectionSpanRect(modelData) : { y: 0, height: 0 }
-          readonly property bool hoveredCard: isWorkspace
-            && root.hoveredWorkspaceKey !== ""
-            && modelData.key === root.hoveredWorkspaceKey
           visible: isWorkspace && geom.height > 0
-          x: root.workspaceCardInset
+          x: root.workspaceCardInset + Style.space(4)
           y: geom.y
-          width: Math.max(0, sectionChromeHost.width - root.workspaceCardInset * 2)
+          width: Math.max(0, sectionChromeHost.width - (root.workspaceCardInset + Style.space(4)) * 2)
           height: geom.height
           z: 1
           enabled: false
 
-          Ui.BorderSurface {
-            anchors.fill: parent
-            radius: root.cardRadius
-            color: parent.hoveredCard ? root.workspaceHoverFill : root.workspaceFill
-            borderSpec: Border.none()
-          }
-
-          // Faint separator at the whole workspace card end (not under heading).
+          // Separate groups without a second card inside the monitor card.
           Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 1
-            color: Util.alpha(Color.foreground, 0.08)
+            color: Util.alpha(Color.foreground, 0.06)
           }
         }
       }

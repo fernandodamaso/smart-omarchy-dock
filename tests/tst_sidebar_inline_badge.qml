@@ -65,15 +65,15 @@ TestCase {
     compare(following.artX, leading.artX, "artwork columns align")
     compare(following.labelX, leading.labelX, "labels align")
     compare(following.stemX, leading.stemX, "guide columns align")
-    compare(leading.stemX, 13 + chip / 2, "the depth-1 stem sits on the chip center")
-    compare(leading.artX, leading.badgeX + chip + 6 + 5,
+    compare(leading.stemX, 9 + chip / 2, "the depth-1 stem sits on the chip center")
+    compare(leading.artX, leading.badgeX + chip + 2,
       "artwork and the horizontal connector begin past the chip's right edge")
   }
 
   function test_longAndNarrowInputsClampTogether() {
     var longLabel = probe("a-very-long-workspace-name")
     compare(chipWidth(longLabel.implicitWidth, available(280)), 64, "ceiling")
-    compare(chipWidth(probe("Workspace").implicitWidth, available(105)), 28,
+    compare(chipWidth(probe("Workspace").implicitWidth, available(105)), 32,
       "narrow content clamps every row to the same available slot")
     compare(chipWidth(0, 0), 24, "floor")
     compare(chipWidth(NaN, undefined), 24, "missing measurement keeps the floor")

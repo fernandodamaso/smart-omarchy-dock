@@ -327,8 +327,8 @@ TestCase {
     verify(counters !== null && fold !== null && label !== null && hit !== null)
     verify(counters.visible && fold.visible)
     compare(label.textFormat, Text.PlainText)
-    // Production depth-2 icon x with inset 10: guide0=30, artX=30+12+24=66.
-    compare(Math.round(chrome.artX), 66)
+    // Production depth-2 icon x with inset 10: guide0=26, artX=26+14+14=54.
+    compare(Math.round(chrome.artX), 54)
     assertAllCountersPainted(chrome, counters, fold)
 
     // Real click on the chevron MouseArea (not a local helper).

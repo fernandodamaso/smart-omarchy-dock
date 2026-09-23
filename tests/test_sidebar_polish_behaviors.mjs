@@ -321,22 +321,22 @@ assert.doesNotMatch(viewportQml, /activeMonitorBorder/,
     'minimized stays independent of IPC pin')
 }
 
-// Tree guide columns: inset+8 badge, inset+20 guide0, depth-1 icon guide0+12, +24/depth.
+// Tree guide columns: 4px group padding, badge-centered guide, 14px depth.
 const guide = Interaction.sidebarTreeGuideLayout(5)
 assert.equal(guide.workspaceLeft, 5)
-assert.equal(guide.badgeLeft, 13)
-assert.equal(guide.guide0, 25)
+assert.equal(guide.badgeLeft, 9)
+assert.equal(guide.guide0, 21)
 assert.equal(guide.iconHalf, 9, 'child columns center on the 18px window icon')
-assert.equal(Interaction.sidebarTreeIconX(5, 1), 37)
-assert.equal(Interaction.sidebarTreeIconX(5, 2), 61)
-assert.equal(Interaction.sidebarTreeIconX(5, 3), 85)
+assert.equal(Interaction.sidebarTreeIconX(5, 1), 35)
+assert.equal(Interaction.sidebarTreeIconX(5, 2), 49)
+assert.equal(Interaction.sidebarTreeIconX(5, 3), 63)
 
 // Rendered guide column: depth-1 stays on the badge column (stemOffset only);
 // every deeper row branches from the parent's rendered icon *center*
 // (parentArt + iconHalf) instead of the nominal left-edge ladder.
-assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, 0, 0), 25,
+assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, 0, 0), 21,
   'depth-1 keeps the guide0 badge column with no badge shift')
-assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, 19, 4), 29,
+assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, 19, 4), 25,
   'depth-1 tracks the measured badge center; guideOffset never leaks in')
 assert.equal(Interaction.sidebarTreeGuideColumnX(5, 2, 0, 0),
   Interaction.sidebarTreeIconX(5, 1) + guide.iconHalf,
@@ -369,10 +369,10 @@ assert.equal(Interaction.sidebarTreeGuideColumnX(5, 3, 11, 4),
   assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, 12, sp), 24,
     'available slot never drops below the floor')
 
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(280, 5, sp), 280 - 13 - 8 - 56,
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(280, 5, sp), 280 - 9 - 8 - 56,
     'workspace-wide budget = content - badge left - padding - widest control stack')
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(100, 5, sp), 24,
-    'narrow content keeps the floor')
+  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(100, 5, sp), 27,
+    'narrow content keeps only the remaining badge slot')
   assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(0, 5, sp), 0,
     'unmapped content reports no budget so rows fall back together')
 
@@ -401,17 +401,17 @@ assert.equal(Interaction.sidebarTreeGuideColumnX(5, 3, 11, 4),
     'hover/selection backgrounds start at the same left edge')
 
   const tight = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 24)
-  assert.equal(tight.badgeX, 13)
-  assert.equal(tight.artX, 13 + 24 + 6 + 5)
-  assert.equal(tight.stemX, 13 + 12)
-  assert.equal(tight.labelX, tight.artX + 18 + 8)
+  assert.equal(tight.badgeX, 9)
+  assert.equal(tight.artX, 9 + 24 + 2)
+  assert.equal(tight.stemX, 9 + 12)
+  assert.equal(tight.labelX, tight.artX + 18 + 4)
   assert.equal(tight.guideOffset, tight.artX - Interaction.sidebarTreeIconX(5, 1))
   assert.equal(tight.stemOffset, 0, '24px badge stem stays on guide0')
   assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, tight.guideOffset,
     tight.stemOffset), tight.stemX,
     'the rendered depth-1 column matches the measured badge stem')
   const wide = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 64)
-  assert.equal(wide.artX, 13 + 64 + 6 + 5)
+  assert.equal(wide.artX, 9 + 64 + 2)
   assert.equal(wide.stemOffset, wide.stemX - guide.guide0)
   assert.ok(wide.stemOffset !== wide.guideOffset,
     'wide badge: stem and icon offsets differ')
@@ -428,15 +428,14 @@ assert.equal(Interaction.sidebarTreeGuideColumnX(5, 3, 11, 4),
     wide.stemOffset), wide.artX + guide.iconHalf,
     'wide badge shifts the column with the icon, not with the badge center')
 
-  // Live 24px-chip shape (inset 11): parent art 54 -> depth-2 column 63,
-  // the pixel value verified on the desktop (icon box 54..72).
+  // The compact group keeps nested guides under the parent icon centre.
   const live = Interaction.sidebarInlineWorkspaceGeometry(11, sp, 24)
-  assert.equal(live.artX, 54)
-  assert.equal(live.guideOffset, 11)
+  assert.equal(live.artX, 41)
+  assert.equal(live.guideOffset, 0)
   assert.equal(Interaction.sidebarTreeGuideColumnX(11, 2, live.guideOffset,
-    live.stemOffset), 63, 'live depth-2 guide sits on the parent icon center')
+    live.stemOffset), 50, 'live depth-2 guide sits on the parent icon center')
   assert.equal(Interaction.sidebarTreeGuideColumnX(11, 3, live.guideOffset,
-    live.stemOffset), 87, 'live depth-3 guide uses the same center rule')
+    live.stemOffset), 64, 'live depth-3 guide uses the same center rule')
 }
 
 // Inline guide/alignment wiring: one viewport-owned measurement, badge-edge

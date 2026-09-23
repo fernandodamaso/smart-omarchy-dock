@@ -347,6 +347,8 @@ assert.deepEqual(plain(midNested.ancestorContinues), [chromeApp.isLastSibling !=
     'Code has three direct rows: the chrome window, the firefox group, sticky')
   assert.ok(id7Direct.every(r => r.parentKey === id7Target.key),
     'every direct row is parented to the same workspace target')
+  assert.equal(id7Direct.filter(r => r.leadingWorkspace).length, 1,
+    'multiple sibling apps share one workspace badge without a header row')
   assert.deepEqual(Array.from(id7Direct, r => r.isLastSibling), [false, false, true],
     'only the final direct row ends the badge-centered guide')
   const id7Nested = p.rows.filter(r => r.workspaceKey === id7Target.key && r.treeDepth === 2)

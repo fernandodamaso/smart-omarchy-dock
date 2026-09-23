@@ -360,7 +360,7 @@ Item {
       return root.inlineWorkspaceGeometry.labelX
     if (root.nestedChild)
       return root.artX + 14 + Style.space(8)
-    if (root.hasArtwork) return artwork.x + artwork.width + Style.space(8)
+    if (root.hasArtwork) return artwork.x + artwork.width + Style.space(4)
     return root.padding
   }
   // Shared fill/rail horizontal bounds (tree-indented vs whole-card workspace).
@@ -823,7 +823,7 @@ Item {
       y: root.collapsed ? Style.space(10) : Math.round((content.height - height) / 2)
       roundedArtwork: false
       badgeRingColor: root.insideWorkspaceCard && root.viewport
-        ? root.viewport.workspaceFill : Color.background
+        ? root.viewport.monitorFill : Color.background
       desktopId: String(root.row.desktopId || "")
       desktopIcon: root.entry ? String(root.entry.icon || "") : ""
       iconOverrides: root.controller.settings.iconOverrides || ({})

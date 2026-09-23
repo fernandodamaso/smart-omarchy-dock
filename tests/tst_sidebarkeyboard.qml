@@ -62,6 +62,18 @@ TestCase {
     keyClick(Qt.Key_Up); compare(actionController.focusedRowKey,"app")
     keyClick(Qt.Key_Space); compare(events[events.length-1],"fold")
   }
+  function test_inline_workspace_sibling_order() {
+    actionController.projection = {rows: [
+      {key:"monitor",kind:"monitor"},
+      {key:"first",kind:"application",parentKey:"workspace"},
+      {key:"child",kind:"window",parentKey:"first"},
+      {key:"second",kind:"application",parentKey:"workspace"}
+    ]}
+    actionController.focusedRowKey = "first"
+    keyClick(Qt.Key_Down); compare(actionController.focusedRowKey,"child")
+    keyClick(Qt.Key_Down); compare(actionController.focusedRowKey,"second")
+    keyClick(Qt.Key_Up); compare(actionController.focusedRowKey,"child")
+  }
   function test_enter_is_plain_even_with_control_held() {
     actionController.focusedRowKey="window"
     keyClick(Qt.Key_Return,Qt.ControlModifier)

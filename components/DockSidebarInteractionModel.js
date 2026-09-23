@@ -126,18 +126,18 @@ function topologyStripWidth(count) {
 }
 
 // Tree guide columns relative to workspace card left (viewport.workspaceCardInset).
-// Badge at left+8, min-24 center at left+20 = guide0; depth-1 icon at guide0+12;
-// each deeper depth +24. iconHalf is half of the 18px expanded artwork icon,
+// Badge at left+4, min-24 center at left+16 = guide0; depth-1 icon at guide0+14;
+// each deeper depth +14. iconHalf is half of the 18px expanded artwork icon,
 // used to center child guide columns on the parent's rendered window icon.
 function sidebarTreeGuideLayout(workspaceCardInset) {
   var left = Number(workspaceCardInset)
   if (!isFinite(left)) left = 0
   return {
     workspaceLeft: left,
-    badgeLeft: left + 8,
-    guide0: left + 20,
-    depthStep: 24,
-    iconOffset: 12,
+    badgeLeft: left + 4,
+    guide0: left + 16,
+    depthStep: 14,
+    iconOffset: 14,
     iconHalf: 9
   }
 }
@@ -217,8 +217,8 @@ function sidebarInlineWorkspaceGeometry(workspaceCardInset, space, badgeWidth) {
   if (!isFinite(bw) || bw <= 0) bw = 24
   if (bw > maxW) bw = maxW
   if (bw < 24) bw = 24
-  var gap = sp(6) + 5
-  var iconGap = sp(8)
+  var gap = sp(2)
+  var iconGap = sp(4)
   var iconSize = 18
   var badgeX = layout.badgeLeft
   var stemX = badgeX + bw / 2
