@@ -53,6 +53,7 @@
   "urgentWindowAnimationEnabled": true,
   "launcherBadgeMode": "automatic",
   "browserProfileBadgesEnabled": true,
+  "dockHerdrIndicators": false,
   "browserActivityMutedServices": [],
   "hiddenApplications": [],
   "pinned": [

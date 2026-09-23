@@ -10,6 +10,7 @@ function model(name, imports = {}) {
 }
 const DockModel = model('DockModel.js')
 const DockWindowModel = model('DockWindowModel.js', { DockModel })
+const PreviewModel = model('DockWindowPreviewModel.js', { DockWindowModel })
 // Execute the real QML method bodies; only compositor transport is substituted.
 function methods(file, properties) {
   const scope = vm.createContext(properties)
@@ -43,7 +44,7 @@ const actions = methods('DockWindowActions.qml', {
     ] },
     usingLua: false, dispatch: request => requests.push(request) }
 })
-const item = methods('DockItem.qml', { DockModel, DockWindowModel, windowActions: actions,
+const item = methods('DockItem.qml', { DockModel, DockWindowModel, PreviewModel, windowActions: actions,
   originOnly: true, runningToplevels: windows, runningCount: 2, lastActivatedToplevel: -1 })
 
 Object.assign(item, { entry: { name: 'Google Chrome' }, desktopId: 'google-chrome',
@@ -53,6 +54,44 @@ assert.equal(item.tooltipLabel(), 'Google Chrome - Work — running application'
 item.browserProfileEntry = { name: '' }
 assert.equal(item.tooltipLabel(), 'Google Chrome — running application')
 const preview = methods('DockWindowPreview.qml', { windowActions: actions, originOnly: true })
+
+let previewRequests = 0
+item.showPreviews = true
+item.previewActivities = []
+item.previewAgents = [{ id: 'agent-a' }]
+item.previewRequested = () => { previewRequests++ }
+assert.equal(item.hasPreviewContent(), true,
+  'one window and one agent is preview-eligible')
+assert.equal(item.dispatchApplicationAction('previews'), true,
+  'configured previews click opens for one agent')
+assert.equal(previewRequests, 1)
+item.previewAgents = []
+assert.equal(item.hasPreviewContent(), false)
+assert.equal(item.dispatchApplicationAction('previews'), false)
+
+const agentRow = {
+  id: 'real-agent-id', indicatorKey: 'window\0server\0internal-agent-id',
+  toplevel: windows[0]
+}
+let activatedAgentTarget = null
+preview.herdrAgentActions = {
+  captureAgentTarget(toplevel, agent) {
+    assert.equal(toplevel, windows[0])
+    assert.equal(agent.id, 'real-agent-id')
+    assert.equal(agent.indicatorKey, 'window\0server\0internal-agent-id')
+    return { agentId: agent.id, toplevel }
+  },
+  activateHerdrTarget(target) {
+    activatedAgentTarget = target
+    return true
+  }
+}
+preview.dismissImmediately = () => {}
+const exactAgentTarget = preview.captureAgentTarget(agentRow)
+agentRow.id = 'replacement-agent-id'
+assert.equal(preview.activateAgentTarget(exactAgentTarget), true)
+assert.equal(activatedAgentTarget.agentId, 'real-agent-id',
+  'preview activates the press/open-time target, not the current row')
 const menu = methods('DockContextMenu.qml', { windowActions: actions, originOnly: true,
   selectedToplevel: windows[0], selectedMinimized: true })
 menu.dismiss = () => {}

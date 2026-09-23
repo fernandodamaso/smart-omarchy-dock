@@ -32,8 +32,21 @@ function actionRecord(id, text, iconName, enabled, command, targetContext, extra
   return record
 }
 
+function agentRecord(id, title, kind, status, enabled, target) {
+  return {
+    kind: "agent",
+    id: String(id || ""),
+    title: String(title || ""),
+    agentKind: String(kind || ""),
+    status: String(status || ""),
+    enabled: enabled !== false,
+    target: target || null
+  }
+}
+
 function isFocusable(record) {
-  return !!record && record.kind === "action" && record.enabled !== false
+  return !!record && (record.kind === "action" || record.kind === "agent")
+    && record.enabled !== false
 }
 
 function firstEnabledIndex(records) {

@@ -7,6 +7,7 @@ import qs.Ui
 import "DockModel.js" as DockModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockWindowModel.js" as DockWindowModel
+import "DockWindowPreviewModel.js" as PreviewModel
 
 Item {
   id: root
@@ -43,6 +44,12 @@ Item {
   required property bool vertical
   required property bool previewActive
   required property bool interfaceAnimationsEnabled
+  property var herdrSummary: ({
+    count: 0, indicatorStatus: "", counters: [], rows: [],
+    blockedTransitionRevision: 0
+  })
+  property int herdrWindowCount: 0
+  property bool herdrReplacesAttention: false
   property var iconOverrides: ({})
   property string windowOverrideSource: ""
   property int iconReloadRevision: 0
@@ -56,6 +63,11 @@ Item {
   property string browserProfileKey: ""
   property bool browserProfileBadgesEnabled: true
   property var previewActivities: []
+  property var previewAgents: []
+  property bool previewHerdrOnly: false
+  property string previewHerdrLabel: ""
+  property var previewHerdrCounters: []
+  property var herdrAgentActions: null
   readonly property var browserProfileEntry: browserProfileKey && browserProfileService
     ? browserProfileService.profileFor(browserProfileKey) : null
   property bool presentationActive: true
@@ -70,6 +82,11 @@ Item {
   readonly property var attentionScope: attentionScopeKey
     ? ({ localUrgent: localUrgent, primaryOwner: primaryBadgeOwner }) : null
   readonly property bool motionOwner: attentionScopeKey !== "" || primaryBadgeOwner
+
+  function hasPreviewContent() {
+    return PreviewModel.hasPreviewContent(
+      root.runningCount, root.previewActivities.length, root.previewAgents.length)
+  }
 
   function dismissPopups() {
     contextMenu.dismiss()
@@ -183,8 +200,15 @@ Item {
   readonly property bool windowUrgent: urgentBadgeState.windowUrgent === true
   readonly property int windowUrgentRevision:
     Number(urgentBadgeState.windowUrgentRevision || 0)
-  readonly property bool attentionActive: badgeTracker
+  readonly property bool attentionActive: !herdrReplacesAttention && badgeTracker
     ? badgeTracker.motionAttentionFor(desktopId, attentionScope) : false
+  readonly property int herdrAgentCount: Math.max(0,
+    Number(herdrSummary && herdrSummary.count) || 0)
+  readonly property string herdrIndicatorStatus:
+    String(herdrSummary && herdrSummary.indicatorStatus || "")
+  readonly property int herdrBlockedTransitionRevision: Math.max(0,
+    Number(herdrSummary && herdrSummary.blockedTransitionRevision) || 0)
+  property int seenHerdrBlockedTransitionRevision: 0
   readonly property bool urgentMotionSuppressed: !presentationVisible || mouse.hovered
     || dragHandler.active || contextMenu.visible || workspaceInputSuppressed
     || previewActive || previewInteractionActive || !presentationActive
@@ -212,8 +236,7 @@ Item {
     case "minimize-restore":
       return root.windowActions.minimizeRestoreToplevels(root.runningToplevels, root.originOnly)
     case "previews":
-      if (!root.showPreviews || root.runningCount === 0
-          || (root.runningCount < 2 && root.previewActivities.length === 0)) return false
+      if (!root.showPreviews || !root.hasPreviewContent()) return false
       root.previewRequested(root, root.desktopId, root.runningToplevels, root.entry)
       return true
     case "close":
@@ -268,8 +291,7 @@ Item {
     lastActivatedToplevel = -1
     wheelRemainder = 0
     lastWheelTimestamp = 0
-    if (runningCount === 0
-        || (runningCount < 2 && root.previewActivities.length === 0))
+    if (!root.hasPreviewContent())
       root.previewDismissRequested()
   }
 
@@ -308,8 +330,17 @@ Item {
     if (play && !urgentMotionSuppressed) attentionMotion.play()
   }
 
+  function requestHerdrBlockedMotion() {
+    var revision = root.herdrBlockedTransitionRevision
+    if (revision <= root.seenHerdrBlockedTransitionRevision) return
+    root.seenHerdrBlockedTransitionRevision = revision
+    if (root.motionReady && root.urgentWindowAnimationEnabled
+        && root.attentionBadgesEnabled) attentionMotion.play()
+  }
+
   Component.onCompleted: {
     primeUrgentMotion()
+    seenHerdrBlockedTransitionRevision = herdrBlockedTransitionRevision
     motionReady = true
     requestUrgentMotion(false)
   }
@@ -343,6 +374,7 @@ Item {
     }
     requestUrgentMotion()
   }
+  onHerdrBlockedTransitionRevisionChanged: requestHerdrBlockedMotion()
 
   Timer {
     id: attentionReminderTimer
@@ -450,8 +482,10 @@ Item {
 
       Rectangle {
         id: windowCountBadge
+        objectName: "dock-corner-count-badge"
 
         visible: root.runningCount > 1
+          || root.runningCount <= 1 && root.herdrAgentCount >= 2
         width: Math.max(16, windowCountText.implicitWidth + 8)
         height: 16
         radius: height / 2
@@ -464,9 +498,12 @@ Item {
 
         Text {
           id: windowCountText
+          objectName: "dock-corner-count-text"
 
           anchors.centerIn: parent
-          text: root.runningCount > 99 ? "99+" : String(root.runningCount)
+          readonly property int displayedCount: root.runningCount > 1
+            ? root.runningCount : root.herdrAgentCount
+          text: displayedCount > 99 ? "99+" : String(displayedCount)
           color: Color.background
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
@@ -475,9 +512,22 @@ Item {
       }
 
       DockApplicationBadge {
-        severity: root.attentionBadge
+        objectName: "dock-attention-badge"
+        severity: root.herdrReplacesAttention ? "none" : root.attentionBadge
         x: iconContainer.width - width + 3
-        y: root.runningCount > 1 ? 13 : -3
+        y: windowCountBadge.visible ? 13 : -3
+      }
+
+      DockHerdrStatusMark {
+        id: herdrStatusMark
+        objectName: "dock-herdr-status-mark"
+        status: root.herdrIndicatorStatus
+        size: Math.max(18, root.iconSize * 24 / 52)
+        ringColor: Color.background
+        animationsEnabled: root.interfaceAnimationsEnabled
+        x: iconContainer.width - width + root.iconSize * 7 / 52
+        y: iconContainer.height - height + root.iconSize * 7 / 52
+        z: 4
       }
 
       Rectangle {
@@ -596,18 +646,42 @@ Item {
     return label
   }
 
+  function accessibleLabel() {
+    var name = root.entry ? root.entry.name : root.desktopId
+    var profileName = root.browserProfileEntry
+      ? String(root.browserProfileEntry.name || "").trim() : ""
+    if (profileName) name += " - " + profileName
+    if (root.runningCount > 0)
+      name += " · " + root.runningCount + (root.runningCount === 1 ? " window" : " windows")
+    if (root.herdrAgentCount > 0)
+      name += " · " + root.herdrAgentCount
+        + (root.herdrAgentCount === 1 ? " agent" : " agents")
+    var counters = root.herdrSummary && Array.isArray(root.herdrSummary.counters)
+      ? root.herdrSummary.counters : []
+    for (var i = 0; i < counters.length; ++i) {
+      var count = Math.max(0, Number(counters[i].count) || 0)
+      if (count === 0) continue
+      var status = String(counters[i].status || "")
+      if (status === "blocked") name += " · " + count + " needs input"
+      else if (status === "working") name += " · " + count + " working"
+      else if (status === "done") name += " · " + count + " done"
+    }
+    return name
+  }
+
+  Accessible.role: Accessible.Button
+  Accessible.name: accessibleLabel()
+
   HoverHandler {
     id: mouse
     cursorShape: Qt.PointingHandCursor
     onHoveredChanged: {
       if (hovered) {
-        if (root.showPreviews && root.runningCount > 0
-            && (root.runningCount >= 2 || root.previewActivities.length > 0)
+        if (root.showPreviews && root.hasPreviewContent()
             && !contextMenu.visible && !dragHandler.active && !root.workspaceInputSuppressed)
           root.previewRequested(root, root.desktopId,
             root.runningToplevels, root.entry)
-      } else if (root.previewActive || root.runningCount >= 2
-          || root.previewActivities.length > 0) {
+      } else if (root.previewActive || root.hasPreviewContent()) {
         root.previewReleased(root)
       }
     }
@@ -788,6 +862,7 @@ Item {
     pinnedItem: root.pinnedItem
     runningToplevels: root.presentationActive ? root.runningToplevels : []
     windowActions: root.windowActions
+    herdrAgentActions: root.herdrAgentActions
     interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
     originOnly: root.originOnly
     onVisibleChanged: {

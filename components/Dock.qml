@@ -16,6 +16,7 @@ import "DockWorkspaceGroupModel.js" as WorkspaceGroupModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockTrashModel.js" as TrashModel
 import "DockSidebarModel.js" as SidebarModel
+import "DockHerdrModel.js" as HerdrModel
 
 PanelWindow {
   id: root
@@ -23,6 +24,8 @@ PanelWindow {
   required property var settings
   required property bool showTrash
   required property var windowActions
+  property var herdrWindowAgents: null
+  property var herdrAgentActions: null
   required property var workspaceMonitorDrag
   required property var badgeTracker
   required property int trashItemCount
@@ -434,6 +437,8 @@ PanelWindow {
   readonly property bool urgentWindowAnimationEnabled:
     typeof settings.urgentWindowAnimationEnabled === "boolean"
       ? settings.urgentWindowAnimationEnabled : true
+  readonly property bool dockHerdrIndicators: DockModel.normalizeSetting(
+    "dockHerdrIndicators", settings.dockHerdrIndicators)
   readonly property bool interfaceAnimationsEnabled: DockModel.normalizeSetting(
     "interfaceAnimationsEnabled", settings.interfaceAnimationsEnabled)
   // Background mode gesture state. The host reports a rejected or still-pending
@@ -798,6 +803,88 @@ PanelWindow {
       ? ({ localUrgent: item.localUrgent === true, primaryOwner: owner })
       : null
     return badgeTracker.badgeFor(item.desktopId, scope, browserRows)
+  }
+
+  function emptyHerdrSummary() {
+    return {
+      count: 0, indicatorStatus: "", counters: [], rows: [],
+      herdrWindowCount: 0, blockedTransitionRevision: 0,
+      blockedAddresses: []
+    }
+  }
+
+  function herdrSummaryFor(item) {
+    if (!root.dockHerdrIndicators || !root.herdrWindowAgents || !item)
+      return root.emptyHerdrSummary()
+    var revision = root.herdrWindowAgents.indicatorRevision
+    return root.herdrWindowAgents.summaryForToplevels(item.toplevels || [])
+  }
+
+  function herdrServerLabel(serverId) {
+    var servers = root.herdrWindowAgents && root.herdrWindowAgents.snapshot
+      && Array.isArray(root.herdrWindowAgents.snapshot.servers)
+      ? root.herdrWindowAgents.snapshot.servers : []
+    for (var i = 0; i < servers.length; ++i) {
+      var server = servers[i]
+      if (server && String(server.id || "") === String(serverId || ""))
+        return HerdrModel.serverDisplayLabel(server)
+    }
+    return "Herdr"
+  }
+
+  function herdrPreviewAgentsFor(item) {
+    if (!root.dockHerdrIndicators || !root.herdrWindowAgents || !item) return []
+    var revision = root.herdrWindowAgents.indicatorRevision
+    var rows = []
+    ;(item.toplevels || []).forEach(function(toplevel) {
+      var summary = root.herdrWindowAgents.summaryForToplevels([toplevel])
+      ;(summary.rows || []).forEach(function(agent) {
+        rows.push(Object.assign({}, agent, {
+          toplevel: toplevel,
+          serverLabel: root.herdrServerLabel(agent.serverId)
+        }))
+      })
+    })
+    return HerdrModel.sortAgentsForDisplay(rows)
+  }
+
+  function herdrPreviewLabelFor(agents) {
+    var labels = []
+    ;(agents || []).forEach(function(agent) {
+      var label = String(agent && agent.serverLabel || "").trim()
+      if (label && label !== "Herdr" && labels.indexOf(label) < 0)
+        labels.push(label)
+    })
+    return labels.join(" · ")
+  }
+
+  function allItemWindowsHerdrAssociated(item) {
+    if (!root.dockHerdrIndicators || !root.herdrWindowAgents
+        || !root.herdrWindowAgents.snapshotReady || !item) return false
+    var toplevels = item.toplevels || []
+    if (!toplevels.length) return false
+    return toplevels.every(function(toplevel) {
+      var windowKey = root.herdrWindowAgents.windowKeyFor(toplevel)
+      var serverId = root.herdrWindowAgents.herdrAssociations.byWindowKey[windowKey]
+      return !!serverId && root.herdrWindowAgents.liveServerById(serverId) !== null
+    })
+  }
+
+  function herdrReplacesAttentionFor(item, summary, attentionBadge) {
+    if (!item || !summary || summary.indicatorStatus !== "blocked"
+        || String(attentionBadge || "") !== "urgent") return false
+    var blocked = summary.blockedAddresses || []
+    if (!blocked.length) return false
+    var urgent = Array.isArray(item.urgentAddresses)
+      ? item.urgentAddresses.map(function(address) {
+          return String(address || "").toLowerCase()
+        }).filter(function(address) { return address !== "" })
+      : root.badgeTracker && typeof root.badgeTracker.urgentAddressesFor === "function"
+        ? root.badgeTracker.urgentAddressesFor(item.desktopId,
+            BadgeModel.entryForDesktopId(item.desktopId, root.applications)) : []
+    return urgent.length > 0 && urgent.every(function(address) {
+      return blocked.indexOf(String(address || "").toLowerCase()) >= 0
+    })
   }
 
   function revealActiveWorkspace() {
@@ -1628,13 +1715,22 @@ PanelWindow {
     browserProfileKey: root.profileKeyFor(modelData)
     browserProfileBadgesEnabled: root.browserProfileBadgesEnabled
     previewActivities: root.browserActivitiesFor(modelData)
+    readonly property var dockHerdrPreviewAgents:
+      root.herdrPreviewAgentsFor(modelData)
+    previewAgents: dockHerdrPreviewAgents
+    previewHerdrOnly: dockHerdrPreviewAgents.length > 0
+      && root.allItemWindowsHerdrAssociated(modelData)
+    previewHerdrLabel: root.herdrPreviewLabelFor(dockHerdrPreviewAgents)
+    previewHerdrCounters: dockHerdrSummary.counters || []
     pinnedItem: modelData.pinned
     runningToplevels: modelData.toplevels
     focused: root.activeToplevel !== null
       && modelData.toplevels.indexOf(root.activeToplevel) >= 0
     windowActions: root.windowActions
+    herdrAgentActions: root.herdrAgentActions
     hyprToplevels: root.hyprToplevels
     badgeTracker: root.badgeTracker
+    readonly property var dockHerdrSummary: root.herdrSummaryFor(modelData)
     readonly property int renderedIndex: {
       if (!originOnly) return index
       var items = root.renderedItems
@@ -1646,6 +1742,10 @@ PanelWindow {
     attentionScopeKey: originOnly && root.badgeTracker && root.screen
       ? root.badgeTracker.workspaceScopeKey(root.screen.name, modelData.presentationId) : ""
     attentionBadge: root.attentionBadgeFor(modelData, renderedIndex)
+    herdrSummary: dockHerdrSummary
+    herdrWindowCount: Number(dockHerdrSummary.herdrWindowCount || 0)
+    herdrReplacesAttention: root.herdrReplacesAttentionFor(
+      modelData, dockHerdrSummary, attentionBadge)
     attentionBadgesEnabled: root.attentionBadgesEnabled
     urgentWindowAnimationEnabled: root.urgentWindowAnimationEnabled
     interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
@@ -1711,6 +1811,7 @@ PanelWindow {
     id: windowPreview
 
     windowActions: root.windowActions
+    herdrAgentActions: root.herdrAgentActions
     activationMonitor: DockWindowModel.monitorIdentity(root.dockHyprMonitor)
     position: root.position
     visibleItems: root.renderedItems

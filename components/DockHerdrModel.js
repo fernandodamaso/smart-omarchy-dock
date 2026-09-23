@@ -394,6 +394,18 @@ function displayAgentSecondary(agent) {
   return ""
 }
 
+// Dock preview secondary line: "tab · Kind" with missing parts omitted.
+function displayAgentTabSecondary(agent) {
+  if (!agent || typeof agent !== "object") return ""
+  var tab = typeof agent.tabTitle === "string"
+    ? agent.tabTitle.replace(/^\s+|\s+$/g, "") : ""
+  var kind = displayAgentKind(agent.agent || agent.agentKind || "")
+  if (tab && kind) return tab + " · " + kind
+  if (tab) return tab
+  if (kind) return kind
+  return ""
+}
+
 // Display sort: blocked → working → done → idle → unknown (stable within rank).
 function agentStatusSortRank(status) {
   var normalized = normalizeStatus(status)
@@ -414,6 +426,53 @@ function sortAgentsForDisplay(agents) {
   var list = Array.isArray(agents) ? agents.slice() : []
   list.sort(compareAgentsForDisplay)
   return list
+}
+
+function acknowledgedAgentDone(acknowledgedDone, agent) {
+  if (!acknowledgedDone || !agent) return false
+  var id = typeof agent.indicatorKey === "string" && agent.indicatorKey
+    ? agent.indicatorKey
+    : typeof agent.id === "string" ? agent.id : String(agent.id || "")
+  if (!id) return false
+  if (Array.isArray(acknowledgedDone)) return acknowledgedDone.indexOf(id) >= 0
+  if (typeof acknowledgedDone.has === "function") return acknowledgedDone.has(id)
+  return acknowledgedDone[id] === true
+}
+
+// One window's dock-facing summary. Counters and rows preserve raw status;
+// acknowledgment suppresses only the done indicator.
+function windowAgentSummary(agents, acknowledgedDone) {
+  var ordered = sortAgentsForDisplay(agents)
+  var seen = Object.create(null)
+  var rows = []
+  for (var i = 0; i < ordered.length; i++) {
+    var agent = ordered[i]
+    if (!agent || typeof agent !== "object") continue
+    var id = typeof agent.id === "string" ? agent.id : String(agent.id || "")
+    var identity = String(agent.serverId || "") + "\0" + id
+    if (!id || seen[identity]) continue
+    seen[identity] = true
+    rows.push(Object.assign({}, agent, {
+      title: displayAgentTitle(agent),
+      focusAgentSupported: agent.focusAgentSupported === true
+    }))
+  }
+  var counters = statusCounters(countAgentStatuses(rows))
+  var indicatorStatus = ""
+  if (rows.some(function(agent) { return normalizeStatus(agent.status) === "blocked" }))
+    indicatorStatus = "blocked"
+  else if (rows.some(function(agent) { return normalizeStatus(agent.status) === "working" }))
+    indicatorStatus = "working"
+  else if (rows.some(function(agent) {
+    return normalizeStatus(agent.status) === "done"
+      && !acknowledgedAgentDone(acknowledgedDone, agent)
+  })) indicatorStatus = "done"
+  return {
+    count: rows.length,
+    indicatorStatus: indicatorStatus,
+    counters: counters,
+    rows: rows
+  }
 }
 
 // Stable workspace → tab buckets from a status-sorted agent list.

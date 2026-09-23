@@ -1,73 +1,78 @@
 import QtQuick
+import QtQuick.Shapes
+import qs.Commons
 
-// Small, presentation-only working-state trail for Herdr rows.
-// The caller owns runtime visibility eligibility and resolves the live theme tint.
+// Smooth, wall-clock-synchronised Herdr working spinner. FrameAnimation only
+// refreshes the shared phase; inactive/reduced-motion instances retain the arc.
 Item {
   id: root
 
-  width: 10
-  height: 10
-  implicitWidth: 10
-  implicitHeight: 10
+  width: 20
+  height: 20
+  implicitWidth: 20
+  implicitHeight: 20
   activeFocusOnTab: false
   focus: false
 
   property bool active: false
+  property bool animationsEnabled: true
   property color tint: "white"
-  property int phase: 0
-  readonly property bool timerRunning: phaseTimer.running
+  readonly property bool animating: frameAnimation.running
+  readonly property var arc: arcPath
 
-  function synchronizedPhase() {
-    return Math.floor(Date.now() / 110) % 8
+  function synchronizedRotation() {
+    return (Date.now() % 1100) / 1100 * 360
   }
 
-  function trailOpacity(dotIndex) {
-    var distance = (root.phase - Number(dotIndex) + 8) % 8
-    if (distance === 0) return 1.0
-    if (distance === 1) return 0.65
-    if (distance === 2) return 0.30
-    return 0.0
+  function updateRotation() {
+    if (root.active && root.animationsEnabled)
+      root.rotation = root.synchronizedRotation()
+    else
+      root.rotation = 0
   }
 
-  onActiveChanged: {
-    phase = active ? synchronizedPhase() : 0
+  onActiveChanged: updateRotation()
+  onAnimationsEnabledChanged: updateRotation()
+
+  FrameAnimation {
+    id: frameAnimation
+    running: root.active && root.animationsEnabled
+    onTriggered: root.rotation = root.synchronizedRotation()
   }
 
-  Timer {
-    id: phaseTimer
-    // Every instance samples the same wall-clock phase. Timers only refresh
-    // bindings; they never advance an instance-local animation state.
-    interval: 55
-    repeat: true
-    running: root.active
-    onTriggered: root.phase = root.synchronizedPhase()
-  }
+  Item {
+    width: 20
+    height: 20
+    anchors.centerIn: parent
+    scale: Math.min(root.width, root.height) / 20
 
-  Repeater {
-    model: [
-      { x: 0, y: 0 },
-      { x: 4, y: 0 },
-      { x: 8, y: 0 },
-      { x: 8, y: 4 },
-      { x: 8, y: 8 },
-      { x: 4, y: 8 },
-      { x: 0, y: 8 },
-      { x: 0, y: 4 }
-    ]
+    Shape {
+      objectName: "herdr-working-shape"
+      anchors.fill: parent
+      preferredRendererType: Shape.CurveRenderer
 
-    delegate: Rectangle {
-      required property var modelData
-      required property int index
+      ShapePath {
+        objectName: "herdr-working-track"
+        fillColor: "transparent"
+        strokeColor: Util.alpha(Color.foreground, 0.18)
+        strokeWidth: 3
 
-      objectName: "herdr-working-dot-" + String(index)
-      x: modelData.x
-      y: modelData.y
-      width: 2
-      height: 2
-      radius: 1
-      color: root.tint
-      opacity: root.active ? root.trailOpacity(index) : 0
-      visible: opacity > 0
+        PathMove { x: 10; y: 3.5 }
+        PathArc { x: 10; y: 16.5; radiusX: 6.5; radiusY: 6.5 }
+        PathArc { x: 10; y: 3.5; radiusX: 6.5; radiusY: 6.5 }
+      }
+
+      ShapePath {
+        id: arcPath
+        objectName: "herdr-working-arc"
+        fillColor: "transparent"
+        strokeColor: root.tint
+        strokeWidth: 3
+        capStyle: ShapePath.RoundCap
+
+        PathMove { x: 10; y: 3.5 }
+        PathArc { x: 16.5; y: 10; radiusX: 6.5; radiusY: 6.5 }
+      }
     }
   }
 }
