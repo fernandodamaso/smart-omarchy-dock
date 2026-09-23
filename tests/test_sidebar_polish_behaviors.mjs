@@ -56,8 +56,6 @@ assert.equal(Interaction.composeRowFill({
 // per-server focus capability made the projected row actionable.
 assert.equal(Interaction.rowHoverFillEligible('herdr-agent', true), true)
 assert.equal(Interaction.rowHoverFillEligible('herdr-agent', false), false)
-assert.equal(Interaction.rowHoverFillEligible('herdr-tab', true), true)
-assert.equal(Interaction.rowHoverFillEligible('herdr-tab', false), false)
 assert.equal(Interaction.rowHoverFillEligible('herdr-state'), false)
 assert.equal(Interaction.rowHoverFillEligible('monitor'), false)
 assert.equal(Interaction.rowHoverFillEligible('browser-tab'), true)

@@ -50,20 +50,14 @@ Item {
   readonly property bool hasArtwork: kind === "window" || kind === "application" || kind === "launcher"
   readonly property bool nestedWindow: kind === "window" && row.nested === true
   readonly property bool nestedTab: kind === "browser-tab"
-  readonly property bool nestedHerdr: kind === "herdr-agent" || kind === "herdr-tab"
-    || kind === "herdr-state"
+  readonly property bool nestedHerdr: kind === "herdr-agent" || kind === "herdr-state"
   readonly property bool nestedChild: nestedTab || nestedHerdr
-  readonly property bool herdrActionable: (kind === "herdr-agent"
-    || kind === "herdr-tab") && row.actionable === true
+  readonly property bool herdrActionable: kind === "herdr-agent" && row.actionable === true
     && row.focusAgentSupported === true
-  readonly property bool herdrGroupHeader: kind === "herdr-tab" && row.groupHeader === true
   readonly property bool herdrStatusDotVisible: !root.collapsed
-    && (kind === "herdr-agent"
-      || (kind === "herdr-tab" && !root.herdrGroupHeader)
-      || kind === "herdr-state")
+    && (kind === "herdr-agent" || kind === "herdr-state")
   readonly property string normalizedHerdrStatus: HerdrModel.normalizeStatus(row.status)
   readonly property bool herdrWorkingStatusTarget: kind === "herdr-agent"
-    || (kind === "herdr-tab" && !root.herdrGroupHeader)
   readonly property bool herdrWorkingStatus: root.herdrWorkingStatusTarget
     && root.normalizedHerdrStatus === "working"
   readonly property string tabFaviconSource: nestedTab
@@ -95,19 +89,14 @@ Item {
   readonly property real herdrWindowWorkingIndicatorGap: Style.space(5)
   readonly property real herdrWindowWorkingIndicatorReservation:
     herdrWindowWorkingAnimationActive ? 10 + herdrWindowWorkingIndicatorGap : 0
-  readonly property string herdrKindLabel: kind === "herdr-agent" || kind === "herdr-tab"
+  readonly property string herdrKindLabel: kind === "herdr-agent"
     ? InteractionModel.herdrAgentKindLabel({ agentKind: row.agentKind || "" })
     : ""
   // Kind moves onto the two-line secondary row; do not reserve side kind width.
   readonly property bool herdrKindVisible: false
-  readonly property string herdrAgentSubtitle: (kind === "herdr-agent"
-      || (kind === "herdr-tab" && !root.herdrGroupHeader))
-    ? String(row.subtitle || "")
-    : ""
-  readonly property bool herdrTwoLineLabels: !root.collapsed
-    && (kind === "herdr-agent"
-      || (kind === "herdr-tab" && !root.herdrGroupHeader))
-  readonly property bool herdrGroupLabel: !root.collapsed && root.herdrGroupHeader
+  readonly property string herdrAgentSubtitle: kind === "herdr-agent"
+    ? String(row.subtitle || "") : ""
+  readonly property bool herdrTwoLineLabels: !root.collapsed && kind === "herdr-agent"
   readonly property int windowCount: kind === "application" ? Number(row.windowCount || row.windows && row.windows.length || 0) : 0
   readonly property int treeDepth: Number(row.treeDepth || 0)
   readonly property bool isLastSibling: row.isLastSibling !== false
@@ -161,17 +150,15 @@ Item {
     return BadgeModel.strictIdentityMatches(root.desktopId, root.entry, classes, aliases)
   }
   readonly property string windowTitle: {
-    if (kind === "browser-tab" || kind === "herdr-agent" || kind === "herdr-tab"
-        || kind === "herdr-state")
+    if (kind === "browser-tab" || kind === "herdr-agent" || kind === "herdr-state")
       return String(row.title || (kind === "herdr-state" ? "Herdr"
-        : kind === "herdr-tab" ? "Tab"
         : kind === "herdr-agent" ? "Coding agent" : "Tab"))
     if (kind === "window" && row.toplevel)
       return String(row.toplevel.title || "").trim() || "Untitled window"
     return ""
   }
   readonly property string liveTitle: {
-    if (kind === "herdr-agent" || kind === "herdr-tab" || kind === "herdr-state")
+    if (kind === "herdr-agent" || kind === "herdr-state")
       return InteractionModel.sidebarWindowDisplayTitle({
         kind: kind,
         title: String(row.title || "")
@@ -263,17 +250,11 @@ Item {
     if (kind === "browser-tab")
       return (row.active === true ? "Active tab: " : "Tab: ") + root.windowTitle + alertBits
         + (attention.muted ? " · Alerts excluded from totals" : "")
-    if (kind === "herdr-agent"
-        || (kind === "herdr-tab" && row.groupHeader !== true))
+    if (kind === "herdr-agent")
       return "Herdr agent: " + liveTitle
         + (root.herdrAgentSubtitle ? " · " + root.herdrAgentSubtitle : "")
         + " · " + InteractionModel.herdrStatusAccessibleText(row.status)
         + (root.herdrActionable && root.controller.herdrFocusErrorFor(root.rowKey)
-          ? " · Focus failed (" + root.controller.herdrFocusErrorFor(root.rowKey) + ")"
-          : "")
-    if (kind === "herdr-tab")
-      return "Herdr tab: " + liveTitle
-        + (row.actionable === true && root.controller.herdrFocusErrorFor(root.rowKey)
           ? " · Focus failed (" + root.controller.herdrFocusErrorFor(root.rowKey) + ")"
           : "")
     if (kind === "herdr-state")
@@ -1045,7 +1026,7 @@ Item {
       id: label
       objectName: "sidebar-label"
       visible: !root.collapsed && root.kind !== "monitor" && root.kind !== "workspace"
-        && root.kind !== "herdr-agent" && root.kind !== "herdr-tab"
+        && root.kind !== "herdr-agent"
       x: {
         return root.baseLabelX + root.herdrWindowWorkingIndicatorReservation
       }
@@ -1132,7 +1113,7 @@ Item {
       tint: Color.accent
     }
 
-    // Two-line Herdr agent / actionable single-panel tab identity.
+    // Two-line Herdr agent identity.
     Column {
       id: herdrAgentLabels
       objectName: "sidebar-herdr-agent-labels"
@@ -1181,25 +1162,6 @@ Item {
         renderType: Text.NativeRendering
         verticalAlignment: Text.AlignVCenter
       }
-    }
-
-    // Multi-panel tab group headers.
-    Text {
-      objectName: "sidebar-herdr-group-label"
-      visible: root.herdrGroupLabel
-      x: root.artX + Style.space(8)
-      width: Math.max(0, content.width - x - root.herdrRightChromeWidth)
-      anchors.verticalCenter: parent.verticalCenter
-      text: root.liveTitle
-      textFormat: Text.PlainText
-      elide: Text.ElideRight
-      wrapMode: Text.NoWrap
-      maximumLineCount: 1
-      color: Util.alpha(Color.foreground, 0.72)
-      font.family: Style.font.family
-      font.pixelSize: Style.font.bodySmall
-      renderType: Text.NativeRendering
-      verticalAlignment: Text.AlignVCenter
     }
 
     // Agent kind (Codex / Claude / Cursor) — after name; parents use counters instead.

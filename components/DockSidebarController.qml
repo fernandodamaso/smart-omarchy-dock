@@ -745,7 +745,7 @@ Item {
       target.targetId = String(row.targetId || "")
       target.windowAddress = String(row.windowAddress || "").toLowerCase()
       target.windowKey = String(row.windowKey || "")
-    } else if (row.kind === "herdr-agent" || row.kind === "herdr-tab") {
+    } else if (row.kind === "herdr-agent") {
       if (row.actionable !== true || row.focusAgentSupported !== true
           || !row.paneId || !row.agentId || !row.serverId) return null
       if (!root.windowActions.isAlive(row.toplevel)) return null
@@ -836,7 +836,7 @@ Item {
         && root.windowActions.isAlive(target.toplevel)
         && String(row.windowAddress || "").toLowerCase() === target.windowAddress
     }
-    if (target.kind === "herdr-agent" || target.kind === "herdr-tab") {
+    if (target.kind === "herdr-agent") {
       if (target.focusAgentSupported !== true
           || row.actionable !== true || row.focusAgentSupported !== true) return false
       if (String(row.windowKey || "") !== String(target.windowKey || "")) return false
@@ -875,7 +875,7 @@ Item {
   function activateTarget(target, control, clickedConnector, modifiers) {
     if (root.interactionBusy || !root.targetIsCurrent(target)) return false
     var accepted = false
-    if (target.kind === "herdr-agent" || target.kind === "herdr-tab") {
+    if (target.kind === "herdr-agent") {
       if (control === true) return false
       if (Number(modifiers || 0) !== Number(Qt.NoModifier)) return false
       return root.activateHerdrTarget(target)
