@@ -112,14 +112,17 @@ function focusedMonitorStripIndex(strip) {
   return -1
 }
 
-// Shared >4 fallback: focused physical ordinal N/M (identical on every header).
-function focusedMonitorStripOrdinal(strip) {
+function monitorStripIndexFor(strip, identity, connector) {
   var list = strip || []
-  var count = list.length
-  if (!(count > 0)) return ""
-  var index = focusedMonitorStripIndex(list)
-  if (index < 0) return ""
-  return (index + 1) + "/" + count
+  var wantedIdentity = String(identity || "")
+  var wantedConnector = String(connector || "")
+  for (var i = 0; i < list.length; ++i) {
+    var item = list[i] || ({})
+    if ((wantedIdentity && String(item.identity || "") === wantedIdentity)
+        || (wantedConnector && String(item.connector || "") === wantedConnector))
+      return i
+  }
+  return -1
 }
 
 // Topology miniature strip width for label-elide estimates (14×10, gap 3).

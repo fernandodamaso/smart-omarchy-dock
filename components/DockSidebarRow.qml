@@ -144,8 +144,10 @@ Item {
   }
   readonly property int monitorStripCount: monitorTopologyStrip.length
   readonly property int monitorSectionIndex: Number(row.sectionIndex || 0)
-  readonly property string monitorStripOrdinal: InteractionModel.focusedMonitorStripOrdinal(
-    root.monitorTopologyStrip)
+  readonly property int monitorStripIndex: InteractionModel.monitorStripIndexFor(
+    root.monitorTopologyStrip, root.row.monitorIdentity, root.monitorConnector)
+  readonly property string monitorStripOrdinal: monitorStripIndex >= 0
+    ? (monitorStripIndex + 1) + "/" + monitorStripCount : ""
   // Browser parents keep a stable desktop-entry label; identity still works when
   // the tab provider is down (DEFAULT_BROWSER_CLASSES) or tabs are folded.
   readonly property bool isBrowserWindow: {
@@ -710,7 +712,7 @@ Item {
       radius: Style.space(4)
       color: "transparent"
       border.width: 1
-      border.color: root.row.active
+      border.color: root.row.focused
         ? Color.accent : Util.alpha(Color.foreground, 0.24)
       Text {
         id: badgeLabel
@@ -720,7 +722,7 @@ Item {
         textFormat: Text.PlainText
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
-        color: root.row.active ? Color.accent : Color.foreground
+        color: root.row.focused ? Color.accent : Color.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         font.bold: true
@@ -749,7 +751,7 @@ Item {
       color: "transparent"
       border.width: 1
       border.color: (leadingWorkspaceBadge.activeFocus
-          || (root.leadingWorkspace && root.leadingWorkspace.active))
+          || (root.leadingWorkspace && root.leadingWorkspace.focused))
         ? Color.accent : Util.alpha(Color.foreground, 0.24)
       Text {
         id: leadingWorkspaceBadgeLabel
@@ -759,7 +761,7 @@ Item {
         textFormat: Text.PlainText
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
-        color: root.leadingWorkspace && root.leadingWorkspace.active
+        color: root.leadingWorkspace && root.leadingWorkspace.focused
           ? Color.accent : Color.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -972,8 +974,9 @@ Item {
       }
     }
 
-    // Tiny connected-display strip: physical x/y miniature order; every header
-    // highlights the same focused monitor. >4 → shared focused ordinal N/M.
+    // Tiny connected-display strip: physical x/y miniature order. Each header
+    // fills its own monitor, accented only when that monitor is focused.
+    // >4 shows this header's own physical ordinal N/M.
     // Rail omits the strip (uses focused tint on railMonitor instead).
     Item {
       id: displayStrip
@@ -996,6 +999,7 @@ Item {
             required property int index
             readonly property var monitorData: root.monitorTopologyStrip[index] || ({})
             readonly property bool focusedMonitor: monitorData.focused === true
+            readonly property bool ownMonitor: index === root.monitorStripIndex
             width: 14
             height: 10
             Accessible.name: InteractionModel.monitorTopologyTooltip(monitorData)
@@ -1004,8 +1008,10 @@ Item {
               width: 14
               height: 10
               radius: 2
-              color: parent.focusedMonitor ? Color.accent : "transparent"
-              border.width: parent.focusedMonitor ? 0 : 1
+              color: parent.ownMonitor
+                ? (parent.focusedMonitor ? Color.accent : Util.alpha(Color.foreground, 0.42))
+                : "transparent"
+              border.width: parent.ownMonitor ? 0 : 1
               border.color: Util.alpha(Color.foreground, 0.42)
             }
             HoverHandler { id: monitorMiniHover }
@@ -1237,6 +1243,7 @@ Item {
         model: root.herdrStatusCounters
         delegate: Item {
           id: counterItem
+          objectName: "sidebar-herdr-counter"
           required property var modelData
           readonly property string normalizedStatus: HerdrModel.normalizeStatus(modelData.status)
           readonly property bool working: normalizedStatus === "working"
@@ -1249,25 +1256,26 @@ Item {
             height: parent.height
             Item {
               objectName: "sidebar-herdr-counter-marker"
-              width: 10
-              height: 10
+              width: Style.space(14)
+              height: Style.space(14)
               anchors.verticalCenter: parent.verticalCenter
               DockLucideIcon {
                 objectName: "sidebar-herdr-counter-icon"
                 anchors.fill: parent
                 iconName: "bot"
-                iconSize: 10
+                iconSize: Style.space(14)
                 tint: root.herdrStatusColor(counterItem.modelData.status)
               }
             }
             Text {
               objectName: "sidebar-herdr-counter-text"
-              anchors.verticalCenter: parent.verticalCenter
+              height: parent.height
+              verticalAlignment: Text.AlignVCenter
               textFormat: Text.PlainText
               text: String(counterItem.modelData.count)
               color: root.herdrStatusColor(counterItem.modelData.status)
               font.family: Style.font.family
-              font.pixelSize: Style.font.caption
+              font.pixelSize: Style.font.bodySmall
               renderType: Text.NativeRendering
             }
           }
@@ -1395,7 +1403,7 @@ Item {
       radius: Style.space(4)
       color: Util.alpha(Color.foreground, 0.08)
       border.width: 1
-      border.color: root.row.active
+      border.color: root.row.focused
         ? Util.alpha(Color.accent, 0.50)
         : Util.alpha(Color.foreground, 0.14)
       Text {
@@ -1406,7 +1414,7 @@ Item {
         textFormat: Text.PlainText
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
-        color: root.row.active ? Color.accent : Color.foreground
+        color: root.row.focused ? Color.accent : Color.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         font.bold: true

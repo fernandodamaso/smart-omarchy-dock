@@ -452,7 +452,7 @@ function annotateTreeAndSpans(result) {
           result.sectionSpans.push({
             kind: "workspace", key: currentWorkspaceKey,
             firstKey: rows[workspaceStart].key, lastKey: rows[workspaceLast].key,
-            focused: workspaceTarget && workspaceTarget.active === true, endPadding: 5
+            focused: workspaceTarget && workspaceTarget.focused === true, endPadding: 5
           })
           rows[workspaceLast].layoutPadWorkspaceEnd = true
         }
@@ -1071,7 +1071,8 @@ function project(input) {
   native.groups.forEach(function(group) {
     var section = sections[group.monitorIdentity] || unknownSection()
     var workspace = { key: JSON.stringify(["workspace", group.identity]), identity: group.identity,
-      owner: section.monitorIdentity, label: group.label, active: group.active, urgent: group.urgent,
+      owner: section.monitorIdentity, label: group.label, active: group.active,
+      focused: group.active && section.focused, urgent: group.urgent,
       applications: [] }
     var localApps = Object.create(null)
     group.items.forEach(function(item) {
@@ -1194,7 +1195,8 @@ function project(input) {
     section.workspaces.forEach(function(workspace) {
       var workspaceRow = { kind: "workspace", key: workspace.key, label: workspace.label,
         workspaceIdentity: workspace.identity, monitorIdentity: workspace.owner,
-        active: workspace.active, urgent: workspace.urgent, target: workspace }
+        active: workspace.active, focused: workspace.focused,
+        urgent: workspace.urgent, target: workspace }
       // Expanded populated workspaces put their label on the first visible
       // child row. Empty workspaces retain a dedicated row so they remain
       // discoverable and actionable. The setting is also the compatibility

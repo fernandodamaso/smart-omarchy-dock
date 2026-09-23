@@ -229,7 +229,7 @@ assert.equal(Array.from(Interaction.compactWorkspaceBadgeLabel('😀Work')).leng
 assert.match(rowQml, /workspaceRailLabel[\s\S]*?compactWorkspaceBadgeLabel/,
   'collapsed rail label uses the compact helper')
 
-// Topology strip: physical order + shared focused index/ordinal (not sectionIndex).
+// Topology strip: physical order, shared focus and per-card own-monitor index.
 assert.equal(Interaction.focusedMonitorStripIndex([
   { focused: false }, { focused: true }, { focused: false }
 ]), 1)
@@ -240,19 +240,25 @@ assert.equal(Interaction.focusedMonitorStripIndex([
   { focused: false }, { focused: false }
 ]), -1)
 assert.equal(Interaction.focusedMonitorStripIndex([]), -1)
-assert.equal(Interaction.focusedMonitorStripOrdinal([
-  { focused: false }, { focused: true }, { focused: false }
-]), '2/3')
-assert.equal(Interaction.focusedMonitorStripOrdinal([
-  { focused: false }, { focused: false }
-]), '')
+const monitorStrip = [
+  { identity: '9', connector: 'DP-1', focused: false },
+  { identity: '2', connector: 'HDMI-A-1', focused: true }
+]
+assert.equal(Interaction.monitorStripIndexFor(monitorStrip, '2', ''), 1)
+assert.equal(Interaction.monitorStripIndexFor(monitorStrip, '', 'DP-1'), 0)
+assert.equal(Interaction.monitorStripIndexFor(monitorStrip, 'missing', 'missing'), -1)
 assert.equal(Interaction.topologyStripWidth(2), 14 * 2 + 3)
 assert.equal(Interaction.topologyStripWidth(4), 14 * 4 + 9)
 assert.equal(Interaction.topologyStripWidth(5), 24)
 assert.match(rowQml, /physicalMonitorStrip/,
   'row builds miniatures from physicalMonitorStrip, not card section order')
-assert.match(rowQml, /focusedMonitorStripOrdinal/,
-  '>4 ordinal uses shared focused physical monitor on every header')
+assert.match(rowQml, /monitorStripIndexFor/,
+  '>4 ordinal and miniature fills use each card own physical monitor')
+assert.match(rowQml, /readonly property bool ownMonitor: index === root\.monitorStripIndex/,
+  'each topology miniature identifies whether it belongs to the current card')
+assert.match(rowQml,
+  /parent\.ownMonitor\s*\? \(parent\.focusedMonitor \? Color\.accent : Util\.alpha\(Color\.foreground, 0\.42\)\)/,
+  'own monitor is accent when focused and dim foreground when unfocused')
 assert.doesNotMatch(rowQml, /monitorStripOrdinal:\s*\(monitorSectionIndex/,
   'ordinal must not be sectionIndex+1/N')
 assert.doesNotMatch(rowQml, /index === root\.monitorSectionIndex/,
@@ -298,9 +304,16 @@ assert.doesNotMatch(viewportQml, /activeMonitorBorder/,
     'strip order must diverge from configured card order in this fixture')
   assert.equal(Interaction.focusedMonitorStripIndex(strip), 1,
     'focus joins by connector/identity onto physical HDMI (index 1)')
-  assert.equal(Interaction.focusedMonitorStripOrdinal(strip), '2/3',
-    '>4 ordinal is the focused physical monitor on every header')
+  assert.equal(Interaction.monitorStripIndexFor(strip, '2', 'HDMI-A-1'), 1,
+    'the HDMI card resolves its own physical monitor at index 1')
 }
+
+assert.doesNotMatch(rowQml, /workspaceBadge[\s\S]{0,420}?root\.row\.active/,
+  'expanded workspace badge accent no longer follows monitor-local active state')
+assert.doesNotMatch(rowQml, /railWorkspaceBadge[\s\S]{0,520}?root\.row\.active/,
+  'rail workspace badge accent no longer follows monitor-local active state')
+assert.match(rowQml, /root\.leadingWorkspace && root\.leadingWorkspace\.focused/,
+  'inline workspace badge accent follows globally focused state')
 
 // Real windowStateForRow: settings.pinned must not light the window pin icon.
 {

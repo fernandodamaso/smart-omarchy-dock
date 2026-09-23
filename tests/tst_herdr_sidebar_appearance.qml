@@ -231,24 +231,25 @@ TestCase {
                 height: parent.height
                 Item {
                   objectName: "sidebar-herdr-counter-marker"
-                  width: 10
-                  height: 10
+                  width: 14
+                  height: 14
                   anchors.verticalCenter: parent.verticalCenter
                   DockLucideIcon {
                     objectName: "sidebar-herdr-counter-icon"
                     anchors.centerIn: parent
-                    width: 10; height: 10
+                    width: 14; height: 14
                     iconName: "bot"
-                    iconSize: 10
+                    iconSize: 14
                     tint: "#7aa2f7"
                   }
                 }
                 Text {
                   objectName: "sidebar-herdr-counter-text"
-                  anchors.verticalCenter: parent.verticalCenter
+                  height: parent.height
+                  verticalAlignment: Text.AlignVCenter
                   text: String(counterItem.modelData.count)
                   textFormat: Text.PlainText
-                  font.pixelSize: 10
+                  font.pixelSize: 12
                 }
               }
               Accessible.name: InteractionModel.herdrCounterAccessibleText(
@@ -371,8 +372,12 @@ TestCase {
     var label = findByName(chrome, "sidebar-label")
     var indicator = findByName(chrome, "sidebar-herdr-window-working-indicator")
     verify(marker !== null && agentIcon !== null && label !== null && indicator !== null)
-    compare(marker.width, 10)
+    compare(marker.width, 14)
     compare(agentIcon.iconName, "bot")
+    compare(Math.abs((agentIcon.y + agentIcon.height / 2)
+      - (findByName(delegates[0], "sidebar-herdr-counter-text").y
+        + findByName(delegates[0], "sidebar-herdr-counter-text").height / 2)) <= 1, true,
+      "robot and counter text are vertically centered")
     compare(delegates[0].Accessible.name, "2 agents working")
     compare(indicator.visible, true)
     compare(indicator.active, true)

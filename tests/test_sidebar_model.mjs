@@ -31,6 +31,12 @@ assert.equal(p.monitorSections[0].workspaces.find(w => w.identity === 'id:4').ap
 assert.ok(p.monitorSections[1].workspaces.some(w => w.identity === 'name:project alpha'))
 assert.equal(p.monitorSections[0].workspaces.find(w => w.identity === 'id:3').active, true)
 assert.equal(p.monitorSections[1].workspaces.find(w => w.identity === 'id:7').active, true)
+assert.equal(p.monitorSections[0].workspaces.find(w => w.identity === 'id:3').focused, false,
+  'active workspace on an unfocused monitor is not globally focused')
+assert.equal(p.monitorSections[1].workspaces.find(w => w.identity === 'id:7').focused, true,
+  'only the active workspace on the focused monitor is globally focused')
+assert.equal(p.monitorSections.flatMap(m => m.workspaces).filter(w => w.focused).length, 1,
+  'only one workspace carries focused accent state')
 assert.equal(findWindow(p, 'sticky').workspaceIdentity, 'id:7')
 assert.equal(findWindow(p, 'minimized').workspaceIdentity, 'id:3')
 assert.equal(findWindow(p, 'minimized').minimized, true)
