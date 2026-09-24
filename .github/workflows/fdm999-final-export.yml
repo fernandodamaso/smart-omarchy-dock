@@ -1,0 +1,33 @@
+name: FDM-999 exact-source export
+on:
+  push:
+    branches: [agent/fdm-999-final-verification]
+    paths: [.github/workflows/fdm999-final-export.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 5c594d5f5459b53f52685a559ca72bac6b5695db
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify and export exact candidate
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 5c594d5f5459b53f52685a559ca72bac6b5695db
+          test "$(git rev-parse HEAD^{tree})" = b72592ebd0c9c1d6ff72176dc2d4ecbd3e7251ff
+          git merge-base --is-ancestor 168f4924af61e5f6339df95d60b2a7f4993d70f8 HEAD
+          git merge-base --is-ancestor 3dcf8ad1049a202b0ae614c83fd3df8461007469 HEAD
+          mkdir -p /tmp/fdm999-export
+          git bundle create /tmp/fdm999-export/published.bundle HEAD
+          git show -s --format='%H%n%T%n%P' HEAD > /tmp/fdm999-export/identity.txt
+          sha256sum /tmp/fdm999-export/published.bundle > /tmp/fdm999-export/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdm999-published-exact-source
+          path: /tmp/fdm999-export/
+          retention-days: 7
