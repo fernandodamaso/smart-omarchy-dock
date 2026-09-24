@@ -1,0 +1,169 @@
+import QtQuick
+import QtTest
+import qs.Commons
+import qs.Ui as Ui
+import "@@COMPONENTS@@"
+import "@@COMPONENTS@@/widgets"
+
+TestCase {
+  id: testCase
+  name: "WidgetSectionChrome"
+  when: windowShown
+  visible: true
+  width: 760
+  height: 440
+  property int opens: 0
+  property int closes: 0
+  property var lastAnchor: null
+  QtObject {
+    id: manager
+    function openFor(anchor) { testCase.opens++; testCase.lastAnchor = anchor; return true }
+  }
+  QtObject {
+    id: mockController
+    property bool interactionBusy: false
+    function widgetView(id) {
+      return { descriptor: { id: id, label: "Coding agents", iconName: "layout-grid" },
+        status: "unavailable", data: { count: 100 }, active: false, revision: 0, provider: null }
+    }
+    function openWidgetPopup() { return false }
+    function closeWidgetPopup() {}
+  }
+  Component {
+    id: hostFactory
+    Item {
+      id: root
+      width: 280; height: 330
+      property bool panelCollapsed: false
+      property var controller: mockController
+      property var widgetManager: manager
+      property alias viewport: hierarchy
+      readonly property var widgetArea: null // main-header entry must not depend on a tail
+      @@MAIN_OPEN@@
+      Item { id: hierarchy; x: 14; width: parent.width - 28; property real workspaceCardInset: Style.space(5) }
+      Item {
+        width: parent.width; height: 34
+        Item { id: collapseButton; anchors.right: parent.right; width: 30; height: 30 }
+        @@MAIN_BUTTON@@
+        property alias button: widgetManage
+        objectName: "main-header"
+      }
+    }
+  }
+  Component {
+    id: areaFactory
+    Item {
+      id: root
+      property var panel
+      property var viewport: panel.viewport
+      @@AREA_INSET@@
+      function closePopup() { testCase.closes++ }
+      @@AREA_OPEN@@
+      x: viewport.x; y: 44; width: viewport.width; height: 160
+      @@AREA_HEADER@@
+      DockWidgetCard {
+        id: card
+        objectName: "section-test-card"
+        y: sectionHeader.height + 6
+        width: parent.width
+        controller: mockController
+        widgetId: "demo.test"
+      }
+    }
+  }
+  Component {
+    id: pinFactory
+    Item {
+      id: root
+      property var panel
+      x: 10; y: 230; width: panel.width - 20; height: 60
+      Item { id: divider; height: 1; width: parent.width }
+      @@PINNED_LABEL@@
+    }
+  }
+  function named(node, name) {
+    if (node.objectName === name) return node
+    for (var i = 0; node.children && i < node.children.length; ++i) {
+      var found = named(node.children[i], name)
+      if (found) return found
+    }
+    return null
+  }
+  function init() { opens = 0; closes = 0; lastAnchor = null; mockController.interactionBusy = false }
+  function makeHost(x, width) {
+    var host = createTemporaryObject(hostFactory, testCase, {x: x, width: width})
+    verify(host !== null)
+    return host
+  }
+  function test_section_geometry_data() {
+    return [{tag: "left minimum", x: 0, width: 240}, {tag: "right minimum", x: 510, width: 240},
+      {tag: "default", x: 0, width: 280}, {tag: "wide", x: 0, width: 420}]
+  }
+  function test_section_geometry(data) {
+    var host = makeHost(data.x, data.width)
+    var area = createTemporaryObject(areaFactory, host, {panel: host})
+    var pins = createTemporaryObject(pinFactory, host, {panel: host})
+    verify(area !== null && pins !== null)
+    waitForRendering(area)
+    var label = named(area, "widget-section-label")
+    var pinned = named(pins, "pinned-section-label")
+    var icon = named(area, "widget-card-icon")
+    var body = named(area, "widget-card-view")
+    verify(label !== null && pinned !== null && icon !== null && body !== null)
+    compare(label.text, "WIDGETS")
+    compare(pinned.text, "PINNED")
+    compare(label.font.pixelSize, pinned.font.pixelSize)
+    compare(label.font.weight, pinned.font.weight)
+    compare(label.color, pinned.color)
+    verify(label.topPadding > 0)
+    var expected = host.mapToItem(testCase, host.viewport.x + host.viewport.workspaceCardInset + Style.space(4), 0).x
+    for (var item of [label, pinned, icon, body])
+      fuzzyCompare(item.mapToItem(testCase, 0, 0).x, expected, 0.01)
+    var plus = named(area, "widget-section-manage")
+    verify(plus !== null)
+    compare(plus.text, "")
+    compare(plus.iconText, "")
+    verify(plus.width >= 24 && plus.height >= 24)
+    verify(label.x + label.width < plus.x)
+    compare(plus.tooltipText, "Add or manage Widgets")
+    compare(plus.Accessible.name, plus.tooltipText)
+    var plusIcon = named(plus, "widget-section-plus")
+    verify(plusIcon !== null)
+    compare(plusIcon.iconName, "plus")
+    tryCompare(plusIcon, "ready", true)
+    plus.forceActiveFocus()
+    keyClick(Qt.Key_Return); keyClick(Qt.Key_Enter); keyClick(Qt.Key_Space)
+    compare(opens, 3); compare(closes, 3); compare(lastAnchor, plus)
+    mouseClick(plus, plus.width / 2, plus.height / 2)
+    compare(opens, 4)
+    plus.enabled = false
+    keyClick(Qt.Key_Return); keyClick(Qt.Key_Enter); keyClick(Qt.Key_Space)
+    mouseClick(plus, plus.width / 2, plus.height / 2)
+    compare(opens, 4)
+  }
+  function test_main_header_zero_presented_cards() {
+    var host = makeHost(0, 280)
+    compare(host.widgetArea, null)
+    var button = named(host, "main-header").button
+    button.forceActiveFocus()
+    keyClick(Qt.Key_Return); keyClick(Qt.Key_Enter); keyClick(Qt.Key_Space)
+    compare(opens, 3); compare(lastAnchor, button)
+    mockController.interactionBusy = true
+    verify(!button.enabled)
+    keyClick(Qt.Key_Return); mouseClick(button, 15, 15)
+    compare(opens, 3)
+  }
+  function test_render_offscreen_chrome() {
+    if ("@@SCREENSHOT@@" === "") return
+    for (var x of [20, 400]) {
+      var host = makeHost(x, 280)
+      createTemporaryObject(areaFactory, host, {panel: host})
+      createTemporaryObject(pinFactory, host, {panel: host})
+    }
+    mouseMove(testCase, 750, 430)
+    wait(100)
+    var done = false
+    verify(testCase.grabToImage(function(result) { done = result.saveToFile("@@SCREENSHOT@@") }))
+    tryVerify(function() { return done })
+  }
+}

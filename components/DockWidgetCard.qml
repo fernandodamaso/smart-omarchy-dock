@@ -11,6 +11,7 @@ Item {
   required property var controller
   required property string widgetId
   property var appearance: null
+  property real contentInset: Style.space(5) + Style.space(4)
   readonly property color idleCardFill: appearance
     ? appearance.monitorFill : Qt.tint(Color.background, Util.alpha(Color.foreground, 0.035))
   readonly property color headerHoverFill: appearance
@@ -103,6 +104,10 @@ Item {
     Rectangle {
       objectName: "widget-card-header-highlight"
       anchors.fill: parent
+      // Keep native focus-border strokes visible above the transient fill.
+      anchors.leftMargin: cardSurface.contentLeftInset
+      anchors.rightMargin: cardSurface.contentRightInset
+      anchors.topMargin: cardSurface.contentTopInset
       radius: root.widgetCardRadius
       color: headerHover.hovered || root.hasCardFocus || cardContext.pressed
         ? root.headerHoverFill : "transparent"
@@ -191,8 +196,9 @@ Item {
 
     WidgetIcon {
       id: widgetIcon
+      objectName: "widget-card-icon"
       anchors.left: parent.left
-      anchors.leftMargin: Style.space(9)
+      anchors.leftMargin: root.contentInset
       anchors.verticalCenter: parent.verticalCenter
       width: 18
       height: 18
@@ -299,6 +305,7 @@ Item {
 
     DockSidebarWidgetView {
       id: widgetView
+      objectName: "widget-card-view"
       controller: root.controller
       widgetId: root.widgetId
       presentation: "expanded"
@@ -308,9 +315,9 @@ Item {
       presentationVisible: root.presentationVisible && !root.collapsed && root.visible
       presentationClipItem: root.presentationClipItem
       presentationRevision: root.presentationRevision
-      x: Style.space(9)
+      x: root.contentInset
       y: Style.space(7)
-      width: Math.max(0, parent.width - Style.space(18))
+      width: Math.max(0, parent.width - 2 * root.contentInset)
       height: implicitHeight
     }
 
@@ -319,6 +326,8 @@ Item {
       visible: !widgetView.hasView
       anchors.fill: parent
       anchors.margins: Style.space(6)
+      anchors.leftMargin: root.contentInset
+      anchors.rightMargin: root.contentInset
       compact: true
       kind: !root.snapshot ? "unavailable"
         : root.snapshot.status === "loading" ? "loading"
@@ -333,6 +342,7 @@ Item {
 
   Controls.Menu {
     id: cardMenu
+    objectName: "widget-card-menu"
     Controls.MenuItem {
       text: "Remove from Widgets"
       onTriggered: root.removeRequested()

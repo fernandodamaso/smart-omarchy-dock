@@ -251,6 +251,15 @@ TestCase {
     verify(surface.border.width > 0)
   }
 
+  function test_header_highlight_does_not_cover_focus_border() {
+    var card = makeCard()
+    card.appearance = testAppearance
+    card.forceActiveFocus()
+    waitForRendering(card)
+    var image = grabImage(card)
+    compareColor(image.pixel(Math.floor(card.width / 2), 0), Color.accent)
+  }
+
   function test_title_single_click_does_not_toggle() {
     var card = makeCard()
     var title = findByName(card, "widget-card-title")
@@ -309,6 +318,20 @@ TestCase {
     mouseMove(handle, 8, handle.height / 2 + card.dragThreshold + 2, Qt.LeftButton)
     compare(card.dragActive, false)
     mouseRelease(handle, 8, handle.height / 2 + card.dragThreshold + 2, Qt.LeftButton)
+    compare(testCase.toggleCount, 0)
+  }
+
+  function test_context_menu_removal_emits_once() {
+    var card = makeCard()
+    var removed = 0
+    card.removeRequested.connect(function() { removed++ })
+    var menu = findChild(card, "widget-card-menu")
+    verify(menu !== null)
+    mouseClick(card, 20, 15, Qt.RightButton)
+    tryCompare(menu, "visible", true)
+    keyClick(Qt.Key_Down)
+    keyClick(Qt.Key_Return)
+    compare(removed, 1)
     compare(testCase.toggleCount, 0)
   }
 
