@@ -37,6 +37,13 @@ FocusScope {
   readonly property var contentTailItem: list.footerItem ? list.footerItem.contentTailItem : null
   property var contentTailDragPoint: null
   signal contentTailAutoScrolled()
+  // Allocate from canonical projection metrics, never a virtualized estimate.
+  readonly property real naturalContentHeight: {
+    var total = 0
+    for (var i = 0; i < root.visibleRows.length; ++i)
+      total += root.rowMetricsFor(root.visibleRows[i]).height
+    return total
+  }
   readonly property int rowCount: visibleRows.length
   readonly property real rowHeight: Math.max(34, Math.ceil(metrics.height + Style.space(12)))
   readonly property real workspaceCardInset: Style.space(5)
