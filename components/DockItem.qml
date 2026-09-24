@@ -520,11 +520,11 @@ Item {
         id: herdrStatusMark
         objectName: "dock-herdr-status-mark"
         status: root.herdrIndicatorStatus
-        size: Math.max(22, root.iconSize * 26 / 52)
+        size: Math.round(Math.min(26, Math.max(16, root.iconSize * 0.84)))
         ringColor: Color.background
         animationsEnabled: root.interfaceAnimationsEnabled
-        x: iconContainer.width - width + root.iconSize * 8 / 52
-        y: -root.iconSize * 8 / 52
+        x: iconContainer.width - width + Math.round(width * 0.3)
+        y: -Math.round(height * 0.3)
         z: 4
       }
 

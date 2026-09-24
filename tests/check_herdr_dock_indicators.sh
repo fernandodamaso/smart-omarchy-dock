@@ -21,9 +21,9 @@ grep -Fq 'summaryForToplevels(item.toplevels || [])' "$dock" \
 grep -Fq 'herdrWindowCount: Number(dockHerdrSummary.herdrWindowCount || 0)' "$dock" \
   || fail 'associated-window count is not passed to DockItem'
 
-grep -Fq 'size: Math.max(22, root.iconSize * 26 / 52)' "$item" \
-  || fail 'readable status mark minimum and 26px scaling missing'
-grep -Fq 'y: -root.iconSize * 8 / 52' "$item" \
+grep -Fq 'size: Math.round(Math.min(26, Math.max(16, root.iconSize * 0.84)))' "$item" \
+  || fail 'status mark must scale with the icon between 16 and 26px'
+grep -Fq 'y: -Math.round(height * 0.3)' "$item" \
   || fail 'status mark must own the top-right corner'
 grep -Fq 'root.runningCount > 1 && !herdrStatusMark.visible' "$item" \
   || fail 'status mark must replace the numeric corner badge'
