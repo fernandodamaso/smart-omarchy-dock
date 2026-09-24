@@ -26,9 +26,29 @@ ShellRoot {
     }
   ]
   readonly property var activities: state === "no-activity" ? []
+    : state === "herdr-only" || state === "herdr-mixed" ? []
     : state === "overflow" ? overflowActivities() : defaultActivities
   readonly property var previewMembers: state === "one-window"
+      || state === "herdr-only"
     ? [firstWindow] : [firstWindow, secondWindow]
+  readonly property var previewAgents:
+    state === "herdr-only" || state === "herdr-mixed" ? [
+      {
+        id: "agent-blocked", serverId: "local", status: "blocked",
+        title: "Execute sidebar layout fix…", tabTitle: "sidebar-layout",
+        agent: "codex", focusAgentSupported: true, toplevel: firstWindow
+      },
+      {
+        id: "agent-working", serverId: "local", status: "working",
+        title: "Sidebar presentation design", tabTitle: "smart-omarchy-dock",
+        agent: "claude", focusAgentSupported: true, toplevel: firstWindow
+      },
+      {
+        id: "agent-done", serverId: "remote", status: "done",
+        title: "Remote review", tabTitle: "worktree-herdr-dock",
+        agent: "claude", focusAgentSupported: false, toplevel: firstWindow
+      }
+    ] : []
 
   function overflowActivities() {
     var rows = []
@@ -60,6 +80,18 @@ ShellRoot {
     function windowState(toplevel) { return { workspace: "name:Work" } }
     function activateToplevel(toplevel, originOnly) { return true }
     function closeToplevel(toplevel) { return true }
+  }
+
+  QtObject {
+    id: herdrActions
+    function captureAgentTarget(toplevel, agent) {
+      return agent && agent.focusAgentSupported === true
+        ? { agentId: agent.id, toplevel: toplevel } : null
+    }
+    function activateHerdrTarget(target) {
+      console.log("herdr-window-preview: focus", target.agentId)
+      return true
+    }
   }
 
   QtObject {
@@ -102,6 +134,14 @@ ShellRoot {
       property var identityToplevel: null
       property bool originOnly: false
       property var previewActivities: harness.activities
+      property var previewAgents: harness.previewAgents
+      property bool previewHerdrOnly: harness.state === "herdr-only"
+      property string previewHerdrLabel: "worktree-herdr-dock"
+      property var previewHerdrCounters: [
+        { status: "blocked", count: 1 },
+        { status: "working", count: 1 },
+        { status: "done", count: 1 }
+      ]
 
       Rectangle {
         anchors.fill: parent
@@ -128,6 +168,7 @@ ShellRoot {
   Components.DockWindowPreview {
     id: preview
     windowActions: actions
+    herdrAgentActions: herdrActions
     position: harness.position
     visibleItems: []
     // Direct mock members have no visible-item owner to refresh from.
@@ -148,6 +189,7 @@ ShellRoot {
       icon: "google-chrome"
     }
     preview.members = harness.previewMembers
+    preview.refreshAgentContent()
     preview.anchorHovered = true
     previewStaged = true
     harness.showPreviewWhenReady()

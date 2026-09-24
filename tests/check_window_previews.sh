@@ -29,6 +29,40 @@ require_pattern 'ScreencopyView[[:space:]]*\{' components/DockWindowPreviewTile.
 require_pattern 'captureFrame\(\)' components/DockWindowPreviewTile.qml
 require_pattern 'function groupedPreviewMembers\(' components/DockWindowPreviewModel.js
 require_pattern 'function previewAnchorOffset\(' components/DockWindowPreviewModel.js
+require_pattern 'function hasPreviewContent\(memberCount, activityCount, agentCount\)' components/DockWindowPreviewModel.js
+
+# FDM-990: one window with one Herdr agent is preview-eligible through the
+# same helper for hover, configured click, delayed open and refresh.
+require_pattern 'import "DockWindowPreviewModel\.js" as PreviewModel' components/DockItem.qml
+require_pattern 'function hasPreviewContent\(\)' components/DockItem.qml
+require_pattern 'root\.previewAgents\.length' components/DockItem.qml
+if grep -Eq 'runningCount[[:space:]]*<[[:space:]]*2.*previewActivities|runningCount[[:space:]]*>=[[:space:]]*2.*previewActivities' components/DockItem.qml; then
+  fail "DockItem preview paths must use hasPreviewContent"
+fi
+
+# Agent rows share the anchor lifecycle, suppress thumbnails only for an
+# all-Herdr item, and capture the real agent target rather than a row index or
+# the bridge-only indicatorKey.
+for property in previewAgents previewHerdrOnly previewHerdrLabel previewHerdrCounters; do
+  require_pattern "property .*${property}" components/DockItem.qml
+done
+require_pattern 'function herdrPreviewAgentsFor\(' components/Dock.qml
+require_pattern 'toplevel:[[:space:]]*toplevel' components/Dock.qml
+require_pattern 'serverLabel:[[:space:]]*root\.herdrServerLabel\(agent\.serverId\)' components/Dock.qml
+require_pattern 'herdrAgentActions:[[:space:]]*root\.herdrAgentActions' DockHost.qml
+require_pattern 'herdrAgentActions:[[:space:]]*root\.herdrAgentActions' components/Dock.qml
+require_pattern 'root\.anchorItem\["previewAgents"\]' components/DockWindowPreview.qml
+require_pattern 'root\.members\.length[[:space:]]*>=[[:space:]]*2[[:space:]]*&&[[:space:]]*!root\.herdrOnly' components/DockWindowPreview.qml
+require_pattern 'root\.herdrAgentActions\.captureAgentTarget\(agent\.toplevel, agent\)' components/DockWindowPreview.qml
+require_pattern 'root\.herdrAgentActions\.activateHerdrTarget\(target\)' components/DockWindowPreview.qml
+require_pattern 'modelData\.focusAgentSupported[[:space:]]*===[[:space:]]*true' components/DockWindowPreview.qml
+require_pattern 'activeFocusOnTab:[[:space:]]*actionable' components/DockWindowPreview.qml
+require_pattern 'Keys\.onReturnPressed:' components/DockWindowPreview.qml
+require_pattern 'text:[[:space:]]*"↵ Focus"' components/DockWindowPreview.qml
+require_pattern 'text:[[:space:]]*"Click a row to focus its pane\."' components/DockWindowPreview.qml
+require_pattern 'HerdrModel\.displayAgentTabSecondary\(' components/DockWindowPreview.qml
+require_pattern 'DockHerdrStatusMark[[:space:]]*\{' components/DockWindowPreview.qml
+require_pattern 'Qt\.callLater\(root\.refreshSupplementaryContent\)' components/DockWindowPreview.qml
 
 # FDM-810 recovery hardening: overflow must be usable without altering the
 # grouped-window source contract inherited from FDM-812.
@@ -51,7 +85,8 @@ require_pattern 'event\.accepted[[:space:]]*=[[:space:]]*true' components/DockWi
 require_pattern 'onAnchorItemChanged:' components/DockWindowPreview.qml
 require_pattern 'target:[[:space:]]*root\.anchorItem' components/DockWindowPreview.qml
 require_pattern 'target:[[:space:]]*root\.anchorScreen' components/DockWindowPreview.qml
-require_pattern 'function onDestroyed\(\)[[:space:]]*\{[[:space:]]*root\.dismissImmediately\(\)' components/DockWindowPreview.qml
+require_pattern 'function onDestroyed\(object\)' components/DockWindowPreview.qml
+require_pattern 'root\.anchorItem[[:space:]]*===[[:space:]]*object' components/DockWindowPreview.qml
 
 # Capture failure is a supported fallback, not a stuck/blank preview.
 require_pattern 'property bool captureStopped:[[:space:]]*false' components/DockWindowPreviewTile.qml

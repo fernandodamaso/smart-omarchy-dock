@@ -6,7 +6,7 @@ Use [the agent workflow](AGENT_CONFIGURATION.md) for minimal, reversible changes
 
 ## All declared settings
 
-Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 57 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
+Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 58 rows against the shipped defaults. Bounds apply to new CLI writes; compatible legacy requested values survive unrelated changes. There is no automatic whole-file migration.
 
 | Key | Declared default | New-write type, limits and dependencies |
 | --- | --- | --- |
@@ -64,6 +64,7 @@ Defaults below are JSON literals. `tests/test_cli_docs.py` checks these 57 rows 
 | `urgentWindowAnimationEnabled` | `true` | Boolean; existing bounded attention motion, also gated by attentionBadgesEnabled in rendering. |
 | `launcherBadgeMode` | `"automatic"` | String: automatic or dots-only. Uses an already-available provider; does not start/install one. |
 | `browserProfileBadgesEnabled` | `true` | Boolean; per-window browser profile corner badges (photo or initial) from the browser-profile provider. No provider or DevTools endpoint means no badges; the setting installs nothing. |
+| `dockHerdrIndicators` | `false` | Show Herdr agent state on terminal icons, in hover previews and in the context menu. Uses the existing Herdr provider; enabling it starts that provider while a classic dock is active, including when it is auto-hidden. |
 | `browserActivityMutedServices` | `[]` | Safe service ID array (`gmail`, `whatsapp`, …). Muted rows stay visible and openable but are excluded from Chrome activity header and dock badge totals; retained by preference reset. |
 | `hiddenApplications` | `[]` | Safe desktop ID array with no new canonical duplicates; independent of pins and retained by preference reset. |
 | `pinned` | `["org.gnome.Nautilus","com.google.Chrome","com.mitchellh.ghostty","code","obsidian","chatgpt"]` | Ordered safe desktop ID array, including unavailable/hidden apps; no new canonical duplicates; retained by preference reset. |

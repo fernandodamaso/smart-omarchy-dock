@@ -98,9 +98,11 @@ TestCase {
       }
       readonly property bool windowWorkingAnimationActive: !agentMode && hasWorkingCounter
         && herdrFolded && interfaceAnimationsEnabled && animationEligible
+      readonly property bool windowWorkingIndicatorVisible: !agentMode && hasWorkingCounter
+        && herdrFolded
       readonly property real windowWorkingIndicatorGap: 5
       readonly property real windowWorkingIndicatorReservation:
-        windowWorkingAnimationActive ? 10 + windowWorkingIndicatorGap : 0
+        windowWorkingIndicatorVisible ? 10 + windowWorkingIndicatorGap : 0
       readonly property real herdrCountersNaturalWidth: herdrCountersVisible
         ? counters.implicitWidth : 0
       readonly property bool herdrStateStripFits: {
@@ -171,8 +173,11 @@ TestCase {
         DockHerdrWorkingIndicator {
           id: windowWorkingIndicator
           objectName: "sidebar-herdr-window-working-indicator"
-          visible: chrome.windowWorkingAnimationActive
-          active: visible
+          visible: chrome.windowWorkingIndicatorVisible
+          active: chrome.windowWorkingAnimationActive
+          animationsEnabled: chrome.interfaceAnimationsEnabled
+          width: 10
+          height: 10
           x: chrome.labelX
           anchors.verticalCenter: parent.verticalCenter
           tint: "#7aa2f7"
@@ -406,13 +411,15 @@ TestCase {
     chrome.herdrFolded = true
     chrome.interfaceAnimationsEnabled = false
     wait(0)
-    compare(indicator.visible, false)
+    compare(indicator.visible, true, "reduced motion keeps a static folded indicator")
+    compare(indicator.animating, false)
     compare(agentIcon.visible, true)
 
     chrome.interfaceAnimationsEnabled = true
     chrome.animationEligible = false
     wait(0)
-    compare(indicator.visible, false)
+    compare(indicator.visible, true, "reduced motion keeps a static folded indicator")
+    compare(indicator.animating, false)
     compare(agentIcon.visible, true)
   }
 

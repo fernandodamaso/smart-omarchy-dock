@@ -10,7 +10,6 @@ import "DockSidebarWidgetModel.js" as SidebarWidgetModel
 import "DockBadgeModel.js" as BadgeModel
 import "DockBrowserActivityModel.js" as ActivityModel
 import "DockFullscreenModel.js" as FullscreenModel
-import "DockHerdrModel.js" as HerdrModel
 
 // Host-owned session/view state. All compositor data and action/writer services
 // are injected. Widget leases belong to this host session, never to a view.
@@ -29,6 +28,8 @@ Item {
   property string focusedWorkspace: ""
   property int scopeRevision: 0
   readonly property var windowActions: host ? host.windowActions || null : null
+  readonly property var herdrWindowAgents: host ? host.herdrWindowAgents || null : null
+  readonly property var herdrAgentActions: host ? host.herdrAgentActions || null : null
   readonly property var windowIconOverrides: DockIconModel.normalizeWindowRules(
     settings.windowIconOverrides || [])
   property var dragSession: null
@@ -92,17 +93,12 @@ Item {
   readonly property bool widgetWorkActive: mappedScreens.length > 0
   readonly property var widgetCollapsed: SidebarWidgetModel.collapsedMap(
     settings.sidebarWidgetCollapsed)
-  // Herdr window↔session association bridge (process identity only).
-  property int windowProcessRevision: 0
-  property string windowProcessFingerprint: ""
-  property string windowProcessSentEpoch: ""
-  property string herdrAssociationEpoch: ""
-  property bool windowProcessBootstrapped: false
-  property var windowProcessTargets: []
-  property var herdrAssociations: ({ byWindowKey: ({}), unmatchedServerIds: [] })
-  // Last verified window→server parents. Survives provider loss only while the
-  // exact live handle key and PID remain unchanged. Never stores agents/counts.
-  property var herdrVerifiedParents: ({})
+  // Compatibility/readback aliases. The host bridge owns the mutable state.
+  readonly property int windowProcessRevision: herdrWindowAgents
+    ? herdrWindowAgents.windowProcessRevision : 0
+  readonly property string herdrAssociationEpoch: herdrWindowAgents
+    ? herdrWindowAgents.herdrAssociationEpoch : ""
+  readonly property var herdrAssociations: sidebarHerdrAssociations()
   property bool projecting: false
 
   // Map override when present; otherwise the global sidebarCollapsed default.
@@ -129,11 +125,6 @@ Item {
   property var scrollStates: ({})
   property string focusedRowKey: ""
   property string mutationFeedback: ""
-  // Short-lived focus failure by row key (fixed error codes only).
-  property var herdrFocusErrors: ({})
-  property string latestFocusRequestId: ""
-  property var pendingFocusByRequest: ({})
-  property var pendingFocusByAgent: ({})
   // Intra-row keyboard focus for the browser-tab mute (eye) control.
   property string alertControlKey: ""
   readonly property var rowsByKey: SidebarModel.indexRowsByKey(projection, railProjection)
@@ -273,7 +264,6 @@ Item {
     // Snapshot updates must not reset the delegate model or popup anchor.
     if (JSON.stringify(ids) !== JSON.stringify(root.widgetIds)) root.widgetIds = ids
     root.widgetRevision = (root.widgetRevision + 1) % 1000000000
-    root.syncHerdrWindowProcesses()
     // Herdr snapshot/association changes feed nested tree rows.
     if (!root.projecting)
       root.scheduleRefresh()
@@ -498,7 +488,6 @@ Item {
     root.syncWidgets()
     if (root.interactionBusy && nextMapped.length) {
       root.refreshPending = true
-      root.syncHerdrWindowProcesses()
       return
     }
     root.refreshPending = false
@@ -508,7 +497,6 @@ Item {
     if (!nextPrimary) {
       root.projection = SidebarModel.emptyProjection()
       root.railProjection = SidebarModel.emptyProjection()
-      root.syncHerdrWindowProcesses()
       root.refreshed()
       return
     }
@@ -534,15 +522,11 @@ Item {
       if (!service || !service.available) return ({})
       return service.tabs || ({})
     })()
-    // Associations must be current before projection so nested agent rows appear.
-    root.syncHerdrWindowProcesses()
     var herdrView = root.widgetView("herdr.agents")
-    var herdrSnapshot = herdrView && herdrView.status === "ready" && herdrView.data
-      ? herdrView.data : null
-    var herdrVerified = root.herdrAssociationEpoch !== ""
-      && !!herdrSnapshot
-      && typeof herdrSnapshot.providerEpoch === "string"
-      && herdrSnapshot.providerEpoch === root.herdrAssociationEpoch
+    var herdrSnapshot = root.herdrWindowAgents && root.herdrWindowAgents.snapshotReady
+      ? root.herdrWindowAgents.snapshot : null
+    var herdrVerified = !!(root.herdrWindowAgents
+      && root.herdrWindowAgents.snapshotReady && herdrView && herdrView.active)
     var projectInput = {
       desktop: desktop, screens: root.screens,
       monitors: root.monitors, monitorOrder: root.settings.workspaceMonitorOrder || [],
@@ -598,146 +582,23 @@ Item {
     root.refreshed()
   }
 
-  function collectWindowProcessTargets() {
-    var targets = []
-    var entries = (root.registry && root.registry.entries) ? root.registry.entries : []
+  // SidebarModel keeps its own registry keys. Translate the host bridge's
+  // toplevel-lifetime keys without changing the projection contract.
+  function sidebarHerdrAssociations() {
+    var bridge = root.herdrWindowAgents
+    var source = bridge && bridge.herdrAssociations
+      ? bridge.herdrAssociations : ({ byWindowKey: ({}), unmatchedServerIds: [] })
+    var byWindowKey = ({})
+    var entries = root.registry && root.registry.entries ? root.registry.entries : []
     for (var i = 0; i < entries.length; i++) {
       var entry = entries[i]
-      if (!entry || !entry.toplevel) continue
-      var handle = WindowModel.handleForToplevel(entry.toplevel, root.hyprToplevels)
-      if (!handle) continue
-      var ipc = handle.lastIpcObject || ({})
-      var pid = ipc.pid
-      if (typeof pid !== "number" || !isFinite(pid) || Math.floor(pid) !== pid || pid <= 0)
-        continue
-      var key = typeof entry.key === "string" ? entry.key : ""
-      if (!key) continue
-      targets.push({ key: key, pid: pid })
+      if (!entry || !entry.key || !entry.toplevel || !bridge) continue
+      var bridgeKey = bridge.windowKeyFor(entry.toplevel)
+      if (bridgeKey && source.byWindowKey[bridgeKey])
+        byWindowKey[entry.key] = source.byWindowKey[bridgeKey]
     }
-    return targets
-  }
-
-  function emptyHerdrAssociations() {
-    return ({ byWindowKey: ({}), unmatchedServerIds: [] })
-  }
-
-  function rememberHerdrVerifiedParents(associations, targets) {
-    var pidByKey = Object.create(null)
-    ;(targets || []).forEach(function(target) {
-      if (!target || typeof target.key !== "string" || !target.key) return
-      if (typeof target.pid !== "number") return
-      pidByKey[target.key] = target.pid
-    })
-    var next = Object.create(null)
-    var byWindow = associations && associations.byWindowKey
-      ? associations.byWindowKey : ({})
-    Object.keys(byWindow).forEach(function(windowKey) {
-      var serverId = byWindow[windowKey]
-      var pid = pidByKey[windowKey]
-      if (typeof serverId !== "string" || !serverId) return
-      if (typeof pid !== "number") return
-      next[windowKey] = { serverId: serverId, pid: pid }
-    })
-    root.herdrVerifiedParents = next
-  }
-
-  // Parent labels only: drop entries whose exact handle key/PID no longer match.
-  function preservedHerdrAssociations(targets) {
-    var pidByKey = Object.create(null)
-    ;(targets || []).forEach(function(target) {
-      if (!target || typeof target.key !== "string" || !target.key) return
-      if (typeof target.pid !== "number") return
-      pidByKey[target.key] = target.pid
-    })
-    var byWindowKey = ({})
-    var verified = root.herdrVerifiedParents || ({})
-    var retained = Object.create(null)
-    Object.keys(verified).forEach(function(windowKey) {
-      var entry = verified[windowKey]
-      if (!entry || typeof entry !== "object") return
-      if (pidByKey[windowKey] !== entry.pid) return
-      if (typeof entry.serverId !== "string" || !entry.serverId) return
-      byWindowKey[windowKey] = entry.serverId
-      retained[windowKey] = { serverId: entry.serverId, pid: entry.pid }
-    })
-    root.herdrVerifiedParents = retained
-    return ({ byWindowKey: byWindowKey, unmatchedServerIds: [] })
-  }
-
-  function clearHerdrAssociations(options) {
-    var preserveParents = !!(options && options.preserveParents === true)
-    if (preserveParents) {
-      root.herdrAssociations = root.preservedHerdrAssociations(root.windowProcessTargets)
-    } else {
-      root.herdrAssociations = root.emptyHerdrAssociations()
-      root.herdrVerifiedParents = ({})
-    }
-    root.herdrAssociationEpoch = ""
-  }
-
-  function syncHerdrWindowProcesses() {
-    if (!root.initialized) return
-    var targets = root.collectWindowProcessTargets()
-    var fingerprint = HerdrModel.windowProcessFingerprint(targets)
-    var fingerprintChanged = fingerprint !== root.windowProcessFingerprint
-    // Empty initial targets are still a real request so unmatched sessions fall back.
-    var bootstrapping = !root.windowProcessBootstrapped
-    if (fingerprintChanged || bootstrapping) {
-      root.windowProcessBootstrapped = true
-      root.windowProcessFingerprint = fingerprint
-      root.windowProcessTargets = targets
-      root.windowProcessRevision = root.windowProcessRevision + 1
-      // Prune retained parents against the new handle/PID set; do not wipe
-      // unchanged verified parents when an unrelated window appears or leaves.
-      root.clearHerdrAssociations({ preserveParents: true })
-      root.windowProcessSentEpoch = ""
-    } else {
-      root.windowProcessTargets = targets
-    }
-
-    var view = root.widgetView("herdr.agents")
-    var provider = view && view.provider ? view.provider : null
-    var leaseActive = !!(provider && typeof provider.setWindowProcesses === "function"
-        && provider.running !== false && view && view.active)
-    if (!leaseActive) {
-      root.windowProcessSentEpoch = ""
-      root.clearHerdrAssociations({ preserveParents: true })
-      return
-    }
-
-    var epoch = typeof provider.sourceEpoch === "string" ? provider.sourceEpoch : ""
-    if (root.herdrAssociationEpoch && root.herdrAssociationEpoch !== epoch)
-      root.clearHerdrAssociations({ preserveParents: true })
-
-    var needsSend = fingerprintChanged || bootstrapping
-        || root.windowProcessSentEpoch !== epoch
-    if (needsSend && root.windowProcessRevision > 0) {
-      var pids = HerdrModel.normalizeWindowProcessPids(
-        targets.map(function(row) { return row.pid }))
-      if (provider.setWindowProcesses(root.windowProcessRevision, pids)) {
-        root.windowProcessSentEpoch = epoch
-        // Reissue after epoch change withholds until a matching current-epoch reply.
-        if (!fingerprintChanged && !bootstrapping)
-          root.clearHerdrAssociations({ preserveParents: true })
-      }
-    }
-
-    if (view.status !== "ready" || !view.data) {
-      root.clearHerdrAssociations({ preserveParents: true })
-      return
-    }
-    var resolved = HerdrModel.resolveAssociations({
-      revision: root.windowProcessRevision,
-      epoch: root.windowProcessSentEpoch,
-      targets: root.windowProcessTargets
-    }, view.data)
-    if (!resolved) {
-      root.clearHerdrAssociations({ preserveParents: true })
-      return
-    }
-    root.herdrAssociations = resolved
-    root.herdrAssociationEpoch = view.data.providerEpoch || epoch
-    root.rememberHerdrVerifiedParents(resolved, root.windowProcessTargets)
+    return ({ byWindowKey: byWindowKey,
+      unmatchedServerIds: source.unmatchedServerIds || [] })
   }
 
   // Captured on pointer press/menu open, not looked up by title/index on release.
@@ -760,23 +621,8 @@ Item {
       target.windowAddress = String(row.windowAddress || "").toLowerCase()
       target.windowKey = String(row.windowKey || "")
     } else if (row.kind === "herdr-agent") {
-      if (row.actionable !== true || row.focusAgentSupported !== true
-          || !row.paneId || !row.agentId || !row.serverId) return null
-      if (!root.windowActions.isAlive(row.toplevel)) return null
-      var generation = Number(row.connectionGeneration)
-      if (!isFinite(generation) || Math.floor(generation) !== generation || generation <= 0)
-        return null
-      target.toplevel = row.toplevel
-      target.address = String(row.address || root.windowActions.addressFor(row.toplevel) || "")
-      target.windowKey = String(row.windowKey || "")
-      target.providerEpoch = String(row.providerEpoch || "")
-      target.serverId = String(row.serverId || "")
-      target.connectionGeneration = generation
-      target.agentId = String(row.agentId || "")
-      target.paneId = String(row.paneId || "")
-      target.terminalId = String(row.terminalId || "")
-      target.focusAgentSupported = true
-      if (!target.providerEpoch || !target.windowKey) return null
+      return root.herdrAgentActions
+        ? root.herdrAgentActions.captureAgentTarget(row.toplevel, row) : null
     } else if (row.kind === "workspace") {
       var destination = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
       if (!destination) return null
@@ -785,54 +631,13 @@ Item {
     return target
   }
 
-  function herdrAgentFocusKey(target) {
-    if (!target) return ""
-    return [
-      String(target.serverId || ""),
-      String(target.agentId || ""),
-      String(target.paneId || "")
-    ].join("\0")
-  }
-
-  function herdrProvider() {
-    // Prefer the host service directly; the widget lease provider is the same
-    // object when the lease is live, but host access does not depend on view().
-    if (root.host && root.host.herdrService
-        && typeof root.host.herdrService.focusAgent === "function")
-      return root.host.herdrService
-    var view = root.widgetView("herdr.agents")
-    return view && view.provider ? view.provider : null
-  }
-
-  function clearHerdrFocusError(key) {
-    if (!key || !root.herdrFocusErrors || !root.herdrFocusErrors[key]) return
-    var next = Object.assign({}, root.herdrFocusErrors)
-    delete next[key]
-    root.herdrFocusErrors = next
-  }
-
-  function setHerdrFocusError(key, errorCode) {
-    if (!key) return
-    var code = String(errorCode || "unsupported")
-    var next = Object.assign({}, root.herdrFocusErrors || ({}))
-    next[key] = { code: code, expiresAt: Date.now() + 4000 }
-    root.herdrFocusErrors = next
-    herdrFocusErrorTimer.restart()
-  }
-
   function herdrFocusErrorFor(key) {
-    var entry = root.herdrFocusErrors && root.herdrFocusErrors[key]
-    if (!entry) return ""
-    if (Date.now() >= Number(entry.expiresAt || 0)) {
-      root.clearHerdrFocusError(key)
-      return ""
-    }
-    return String(entry.code || "")
+    return root.herdrAgentActions ? root.herdrAgentActions.focusErrorFor(key) : ""
   }
 
   function targetIsCurrent(target) {
-    // Rows only exist while some output shows a sidebar; with none mapped the
-    // projection is empty and no target can be current.
+    if (target && (target.kind === "herdr-agent"))
+      return !!root.herdrAgentActions && root.herdrAgentActions.targetIsCurrent(target)
     if (!target || !root.windowActions || !root.mappedScreens.length) return false
     var row = root.rowsByKey[target.key]
     if (target.desktopId && DockModel.normalizeSetting("hiddenApplications", root.settings.hiddenApplications)
@@ -849,25 +654,6 @@ Item {
         && row.windowKey === target.windowKey
         && root.windowActions.isAlive(target.toplevel)
         && String(row.windowAddress || "").toLowerCase() === target.windowAddress
-    }
-    if (target.kind === "herdr-agent") {
-      if (target.focusAgentSupported !== true
-          || row.actionable !== true || row.focusAgentSupported !== true) return false
-      if (String(row.windowKey || "") !== String(target.windowKey || "")) return false
-      if (String(row.providerEpoch || "") !== String(target.providerEpoch || "")) return false
-      if (String(row.serverId || "") !== String(target.serverId || "")) return false
-      if (String(row.agentId || "") !== String(target.agentId || "")) return false
-      if (String(row.paneId || "") !== String(target.paneId || "")) return false
-      if (String(row.terminalId || "") !== String(target.terminalId || "")) return false
-      if (Number(row.connectionGeneration) !== Number(target.connectionGeneration)) return false
-      if (!root.windowActions.isAlive(target.toplevel) || row.toplevel !== target.toplevel)
-        return false
-      if (String(row.address || root.windowActions.addressFor(target.toplevel) || "")
-          !== String(target.address || ""))
-        return false
-      var assoc = root.herdrAssociations && root.herdrAssociations.byWindowKey
-      if (!assoc || assoc[target.windowKey] !== target.serverId) return false
-      return true
     }
     if (target.kind === "workspace") {
       var current = root.windowActions.resolveWorkspaceDropTarget(target.workspaceIdentity)
@@ -892,7 +678,8 @@ Item {
     if (target.kind === "herdr-agent") {
       if (control === true) return false
       if (Number(modifiers || 0) !== Number(Qt.NoModifier)) return false
-      return root.activateHerdrTarget(target)
+      return root.herdrAgentActions
+        ? root.herdrAgentActions.activateHerdrTarget(target) : false
     }
     if (target.kind === "window") {
       // FDM-954's deliberate Ctrl route. Missing/untrusted modifier state cannot
@@ -960,99 +747,6 @@ Item {
     }
     if (accepted) root.focusReturnTarget = null
     return accepted
-  }
-
-  function activateHerdrTarget(target) {
-    root.clearHerdrFocusError(target.key)
-    var agentKey = root.herdrAgentFocusKey(target)
-    var existingId = root.pendingFocusByAgent && root.pendingFocusByAgent[agentKey]
-    if (existingId && root.pendingFocusByRequest && root.pendingFocusByRequest[existingId]) {
-      root.latestFocusRequestId = existingId
-      return true
-    }
-    var provider = root.herdrProvider()
-    if (!provider || typeof provider.focusAgent !== "function") {
-      root.setHerdrFocusError(target.key, "provider_unavailable")
-      return false
-    }
-    var requestId = root.enqueueHerdrFocus(provider, target, agentKey, false)
-    return !!requestId
-  }
-
-  function enqueueHerdrFocus(provider, target, agentKey, afterRaise) {
-    var requestId = provider.focusAgent({
-      providerEpoch: target.providerEpoch,
-      serverId: target.serverId,
-      connectionGeneration: Math.floor(Number(target.connectionGeneration)),
-      agentId: target.agentId,
-      paneId: target.paneId,
-      terminalId: target.terminalId
-    })
-    if (!requestId) {
-      if (!afterRaise) root.setHerdrFocusError(target.key, "provider_unavailable")
-      return ""
-    }
-    var byRequest = Object.assign({}, root.pendingFocusByRequest || ({}))
-    byRequest[requestId] = {
-      key: target.key,
-      kind: target.kind,
-      windowKey: target.windowKey,
-      toplevel: target.toplevel,
-      address: target.address,
-      providerEpoch: target.providerEpoch,
-      serverId: target.serverId,
-      connectionGeneration: Math.floor(Number(target.connectionGeneration)),
-      agentId: target.agentId,
-      paneId: target.paneId,
-      terminalId: target.terminalId,
-      focusAgentSupported: true,
-      agentKey: agentKey,
-      afterRaise: afterRaise === true
-    }
-    root.pendingFocusByRequest = byRequest
-    var byAgent = Object.assign({}, root.pendingFocusByAgent || ({}))
-    byAgent[agentKey] = requestId
-    root.pendingFocusByAgent = byAgent
-    root.latestFocusRequestId = requestId
-    return requestId
-  }
-
-  function onHerdrFocusFinished(requestId, ok, errorCode) {
-    var pending = root.pendingFocusByRequest && root.pendingFocusByRequest[requestId]
-    if (!pending) return
-    var byRequest = Object.assign({}, root.pendingFocusByRequest)
-    delete byRequest[requestId]
-    root.pendingFocusByRequest = byRequest
-    if (root.pendingFocusByAgent && root.pendingFocusByAgent[pending.agentKey] === requestId) {
-      var byAgent = Object.assign({}, root.pendingFocusByAgent)
-      delete byAgent[pending.agentKey]
-      root.pendingFocusByAgent = byAgent
-    }
-    var isLatest = root.latestFocusRequestId === requestId
-    if (!ok) {
-      if (isLatest) root.setHerdrFocusError(pending.key, errorCode || "unsupported")
-      return
-    }
-    if (!isLatest) return
-    if (!root.targetIsCurrent(pending)) return
-    if (String(pending.providerEpoch || "") !== String(
-          (root.rowsByKey[pending.key] && root.rowsByKey[pending.key].providerEpoch) || ""))
-      return
-    if (Number(pending.connectionGeneration)
-        !== Number((root.rowsByKey[pending.key]
-          && root.rowsByKey[pending.key].connectionGeneration) || 0))
-      return
-    // Confirm focus already applied after a window raise — done.
-    if (pending.afterRaise) return
-    // Raise the Herdr window, then re-assert pane focus. Window activation can
-    // restore the client's prior tab if it runs after the first agent.focus.
-    if (root.windowActions.isAlive(pending.toplevel)) {
-      root.windowActions.activateToplevel(pending.toplevel, true, "", true)
-      root.focusReturnTarget = null
-    }
-    var provider = root.herdrProvider()
-    if (!provider || typeof provider.focusAgent !== "function") return
-    root.enqueueHerdrFocus(provider, pending, pending.agentKey, true)
   }
 
   function rememberNavigationFocus() {
@@ -1675,18 +1369,11 @@ Item {
   onFocusedWorkspaceChanged: root.scheduleRefresh()
   onScopeRevisionChanged: root.scheduleRefresh()
   onInteractionBusyChanged: if (!interactionBusy) root.scheduleRefresh()
-  readonly property var herdrFocusService: {
-    var revision = root.widgetRevision
-    if (root.host && root.host.herdrService)
-      return root.host.herdrService
-    var view = root.widgetView("herdr.agents")
-    return view && view.provider ? view.provider : null
-  }
   Connections {
-    target: root.herdrFocusService
-    function onFocusAgentFinished(requestId, ok, errorCode) {
-      root.onHerdrFocusFinished(requestId, ok, errorCode)
-    }
+    target: root.host && root.host.browserProfileService
+      ? root.host.browserProfileService : null
+    function onRevisionChanged() { root.scheduleRefresh() }
+    function onAvailableChanged() { root.scheduleRefresh() }
   }
   Timer {
     id: dropDeadlineTimer
@@ -1694,37 +1381,6 @@ Item {
     interval: 1500
     repeat: false
     onTriggered: root.expireDropOperation(operationToken)
-  }
-  Timer {
-    id: herdrFocusErrorTimer
-    interval: 1000
-    repeat: true
-    onTriggered: {
-      var errors = root.herdrFocusErrors || ({})
-      var keys = Object.keys(errors)
-      if (!keys.length) {
-        herdrFocusErrorTimer.stop()
-        return
-      }
-      var now = Date.now()
-      var next = Object.assign({}, errors)
-      var changed = false
-      for (var i = 0; i < keys.length; i++) {
-        if (now >= Number(errors[keys[i]].expiresAt || 0)) {
-          delete next[keys[i]]
-          changed = true
-        }
-      }
-      if (changed) root.herdrFocusErrors = next
-      if (!Object.keys(root.herdrFocusErrors || ({})).length)
-        herdrFocusErrorTimer.stop()
-    }
-  }
-  Connections {
-    target: root.host && root.host.browserProfileService
-      ? root.host.browserProfileService : null
-    function onRevisionChanged() { root.scheduleRefresh() }
-    function onAvailableChanged() { root.scheduleRefresh() }
   }
   Component.onCompleted: {
     root.widgetManager = SidebarWidgetModel.createManager(function() { root.widgetsChanged() })

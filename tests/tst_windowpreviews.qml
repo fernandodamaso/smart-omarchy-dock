@@ -103,11 +103,12 @@ TestCase {
       [first, stale], [first]).length, 0)
   }
 
-  function test_activityCanOpenAOneWindowPreview() {
-    verify(PreviewModel.hasPreviewContent(1, 1))
-    verify(PreviewModel.hasPreviewContent(2, 0))
-    verify(!PreviewModel.hasPreviewContent(1, 0))
-    verify(!PreviewModel.hasPreviewContent(0, 1))
+  function test_activityOrAgentCanOpenAOneWindowPreview() {
+    verify(PreviewModel.hasPreviewContent(1, 1, 0))
+    verify(PreviewModel.hasPreviewContent(1, 0, 1))
+    verify(PreviewModel.hasPreviewContent(2, 0, 0))
+    verify(!PreviewModel.hasPreviewContent(1, 0, 0))
+    verify(!PreviewModel.hasPreviewContent(0, 1, 1))
   }
 
   function test_livePreviewMembersRetainsOneWindowForActivityCard() {

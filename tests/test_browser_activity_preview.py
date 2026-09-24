@@ -37,13 +37,18 @@ def preview_session_source():
     bindings = "  readonly property var activityPresentation:" + bindings
     names = ["clearSession", "dismissImmediately", "requestPreview", "releasePreview"]
     # Keep the harness runnable against the pre-fix source for red/green checks.
-    if "  function refreshActivityContent(" in source:
+    if "  function refreshSupplementaryContent(" in source:
+        names.append("refreshSupplementaryContent")
+        names.append("refreshAgentContent")
+    elif "  function refreshActivityContent(" in source:
         names.append("refreshActivityContent")
     methods = "\n".join(qml_block(source, "function " + name + "(") for name in names)
-    handlers = "\n".join(qml_block(source, name + ": {") for name in (
-        "onActivityRowsChanged", "onAnchorItemChanged"))
+    handler_names = ["onActivityRowsChanged", "onAnchorItemChanged"]
+    if "  onAgentRowsChanged:" in source:
+        handler_names.append("onAgentRowsChanged")
+    handlers = "\n".join(qml_block(source, name + ": {") for name in handler_names)
     connections = re.search(
-        r"^  Connections \{\n    target: root.anchorItem\n.*?^  \}", source,
+        r"^  Connections \{\n(?:    id: [^\n]+\n)?    target: root.anchorItem\n.*?^  \}", source,
         re.MULTILINE | re.DOTALL)
     if not connections:
         raise AssertionError("Missing production anchor Connections")
@@ -56,6 +61,7 @@ Item {{
   visible: false
   property var mutedServices: []
 {state}
+  property bool herdrOnly: false
 {bindings}
   readonly property bool pending: openTimer.running
   property bool popupHovered: false
@@ -85,6 +91,10 @@ Item {
       property var identityToplevel: null
       property bool originOnly: false
       property var previewActivities: []
+      property var previewAgents: []
+      property bool previewHerdrOnly: false
+      property string previewHerdrLabel: ""
+      property var previewHerdrCounters: []
     }
   }
   TestCase {
@@ -95,12 +105,13 @@ Item {
     property var ordinary
     function init() {
       preview = createTemporaryObject(sessionFactory, scene)
-      chrome = createTemporaryObject(anchorFactory, scene, {
-        presentationId: "chrome", previewActivities: [{
-          targetId: "A1", serviceId: "gmail", label: "Gmail", count: 13,
-          profileKey: "Default", domain: "mail.google.com", windowAddress: "0x1"
-        }]
-      })
+      chrome = createTemporaryObject(anchorFactory, scene, {presentationId: "chrome"})
+      // Assign after construction so Qt 6.11 keeps a JavaScript Array rather
+      // than converting createTemporaryObject's map value to a QVariantList.
+      chrome.previewActivities = [{
+        targetId: "A1", serviceId: "gmail", label: "Gmail", count: 13,
+        profileKey: "Default", domain: "mail.google.com", windowAddress: "0x1"
+      }]
       ordinary = createTemporaryObject(anchorFactory, scene, {presentationId: "editor"})
       verify(preview !== null)
       verify(chrome !== null)
@@ -191,6 +202,44 @@ Item {
       compare(preview.anchorItem, chrome)
       compare(preview.activityRows.length, 1)
       compare(preview.activityTotal, 0)
+      verify(preview.visible)
+    }
+    function test_z_agentLifecycleEligibilityAndFallbacks() {
+      ordinary.previewAgents = [{id: "agent-a", status: "working"}]
+      request(ordinary, 1)
+      verify(preview.pending)
+      compare(preview.anchorItem, ordinary)
+      compare(preview.agentRows.length, 1)
+      ordinary.previewAgents = []
+      tryCompare(preview, "anchorItem", null)
+
+      ordinary.previewAgents = [{id: "agent-a", status: "working"}]
+      request(ordinary, 1)
+      preview.visible = true
+      ordinary.previewAgents = []
+      tryCompare(preview, "anchorItem", null)
+      verify(!preview.visible)
+      verify(!preview.pending)
+
+      chrome.previewAgents = [{id: "agent-a", status: "working"}]
+      request(chrome, 1)
+      preview.visible = true
+      chrome.previewAgents = []
+      wait(1)
+      compare(preview.anchorItem, chrome)
+      compare(preview.activityRows.length, 1)
+      verify(preview.visible)
+      preview.dismissImmediately()
+
+      ordinary.previewAgents = [{id: "agent-a", status: "working"}]
+      ordinary.previewHerdrOnly = true
+      request(ordinary, 2)
+      preview.visible = true
+      ordinary.previewAgents = []
+      ordinary.previewHerdrOnly = false
+      wait(1)
+      compare(preview.anchorItem, ordinary)
+      compare(preview.members.length, 2)
       verify(preview.visible)
     }
   }

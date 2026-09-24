@@ -87,9 +87,13 @@ Item {
   readonly property bool herdrWindowWorkingAnimationActive: herdrAssociated
     && root.herdrFolded && herdrWorkingCounter
     && root.animationsEnabled && root.herdrAnimationEligible
+  // Expanded rows already show their working agents below; only folded
+  // parents carry the window-level indicator.
+  readonly property bool herdrWindowWorkingIndicatorVisible: herdrAssociated
+    && root.herdrFolded && herdrWorkingCounter
   readonly property real herdrWindowWorkingIndicatorGap: Style.space(5)
   readonly property real herdrWindowWorkingIndicatorReservation:
-    herdrWindowWorkingAnimationActive ? 10 + herdrWindowWorkingIndicatorGap : 0
+    herdrWindowWorkingIndicatorVisible ? 10 + herdrWindowWorkingIndicatorGap : 0
   readonly property string herdrKindLabel: kind === "herdr-agent"
     ? InteractionModel.herdrAgentKindLabel({ agentKind: row.agentKind || "" })
     : ""
@@ -471,24 +475,6 @@ Item {
     return labelRight + gap + stripW + gap <= countersLeft
   }
 
-  // Resolve Herdr status roles to Omarchy Color tokens. Idle uses brighter
-  // foreground alpha than Color.muted for counter readability. done/blocked
-  // prefer theme green/yellow hex tokens via flatColor; hollow is outline-only.
-  // "done" is Herdr state, not proven task success.
-  function herdrStatusColor(status) {
-    var role = HerdrModel.statusColorRole(status)
-    if (role === "accent") return Color.accent
-    if (role === "idle") return Util.alpha(Color.foreground, 0.78)
-    if (role === "muted") return Color.muted
-    if (role === "done") return Color.flatColor("#9ece6a", Color.accent)
-    if (role === "blocked") return Color.flatColor("#e0af68", Color.urgent)
-    return Color.muted
-  }
-
-  function herdrStatusHollow(status) {
-    return HerdrModel.statusColorRole(status) === "hollow"
-  }
-
   readonly property bool animationsEnabled: root.controller.settings
     && root.controller.settings.interfaceAnimationsEnabled !== false
   readonly property bool herdrWorkingAnimationActive: root.herdrStatusDotVisible
@@ -505,6 +491,7 @@ Item {
     : root.footerDropTarget ? Color.accent : Color.muted
   // Persistent included-alert window-name nudge (label Translate only).
   property int attentionNudgeX: 0
+  DockHerdrStatusColors { id: herdrStatusColors }
   readonly property int attentionDisplayCount: root.attention.countVisible
     ? root.attention.count : 0
   readonly property bool persistentSelected: root.focusedWindow || root.activeBrowserTab
@@ -914,9 +901,8 @@ Item {
         : Util.alpha(Color.foreground, 0.75)
     }
 
-    // Nested Herdr marker — working uses the short dot trail when eligible.
-    // The 10px working slot keeps the legacy 8px static dot centered when
-    // animations are disabled/offscreen; every other status keeps its old size.
+    // Nested Herdr marker — working uses the shared smooth spinner. Reduced
+    // motion and clipped rows keep the same static arc instead of reverting.
     Item {
       id: herdrStatusMarker
       objectName: "sidebar-herdr-status-marker"
@@ -930,22 +916,25 @@ Item {
         id: herdrWorkingIndicator
         objectName: "sidebar-herdr-working-indicator"
         anchors.centerIn: parent
-        visible: root.herdrWorkingAnimationActive
-        active: visible
-        tint: Color.accent
+        width: parent.width
+        height: parent.height
+        visible: root.herdrWorkingStatus
+        active: root.herdrWorkingAnimationActive
+        animationsEnabled: root.animationsEnabled
+        tint: herdrStatusColors.color("working")
       }
 
       Rectangle {
         objectName: "sidebar-herdr-static-status-dot"
-        visible: !herdrWorkingIndicator.visible
+        visible: !root.herdrWorkingStatus
         anchors.centerIn: parent
         width: 8
         height: 8
         radius: 4
-        color: root.herdrStatusHollow(row.status)
+        color: herdrStatusColors.hollow(root.row.status)
           ? "transparent"
-          : root.herdrStatusColor(row.status)
-        border.width: root.herdrStatusHollow(row.status) ? 1 : 0
+          : herdrStatusColors.color(root.row.status)
+        border.width: herdrStatusColors.hollow(root.row.status) ? 1 : 0
         border.color: Color.muted
         opacity: root.herdrActionable
           && (root.normalizedHerdrStatus === "working"
@@ -1137,11 +1126,14 @@ Item {
     DockHerdrWorkingIndicator {
       id: herdrWindowWorkingIndicator
       objectName: "sidebar-herdr-window-working-indicator"
-      visible: root.herdrWindowWorkingAnimationActive
-      active: visible
+      visible: root.herdrWindowWorkingIndicatorVisible
+      active: root.herdrWindowWorkingAnimationActive
+      animationsEnabled: root.animationsEnabled
+      width: 10
+      height: 10
       x: root.baseLabelX
       anchors.verticalCenter: parent.verticalCenter
-      tint: Color.accent
+      tint: herdrStatusColors.color("working")
     }
 
     // Two-line Herdr agent identity.
@@ -1187,7 +1179,8 @@ Item {
         elide: Text.ElideRight
         wrapMode: Text.NoWrap
         maximumLineCount: 1
-        color: Color.muted
+        // Brighter than muted, still quieter than the title.
+        color: Qt.tint(Color.muted, Util.alpha(Color.foreground, 0.45))
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         renderType: Text.NativeRendering
@@ -1257,7 +1250,7 @@ Item {
                 anchors.fill: parent
                 iconName: "bot"
                 iconSize: Style.space(14)
-                tint: root.herdrStatusColor(counterItem.modelData.status)
+                tint: herdrStatusColors.color(counterItem.modelData.status)
               }
             }
             Text {
@@ -1266,7 +1259,7 @@ Item {
               verticalAlignment: Text.AlignVCenter
               textFormat: Text.PlainText
               text: String(counterItem.modelData.count)
-              color: root.herdrStatusColor(counterItem.modelData.status)
+              color: herdrStatusColors.color(counterItem.modelData.status)
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
               renderType: Text.NativeRendering

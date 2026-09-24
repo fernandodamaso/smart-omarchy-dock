@@ -309,7 +309,7 @@ preserved in this repository.
 ## Configure
 
 The [CLI reference](docs/CLI_REFERENCE.md) describes commands, JSON fields and
-errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 57
+errors; the [configuration inventory](docs/CONFIGURATION.md) lists all 58
 settings, declared defaults and dependencies. Both ship beside the offline
 [agent guide](docs/AGENT_CONFIGURATION.md). Its recipes are executed against
 the real CLI parser and production host/model harness in the existing CI;
@@ -423,6 +423,8 @@ apply. Read the running host's schema/defaults and preserve the user's values:
   "attentionBadgesEnabled": true,
   "urgentWindowAnimationEnabled": true,
   "launcherBadgeMode": "automatic",
+  "browserProfileBadgesEnabled": true,
+  "dockHerdrIndicators": false,
   "browserActivityMutedServices": [],
   "sidebarBrowserTabsEnabled": true,
   "hiddenApplications": [],
@@ -481,6 +483,8 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 | `attentionBadgesEnabled` | Show application attention badges. FDM-809 dot severity remains the fallback; in automatic mode an authoritative positive visible launcher count may replace that dot. |
 | `urgentWindowAnimationEnabled` | When `true`, active SNI, critical local-notification, or Hyprland urgent attention may nudge the owning application icon, no more than once every 3000 ms while attention remains. A launcher count alone never animates; a count with attention still does. Motion is effective only while `attentionBadgesEnabled` is also enabled; disabling it leaves the static badge intact. |
 | `launcherBadgeMode` | `automatic` shows authoritative application-provided counts when available; `dots-only` ignores numeric provider state and preserves FDM-809 dots only. |
+| `browserProfileBadgesEnabled` | Show per-window browser profile badges when the browser-profile provider is installed and the browser exposes a DevTools endpoint; no provider is installed or started by this setting. |
+| `dockHerdrIndicators` | Show Herdr agent state on terminal icons, in hover previews and in the context menu. Uses the existing Herdr provider; enabling it starts that provider while a classic dock is active, including when it is auto-hidden. |
 | `browserActivityMutedServices` | Service IDs muted from Chrome activity header and badge totals (`gmail`, `whatsapp`, …); rows stay visible/dimmed and openable; retained by preference reset |
 | `sidebarBrowserTabsEnabled` | When true and the browser-profile provider is available, sidebar Chrome windows can expand to list open page tabs (titles only, no URLs) |
 | `sidebarInlineSoloWorkspace` | When true, populated workspace names share the first application/window row instead of using a dedicated row; empty workspaces remain dedicated rows. Set `false` to retain separate workspace rows |

@@ -143,6 +143,10 @@ TestCase {
     compare(DockModel.normalizeSetting("showTrash", "false"), true)
     compare(DockModel.normalizeSetting("sidebarInlineSoloWorkspace", false), false)
     compare(DockModel.normalizeSetting("sidebarInlineSoloWorkspace", "false"), true)
+    compare(DockModel.normalizeSetting("dockHerdrIndicators", true), true)
+    compare(DockModel.normalizeSetting("dockHerdrIndicators", false), false)
+    compare(DockModel.normalizeSetting("dockHerdrIndicators", "true"), false)
+    compare(DockModel.normalizeSetting("dockHerdrIndicators", undefined), false)
     compare(DockModel.normalizeSetting("controlCommand", "  launcher --toggle  "),
       "launcher --toggle")
   }
@@ -151,6 +155,7 @@ TestCase {
     compare(DockModel.settingsDefaults().showPreviews, true)
     compare(DockModel.settingsDefaults().showTrash, true)
     compare(DockModel.settingsDefaults().sidebarInlineSoloWorkspace, true)
+    compare(DockModel.settingsDefaults().dockHerdrIndicators, false)
   }
 
   function test_providesWorkspaceBadgeDefaults() {

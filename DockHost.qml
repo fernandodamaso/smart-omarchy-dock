@@ -44,7 +44,7 @@ Item {
         manageable: false,
         available: root.herdrService.available !== false,
         revision: 1,
-        acquire: function(owner) { return root.herdrService.acquire(owner) },
+        acquire: function(owner) { return root.herdrWindowAgents.createConsumerLease(owner) },
         expandedView: herdrExpandedView,
         compactView: herdrCompactView,
         popupView: herdrPopupView
@@ -112,6 +112,8 @@ Item {
   property bool workspaceCountsRefreshPending: false
   property int scopeRevision: scopeRefreshController.revision
   readonly property var windowActions: windowActionsController
+  readonly property var herdrWindowAgents: herdrWindowAgentsController
+  readonly property var herdrAgentActions: herdrAgentActionsController
   readonly property var workspaceMonitorDrag: workspaceMonitorDragController
   readonly property var badgeTracker: badgeTrackerController
   readonly property bool showTrash: showTrashSetting
@@ -657,6 +659,25 @@ Item {
     applicationMutationController: root
   }
 
+  DockHerdrWindowAgents {
+    id: herdrWindowAgentsController
+    herdrService: root.herdrService
+    toplevels: root.desktopToplevels
+    hyprToplevels: root.hyprToplevels
+    focusedToplevel: ToplevelManager.activeToplevel
+    scopeRevision: root.scopeRevision
+    dockConsumerActive: DockModel.normalizeSetting(
+      "dockHerdrIndicators", root.settings.dockHerdrIndicators)
+      && root.presentation.classicScreens.length > 0
+  }
+
+  DockHerdrAgentActions {
+    id: herdrAgentActionsController
+    bridge: root.herdrWindowAgents
+    windowActions: root.windowActions
+    herdrService: root.herdrService
+  }
+
   DockWorkspaceMonitorDrag {
     id: workspaceMonitorDragController
     windowActions: root.windowActions
@@ -743,6 +764,8 @@ Item {
         browserProfileBadgesEnabled: root.settings.browserProfileBadgesEnabled !== false
         showTrash: root.showTrash
         windowActions: root.windowActions
+        herdrWindowAgents: root.herdrWindowAgents
+        herdrAgentActions: root.herdrAgentActions
         workspaceMonitorDrag: workspaceMonitorDragController
         badgeTracker: root.badgeTracker
         trashItemCount: root.trashItemCount

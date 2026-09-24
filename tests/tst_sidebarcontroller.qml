@@ -17,6 +17,34 @@ TestCase {
     }
   }
   Component { id: factory; DockSidebarController { host: writer } }
+  Component { id: bridgeFactory; DockHerdrWindowAgents {} }
+
+  function createHerdrController(service, properties) {
+    var values = Object.assign({}, properties)
+    var bridge = createTemporaryObject(bridgeFactory, this, {
+      herdrService: service,
+      toplevels: values.toplevels || [],
+      hyprToplevels: values.hyprToplevels || []
+    })
+    verify(bridge !== null)
+    var descriptor = values.widgetRegistry["herdr.agents"]
+    values.widgetRegistry = {
+      "herdr.agents": Object.assign({}, descriptor, {
+        acquire: function(owner) { return bridge.createConsumerLease(owner) }
+      })
+    }
+    values.host = {
+      windowActions: null,
+      herdrWindowAgents: bridge,
+      herdrAgentActions: null,
+      saveSetting: function(key, value) { return writer.saveSetting(key, value) }
+    }
+    var controller = createTemporaryObject(factory, this, values)
+    verify(controller !== null)
+    bridge.toplevels = Qt.binding(function() { return controller.toplevels })
+    bridge.hyprToplevels = Qt.binding(function() { return controller.hyprToplevels })
+    return controller
+  }
   Component {
     id: toplevelFactory
     QtObject {
@@ -116,7 +144,7 @@ TestCase {
             if (lease.released) return
             if (lease.active) {
               lease.active = false
-              svc.activeCount = Math.max(0, svc.activeCount - 1)
+              if (svc) svc.activeCount = Math.max(0, svc.activeCount - 1)
             }
             lease.publish = null
             lease.released = true
@@ -159,7 +187,7 @@ TestCase {
     var a = createTemporaryObject(toplevelFactory, this, { title: "A" })
     var b = createTemporaryObject(toplevelFactory, this, { title: "B" })
     var screen = { name: "DP-1", width: 1920, height: 1080 }
-    var c = createTemporaryObject(factory, this, {
+    var c = createHerdrController(service, {
       widgetRegistry: {
         "herdr.agents": {
           id: "herdr.agents",
@@ -207,9 +235,11 @@ TestCase {
       lastIpcObject: { workspace: { id: 1 }, monitor: 0, pid: 40 }
     }]
     c.refresh()
-    compare(c.windowProcessRevision, 2)
-    compare(service.writes.length, 2)
-    compare(service.writes[1].revision, 2)
+    verify(c.windowProcessRevision > 1)
+    verify(service.writes.length >= 2)
+    var replacementRevision = c.windowProcessRevision
+    compare(service.writes[service.writes.length - 1].revision, replacementRevision)
+    compare(service.writes[service.writes.length - 1].pids, [40])
     var secondKey = c.registry.entries[0].key
     verify(secondKey !== firstKey)
 
@@ -238,7 +268,10 @@ TestCase {
         capabilities: { focusAgent: true },
         clients: [{ pid: 41, startTime: 41, ancestors: [{ pid: 40, startTime: 40 }] }]
       }],
-      windowProcesses: { revision: 2, identities: [{ pid: 40, startTime: 40 }] }
+      windowProcesses: {
+        revision: replacementRevision,
+        identities: [{ pid: 40, startTime: 40 }]
+      }
     })
     wait(0)
     var assoc = c.herdrAssociations.byWindowKey
@@ -250,7 +283,7 @@ TestCase {
     verify(service !== null)
     var a = createTemporaryObject(toplevelFactory, this, { title: "A" })
     var screen = { name: "DP-1", width: 1920, height: 1080 }
-    var c = createTemporaryObject(factory, this, {
+    var c = createHerdrController(service, {
       widgetRegistry: {
         "herdr.agents": {
           id: "herdr.agents",
@@ -379,7 +412,7 @@ TestCase {
     var a = createTemporaryObject(toplevelFactory, this, { title: "A" })
     var b = createTemporaryObject(toplevelFactory, this, { title: "B" })
     var screen = { name: "DP-1", width: 1920, height: 1080 }
-    var c = createTemporaryObject(factory, this, {
+    var c = createHerdrController(service, {
       widgetRegistry: {
         "herdr.agents": {
           id: "herdr.agents",
@@ -462,7 +495,7 @@ TestCase {
     var service = createTemporaryObject(herdrServiceFactory, this)
     verify(service !== null)
     var screen = { name: "DP-1", width: 1920, height: 1080 }
-    var c = createTemporaryObject(factory, this, {
+    var c = createHerdrController(service, {
       widgetRegistry: {
         "herdr.agents": {
           id: "herdr.agents",
@@ -539,7 +572,7 @@ TestCase {
     var term = createTemporaryObject(toplevelFactory, this, { title: "Herdr" })
     var other = createTemporaryObject(toplevelFactory, this, { title: "Other" })
     var screen = { name: "DP-1", width: 1920, height: 1080 }
-    var c = createTemporaryObject(factory, this, {
+    var c = createHerdrController(service, {
       widgetRegistry: {
         "herdr.agents": {
           id: "herdr.agents",

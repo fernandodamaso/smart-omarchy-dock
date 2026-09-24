@@ -13,6 +13,8 @@ class SidebarQmlSyntaxTests(unittest.TestCase):
         names = ['DockHost.qml', 'components/DockSidebarController.qml',
                  'components/DockSidebar.qml','components/DockSidebarViewport.qml',
                  'components/DockSidebarRow.qml','components/DockSidebarRowInput.qml','components/DockSidebarKeyboard.qml',
+                 'components/DockHerdrWorkingIndicator.qml',
+                 'components/DockHerdrStatusColors.qml','components/DockHerdrStatusMark.qml',
                  'components/DockContextMenu.qml','components/DockSidebarWidgetArea.qml',
                  'components/DockSidebarWidgetManager.qml',
                  'components/DockExternalWidgetRegistry.qml',

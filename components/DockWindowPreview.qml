@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "DockBrowserActivityModel.js" as ActivityModel
+import "DockHerdrModel.js" as HerdrModel
 import "DockWindowPreviewModel.js" as PreviewModel
 
 PopupWindow {
@@ -14,6 +15,7 @@ PopupWindow {
   required property var windowActions
   required property string position
   required property var visibleItems
+  property var herdrAgentActions: null
   property var iconOverrides: ({})
   property int iconReloadRevision: 0
   property string activationMonitor: ""
@@ -41,11 +43,19 @@ PopupWindow {
   readonly property bool orientationHorizontal:
     PreviewModel.orientationHorizontal(root.position)
   readonly property bool hasActivity: root.activityRows.length > 0
-  readonly property int tileWidth: root.hasActivity ? Style.space(180) : 232
-  readonly property int tileHeight: root.hasActivity ? Style.space(142) : 176
-  readonly property int tilePreviewHeight: root.hasActivity ? Style.space(102) : 122
+  readonly property bool hasAgents: root.agentRows.length > 0
+  property bool herdrOnly: false
+  readonly property bool hasSupplementaryContent:
+    root.hasActivity || (root.hasAgents && !root.herdrOnly)
+  readonly property int tileWidth: root.hasSupplementaryContent
+    ? Style.space(180) : 232
+  readonly property int tileHeight: root.hasSupplementaryContent
+    ? Style.space(142) : 176
+  readonly property int tilePreviewHeight: root.hasSupplementaryContent
+    ? Style.space(102) : 122
   readonly property int tileSpacing: Style.space(8)
-  readonly property int popupPadding: Style.space(root.hasActivity ? 16 : 8)
+  readonly property int popupPadding: root.herdrOnly
+    ? Style.space(14) : Style.space(root.hasSupplementaryContent ? 16 : 8)
   readonly property int popupGap: Style.space(8)
   readonly property int activityWidth: Style.space(368)
   readonly property int headerHeight: Math.max(
@@ -53,21 +63,33 @@ PopupWindow {
   readonly property int activityRowHeight: Math.max(
     Style.space(62), Style.font.subtitle + Style.font.bodySmall + Style.space(16))
   readonly property int maxVisibleActivityRows: 6
-  readonly property int sectionSpacing: Style.space(8)
+  readonly property int sectionSpacing:
+    Style.space(root.herdrOnly ? 12 : 8)
   readonly property int separatorHeight: Style.spacing.hairline
   readonly property int windowLabelHeight: Style.space(18)
+  readonly property int agentHeaderHeight: Style.space(24)
+  readonly property int agentRowHeight: Style.space(56)
+  readonly property int agentRowSpacing: Style.space(2)
+  readonly property int agentFooterHeight: Style.space(16)
   readonly property var activityPresentation: ActivityModel.presentation(
     root.anchorItem && Array.isArray(root.anchorItem["previewActivities"])
       ? root.anchorItem["previewActivities"] : [], root.mutedServices)
   readonly property var activityRows: activityPresentation.rows
   readonly property int activityTotal: activityPresentation.total
-  readonly property bool showWindowPreviews: root.members.length >= 2
+  property var agentRows: []
+  property string herdrLabel: ""
+  property var herdrCounters: []
+  readonly property bool showWindowPreviews:
+    root.members.length >= 2 && !root.herdrOnly
   readonly property int activityContentHeight: root.activityRows.length > 0
     ? root.activityRows.length * root.activityRowHeight
       + Math.max(0, root.activityRows.length - 1) * root.separatorHeight : 0
   readonly property int naturalActivityListHeight: PreviewModel.activityViewportHeight(
     root.activityRows.length, root.activityRowHeight,
     root.separatorHeight, root.maxVisibleActivityRows)
+  readonly property int agentListHeight: root.agentRows.length > 0
+    ? root.agentRows.length * root.agentRowHeight
+      + Math.max(0, root.agentRows.length - 1) * root.agentRowSpacing : 0
   readonly property int previewContentWidth: !root.showWindowPreviews ? 0
     : root.orientationHorizontal
       ? root.members.length * root.tileWidth
@@ -79,28 +101,38 @@ PopupWindow {
       + Math.max(0, root.members.length - 1) * root.tileSpacing
   readonly property int maxVisiblePreviewTiles: 2
   readonly property int previewFlowWidth: !root.showWindowPreviews ? 0
-    : root.hasActivity && root.orientationHorizontal ? root.activityWidth
+    : root.hasSupplementaryContent && root.orientationHorizontal ? root.activityWidth
     : root.orientationHorizontal ? root.previewContentWidth
     : root.tileWidth
   readonly property int previewFlowHeight: !root.showWindowPreviews ? 0
     : root.orientationHorizontal ? root.tileHeight
-    : root.hasActivity
+    : root.hasSupplementaryContent
       ? Math.min(root.members.length, root.maxVisiblePreviewTiles)
         * root.tileHeight
         + Math.max(0, Math.min(root.members.length, root.maxVisiblePreviewTiles) - 1)
           * root.tileSpacing
     : root.previewContentHeight
-  readonly property int contentWidth: root.hasActivity
-    ? Math.max(root.activityWidth, root.previewFlowWidth)
-    : root.previewFlowWidth
+  readonly property int contentWidth: root.herdrOnly
+    ? Style.space(432)
+    : root.hasSupplementaryContent
+      ? Math.max(root.activityWidth, root.previewFlowWidth)
+      : root.previewFlowWidth
   readonly property int previewSectionHeight: root.showWindowPreviews
     ? root.sectionSpacing + root.separatorHeight
       + root.sectionSpacing + root.windowLabelHeight
       + root.sectionSpacing + root.previewFlowHeight : 0
-  readonly property int naturalContentHeight: root.hasActivity
-    ? root.headerHeight + root.sectionSpacing
-      + root.naturalActivityListHeight + root.previewSectionHeight
-    : root.previewFlowHeight
+  readonly property int supplementaryContentHeight:
+    (root.hasSupplementaryContent ? root.headerHeight : 0)
+    + (root.hasActivity ? root.sectionSpacing + root.naturalActivityListHeight : 0)
+    + (root.hasAgents ? root.sectionSpacing + root.agentHeaderHeight
+      + root.sectionSpacing + root.agentListHeight : 0)
+    + (root.herdrOnly ? root.sectionSpacing + root.agentFooterHeight : 0)
+  readonly property int naturalContentHeight: root.herdrOnly
+    ? root.agentHeaderHeight + root.sectionSpacing + root.agentListHeight
+      + root.sectionSpacing + root.agentFooterHeight
+    : root.hasSupplementaryContent
+      ? root.supplementaryContentHeight + root.previewSectionHeight
+      : root.previewFlowHeight
   readonly property int desiredWidth: root.popupPadding * 2 + root.contentWidth
   readonly property int desiredHeight: root.popupPadding * 2
     + root.naturalContentHeight
@@ -116,13 +148,24 @@ PopupWindow {
   // overflow instead of starving rows to fit unbounded preview tiles.
   readonly property int activityListHeight: root.hasActivity
     ? root.naturalActivityListHeight : 0
-  readonly property int contentHeight: root.hasActivity
-    ? root.headerHeight + root.sectionSpacing + root.activityListHeight
-      + root.previewSectionHeight
-    : root.previewFlowHeight
+  readonly property int contentHeight: root.naturalContentHeight
 
   signal activityRequested(var activity)
   signal activityMuteToggled(string serviceId)
+
+  DockHerdrStatusColors { id: statusColors }
+
+  function captureAgentTarget(agent) {
+    return root.herdrAgentActions && agent && agent.toplevel
+      ? root.herdrAgentActions.captureAgentTarget(agent.toplevel, agent) : null
+  }
+
+  function activateAgentTarget(target) {
+    if (!target || !root.herdrAgentActions) return false
+    var activated = root.herdrAgentActions.activateHerdrTarget(target)
+    if (activated) root.dismissImmediately()
+    return activated
+  }
 
   function serviceArtwork(serviceId) {
     if (serviceId === "gmail")
@@ -151,6 +194,10 @@ PopupWindow {
     root.windowOverrideSource = ""
     root.applicationEntry = null
     root.members = []
+    root.agentRows = []
+    root.herdrOnly = false
+    root.herdrLabel = ""
+    root.herdrCounters = []
     root.anchorHovered = false
     root.anchorItem = null
   }
@@ -192,9 +239,11 @@ PopupWindow {
     var requestedActivities = ActivityModel.presentation(
       anchorItem && Array.isArray(anchorItem["previewActivities"])
         ? anchorItem["previewActivities"] : [], root.mutedServices).rows
+    var requestedAgents = anchorItem && Array.isArray(anchorItem["previewAgents"])
+      ? anchorItem["previewAgents"] : []
     if (!anchorItem
         || !PreviewModel.hasPreviewContent(
-          requested.length, requestedActivities.length)
+          requested.length, requestedActivities.length, requestedAgents.length)
         || (root.clipItem && !root.clipItem.containsItem(anchorItem))) {
       if (root.anchorItem === anchorItem) root.dismissImmediately()
       return
@@ -211,6 +260,12 @@ PopupWindow {
     root.originOnly = anchorItem.originOnly === true
     root.applicationEntry = applicationEntry || null
     root.members = requested
+    root.agentRows = requestedAgents
+    root.herdrOnly = requestedAgents.length > 0
+      && anchorItem["previewHerdrOnly"] === true
+    root.herdrLabel = String(anchorItem["previewHerdrLabel"] || "")
+    root.herdrCounters = Array.isArray(anchorItem["previewHerdrCounters"])
+      ? anchorItem["previewHerdrCounters"] : []
     root.anchorHovered = true
 
     if (root.visible || switching) {
@@ -244,7 +299,7 @@ PopupWindow {
     }
     var refreshed = root.liveMembers(target.toplevels)
     if (!PreviewModel.hasPreviewContent(
-        refreshed.length, root.activityRows.length)) {
+        refreshed.length, root.activityRows.length, root.agentRows.length)) {
       root.dismissImmediately()
       return
     }
@@ -269,17 +324,29 @@ PopupWindow {
       ? root.windowActions.closeToplevel(toplevel) : false
   }
 
-  function refreshActivityContent() {
+  function refreshSupplementaryContent() {
     // Called after bindings and requestPreview's session assignments settle.
     // Never dismiss from inside the activity binding that clearing the anchor
     // would invalidate, and always validate the current (not queued) session.
     if (!root.anchorItem || (!root.visible && !root.pending)) return
     if (!PreviewModel.hasPreviewContent(
-        root.members.length, root.activityRows.length)) {
+        root.members.length, root.activityRows.length, root.agentRows.length)) {
       root.dismissImmediately()
     } else if (root.visible) {
       root.reanchor()
     }
+  }
+
+  function refreshAgentContent() {
+    if (!root.anchorItem) return
+    root.agentRows = Array.isArray(root.anchorItem["previewAgents"])
+      ? root.anchorItem["previewAgents"] : []
+    root.herdrOnly = root.agentRows.length > 0
+      && root.anchorItem["previewHerdrOnly"] === true
+    root.herdrLabel = String(root.anchorItem["previewHerdrLabel"] || "")
+    root.herdrCounters = Array.isArray(root.anchorItem["previewHerdrCounters"])
+      ? root.anchorItem["previewHerdrCounters"] : []
+    Qt.callLater(root.refreshSupplementaryContent)
   }
 
   implicitWidth: root.previewViewport.width
@@ -305,7 +372,7 @@ PopupWindow {
       root.refreshFromVisibleItems()
       if (!root.anchorHovered || !root.anchorItem
           || !PreviewModel.hasPreviewContent(
-            root.members.length, root.activityRows.length))
+            root.members.length, root.activityRows.length, root.agentRows.length))
         return
       root.visible = true
       Qt.callLater(root.reanchor)
@@ -324,13 +391,15 @@ PopupWindow {
 
   BorderSurface {
     anchors.fill: parent
-    radius: root.hasActivity
+    radius: root.hasSupplementaryContent || root.herdrOnly
       ? Math.max(Style.cornerRadius, Style.space(10)) : Style.cornerRadius
     color: Color.menu.background
     borderSpec: Border.surfaceSpec(
       "menu", "border",
-      root.hasActivity ? Util.alpha(Color.menu.border, 0.38) : Color.menu.border,
-      root.hasActivity ? Style.spacing.hairline : Math.max(1, Style.space(2)))
+      root.hasSupplementaryContent || root.herdrOnly
+        ? Util.alpha(Color.menu.border, 0.38) : Color.menu.border,
+      root.hasSupplementaryContent || root.herdrOnly
+        ? Style.spacing.hairline : Math.max(1, Style.space(2)))
 
     HoverHandler {
       id: popupHover
@@ -375,12 +444,13 @@ PopupWindow {
 
       Column {
         id: contentFlow
-        width: root.hasActivity ? viewport.width : root.contentWidth
+        width: root.hasSupplementaryContent || root.herdrOnly
+          ? viewport.width : root.contentWidth
         height: root.contentHeight
         spacing: root.sectionSpacing
 
         Item {
-          visible: root.hasActivity
+          visible: root.hasSupplementaryContent
           width: contentFlow.width
           height: root.headerHeight
 
@@ -435,6 +505,7 @@ PopupWindow {
             anchors.left: totalCount.right
             anchors.leftMargin: Style.space(6)
             anchors.baseline: totalCount.baseline
+            visible: root.activityRows.length > 0
             text: "unread"
             textFormat: Text.PlainText
             color: Util.alpha(Color.menu.text, 0.62)
@@ -679,7 +750,267 @@ PopupWindow {
         }
 
         Item {
-          visible: root.activityRows.length > 0 && root.showWindowPreviews
+          id: herdrHeader
+          objectName: "preview-herdr-header"
+          visible: root.hasAgents
+          width: contentFlow.width
+          height: root.agentHeaderHeight
+
+          DockLucideIcon {
+            id: herdrHeaderGlyph
+            anchors.left: parent.left
+            anchors.leftMargin: root.herdrOnly ? Style.space(4) : Style.space(6)
+            anchors.verticalCenter: parent.verticalCenter
+            width: Style.space(18)
+            height: width
+            iconName: "terminal"
+            tint: Color.accent
+          }
+
+          Text {
+            anchors.left: herdrHeaderGlyph.right
+            anchors.leftMargin: Style.space(10)
+            anchors.right: herdrCountersRow.left
+            anchors.rightMargin: Style.space(8)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.herdrLabel ? "Herdr · " + root.herdrLabel : "Herdr"
+            textFormat: Text.PlainText
+            color: Color.menu.text
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.title
+            font.weight: Font.Bold
+            elide: Text.ElideRight
+          }
+
+          Row {
+            id: herdrCountersRow
+            objectName: "preview-herdr-counters"
+            anchors.right: parent.right
+            anchors.rightMargin: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(10)
+
+            Repeater {
+              model: root.herdrCounters
+
+              Row {
+                required property var modelData
+                spacing: Style.space(4)
+
+                Rectangle {
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(8)
+                  height: width
+                  radius: width / 2
+                  color: statusColors.color(parent.modelData.status)
+                  border.width: statusColors.hollow(parent.modelData.status)
+                    ? Style.spacing.hairline : 0
+                  border.color: Color.menu.text
+                }
+
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: String(parent.modelData.count || 0)
+                  textFormat: Text.PlainText
+                  color: Util.alpha(Color.menu.text, 0.72)
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+              }
+            }
+          }
+        }
+
+        Item {
+          id: agentList
+          objectName: "preview-herdr-agent-list"
+          visible: root.hasAgents
+          width: contentFlow.width
+          height: root.agentListHeight
+
+          Repeater {
+            model: root.agentRows
+
+            BorderSurface {
+              id: agentRow
+              objectName: "preview-herdr-agent-row"
+              required property var modelData
+              required property int index
+              readonly property bool actionable:
+                modelData.focusAgentSupported === true
+                  && root.herdrAgentActions !== null
+              readonly property bool raised: actionable
+                && (agentHover.hovered || agentRow.activeFocus)
+              property var capturedTarget: null
+
+              width: agentList.width
+              height: root.agentRowHeight
+              y: index * (root.agentRowHeight + root.agentRowSpacing)
+              radius: Style.space(10)
+              color: agentRow.activeFocus
+                ? Style.focusFillFor(Color.menu.text, Color.accent)
+                : agentHover.hovered && actionable
+                  ? Style.hoverFillFor(Color.menu.text, Color.accent)
+                  : "transparent"
+              borderSpec: agentRow.activeFocus
+                ? Border.controlSpec("focus", Color.menu.text, Color.accent)
+                : agentHover.hovered && actionable
+                  ? Border.controlSpec("hover-cursor", Color.menu.text, Color.accent)
+                  : Border.none()
+              activeFocusOnTab: actionable
+              opacity: actionable ? 1 : 0.68
+
+              Accessible.role: actionable
+                ? Accessible.Button : Accessible.StaticText
+              Accessible.name: HerdrModel.displayAgentTitle(modelData)
+                + ", " + HerdrModel.displayAgentTabSecondary(modelData)
+                + ", " + HerdrModel.statusLabel(modelData.status)
+              Accessible.description: actionable
+                ? "Focus this Herdr agent pane" : "Remote Herdr agent"
+              Accessible.onPressAction: if (actionable)
+                root.activateAgentTarget(capturedTarget)
+
+              Keys.onReturnPressed: if (actionable)
+                root.activateAgentTarget(capturedTarget)
+              Keys.onEnterPressed: if (actionable)
+                root.activateAgentTarget(capturedTarget)
+
+              DockHerdrStatusColors { id: rowStatusColors }
+
+              Item {
+                id: rowStatus
+                anchors.left: parent.left
+                anchors.leftMargin: agentRow.contentLeftInset + Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(20)
+                height: width
+
+                DockHerdrStatusMark {
+                  anchors.fill: parent
+                  status: agentRow.modelData.status
+                  size: parent.width
+                  ringColor: Color.menu.background
+                }
+
+                Rectangle {
+                  anchors.centerIn: parent
+                  visible: {
+                    var status = HerdrModel.normalizeStatus(agentRow.modelData.status)
+                    return status === "idle" || status === "unknown"
+                  }
+                  width: Style.space(8)
+                  height: width
+                  radius: width / 2
+                  color: rowStatusColors.hollow(agentRow.modelData.status)
+                    ? "transparent" : rowStatusColors.color(agentRow.modelData.status)
+                  border.width: Style.spacing.hairline
+                  border.color: rowStatusColors.color(agentRow.modelData.status)
+                }
+              }
+
+              Column {
+                anchors.left: rowStatus.right
+                anchors.leftMargin: Style.space(12)
+                anchors.right: rowTrailing.left
+                anchors.rightMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(3)
+
+                Text {
+                  width: parent.width
+                  text: HerdrModel.displayAgentTitle(agentRow.modelData)
+                  textFormat: Text.PlainText
+                  color: Color.menu.text
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.subtitle
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  width: parent.width
+                  text: HerdrModel.displayAgentTabSecondary(agentRow.modelData)
+                  textFormat: Text.PlainText
+                  color: Util.alpha(Color.menu.text, 0.58)
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.bodySmall
+                  elide: Text.ElideRight
+                }
+              }
+
+              Rectangle {
+                id: rowTrailing
+                anchors.right: parent.right
+                anchors.rightMargin: agentRow.contentRightInset + Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                width: agentRow.raised
+                  ? focusChipText.implicitWidth + Style.space(16)
+                  : statusText.implicitWidth
+                height: agentRow.raised ? Style.space(24) : statusText.implicitHeight
+                radius: Style.space(6)
+                color: agentRow.raised
+                  ? Style.normalFillFor(Color.menu.text, Color.accent)
+                  : "transparent"
+
+                Text {
+                  id: focusChipText
+                  anchors.centerIn: parent
+                  visible: agentRow.raised
+                  text: "↵ Focus"
+                  textFormat: Text.PlainText
+                  color: Color.menu.text
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+
+                Text {
+                  id: statusText
+                  anchors.centerIn: parent
+                  visible: !agentRow.raised
+                  text: HerdrModel.statusLabel(agentRow.modelData.status)
+                  textFormat: Text.PlainText
+                  color: rowStatusColors.color(agentRow.modelData.status)
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+              }
+
+              HoverHandler {
+                id: agentHover
+                cursorShape: agentRow.actionable
+                  ? Qt.PointingHandCursor : Qt.ArrowCursor
+              }
+
+              TapHandler {
+                enabled: agentRow.actionable
+                acceptedButtons: Qt.LeftButton
+                onPressedChanged: if (pressed)
+                  agentRow.capturedTarget = root.captureAgentTarget(
+                    agentRow.modelData)
+                onTapped: root.activateAgentTarget(agentRow.capturedTarget)
+              }
+
+              Component.onCompleted: capturedTarget = root.captureAgentTarget(modelData)
+              onModelDataChanged: capturedTarget = root.captureAgentTarget(modelData)
+            }
+          }
+        }
+
+        Text {
+          objectName: "preview-herdr-footer"
+          visible: root.herdrOnly
+          width: contentFlow.width
+          height: root.agentFooterHeight
+          leftPadding: Style.space(4)
+          text: "Click a row to focus its pane."
+          textFormat: Text.PlainText
+          color: Util.alpha(Color.menu.text, 0.58)
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.bodySmall
+          verticalAlignment: Text.AlignVCenter
+        }
+
+        Item {
+          visible: root.hasSupplementaryContent && root.showWindowPreviews
           width: contentFlow.width
           height: root.separatorHeight
 
@@ -690,7 +1021,7 @@ PopupWindow {
         }
 
         Item {
-          visible: root.hasActivity && root.showWindowPreviews
+          visible: root.hasSupplementaryContent && root.showWindowPreviews
           width: contentFlow.width
           height: root.windowLabelHeight
 
@@ -711,9 +1042,10 @@ PopupWindow {
         Item {
           id: tileFlow
           visible: root.showWindowPreviews
-          width: root.hasActivity ? contentFlow.width : root.previewFlowWidth
+          width: root.hasSupplementaryContent
+            ? contentFlow.width : root.previewFlowWidth
           height: root.previewFlowHeight
-          clip: root.hasActivity
+          clip: root.hasSupplementaryContent
 
           Flickable {
             id: previewList
@@ -763,7 +1095,7 @@ PopupWindow {
                 windowOverrideSource: root.windowOverrideSource
                 iconReloadRevision: root.iconReloadRevision
                 captureEnabled: root.visible && root.previewCaptureEnabled
-                compactActivityLayout: root.hasActivity
+                compactActivityLayout: root.hasSupplementaryContent
                 fallbackArtwork: root.previewArtwork[modelData.title] || ""
                 previewWidth: root.tileWidth
                 previewHeight: root.tilePreviewHeight
@@ -789,10 +1121,10 @@ PopupWindow {
   onPositionChanged: if (root.visible) Qt.callLater(root.reanchor)
   onMembersChanged: if (root.visible
       && PreviewModel.hasPreviewContent(
-        root.members.length, root.activityRows.length))
+        root.members.length, root.activityRows.length, root.agentRows.length))
     Qt.callLater(root.reanchor)
   onActivityRowsChanged: {
-    Qt.callLater(root.refreshActivityContent)
+    Qt.callLater(root.refreshSupplementaryContent)
   }
   onAnchorItemChanged: {
     if (!root.anchorItem && root.desktopId !== "")
@@ -800,17 +1132,29 @@ PopupWindow {
   }
 
   Connections {
+    id: anchorConnections
     target: root.anchorItem
     ignoreUnknownSignals: true
-    function onDestroyed() { root.dismissImmediately() }
+    function onDestroyed(object) {
+      if (!root.anchorItem || root.anchorItem === object)
+        root.dismissImmediately()
+    }
     function onXChanged() { root.refreshAnchorGeometry() }
     function onYChanged() { root.refreshAnchorGeometry() }
     function onWidthChanged() { root.refreshAnchorGeometry() }
     function onHeightChanged() { root.refreshAnchorGeometry() }
     function onVisibleChanged() { if (root.anchorItem && !root.anchorItem.visible) root.dismissImmediately() }
     function onPreviewActivitiesChanged() {
-      Qt.callLater(root.refreshActivityContent)
+      Qt.callLater(root.refreshSupplementaryContent)
     }
+    function onPreviewAgentsChanged() {
+      root.refreshAgentContent()
+    }
+    function onPreviewHerdrOnlyChanged() {
+      root.refreshAgentContent()
+    }
+    function onPreviewHerdrLabelChanged() { root.refreshAgentContent() }
+    function onPreviewHerdrCountersChanged() { root.refreshAgentContent() }
   }
 
   Connections {

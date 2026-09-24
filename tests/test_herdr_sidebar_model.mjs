@@ -412,6 +412,13 @@ console.log('herdr sidebar model association: PASS')
   assert.equal(Model.displayAgentSecondary({ workspaceLabel: 'ws', agent: 'cursor' }),
     'ws - Cursor')
   assert.equal(Model.displayAgentSecondary({ agent: 'codex' }), 'Codex')
+  assert.equal(Model.displayAgentTabSecondary({ tabTitle: 'Review', agent: 'codex' }),
+    'Review · Codex')
+  assert.equal(Model.displayAgentTabSecondary({ agent: 'claude' }), 'Claude')
+  assert.equal(Model.displayAgentTabSecondary({ tabTitle: 'Build' }), 'Build')
+  assert.equal(Model.displayAgentSecondary({
+    workspaceLabel: 'ws', tabTitle: 'Review', agent: 'codex'
+  }), 'ws - Codex', 'sidebar secondary text remains workspace-based')
   assert.deepEqual(
     Model.sortAgentsForDisplay([
       { id: '1', status: 'idle' },
@@ -422,6 +429,38 @@ console.log('herdr sidebar model association: PASS')
     ]).map(a => a.status),
     ['blocked', 'working', 'done', 'idle', 'unknown'],
   )
+  const summary = Model.windowAgentSummary([
+    { id: 'idle', status: 'idle', title: 'Idle', focusAgentSupported: true },
+    { id: 'done', status: 'done', title: 'Done', focusAgentSupported: false },
+    { id: 'working', status: 'working', title: 'Working', focusAgentSupported: true },
+    { id: 'blocked', status: 'blocked', title: 'Blocked', focusAgentSupported: true },
+    { id: 'stale', status: 'stale', title: 'Stale', focusAgentSupported: false }
+  ], {})
+  assert.equal(summary.count, 5)
+  assert.equal(summary.indicatorStatus, 'blocked')
+  assert.deepEqual(plain(summary.counters), [
+    { status: 'blocked', count: 1 }, { status: 'working', count: 1 },
+    { status: 'done', count: 1 }, { status: 'idle', count: 1 },
+    { status: 'unknown', count: 1 }
+  ])
+  assert.deepEqual(Array.from(summary.rows, row => row.id),
+    ['blocked', 'working', 'done', 'idle', 'stale'])
+  assert.equal(summary.rows[0].status, 'blocked', 'rows retain raw status')
+  assert.equal(summary.rows[2].focusAgentSupported, false,
+    'remote focus capability remains visible in summary rows')
+  assert.equal(Model.windowAgentSummary([
+    { id: 'done', status: 'done' }, { id: 'idle', status: 'idle' }
+  ], { done: true }).indicatorStatus, '', 'acknowledged done is indicator-only')
+  assert.equal(Model.windowAgentSummary([
+    { id: 'done', status: 'done' }, { id: 'working', status: 'working' }
+  ], { done: true }).indicatorStatus, 'working')
+  const duplicateIds = Model.windowAgentSummary([
+    { id: 'same', serverId: 'one', status: 'done', indicatorKey: 'window-one' },
+    { id: 'same', serverId: 'two', status: 'done', indicatorKey: 'window-two' }
+  ], { 'window-one': true })
+  assert.equal(duplicateIds.count, 2, 'agent identity is scoped by server')
+  assert.equal(duplicateIds.indicatorStatus, 'done',
+    'acknowledging one window completion does not hide another with the same agent id')
   const grouped = plain(Model.groupAgentsForTree([
     { id: 'a', workspaceId: 'w1', workspaceLabel: 'Dock', tabId: 't1', tabTitle: 'One', status: 'idle' },
     { id: 'b', workspaceId: 'w1', workspaceLabel: 'Dock', tabId: 't1', tabTitle: 'One', status: 'working' },

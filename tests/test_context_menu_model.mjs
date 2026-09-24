@@ -8,8 +8,15 @@ vm.runInContext(source.replace(/^\.(pragma|import).*$/gm, ''), scope)
 
 const targetA = { toplevel: { id: 'A' }, address: '0xaaa' }
 const targetB = { toplevel: { id: 'B' }, address: '0xbbb' }
+const agentTarget = { toplevel: targetA.toplevel, agentId: 'agent-a' }
+const remote = scope.agentRecord(
+  'herdr:remote', 'Remote session agent', 'Claude', 'idle', false, null)
+const agent = scope.agentRecord(
+  'herdr:local', 'Execute sidebar layout fix', 'Codex', 'blocked', true, agentTarget)
 const records = [
   scope.headerRecord('header', 'Chrome', '2 open windows'),
+  agent,
+  remote,
   scope.actionRecord('window:a', 'Window A', 'app-window', true, 'open-window', targetA),
   scope.actionRecord('disabled', 'Disabled', '', false, 'noop', null),
   scope.separatorRecord('divider'),
@@ -17,11 +24,18 @@ const records = [
 ]
 
 assert.equal(scope.firstEnabledIndex(records), 1)
-assert.equal(scope.nextEnabledIndex(records, 1, 1), 4)
-assert.equal(scope.nextEnabledIndex(records, 4, -1), 1)
+assert.deepEqual(JSON.parse(JSON.stringify(agent)), {
+  kind: 'agent', id: 'herdr:local', title: 'Execute sidebar layout fix',
+  agentKind: 'Codex', status: 'blocked', enabled: true,
+  target: { toplevel: { id: 'A' }, agentId: 'agent-a' }
+})
+assert.equal(scope.isFocusable(remote), false, 'disabled remote rows are not focusable')
+assert.equal(scope.nextEnabledIndex(records, 1, 1), 3,
+  'keyboard navigation skips a disabled remote row')
+assert.equal(scope.nextEnabledIndex(records, 3, -1), 1)
 
 const cursor = scope.cursorStep(records, 1, 1, targetA)
-assert.equal(cursor.index, 4)
+assert.equal(cursor.index, 3)
 assert.equal(cursor.targetContext, targetA,
   'cursor movement must not retarget the action context')
 
