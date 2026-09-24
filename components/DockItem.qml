@@ -484,8 +484,7 @@ Item {
         id: windowCountBadge
         objectName: "dock-corner-count-badge"
 
-        visible: root.runningCount > 1
-          || root.runningCount <= 1 && root.herdrAgentCount >= 2
+        visible: root.runningCount > 1 && !herdrStatusMark.visible
         width: Math.max(16, windowCountText.implicitWidth + 8)
         height: 16
         radius: height / 2
@@ -501,9 +500,7 @@ Item {
           objectName: "dock-corner-count-text"
 
           anchors.centerIn: parent
-          readonly property int displayedCount: root.runningCount > 1
-            ? root.runningCount : root.herdrAgentCount
-          text: displayedCount > 99 ? "99+" : String(displayedCount)
+          text: root.runningCount > 99 ? "99+" : String(root.runningCount)
           color: Color.background
           font.family: Style.font.family
           font.pixelSize: Style.font.bodySmall
@@ -515,18 +512,19 @@ Item {
         objectName: "dock-attention-badge"
         severity: root.herdrReplacesAttention ? "none" : root.attentionBadge
         x: iconContainer.width - width + 3
-        y: windowCountBadge.visible ? 13 : -3
+        y: -3 + (windowCountBadge.visible ? 16 : 0)
+          + (herdrStatusMark.visible ? herdrStatusMark.height : 0)
       }
 
       DockHerdrStatusMark {
         id: herdrStatusMark
         objectName: "dock-herdr-status-mark"
         status: root.herdrIndicatorStatus
-        size: Math.max(18, root.iconSize * 24 / 52)
+        size: Math.max(22, root.iconSize * 26 / 52)
         ringColor: Color.background
         animationsEnabled: root.interfaceAnimationsEnabled
-        x: iconContainer.width - width + root.iconSize * 7 / 52
-        y: iconContainer.height - height + root.iconSize * 7 / 52
+        x: iconContainer.width - width + root.iconSize * 8 / 52
+        y: -root.iconSize * 8 / 52
         z: 4
       }
 

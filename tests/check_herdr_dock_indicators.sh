@@ -21,16 +21,15 @@ grep -Fq 'summaryForToplevels(item.toplevels || [])' "$dock" \
 grep -Fq 'herdrWindowCount: Number(dockHerdrSummary.herdrWindowCount || 0)' "$dock" \
   || fail 'associated-window count is not passed to DockItem'
 
-grep -Fq 'size: Math.max(18, root.iconSize * 24 / 52)' "$item" \
-  || fail 'readable status mark minimum and 24px scaling missing'
-grep -Fq 'x: iconContainer.width - width + root.iconSize * 7 / 52' "$item" \
-  || fail 'status mark right -7 canvas offset missing'
-grep -Fq 'y: iconContainer.height - height + root.iconSize * 7 / 52' "$item" \
-  || fail 'status mark bottom -7 canvas offset missing'
-grep -Fq 'root.runningCount <= 1 && root.herdrAgentCount >= 2' "$item" \
-  || fail 'agent-count badge ownership missing'
-grep -Fq '? root.runningCount : root.herdrAgentCount' "$item" \
-  || fail 'window count must retain priority over agent count'
+grep -Fq 'size: Math.max(22, root.iconSize * 26 / 52)' "$item" \
+  || fail 'readable status mark minimum and 26px scaling missing'
+grep -Fq 'y: -root.iconSize * 8 / 52' "$item" \
+  || fail 'status mark must own the top-right corner'
+grep -Fq 'root.runningCount > 1 && !herdrStatusMark.visible' "$item" \
+  || fail 'status mark must replace the numeric corner badge'
+if grep -Fq 'herdrAgentCount >= 2' "$item"; then
+  fail 'agent count must not occupy the corner badge'
+fi
 grep -Fq 'root.herdrReplacesAttention ? "none" : root.attentionBadge' "$item" \
   || fail 'same-window blocked attention replacement missing'
 grep -Fq 'status === "blocked") name += " · " + count + " needs input"' "$item" \

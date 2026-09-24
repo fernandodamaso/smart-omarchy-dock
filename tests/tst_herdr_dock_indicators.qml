@@ -92,8 +92,7 @@ TestCase {
         Rectangle {
           id: countBadge
           objectName: "dock-corner-count-badge"
-          visible: indicator.runningCount > 1
-            || indicator.runningCount <= 1 && indicator.herdrAgentCount >= 2
+          visible: indicator.runningCount > 1 && !statusMark.visible
           width: Math.max(16, countText.implicitWidth + 8)
           height: 16
           radius: height / 2
@@ -105,9 +104,7 @@ TestCase {
             id: countText
             objectName: "dock-corner-count-text"
             anchors.centerIn: parent
-            readonly property int displayedCount: indicator.runningCount > 1
-              ? indicator.runningCount : indicator.herdrAgentCount
-            text: displayedCount > 99 ? "99+" : String(displayedCount)
+            text: indicator.runningCount > 99 ? "99+" : String(indicator.runningCount)
           }
         }
 
@@ -115,16 +112,18 @@ TestCase {
           objectName: "dock-attention-badge"
           severity: indicator.herdrReplacesAttention ? "none" : indicator.attentionBadge
           x: icon.width - width + 3
-          y: countBadge.visible ? 13 : -3
+          y: -3 + (countBadge.visible ? 16 : 0)
+            + (statusMark.visible ? statusMark.height : 0)
         }
 
         DockHerdrStatusMark {
+          id: statusMark
           objectName: "dock-herdr-status-mark"
           status: indicator.herdrSummary.indicatorStatus
-          size: 24
+          size: 26
           animationsEnabled: false
-          x: icon.width - width + 7
-          y: icon.height - height + 7
+          x: icon.width - width + 8
+          y: -8
         }
       }
     }
@@ -263,8 +262,8 @@ TestCase {
     item.herdrSummary = summary(["blocked", "working", "done"])
     wait(0)
     compare(HerdrModel.statusColorRole(mark.status), "blocked")
-    compare(badge.visible, true)
-    compare(badgeText.text, "3")
+    compare(badge.visible, false, "agent count never owns the corner badge")
+    compare(mark.y, -8, "status mark owns the top-right corner")
 
     // A stale/reconnecting projection is deliberately an empty summary.
     item.herdrSummary = summary([])
@@ -277,7 +276,13 @@ TestCase {
     item.runningToplevels = [one, two]
     item.herdrSummary = summary(["blocked", "working", "done"])
     wait(0)
-    compare(badgeText.text, "2", "window count owns the corner for grouped windows")
+    compare(badge.visible, false, "status mark replaces the window count")
+    item.herdrSummary = summary([])
+    wait(0)
+    compare(badge.visible, true, "window count returns without Herdr agents")
+    compare(badgeText.text, "2")
+    item.herdrSummary = summary(["blocked", "working", "done"])
+    wait(0)
     verify(item.Accessible.name.indexOf("2 windows · 3 agents") >= 0)
     verify(item.Accessible.name.indexOf("1 needs input") >= 0)
     verify(item.Accessible.name.indexOf("1 working") >= 0)
