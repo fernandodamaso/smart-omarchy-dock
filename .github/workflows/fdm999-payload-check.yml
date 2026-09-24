@@ -1,0 +1,77 @@
+name: FDM-999 verify publication payload
+on:
+  push:
+    branches: [agent/fdm-999-test-runtime]
+    paths: [.github/workflows/fdm999-payload-check.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Recover content-addressed payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p recovered/parts
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          expected = '''70b82247b64d3d2abc7a53f7d71054735c6ba9c3
+          fa413abcb4f8573fbf0cd71572cabd8c25b2b9f9
+          6cad603eb2b7ad16374d1f15c479bb4334266ec7
+          d8c16ee02e442b495d89848488efd5791cd84f2e
+          77a996d32cc3aadf4c1ea5b3a753ff264ae7f82f
+          1a02e62d17fa699cff1b046b71d5c3d98e8a0770
+          f8bddb7564f41bc5bda95cb23d8c620216b2d779
+          03ec2320ffd0dd1c95c18c0311d5cd738ee5c30b
+          b048bb7b40e0c8d2d30a5b4394f9d684ab2bb9bc
+          57d1b6e9b8c543dee1d40af2250f0b5ff115a017
+          f264c5429041fd65262a8e4b756c06614310aa7f
+          7e0c14c6b47928b97d7c1ca58b734225b1bdd4a9
+          f0ac69e4f3bd51b1e976bb882bf42e6f3133303b
+          0b8d8c83fd0c3b0503741bf2fc505fbddddc4d05
+          dee85dadf4d73da1f8eeff5c0f3a3428212b9d5a
+          7e608eedab8f7c6de3fadfff494a8df86bf0fdbc
+          b0f185235fc884eb041b6df3a7486c60019d5a4d
+          5a20b227b4cb6f3b40ac10ef05a77d691a9b53dd
+          5a9def558f11bcf72ccf7ed9f49841d5a3c9fc02
+          2e6435d3150ba6ac69779db0f03f364c27c2b87b
+          fe02f233f5b7f88a4bb8bf44be0465737768821a
+          c1b73ef4f504649030268c68b8b726a16d1c343d
+          94e304576e4c1b46350b0285b0b92afb8247f923'''.split()
+          fallback = {2:'97684a6a0faaecb14df9d78a561b4117944b9b83',7:'902350ad3f9f415f8aec6e1febffaf7a62b9c418',8:'a94bd292e7b5cc68124e12bcd659118409212a98',9:'e6591ad7c6a009e431a25152215d37f76d7c4a1a',10:'ca11d5fe55ff2f88d16c1bcae9e590fe3c9945ab',11:'cd2b9f3306c55e62e75825a210631a1f95937d06',12:'da513a50e76f0253e8d0e8703a9b3786fe9d6c0f',13:'a8823f511a8afad8a4b1dc50df82f0268ffde920',14:'0b8d510775d33d2c44bc7b9541e6a6a18c2ae1e0',15:'dee2377775c1b1351611b38977dc068542356a60f',16:'71ae22c533046f746ab8d3d89e58a9dd9e783688',17:'b0f6327e457064922c6464679057c76f7a85d785',18:'5a20ea3d919eb3126a4f601c67ab26cccf9619e5',19:'5a9af65fc4df43b454a8de1b39a5c86518f3f2d0',22:'5ef272670db0a28395e3768c1e359c87caa2e7b4',23:'9899b8a57733e3d8118840a60591fad9d839f1d6'}
+          report = []
+          for number, sha in enumerate(expected, 1):
+              data = None
+              source = None
+              for candidate in [sha, fallback.get(number)]:
+                  if not candidate: continue
+                  result = subprocess.run(['gh','api','repos/fernandodamaso/smart-omarchy-dock/git/blobs/'+candidate], capture_output=True, text=True)
+                  if result.returncode == 0:
+                      source = candidate
+                      data = base64.b64decode(json.loads(result.stdout)['content'])
+                      break
+              if data is not None:
+                  Path(f'recovered/parts/part-{number:02d}.txt').write_bytes(data)
+                  actual = hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              else:
+                  actual = None
+              row = {'number':number,'expected':sha,'source':source,'actual':actual,'ok':actual==sha}
+              report.append(row)
+              print(json.dumps(row))
+          Path('recovered/report.json').write_text(json.dumps(report,indent=2))
+          if all(row['ok'] for row in report):
+              raw = b''.join(Path(f'recovered/parts/part-{i:02d}.txt').read_bytes() for i in range(1,24))
+              bundle = base64.b64decode(raw, validate=True)
+              assert len(bundle)==50460
+              assert hashlib.sha256(bundle).hexdigest()=='c44eb89c65b4e38de2513a7af145fe1f483ac0ca59dd93deffb0540c8f0a92bd'
+              Path('recovered/candidate.bundle').write_bytes(bundle)
+              print('All payload hashes and bundle checksum PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fdm999-payload-verification
+          path: recovered
+          retention-days: 7
