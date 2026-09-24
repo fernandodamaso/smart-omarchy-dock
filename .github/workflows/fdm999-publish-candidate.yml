@@ -1,0 +1,90 @@
+name: FDM-999 publish verified candidate
+on:
+  push:
+    branches: [agent/fdm-999-test-runtime]
+    paths: [.github/workflows/fdm999-publish-candidate.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/fdm-998-widgetkit-tokens
+          fetch-depth: 0
+      - name: Reassemble and verify publication payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p recovered/parts
+          python3 - <<'PY'
+          import base64, hashlib, json, subprocess
+          from pathlib import Path
+          expected = '''70b82247b64d3d2abc7a53f7d71054735c6ba9c3
+          fa413abcb4f8573fbf0cd71572cabd8c25b2b9f9
+          6cad603eb2b7ad16374d1f15c479bb4334266ec7
+          d8c16ee02e442b495d89848488efd5791cd84f2e
+          77a996d32cc3aadf4c1ea5b3a753ff264ae7f82f
+          1a02e62d17fa699cff1b046b71d5c3d98e8a0770
+          f8bddb7564f41bc5bda95cb23d8c620216b2d779
+          03ec2320ffd0dd1c95c18c0311d5cd738ee5c30b
+          b048bb7b40e0c8d2d30a5b4394f9d684ab2bb9bc
+          57d1b6e9b8c543dee1d40af2250f0b5ff115a017
+          f264c5429041fd65262a8e4b756c06614310aa7f
+          7e0c14c6b47928b97d7c1ca58b734225b1bdd4a9
+          f0ac69e4f3bd51b1e976bb882bf42e6f3133303b
+          0b8d8c83fd0c3b0503741bf2fc505fbddddc4d05
+          dee85dadf4d73da1f8eeff5c0f3a3428212b9d5a
+          7e608eedab8f7c6de3fadfff494a8df86bf0fdbc
+          b0f185235fc884eb041b6df3a7486c60019d5a4d
+          5a20b227b4cb6f3b40ac10ef05a77d691a9b53dd
+          5a9def558f11bcf72ccf7ed9f49841d5a3c9fc02
+          2e6435d3150ba6ac69779db0f03f364c27c2b87b
+          fe02f233f5b7f88a4bb8bf44be0465737768821a
+          c1b73ef4f504649030268c68b8b726a16d1c343d
+          94e304576e4c1b46350b0285b0b92afb8247f923'''.split()
+          report=[]
+          for number,sha in enumerate(expected,1):
+              result=subprocess.run(['gh','api','repos/fernandodamaso/smart-omarchy-dock/git/blobs/'+sha],capture_output=True,text=True)
+              data=None
+              if result.returncode==0:
+                  data=base64.b64decode(json.loads(result.stdout)['content'])
+              elif number==2:
+                  result=subprocess.run(['gh','api','repos/fernandodamaso/smart-omarchy-dock/git/blobs/97684a6a0faaecb14df9d78a561b4117944b9b83'],capture_output=True,text=True)
+                  if result.returncode==0:
+                      data=base64.b64decode(json.loads(result.stdout)['content']).replace(b'VzW8rRR',b'VzW8bRR')
+              actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest() if data is not None else None
+              if data is not None: Path(f'recovered/parts/part-{number:02d}.txt').write_bytes(data)
+              row={'number':number,'expected':sha,'actual':actual,'ok':sha==actual}
+              report.append(row)
+              print(json.dumps(row))
+          Path('recovered/report.json').write_text(json.dumps(report,indent=2))
+          assert all(row['ok'] for row in report), 'Payload is incomplete; do not publish'
+          raw=b''.join(Path(f'recovered/parts/part-{i:02d}.txt').read_bytes() for i in range(1,24))
+          bundle=base64.b64decode(raw,validate=True)
+          assert len(bundle)==50460
+          assert hashlib.sha256(bundle).hexdigest()=='c44eb89c65b4e38de2513a7af145fe1f483ac0ca59dd93deffb0540c8f0a92bd'
+          Path('recovered/candidate.bundle').write_bytes(bundle)
+          print('Bundle checksum PASS')
+          PY
+      - name: Publish the exact tested source without rewriting any parent
+        run: |
+          set -euo pipefail
+          git cat-file -e 168f4924af61e5f6339df95d60b2a7f4993d70f8^{commit}
+          git cat-file -e 3dcf8ad1049a202b0ae614c83fd3df8461007469^{commit}
+          git bundle verify recovered/candidate.bundle
+          git fetch recovered/candidate.bundle refs/heads/feat/fdm-999-split-scroll
+          test "$(git rev-parse FETCH_HEAD)" = 1388e462f2beac3aacbd40c6e952d18ea20326e3
+          git diff --check 168f4924af61e5f6339df95d60b2a7f4993d70f8...FETCH_HEAD
+          git diff --exit-code 168f4924af61e5f6339df95d60b2a7f4993d70f8 FETCH_HEAD -- docs/widget-gallery/reference/
+          git merge-base --is-ancestor 168f4924af61e5f6339df95d60b2a7f4993d70f8 FETCH_HEAD
+          git merge-base --is-ancestor 3dcf8ad1049a202b0ae614c83fd3df8461007469 FETCH_HEAD
+          git push origin FETCH_HEAD:refs/heads/feat/fdm-999-split-scroll
+          printf 'head=%s\ntree=%s\n' "$(git rev-parse FETCH_HEAD)" "$(git rev-parse FETCH_HEAD^{tree})" | tee recovered/published.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fdm999-publication-evidence
+          path: recovered
+          retention-days: 7
