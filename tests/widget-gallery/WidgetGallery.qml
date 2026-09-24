@@ -177,7 +177,7 @@ Flickable {
       }
       WidgetKeyValue { width: parent.width; label: "Provider"; value: "Synthetic"; emphasized: true }
       WidgetMeter { width: parent.width; label: "CPU"; valueText: "42%"; value: 0.42; semantic: "info" }
-      WidgetMeter { width: parent.width; label: "Memory"; valueText: "71%"; value: 0.71; semantic: "warning" }
+      WidgetMeter { width: parent.width; label: "Memory"; valueText: "71%"; value: 0.71; semantic: "neutral" }
     }
 
     WidgetSection {
