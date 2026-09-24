@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as Controls
 import qs.Commons
 import qs.Ui as Ui
@@ -40,6 +41,17 @@ Item {
   property bool dragActive: false
   readonly property int dragThreshold: 6
 
+  // Item.activeFocus does not include descendants (for example a body input).
+  // Track the window's actual focus item without moving focus or adding a Tab stop.
+  readonly property bool hasCardFocus: {
+    var item = root.Window.window ? root.Window.window.activeFocusItem : null
+    while (item) {
+      if (item === root) return true
+      item = item.parent
+    }
+    return root.activeFocus
+  }
+
   activeFocusOnTab: true
   implicitHeight: header.height + (collapsed ? 0 : body.implicitHeight)
   height: implicitHeight
@@ -50,7 +62,7 @@ Item {
     anchors.fill: parent
     radius: root.widgetCardRadius
     color: root.idleCardFill
-    borderSpec: root.activeFocus
+    borderSpec: root.hasCardFocus
       ? Border.controlSpec("focus", Color.foreground, Color.accent)
       : Border.none()
   }
@@ -92,7 +104,7 @@ Item {
       objectName: "widget-card-header-highlight"
       anchors.fill: parent
       radius: root.widgetCardRadius
-      color: headerHover.hovered || root.activeFocus || cardContext.pressed
+      color: headerHover.hovered || root.hasCardFocus || cardContext.pressed
         ? root.headerHoverFill : "transparent"
     }
 
@@ -113,7 +125,9 @@ Item {
 
     Item {
       id: dragHandle
-      anchors.right: collapseButton.left
+      objectName: "widget-card-grip"
+      anchors.right: badge.visible ? badge.left : collapseButton.left
+      anchors.rightMargin: badge.visible ? Style.space(4) : 0
       anchors.verticalCenter: parent.verticalCenter
       width: Style.space(22)
       height: parent.height
@@ -122,10 +136,13 @@ Item {
       Accessible.name: "Drag " + root.title + " to reorder"
 
       WidgetIcon {
+        objectName: "widget-card-grip-icon"
         anchors.centerIn: parent
         width: 13
         height: 13
-        iconName: "move"
+        // Only the glyph fades. The invisible grip keeps its pointer target.
+        opacity: cardHover.hovered || root.hasCardFocus || root.dragActive ? 1 : 0
+        iconName: "grip-vertical"
         sizeToken: "xs"
         containerVariant: "plain"
         tint: Util.alpha(Color.foreground, 0.55)
@@ -191,13 +208,13 @@ Item {
       objectName: "widget-card-title"
       anchors.left: widgetIcon.right
       anchors.leftMargin: Style.space(7)
-      anchors.right: badge.visible ? badge.left : dragHandle.left
+      anchors.right: dragHandle.left
       anchors.rightMargin: Style.space(6)
       anchors.verticalCenter: parent.verticalCenter
       text: root.title
       textFormat: Text.PlainText
       elide: Text.ElideRight
-      color: !root.collapsed || root.activeFocus
+      color: !root.collapsed || root.hasCardFocus
         ? Color.foreground : Util.alpha(Color.foreground, 0.85)
       font.family: Style.font.family
       font.pixelSize: Style.font.body
@@ -206,8 +223,9 @@ Item {
 
     Rectangle {
       id: badge
+      objectName: "widget-card-badge"
       visible: root.badgeCount > 0
-      anchors.right: dragHandle.left
+      anchors.right: collapseButton.left
       anchors.rightMargin: Style.space(4)
       anchors.verticalCenter: parent.verticalCenter
       width: Math.max(17, badgeText.implicitWidth + 8)
@@ -219,6 +237,7 @@ Item {
 
       Text {
         id: badgeText
+        objectName: "widget-card-badge-text"
         anchors.centerIn: parent
         text: root.badgeCount > 99 ? "99+" : String(root.badgeCount)
         textFormat: Text.PlainText
@@ -249,11 +268,12 @@ Item {
         anchors.centerIn: parent
         width: 13
         height: 13
-        iconName: "chevron-right"
+        objectName: "widget-card-collapse-icon"
+        iconName: "chevron-down"
         sizeToken: "xs"
         containerVariant: "plain"
         accessibleName: collapseButton.tooltipText
-        rotation: root.collapsed ? 0 : 90
+        rotation: root.collapsed ? 0 : 180
         tint: Color.foreground
       }
     }
@@ -261,6 +281,7 @@ Item {
 
   Item {
     id: body
+    objectName: "widget-card-body"
     anchors.top: header.bottom
     width: parent.width
     implicitHeight: widgetView.hasView ? widgetView.implicitHeight + Style.space(16) : Style.space(56)

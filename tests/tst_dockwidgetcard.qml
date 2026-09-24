@@ -24,6 +24,8 @@ TestCase {
     testAppearance.monitorFill = "#343747"
     testAppearance.workspaceHoverFill = "#484c60"
     testAppearance.cardRadius = 2
+    mockController.count = 0
+    mockController.label = "Demo Widget"
     mouseMove(testCase, 350, 230)
   }
 
@@ -31,10 +33,12 @@ TestCase {
   QtObject {
     id: mockController
     property var herdrAssociations: ({})
+    property int count: 0
+    property string label: "Demo Widget"
     function widgetView(id) {
       return {
-        descriptor: { id: id, label: "Demo Widget", iconName: "layout-grid" },
-        data: { count: 0 },
+        descriptor: { id: id, label: mockController.label, iconName: "layout-grid" },
+        data: { count: mockController.count },
         status: "unavailable",
         active: false,
         revision: 0,
@@ -54,6 +58,11 @@ TestCase {
       collapsed: false
       onToggleRequested: testCase.toggleCount += 1
     }
+  }
+
+  Component {
+    id: inputFactory
+    TextInput { x: 25; y: 12; width: 100; height: 24; text: "Body input" }
   }
 
   function findByName(node, name) {
@@ -124,6 +133,111 @@ TestCase {
     verify(divider !== null)
     compare(divider.height, 1)
     compareColor(divider.color, Util.alpha(Color.foreground, 0.07))
+  }
+
+  function test_header_geometry_data() {
+    return [ { tag: "no badge", count: 0 }, { tag: "one", count: 1 },
+      { tag: "99 plus", count: 100 } ]
+  }
+
+  function test_header_geometry(data) {
+    mockController.count = data.count
+    mockController.label = "A very long Widget title that must elide before the fixed drag grip"
+    var card = makeCard()
+    card.width = 240
+    waitForRendering(card)
+    var grip = findByName(card, "widget-card-grip")
+    var icon = findByName(card, "widget-card-grip-icon")
+    var badge = findByName(card, "widget-card-badge")
+    var title = findByName(card, "widget-card-title")
+    var collapse = findByName(card, "widget-card-collapse")
+    verify(grip !== null && icon !== null && badge !== null)
+    compare(badge.visible, data.count > 0)
+    tryCompare(icon, "ready", true)
+    compare(icon.iconName, "grip-vertical")
+    compare(grip.activeFocusOnTab, false)
+    compare(grip.visible, true)
+    compare(grip.enabled, true)
+    compare(grip.width, Style.space(22))
+    verify(title.width > 0)
+    verify(title.truncated)
+    verify(title.x + title.width <= grip.x)
+    if (badge.visible) {
+      verify(grip.x + grip.width <= badge.x)
+      verify(badge.x + badge.width <= collapse.x)
+      compare(findByName(card, "widget-card-badge-text").text, data.count > 99 ? "99+" : "1")
+    } else {
+      verify(grip.x + grip.width <= collapse.x)
+    }
+    var positions = [grip.x, badge.x, collapse.x, title.width]
+    compare(icon.opacity, 0)
+    mouseMove(card, 20, 15)
+    tryCompare(icon, "opacity", 1)
+    compare([grip.x, badge.x, collapse.x, title.width], positions)
+    mouseMove(testCase, 350, 230)
+    tryCompare(icon, "opacity", 0)
+    card.forceActiveFocus()
+    tryCompare(icon, "opacity", 1)
+    compare([grip.x, badge.x, collapse.x, title.width], positions)
+    compare(grip.Accessible.name, "Drag " + card.title + " to reorder")
+  }
+
+  function test_body_input_focus_reveals_grip_without_changing_idle_surface() {
+    var card = makeCard()
+    card.appearance = testAppearance
+    var body = findByName(card, "widget-card-body")
+    verify(body !== null)
+    var input = createTemporaryObject(inputFactory, body)
+    var icon = findByName(card, "widget-card-grip-icon")
+    verify(icon !== null)
+    compare(icon.opacity, 0)
+    input.forceActiveFocus()
+    verify(input.activeFocus)
+    verify(!card.activeFocus)
+    tryCompare(icon, "opacity", 1)
+    compare(findByName(card, "widget-card-header-highlight").color, testAppearance.workspaceHoverFill)
+    compare(findByName(card, "widget-card-surface").color, testAppearance.monitorFill)
+    verify(findByName(card, "widget-card-surface").border.width > 0)
+    keyClick(Qt.Key_End)
+    keyClick(Qt.Key_Space)
+    for (var letter of [Qt.Key_E, Qt.Key_D, Qt.Key_I, Qt.Key_T, Qt.Key_E, Qt.Key_D])
+      keyClick(letter)
+    compare(input.text, "Body input edited")
+    compare(testCase.toggleCount, 0)
+  }
+
+  function test_hidden_grip_drag_survives_hover_loss_and_cancel() {
+    var card = makeCard()
+    var grip = findByName(card, "widget-card-grip-icon")
+    verify(grip !== null)
+    compare(grip.opacity, 0)
+    var handle = findByName(card, "widget-card-drag-handle")
+    var started = 0
+    var finished = []
+    card.dragStarted.connect(function() { started += 1 })
+    card.dragFinished.connect(function(x, y, cancelled) { finished.push(cancelled) })
+    mousePress(handle, 8, 15, Qt.LeftButton)
+    mouseMove(handle, 8, 15 + card.dragThreshold + 2, Qt.LeftButton)
+    compare(started, 1)
+    compare(card.dragActive, true)
+    mouseMove(testCase, 345, 225, Qt.LeftButton)
+    compare(grip.opacity, 1)
+    card.visible = false
+    tryCompare(card, "dragActive", false)
+    compare(finished, [true])
+    mouseRelease(testCase, 345, 225, Qt.LeftButton)
+    compare(finished, [true])
+    compare(testCase.toggleCount, 0)
+  }
+
+  function test_down_chevron_rotation_tracks_collapsed_state() {
+    var card = makeCard()
+    var arrow = findByName(card, "widget-card-collapse-icon")
+    verify(arrow !== null)
+    compare(arrow.iconName, "chevron-down")
+    compare(arrow.rotation, 180)
+    card.collapsed = true
+    compare(arrow.rotation, 0)
   }
 
   function test_idle_wrapper_has_no_border_and_focus_restores_feedback() {
