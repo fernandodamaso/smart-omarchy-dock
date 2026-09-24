@@ -132,6 +132,12 @@ is not native qualification. Installed/full-shell version matching remains local
 
 ## FDM-998 / WIDGET-06 — WidgetKit token alignment (execution source slice)
 
+Execution handoff: branch `feat/fdm-998-widgetkit-tokens`, Draft PR #114,
+stacked on FDM-997 exact head `8da5ad5ac9bfb05e1c450b4b9c9cf3cd973e8941`.
+Native/token and measured contrast evidence is in
+`docs/FDM-998-widgetkit-token-audit.md`. Exact-head CI evidence is recorded in
+the PR/Linear handoff only after the final source head is green.
+
 https://linear.app/fdamaso/issue/FDM-998 . Visual-only public WidgetKit 1.0; no
 property/signal/import removal or rename; additive properties allowed, not required.
 Files: WidgetText, WidgetFormField, WidgetStat, WidgetTextInput,
