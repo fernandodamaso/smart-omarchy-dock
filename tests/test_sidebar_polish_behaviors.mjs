@@ -15,6 +15,24 @@ const keyboardQml = read('components/DockSidebarKeyboard.qml')
 const rowInputQml = read('components/DockSidebarRowInput.qml')
 const pinnedStripQml = read('components/DockSidebarPinnedStrip.qml')
 
+// Deferred owner callbacks must die with their viewport/sidebar generation.
+// Zero-delay restartable Timers also coalesce refresh bursts without changing
+// which events request the existing restore/refresh behavior.
+assert.match(viewportQml,
+  /Timer\s*\{\s*id:\s*restoreTimer\s*interval:\s*0\s*repeat:\s*false\s*onTriggered:\s*root\.restoreAnchor\(\)\s*\}/s,
+  'viewport owns a zero-delay coalescing restore timer')
+assert.equal((viewportQml.match(/restoreTimer\.restart\(\)/g) || []).length, 4,
+  'all four deferred viewport restore paths use the owned timer')
+assert.doesNotMatch(viewportQml, /Qt\.callLater\(root\.restoreAnchor\)/,
+  'viewport never queues a restore method reference past owner destruction')
+assert.match(sidebarQml,
+  /Timer\s*\{\s*id:\s*refreshContextTimer\s*interval:\s*0\s*repeat:\s*false\s*onTriggered:\s*root\.refreshContext\(\)\s*\}/s,
+  'sidebar owns a zero-delay coalescing context refresh timer')
+assert.equal((sidebarQml.match(/refreshContextTimer\.restart\(\)/g) || []).length, 9,
+  'all nine deferred sidebar refresh paths use the owned timer')
+assert.doesNotMatch(sidebarQml, /Qt\.callLater\(root\.refreshContext\)/,
+  'sidebar never queues a refresh method reference past owner destruction')
+
 // rowFill / persistentFill composition priorities
 assert.equal(Interaction.composeRowFill({
   dropTarget: true, pressed: true, hovered: true, navigable: true,

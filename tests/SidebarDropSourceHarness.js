@@ -22,6 +22,9 @@ function viewport(parent, options) {
     if (!match) throw new Error("Missing production callback " + name)
     return match[0]
   }).join("\n")
+  var restoreTimer = request.responseText.match(
+    /^  Timer \{\n    id: restoreTimer\n[\s\S]*?^  \}/m)
+  if (!restoreTimer) throw new Error("Missing production owned restore timer")
   var source = 'import QtQuick\n'
     + 'import "' + Qt.resolvedUrl('../components/DockSidebarModel.js') + '" as SidebarModel\n'
     + 'import "' + Qt.resolvedUrl('../components/DockSidebarInteractionModel.js') + '" as InteractionModel\n'
@@ -47,7 +50,7 @@ function viewport(parent, options) {
     + 'function clearDropPresentation() { dropFlashKey=""; queuedDropToken=0 }\n'
     + 'function showDropFeedback(op) { feedbackState=op.state }\n'
     + 'function showDropFlash(token,key) { presentedDropToken=token; dropFlashKey=key }\n'
-    + selected + '\n' + callbacks + '\n'
+    + selected + '\n' + callbacks + '\n' + restoreTimer[0] + '\n'
     + 'ListView { id:list; anchors.fill:parent; model:root.visibleRows; cacheBuffer:0\n'
     + ' delegate: Item { required property int index; width:list.width; height:root.rowHeight }\n'
     + '}\nConnections { target:root.controller\n'

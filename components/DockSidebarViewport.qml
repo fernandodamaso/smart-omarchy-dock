@@ -34,7 +34,7 @@ FocusScope {
   readonly property var blankRegion: DockModel.sidebarBlankRegion(
     list.contentHeight, list.height, list.contentY, list.width)
   property Component contentTail: null
-  readonly property var contentTailItem: contentTailLoader.item
+  readonly property var contentTailItem: list.footerItem ? list.footerItem.contentTailItem : null
   property var contentTailDragPoint: null
   signal contentTailAutoScrolled()
   readonly property int rowCount: visibleRows.length
@@ -95,6 +95,12 @@ FocusScope {
   // Bump when list geometry/model changes so offscreen span estimates refresh.
   property int sectionChromeRevision: 0
   FontMetrics { id: metrics; font.family: Style.font.family; font.pixelSize: Style.font.body }
+  Timer {
+    id: restoreTimer
+    interval: 0
+    repeat: false
+    onTriggered: root.restoreAnchor()
+  }
 
   function rowIntersectsViewport(rowY, rowHeightValue) {
     return root.presentationVisible && !root.panelCollapsed
@@ -335,7 +341,7 @@ FocusScope {
       return
     }
     root.pendingRestore = true
-    Qt.callLater(root.restoreAnchor)
+    restoreTimer.restart()
   }
 
   function restoreAnchor() {
@@ -797,7 +803,7 @@ FocusScope {
     if (incoming.keys.length)
       root.previousKeys = incoming.keys
     root.pendingRestore = true
-    Qt.callLater(root.restoreAnchor)
+    restoreTimer.restart()
     root.syncFocusForProjection()
     root.bumpSectionChrome()
   }
@@ -851,6 +857,7 @@ FocusScope {
     }
     footer: Item {
       id: contentTailHost
+      readonly property var contentTailItem: contentTailLoader.item
       width: list.width
       height: root.panelCollapsed || !contentTailLoader.item
         ? 0 : Math.max(0, contentTailLoader.item.implicitHeight)
@@ -1053,7 +1060,7 @@ FocusScope {
   onRowHeightChanged: {
     if (!root.previousKeys.length) return
     root.pendingRestore = true
-    Qt.callLater(root.restoreAnchor)
+    restoreTimer.restart()
     root.bumpSectionChrome()
   }
   onHeightChanged: root.requestRestore()
@@ -1064,7 +1071,7 @@ FocusScope {
     root.scrollModeCollapsed = root.panelCollapsed
     root.previousCollapsed = root.panelCollapsed
     root.pendingRestore = true
-    Qt.callLater(root.restoreAnchor)
+    restoreTimer.restart()
   }
   // One clipped, noninteractive pill inside the originating panel. It never
   // acquires a window, pointer grab, or action authority of its own.

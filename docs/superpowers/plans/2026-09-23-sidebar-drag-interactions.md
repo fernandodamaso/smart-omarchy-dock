@@ -192,12 +192,20 @@ When a window is already on this monitor but on a different workspace, should dr
 
 ## Task 6 — KVM and native qualification
 
-- [ ] Start a fresh named KVM guest per `docs/DEV_SESSIONS.md`, sync the exact candidate worktree, restart the guest dock, and qualify W1–W7/G1 on two virtual outputs. Capture source dimming, ghost labels, group/header/footer targets, workspace-pin and same-monitor no-op feedback, sorted placeholders, rail mode, theme and animation preference.
-- [ ] Verify real pointer press/drag/release, grab completion, cancellation, scrolling, confirmed success and known pre-dispatch refusal snap-back. Verify unconfirmed feedback never promises rollback. Controlled delayed/inconsistent readback is exercised through the substituted-transport tests, not by claiming a native failure was reproduced without evidence.
-- [ ] Check offscreen confirmed destinations after restoration and independent mirrored-panel scroll positions; include workspace→monitor and new-workspace window moves, named workspaces and minimized restoration.
-- [ ] Code only narrow demonstrated runtime defects on the exact source candidate. Each fix commit invalidates prior exact-head acceptance and requires targeted reruns plus the applicable validation gate. Record the final base/head, commands/results, guest identity, observations and storyboard captures; avoid private window titles/data in shared logs.
-- [ ] Update the native matrix in `docs/SIDEBAR_INTERACTIONS.md` for header owner checks, both source-kind rejections, confirmed versus unconfirmed outcomes, and scroll ordering. Stop and clean up the guest and record stopped-state evidence and reset/rollback procedure.
-- [ ] Physical desktop testing is only on explicit user request through `smartdock dev use` followed by `smartdock dev reset`. Never start a second dock beside production or edit its installed plugin.
+**Status: locally qualified with disclosed boundaries.** The exact results and
+evidence inventory are in
+[`docs/FDM-995-native-qualification.md`](../../FDM-995-native-qualification.md).
+The run does not complete physical-output or full-Omarchy-host acceptance, and
+the same-monitor header behavior remains pending owner product approval.
+
+- [x] Ran fresh named KVM guests `fdm995-native-r3` and `fdm995-native-r4` in standalone mode on `Virtual-1` and `Virtual-2`, with guest-only ydotool input and the normal guest dock stopped before observer rounds.
+- [x] Qualified native held-button press/drag/release, Escape cancellation, rejection cleanup, confirmed moves, source/target feedback, reduced motion, live reload, virtual topology recovery and bounded autoscroll. Controlled delayed/inconsistent readback remains substituted evidence and is not reported as a native race reproduction.
+- [x] Qualified native cross-monitor header, numeric/named workspace-source, new-workspace and minimized-window moves; origin-only offscreen containment with an unchanged mirror after queued restore; and source-close followed by an independent fresh drag. The reverse-origin offscreen case was not achieved. Native folded fallback retained the fold and selected only the workspace group, but categorical no-focus-steal remained inconclusive; the full folded/recreated-origin/restore-ordering contract passed in substituted QML tests.
+- [x] Applied only the three demonstrated candidate fixes: footer `Bound` scope, an owned restore timer and an owned context-refresh timer; reran targeted source and native checks on the resulting dirty candidate.
+- [x] Updated the native matrix with native/substituted/blocked boundaries, recorded sanitized evidence and stopped state (`qemu_alive=false`), and left production settings and the installed plugin unchanged.
+- [ ] **Not completed:** reverse-origin offscreen qualification, categorical native folded-fallback no-focus-steal, and physical-output/full-Omarchy-host qualification. No physical desktop switch was used, so no `smartdock dev reset` was required.
+
+Any further code change invalidates the report's exact-candidate native evidence.
 
 ## Risks and safeguards
 

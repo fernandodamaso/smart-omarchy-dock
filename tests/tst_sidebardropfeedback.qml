@@ -27,6 +27,7 @@ TestCase {
     property bool entityAlive: true
     property bool locationMatches: true
     property var windowActions: actions
+    property int scrollWriteCount: 0
     signal refreshed()
     function dropOriginIsCurrent(op) { return originAlive && !!op && op === dropOperation }
     function dropEntityAlive(op) { return entityAlive }
@@ -34,6 +35,7 @@ TestCase {
     function endDropOperation(token) { if(dropOperation && dropOperation.token===token) dropOperation=null }
     function readScrollState(connector,collapsed) { return SidebarModel.readScrollState(states,connector,collapsed) }
     function writeScrollState(connector,collapsed,anchor,keys) {
+      scrollWriteCount += 1
       states=SidebarModel.writeScrollState(states,connector,collapsed,anchor,keys)
     }
   }
@@ -45,7 +47,7 @@ TestCase {
   function init() {
     controller.dropOperation=null; controller.originAlive=true;controller.entityAlive=true
     controller.locationMatches=true;controller.projecting=false;controller.refreshPending=false
-    controller.states=({})
+    controller.states=({});controller.scrollWriteCount=0
     var rows=[]
     for(var i=0;i<24;++i) rows.push({kind:"window",key:"r"+i,workspaceIdentity:"id:3",monitorIdentity:"0"})
     rows[20]={kind:"window",key:"destination",workspaceIdentity:"id:3",monitorIdentity:"0",toplevel:capturedWindow,address:"0xa"}
@@ -71,7 +73,7 @@ TestCase {
   function test_queued_restore_then_offscreen_contain_is_origin_only() {
     var before=JSON.stringify(controller.readScrollState("HDMI-A-1",true))
     origin.previousHeightMap="old-layout"
-    origin.requestRestore() // genuine Qt.callLater restoration already queued
+    origin.requestRestore() // genuine owned-timer restoration already queued
     verify(origin.pendingRestore)
     controller.dropOperation=operation()
     tryCompare(origin,"dropFlashKey","destination")
@@ -88,6 +90,14 @@ TestCase {
     compare(mirror.listView.contentY,64)
     compare(mirror.dropFlashKey,"")
     compare(JSON.stringify(controller.readScrollState("HDMI-A-1",true)),before)
+  }
+  function test_restore_requests_coalesce_in_owned_timer() {
+    origin.previousHeightMap="old-layout"
+    var writes=controller.scrollWriteCount
+    origin.requestRestore();origin.requestRestore();origin.requestRestore()
+    compare(controller.scrollWriteCount,writes)
+    tryCompare(controller,"scrollWriteCount",writes+1)
+    verify(!origin.pendingRestore && !origin.restoring)
   }
   function test_recreated_origin_rejects_already_queued_callback() {
     controller.dropOperation=operation()

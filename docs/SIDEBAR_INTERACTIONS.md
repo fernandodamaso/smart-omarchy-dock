@@ -132,21 +132,33 @@ Only the originating live viewport participates; mirrored panels keep independen
 connector × expanded/rail anchors. New gestures, topology/surface changes and
 teardown invalidate outstanding tokens, timers and queued callbacks.
 
-### Native qualification matrix (FDM-995 — not yet qualified)
+### Native qualification matrix (FDM-995)
 
-| Area | Cases to qualify in the exact-head, fresh two-output KVM guest |
-| --- | --- |
-| W1/W5/G1 source feedback | Window/workspace dimming, numeric/named labels, pins, rejected-to-valid transition, expanded and rail pills, clipping and closed-hand grab |
-| W2/W4 geometry | Group fill without outline, final group, shared boundaries, autoscroll, all-monitor dashed slots, blocked slots, footer/header/Widget-tail exclusion |
-| W3 header drop | Cross-monitor active workspace; same-monitor other-workspace provisional policy; stale/missing active owner; release revalidation; minimized/named sources; no workspace relocation |
-| Workspace card drop | Card border/fill, numeric/named sorted placeholders, empty monitors, pin/same-monitor refusal |
-| Confirmation | Existing/new workspace and workspace-source moves, delayed/inconsistent readback, timeout then late success, no rollback, captured-source closure/replacement |
-| W6/W7 finish | Real `UngrabExclusive`, escape/grab cancellation, safe refusal snap, 400 ms confirmed flash, reduced animation, fresh drag/teardown during feedback |
-| Scrolling and lifecycle | Offscreen success after queued restore, folded/absent fallback, two mirrored panels/mixed modes, origin destroy/recreate, topology change, live reload |
+Qualified on the exact dirty candidate identified in
+[`FDM-995-native-qualification.md`](FDM-995-native-qualification.md), in the fresh
+two-output standalone guests `fdm995-native-r3` and `fdm995-native-r4`.
+“Substituted” means production QML/model code under controlled test transport or
+timing; it is not a native race or rendering claim.
 
-Inspect the exact candidate in a fresh named guest per `docs/DEV_SESSIONS.md`;
-record captures/results and stopped-state evidence. No installed-plugin edit or
-physical desktop preview is authorized by source execution.
+| Area | Result | Qualification boundary |
+| --- | --- | --- |
+| W1/W5/G1 source feedback | Native pass | Window/workspace source dimming, monitor-group target, expanded and collapsed/right-edge feedback, pinned-window rejection, minimized-source ghost/target, and reduced-motion flash were observed. |
+| W2/W4 geometry | Native pass, partial matrix | Mirrored new-workspace slots, allocated destination, monitor-group target and held-drag autoscroll `contentY 0 → 64` passed. Every geometry permutation from the planning matrix was not independently replayed. |
+| W3 header drop | Native pass with product approval pending | Cross-monitor header move confirmed with origin-only flash. Same-monitor header behavior was qualified and is not a runtime defect, but the provisional product policy still requires owner approval. Stale/missing owner races remain deterministic substituted coverage, not native evidence. |
+| Workspace-source/card moves | Native pass, partial matrix | Numeric `id:3` and named `name:alpha` workspace-source moves passed in both origins represented by Virtual-1/Virtual-2. The complete placeholder/empty-monitor permutation matrix was not independently completed. |
+| Confirmation | Native pass plus substituted pass | Native existing/header, new-workspace, minimized-window and workspace-source operations reached submitting → pending → confirmed; pinned and outside releases rejected. Delayed/inconsistent readback, timeout/late success, replacement and stale-owner cases are source/substituted evidence only. |
+| W6/W7 finish | Native pass, partial matrix | Real held-button input, release, Escape cancellation, rejection cleanup, origin-only flash, reduced motion and live-reload settlement passed. Closing the captured source cleared its operation without flash; a fresh drag then confirmed independently without stale transfer. |
+| Scrolling and lifecycle | Native pass plus substituted pass | Native autoscroll, two-panel generations, mixed expanded/rail live reload, two → one → two virtual topology recovery, and offscreen origin-only containment after queued restoration passed. The reverse-origin offscreen case was not achieved. Native folded fallback retained the fold and flashed only the workspace group, but categorical no-focus-steal was inconclusive; the complete folded contract, recreated-origin rejection and owned restore ordering passed in the QML harness. |
+| Host/output scope | Blocked outside tested context | No physical-output or full-Omarchy-host claim. The tested host was standalone on two virtual KVM outputs with guest-only input. |
+
+R13/R14 additionally exposed missing icon assets in the disposable observer copy
+and `DockMenuAction` context-menu width binding-loop warnings. Those contextual
+warnings are disclosed separately from the candidate result: both rounds had
+zero candidate delayed-callback errors. The inspected individual settled frames
+and observer records showed no stale drag presentation; clipped Thunar content
+at the guest screen edge was a real test window, not dock feedback. Any further
+code change invalidates this exact-candidate native evidence and requires
+affected native checks to run again.
 
 ### Native UI composition inspected
 
@@ -197,14 +209,27 @@ SMARTDOCK_ISOLATED_RUNTIME=1 SMARTDOCK_RUNTIME_LOG=/tmp/sidebar-native.jsonl \
 ```
 
 The observer uses disposable source/configuration, refuses an existing mapped
-SmartDock layer and is bounded to 1..300 seconds. It logs real row press state,
-raw activation modifiers, captured connector/address, accepted action, delayed
-workspace-owner/focused-address readback and drag lifecycle observations. Window
-titles are omitted. The output is prefixed diagnostic JSON, not a bare JSONL file.
-A `ready` record or clean observer exit is **not** a matrix pass. Inspect and
-sanitize the evidence; keyboard actions may have no press snapshot, and rapid
-interactions may share a delayed readback. Record independent `hyprctl -j`
-workspace/monitor/active-window snapshots before and after each isolated case.
+SmartDock layer and is bounded to 1..300 seconds. It discovers every live
+`host.sidebarPanels` surface and its ordinary and discoverable inline-workspace
+badge inputs. Records contain only allowlisted scalar identities and booleans:
+gesture sequence, source kind/key/address, connector/surface generation,
+target/rejection changes, release and cleanup, drop-operation token/state/
+expected workspace+monitor/deadline, and each viewport's restore/contentY/
+anchor/flash/presentation state. They never contain titles, rows, QObject dumps,
+whole toplevels or private action payloads. The output is prefixed diagnostic
+JSON, not a bare JSONL file.
+
+For FDM-995, run the command in a fresh two-output named guest after stopping its
+normal dock. Require `ready.panelCount` to equal the expected sidebar panel count
+and require both panel connectors to produce `panel-observed` viewport records
+before interacting. Correlate one physical gesture by `sequence`; a release is
+shown by `gesture-release`, cleanup by `gesture-cleanup`, and the eventual result
+by `drop-operation` state transitions plus only the originating generation's
+viewport records. `observedInlineInputCount` may be zero when no populated
+workspace has an inline badge currently instantiated; it is not proof that the
+input class was missed. A `ready` record or clean observer exit is **not** a
+matrix pass. Record independent `hyprctl -j` workspace/monitor/active-window
+snapshots before and after each isolated case.
 
 SB-06 must run the following on the final combined SB-03/04/05 candidate:
 
