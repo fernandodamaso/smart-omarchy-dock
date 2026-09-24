@@ -1,0 +1,29 @@
+name: FDM-999 recover publication payload
+on:
+  push:
+    branches: [agent/fdm-999-test-runtime]
+    paths: [.github/workflows/fdm999-recover-blob.yml]
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download existing publication blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p recovered
+          gh api repos/fernandodamaso/smart-omarchy-dock/git/blobs/2c2c85712e717059fb57b0c2631e65e32dc55611 > recovered/blob.json
+          python3 - <<'PY'
+          import json, base64
+          from pathlib import Path
+          value = json.loads(Path('recovered/blob.json').read_text())
+          Path('recovered/partial.bundle').write_bytes(base64.b64decode(value['content']))
+          print(value['sha'], value['size'])
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdm999-partial-publication-recovery
+          path: recovered
+          retention-days: 7
