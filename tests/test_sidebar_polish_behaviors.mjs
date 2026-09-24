@@ -15,6 +15,24 @@ const keyboardQml = read('components/DockSidebarKeyboard.qml')
 const rowInputQml = read('components/DockSidebarRowInput.qml')
 const pinnedStripQml = read('components/DockSidebarPinnedStrip.qml')
 
+// Deferred owner callbacks must die with their viewport/sidebar generation.
+// Zero-delay restartable Timers also coalesce refresh bursts without changing
+// which events request the existing restore/refresh behavior.
+assert.match(viewportQml,
+  /Timer\s*\{\s*id:\s*restoreTimer\s*interval:\s*0\s*repeat:\s*false\s*onTriggered:\s*root\.restoreAnchor\(\)\s*\}/s,
+  'viewport owns a zero-delay coalescing restore timer')
+assert.equal((viewportQml.match(/restoreTimer\.restart\(\)/g) || []).length, 4,
+  'all four deferred viewport restore paths use the owned timer')
+assert.doesNotMatch(viewportQml, /Qt\.callLater\(root\.restoreAnchor\)/,
+  'viewport never queues a restore method reference past owner destruction')
+assert.match(sidebarQml,
+  /Timer\s*\{\s*id:\s*refreshContextTimer\s*interval:\s*0\s*repeat:\s*false\s*onTriggered:\s*root\.refreshContext\(\)\s*\}/s,
+  'sidebar owns a zero-delay coalescing context refresh timer')
+assert.equal((sidebarQml.match(/refreshContextTimer\.restart\(\)/g) || []).length, 9,
+  'all nine deferred sidebar refresh paths use the owned timer')
+assert.doesNotMatch(sidebarQml, /Qt\.callLater\(root\.refreshContext\)/,
+  'sidebar never queues a refresh method reference past owner destruction')
+
 // rowFill / persistentFill composition priorities
 assert.equal(Interaction.composeRowFill({
   dropTarget: true, pressed: true, hovered: true, navigable: true,
@@ -409,15 +427,15 @@ assert.match(rowQml, /borderSpec: root\.keyboardFocusVisible/,
 assert.doesNotMatch(rowQml, /root\.forceActiveFocus\(Qt\.MouseFocusReason\);|onFocusRequested: root\.forceActiveFocus/,
   'every row pointer focus path goes through focusFromPointer')
 assert.match(rowInputQml,
-  /id: hover[\s\S]{0,100}?cursorShape: Qt\.ArrowCursor/,
-  'ordinary rows override the panel-wide drag cursor')
+  /id: hover[\s\S]{0,150}?cursorShape: root\.dragOwned \? Qt\.ClosedHandCursor : Qt\.ArrowCursor/,
+  'ordinary rows use an arrow when idle and a closed hand while dragging')
 assert.match(sidebarQml,
   /id: headerBar[\s\S]{0,140}?HoverHandler \{ cursorShape: Qt\.ArrowCursor \}/,
   'header controls override the panel-wide drag cursor')
 assert.match(pinnedStripQml, /HoverHandler \{ cursorShape: Qt\.ArrowCursor \}/,
   'the pinned area overrides the panel-wide drag cursor')
 assert.match(viewportQml,
-  /visible: isWorkspace && geom\.height > 0\s*&& !InteractionModel\.isMonitorFinalKey\(modelData\.lastKey, root\.sectionSpans\)/,
+  /Rectangle \{\s*visible: !InteractionModel\.isMonitorFinalKey\(modelData\.lastKey, root\.sectionSpans\)/,
   'the final workspace in each monitor does not draw a trailing divider')
 assert.match(rowQml,
   /id: leadingWorkspaceBadge[\s\S]{0,260}?readonly property string rowKey: root\.inlineWorkspaceBadgeKey/,

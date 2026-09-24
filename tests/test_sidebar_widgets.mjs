@@ -190,6 +190,12 @@ const hostSource = read('DockHost.qml');
 const cardSource = read('components/DockWidgetCard.qml');
 assert.match(viewportSource, /property Component contentTail/);
 assert.match(viewportSource, /footer: Item\s*\{/);
+assert.match(viewportSource,
+  /readonly property var contentTailItem:\s*list\.footerItem\s*\?\s*list\.footerItem\.contentTailItem\s*:\s*null/,
+  'Bound root must resolve the Widget tail through the instantiated footer boundary');
+assert.match(viewportSource,
+  /footer: Item\s*\{[\s\S]*?readonly property var contentTailItem:\s*contentTailLoader\.item[\s\S]*?Loader\s*\{\s*id:\s*contentTailLoader/,
+  'footer must expose its locally scoped Loader item to the viewport root');
 assert.match(sidebarSource, /contentTail: Component/);
 assert.match(sidebarSource, /anchors\.bottom: pinnedStrip\.top/);
 assert.doesNotMatch(sidebarSource, /widgetOverflowButton|id:\s*widgetOverflow/);

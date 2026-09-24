@@ -37,7 +37,9 @@ export function interactionFixture() {
     herdrFocusErrorTimer:{restart(){}, stop(){}},
     registry:SidebarModel.reconcileHandles({nextToken:1,entries:[]},windows),
     mappedScreens:[{name:'DP-1'},{name:'HDMI-A-1'}],
-    dragSession:null,dragTarget:null,focusReturnTarget:null,
+    dropToken:0,dropSurfaceSerial:0,dropSurfaces:{},dropOperation:null,dropTimeoutMs:1500,dropClock:()=>Date.now(),
+    dropDeadlineTimer:{restart(){this.running=true},stop(){this.running=false},running:false},
+    dragSession:null,dragTarget:null,dragRejection:null,headerDropWithinMonitor:true,focusReturnTarget:null,
     dragChanged(){},navigationRequested(){},contextRequested(){},refreshed(){},surfaceInvalidated(){} })
   controller.projection = {rows:windows.map((t,i)=>({kind:'window',key:controller.registry.entries[i].key,
     toplevel:t,address:handles[i].address,workspaceIdentity:'name:Design work',monitorIdentity:'1'}))
