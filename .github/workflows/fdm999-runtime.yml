@@ -1,0 +1,59 @@
+name: FDM-999 isolated test runtime
+on:
+  push:
+    branches: [agent/fdm-999-test-runtime]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 168f4924af61e5f6339df95d60b2a7f4993d70f8
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Export source and exact refs
+        run: |
+          mkdir -p /tmp/fdm999-export
+          git fetch origin main feat/fdm-997-widget-chrome feat/fdm-998-widgetkit-tokens
+          git update-ref refs/heads/fdm999-parent 168f4924af61e5f6339df95d60b2a7f4993d70f8
+          git update-ref refs/heads/fdm999-main refs/remotes/origin/main
+          git bundle create /tmp/fdm999-export/source.bundle refs/heads/fdm999-parent refs/heads/fdm999-main
+          git show-ref > /tmp/fdm999-export/refs.txt
+          git log -4 --oneline origin/main > /tmp/fdm999-export/main.txt
+      - name: Install Qt tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qt6-declarative-dev-tools qt6-base-dev-tools qml6-module-qttest qml6-module-qtquick qml6-module-qtqml-workerscript qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-templates qml6-module-qtquick-layouts qml6-module-qt5compat-graphicaleffects libqt6svg6 qt6-image-formats-plugins
+      - name: Export relocatable runtime
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, subprocess, shutil
+          root = pathlib.Path('/tmp/qt-runtime')
+          paths = [pathlib.Path('/usr/lib/qt6/bin'), pathlib.Path('/usr/lib/x86_64-linux-gnu/qt6')]
+          for path in paths:
+              shutil.copytree(path, root / str(path).lstrip('/'), symlinks=False, dirs_exist_ok=True)
+          libs = set()
+          for path in list(root.rglob('*')):
+              if not path.is_file(): continue
+              try:
+                  if path.open('rb').read(4) != b'\x7fELF': continue
+                  output = subprocess.run(['ldd', str(path)], text=True, capture_output=True).stdout
+                  for line in output.splitlines():
+                      for part in line.split():
+                          if part.startswith('/') and pathlib.Path(part).is_file(): libs.add(part)
+              except OSError: pass
+          for lib in libs:
+              dst = root / lib.lstrip('/')
+              dst.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(lib, dst)
+          PY
+          dpkg-query -W 'libqt6*' 'qml6*' > /tmp/fdm999-export/qt-versions.txt
+          tar -czf /tmp/fdm999-export/qt-runtime.tar.gz -C /tmp/qt-runtime .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdm999-source-and-test-runtime
+          path: /tmp/fdm999-export
+          retention-days: 7
