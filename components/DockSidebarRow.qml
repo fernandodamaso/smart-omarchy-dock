@@ -1168,7 +1168,8 @@ Item {
         elide: Text.ElideRight
         wrapMode: Text.NoWrap
         maximumLineCount: 1
-        color: Color.muted
+        // Brighter than muted, still quieter than the title.
+        color: Qt.tint(Color.muted, Util.alpha(Color.foreground, 0.45))
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         renderType: Text.NativeRendering
