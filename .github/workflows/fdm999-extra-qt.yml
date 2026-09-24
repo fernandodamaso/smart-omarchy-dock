@@ -1,0 +1,21 @@
+name: FDM-999 extra Qt modules
+on:
+  push:
+    branches: [agent/fdm-999-test-runtime]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Export missing modules
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qml6-module-qtquick-shapes qml6-module-qtquick-dialogs
+          mkdir -p /tmp/extra
+          tar -czf /tmp/extra/qt-extra.tar.gz /usr/lib/x86_64-linux-gnu/qt6/qml /usr/lib/x86_64-linux-gnu/libQt6*.so* /usr/lib/x86_64-linux-gnu/libicu*.so*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdm999-extra-qt
+          path: /tmp/extra
+          retention-days: 7
