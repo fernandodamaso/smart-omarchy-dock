@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../components"
+import "../components/DockSidebarInteractionModel.js" as InteractionModel
 
 // Actual controller + QML geometry bindings, not compositor acceptance evidence.
 TestCase {
@@ -27,6 +28,12 @@ TestCase {
   }
 
   function init() { writer.writes = [] }
+  function test_monitor_map_tooltip() {
+    compare(InteractionModel.monitorTopologyTooltip({connector:"DP-1", focused:true}),
+      "Monitor DP-1 · focused")
+    compare(InteractionModel.monitorTopologyTooltip({connector:"HDMI-A-1", focused:false}),
+      "Monitor HDMI-A-1")
+  }
   function test_resize_preserves_other_output_rail_data() {
     return [{tag:"left-override",edge:"left",fallback:false},
       {tag:"right-override",edge:"right",fallback:false},

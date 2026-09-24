@@ -400,9 +400,9 @@ TestCase {
     compare(c.herdrAssociations.byWindowKey[windowKey], "local-a")
     compare(c.herdrAssociationEpoch, "epoch-2")
     verify(c.projection.rows.some(function(row) {
-      return row.kind === "herdr-tab" && row.windowKey === windowKey
+      return row.kind === "herdr-agent" && row.windowKey === windowKey
         && row.actionable === true
-        && (row.title === "Verified Agent" || row.agentId)
+        && row.title === "Verified Agent"
     }))
   }
 
@@ -634,7 +634,7 @@ TestCase {
     compare(parent.herdrFoldKey, foldKey)
     compare(parent.herdrFolded, false)
     verify(c.projection.rows.some(function(row) {
-      return row.kind === "herdr-tab" && row.windowKey === windowKey
+      return row.kind === "herdr-agent" && row.windowKey === windowKey
         && row.actionable === true
     }))
     verify(c.toggleHerdrAgents(windowKey))
@@ -645,8 +645,7 @@ TestCase {
     compare(parent.herdrStatusCounters.length, 1)
     compare(parent.herdrStatusCounters[0].status, "working")
     verify(!c.projection.rows.some(function(row) {
-      return (row.kind === "herdr-agent" || row.kind === "herdr-tab")
-        && row.windowKey === windowKey
+      return row.kind === "herdr-agent" && row.windowKey === windowKey
     }))
     // Fold memory survives another refresh.
     c.refresh()
@@ -661,8 +660,7 @@ TestCase {
     verify(c.folds[foldKey])
     compare(service.activeCount, leaseBeforeRail)
     verify(!c.railProjection.rows.some(function(row) {
-      return (row.kind === "herdr-agent" || row.kind === "herdr-tab")
-        && row.windowKey === windowKey
+      return row.kind === "herdr-agent" && row.windowKey === windowKey
     }))
     c.settings = Object.assign({}, c.settings, {
       sidebarCollapsedByMonitor: { "DP-1": false }

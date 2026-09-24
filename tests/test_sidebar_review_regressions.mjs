@@ -45,7 +45,8 @@ function shelf(animationsEnabled) {
     move: (from, to, count) => { values.splice(to, 0, ...values.splice(from, count)) },
   }
   const c = qmlMethods('DockSidebarPinnedStrip.qml', {
-    displayModel, pins: [], prevPins: [], exitStash: {}, animationsEnabled, stripReady: true,
+    displayModel, pins: [], prevPins: [], shownKeys: [], visibleCount: 10,
+    exitStash: {}, animationsEnabled, stripReady: true,
   })
   return {
     values, c,
@@ -78,6 +79,7 @@ test('pin reorder preserves pending exits and cancels a reinserted exit', () => 
   s.set(['C', 'B'])
   assert.deepEqual(s.keys(), ['C', 'B'])
   assert.equal(a.exiting, true)
+  assert.equal(a.exitSlot, 0, 'removed visible pin fades from its original slot')
   s.set(['B', 'A', 'C'])
   assert.deepEqual(s.keys(), ['B', 'A', 'C'])
   assert.equal(s.values.find(row => row.key === 'A'), a)

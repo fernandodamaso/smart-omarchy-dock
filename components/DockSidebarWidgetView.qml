@@ -18,6 +18,10 @@ Item {
     if (!viewEnabled || !snapshot || !snapshot.active || snapshot.status !== "ready" || !snapshot.descriptor) return null
     return snapshot.descriptor[presentation + "View"] || null
   }
+  readonly property url sourceUrl: {
+    if (!viewEnabled || !snapshot || !snapshot.active || snapshot.status !== "ready" || !snapshot.descriptor) return ""
+    return snapshot.descriptor[presentation + "Source"] || ""
+  }
   readonly property bool hasView: loader.status === Loader.Ready && loader.item !== null
   readonly property var loadedItem: loader.item
   readonly property var widgetContext: ({
@@ -45,7 +49,8 @@ Item {
   Loader {
     id: loader
     anchors.fill: parent
-    sourceComponent: root.factory
+    sourceComponent: root.sourceUrl.toString() === "" ? root.factory : null
+    source: root.factory ? "" : root.sourceUrl
     onLoaded: {
       try {
         if (typeof item.widgetContext === "undefined") throw new Error("Missing widgetContext")

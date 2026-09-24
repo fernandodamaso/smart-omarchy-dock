@@ -606,7 +606,7 @@ Item {
       target.targetId = String(row.targetId || "")
       target.windowAddress = String(row.windowAddress || "").toLowerCase()
       target.windowKey = String(row.windowKey || "")
-    } else if (row.kind === "herdr-agent" || row.kind === "herdr-tab") {
+    } else if (row.kind === "herdr-agent") {
       return root.herdrAgentActions
         ? root.herdrAgentActions.captureAgentTarget(row.toplevel, row) : null
     } else if (row.kind === "workspace") {
@@ -622,7 +622,7 @@ Item {
   }
 
   function targetIsCurrent(target) {
-    if (target && (target.kind === "herdr-agent" || target.kind === "herdr-tab"))
+    if (target && (target.kind === "herdr-agent"))
       return !!root.herdrAgentActions && root.herdrAgentActions.targetIsCurrent(target)
     if (!target || !root.windowActions || !root.mappedScreens.length) return false
     var row = root.rowsByKey[target.key]
@@ -661,7 +661,7 @@ Item {
   function activateTarget(target, control, clickedConnector, modifiers) {
     if (root.interactionBusy || !root.targetIsCurrent(target)) return false
     var accepted = false
-    if (target.kind === "herdr-agent" || target.kind === "herdr-tab") {
+    if (target.kind === "herdr-agent") {
       if (control === true) return false
       if (Number(modifiers || 0) !== Number(Qt.NoModifier)) return false
       return root.herdrAgentActions

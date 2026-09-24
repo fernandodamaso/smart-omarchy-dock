@@ -50,6 +50,11 @@ Item {
         popupView: herdrPopupView
       }
     }
+    var externalDescriptors = externalWidgetRegistry.descriptors || ({})
+    Object.keys(externalDescriptors).sort().forEach(function(widgetId) {
+      if (!Object.prototype.hasOwnProperty.call(registry, widgetId))
+        registry[widgetId] = externalDescriptors[widgetId]
+    })
     return registry
   }
   readonly property var sidebarController: sidebarState
@@ -523,6 +528,7 @@ Item {
   }
 
   DockDemoWidgetRegistry { id: demoWidgetRegistry }
+  DockExternalWidgetRegistry { id: externalWidgetRegistry }
 
   DockControl {
     id: dockControl

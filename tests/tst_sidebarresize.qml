@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../components"
+import "../components/DockSidebarInteractionModel.js" as InteractionModel
 
 TestCase {
   name: "SidebarResize"
@@ -22,6 +23,15 @@ TestCase {
   }
   Component { id: factory; DockSidebarController { host: writer } }
   Component { id: handleFactory; DockSidebarResizeHandle { width: 8; height: 300 } }
+  function test_pinned_strip_slots_at_supported_widths() {
+    var cases = [{width:240, visible:3, hidden:4},
+      {width:256, visible:4, hidden:3}, {width:320, visible:5, hidden:2}]
+    for (var sample of cases) {
+      var layout = InteractionModel.pinnedStripLayout(sample.width - 28, 7, 32, 32, 7)
+      compare(layout.visible, sample.visible)
+      compare(layout.hidden, sample.hidden)
+    }
+  }
 
   function makeController(edge) {
     return createTemporaryObject(factory, this, {

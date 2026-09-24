@@ -2,6 +2,21 @@ import assert from 'node:assert/strict'
 import {loadModel} from './host_harness.mjs'
 
 const model = loadModel('DockSidebarModel')
+const layout = loadModel('DockSidebarInteractionModel')
+
+// At 256 px, the panel's 14 px inset plus these positions puts application
+// titles at 75 px and nested window titles at 95 px. Both sibling app rows
+// consume the same workspace geometry, regardless of which owns the badge.
+const inline = layout.sidebarInlineWorkspaceGeometry(5, n => n)
+assert.equal(14 + inline.labelX, 75)
+assert.equal(14 + inline.labelX + layout.sidebarTreeGuideLayout(5).depthStep, 95)
+assert.equal(inline.badgeX, 9, 'workspace badge has 4 px inside the 5 px card inset')
+const inlineSelection = layout.sidebarSelectionInsets({
+  kind: 'window', collapsed: false, insideWorkspaceCard: true,
+  workspaceCardInset: 5, artX: inline.artX
+})
+assert.ok(inlineSelection.left >= inline.badgeX + inline.badgeWidth + 4,
+  'inline hover/focus fill leaves at least 4 px after the workspace badge')
 
 function g(screen, requested = 320, collapsed = false) {
   return model.screenGeometry(screen, requested, collapsed)

@@ -12,6 +12,8 @@ const controllerQml = read('components/DockSidebarController.qml')
 const sidebarQml = read('components/DockSidebar.qml')
 const viewportQml = read('components/DockSidebarViewport.qml')
 const keyboardQml = read('components/DockSidebarKeyboard.qml')
+const rowInputQml = read('components/DockSidebarRowInput.qml')
+const pinnedStripQml = read('components/DockSidebarPinnedStrip.qml')
 
 // rowFill / persistentFill composition priorities
 assert.equal(Interaction.composeRowFill({
@@ -54,8 +56,6 @@ assert.equal(Interaction.composeRowFill({
 // per-server focus capability made the projected row actionable.
 assert.equal(Interaction.rowHoverFillEligible('herdr-agent', true), true)
 assert.equal(Interaction.rowHoverFillEligible('herdr-agent', false), false)
-assert.equal(Interaction.rowHoverFillEligible('herdr-tab', true), true)
-assert.equal(Interaction.rowHoverFillEligible('herdr-tab', false), false)
 assert.equal(Interaction.rowHoverFillEligible('herdr-state'), false)
 assert.equal(Interaction.rowHoverFillEligible('monitor'), false)
 assert.equal(Interaction.rowHoverFillEligible('browser-tab'), true)
@@ -69,6 +69,9 @@ assert.match(rowQml, /navigable:\s*InteractionModel\.rowHoverFillEligible\(root\
 assert.match(rowQml,
   /navigable:\s*\[["']window["'],\s*["']workspace["'],\s*["']application["'],\s*["']launcher["'],\s*["']browser-tab["']\]/,
   'herdr-agent activation stays outside the generic navigable kind list')
+assert.match(rowQml,
+  /secondaryPathLabel[\s\S]*?Util\.alpha\(Color\.foreground, root\.focusedWindow \? 0\.78 : 0\.62\)/,
+  'secondary window paths retain contrast on the focused accent fill')
 
 // Variable-height scroll restore uses heightMap; shared sidebarRowMetrics baselines
 const monitor0 = { kind: 'monitor', sectionIndex: 0, layoutGapBefore: '' }
@@ -213,6 +216,13 @@ assert.equal(Interaction.compactWorkspaceBadgeLabel('2Work'), '2W')
 assert.equal(Interaction.compactWorkspaceBadgeLabel(''), '')
 assert.equal(Interaction.compactWorkspaceBadgeLabel('  Work  '), 'Wo',
   'surrounding whitespace trimmed before abbreviation')
+assert.equal(Interaction.sidebarCountPillVisible('window', false, true, true, false), false,
+  'an expanded browser parent leaves counts to its tabs')
+assert.equal(Interaction.sidebarCountPillVisible('window', false, true, true, true), true,
+  'a folded browser parent owns the summed count')
+assert.equal(Interaction.sidebarCountPillVisible('browser-tab', false, true, false, false), true,
+  'expanded tab children keep their own pills')
+assert.equal(Interaction.sidebarCountPillVisible('window', false, false, false, false), false)
 assert.equal(Interaction.compactWorkspaceBadgeLabel('😀Work'), '😀W',
   'surrogate pairs must not split')
 assert.equal(Array.from(Interaction.compactWorkspaceBadgeLabel('😀Work')).length, 2,
@@ -220,7 +230,7 @@ assert.equal(Array.from(Interaction.compactWorkspaceBadgeLabel('😀Work')).leng
 assert.match(rowQml, /workspaceRailLabel[\s\S]*?compactWorkspaceBadgeLabel/,
   'collapsed rail label uses the compact helper')
 
-// Topology strip: physical order + shared focused index/ordinal (not sectionIndex).
+// Topology strip: physical order, shared focus and per-card own-monitor index.
 assert.equal(Interaction.focusedMonitorStripIndex([
   { focused: false }, { focused: true }, { focused: false }
 ]), 1)
@@ -231,19 +241,25 @@ assert.equal(Interaction.focusedMonitorStripIndex([
   { focused: false }, { focused: false }
 ]), -1)
 assert.equal(Interaction.focusedMonitorStripIndex([]), -1)
-assert.equal(Interaction.focusedMonitorStripOrdinal([
-  { focused: false }, { focused: true }, { focused: false }
-]), '2/3')
-assert.equal(Interaction.focusedMonitorStripOrdinal([
-  { focused: false }, { focused: false }
-]), '')
-assert.equal(Interaction.topologyStripWidth(2), 13 * 2 + 3)
-assert.equal(Interaction.topologyStripWidth(4), 13 * 4 + 9)
+const monitorStrip = [
+  { identity: '9', connector: 'DP-1', focused: false },
+  { identity: '2', connector: 'HDMI-A-1', focused: true }
+]
+assert.equal(Interaction.monitorStripIndexFor(monitorStrip, '2', ''), 1)
+assert.equal(Interaction.monitorStripIndexFor(monitorStrip, '', 'DP-1'), 0)
+assert.equal(Interaction.monitorStripIndexFor(monitorStrip, 'missing', 'missing'), -1)
+assert.equal(Interaction.topologyStripWidth(2), 14 * 2 + 3)
+assert.equal(Interaction.topologyStripWidth(4), 14 * 4 + 9)
 assert.equal(Interaction.topologyStripWidth(5), 24)
 assert.match(rowQml, /physicalMonitorStrip/,
   'row builds miniatures from physicalMonitorStrip, not card section order')
-assert.match(rowQml, /focusedMonitorStripOrdinal/,
-  '>4 ordinal uses shared focused physical monitor on every header')
+assert.match(rowQml, /monitorStripIndexFor/,
+  '>4 ordinal and miniature fills use each card own physical monitor')
+assert.match(rowQml, /readonly property bool ownMonitor: index === root\.monitorStripIndex/,
+  'each topology miniature identifies whether it belongs to the current card')
+assert.match(rowQml,
+  /parent\.ownMonitor\s*\? \(parent\.focusedMonitor \? Color\.accent : Util\.alpha\(Color\.foreground, 0\.42\)\)/,
+  'own monitor is accent when focused and dim foreground when unfocused')
 assert.doesNotMatch(rowQml, /monitorStripOrdinal:\s*\(monitorSectionIndex/,
   'ordinal must not be sectionIndex+1/N')
 assert.doesNotMatch(rowQml, /index === root\.monitorSectionIndex/,
@@ -289,9 +305,16 @@ assert.doesNotMatch(viewportQml, /activeMonitorBorder/,
     'strip order must diverge from configured card order in this fixture')
   assert.equal(Interaction.focusedMonitorStripIndex(strip), 1,
     'focus joins by connector/identity onto physical HDMI (index 1)')
-  assert.equal(Interaction.focusedMonitorStripOrdinal(strip), '2/3',
-    '>4 ordinal is the focused physical monitor on every header')
+  assert.equal(Interaction.monitorStripIndexFor(strip, '2', 'HDMI-A-1'), 1,
+    'the HDMI card resolves its own physical monitor at index 1')
 }
+
+assert.doesNotMatch(rowQml, /workspaceBadge[\s\S]{0,420}?root\.row\.active/,
+  'expanded workspace badge accent no longer follows monitor-local active state')
+assert.doesNotMatch(rowQml, /railWorkspaceBadge[\s\S]{0,520}?root\.row\.active/,
+  'rail workspace badge accent no longer follows monitor-local active state')
+assert.match(rowQml, /root\.leadingWorkspace && root\.leadingWorkspace\.focused/,
+  'inline workspace badge accent follows globally focused state')
 
 // Real windowStateForRow: settings.pinned must not light the window pin icon.
 {
@@ -321,136 +344,27 @@ assert.doesNotMatch(viewportQml, /activeMonitorBorder/,
     'minimized stays independent of IPC pin')
 }
 
-// Tree guide columns: inset+8 badge, inset+20 guide0, depth-1 icon guide0+12, +24/depth.
+// Fixed badge column and compact sibling geometry at the default scale.
 const guide = Interaction.sidebarTreeGuideLayout(5)
-assert.equal(guide.workspaceLeft, 5)
-assert.equal(guide.badgeLeft, 13)
-assert.equal(guide.guide0, 25)
-assert.equal(guide.iconHalf, 9, 'child columns center on the 18px window icon')
-assert.equal(Interaction.sidebarTreeIconX(5, 1), 37)
-assert.equal(Interaction.sidebarTreeIconX(5, 2), 61)
-assert.equal(Interaction.sidebarTreeIconX(5, 3), 85)
+assert.equal(guide.badgeLeft, 9)
+assert.equal(guide.guide0, 20)
+assert.equal(guide.depthStep, 20)
+assert.equal(Interaction.sidebarTreeIconX(5, 1), 39)
+assert.equal(Interaction.sidebarTreeIconX(5, 2), 59)
+const inline = Interaction.sidebarInlineWorkspaceGeometry(5, n => n)
+assert.deepEqual({badgeX:inline.badgeX, badgeWidth:inline.badgeWidth,
+  stemX:inline.stemX, artX:inline.artX, labelX:inline.labelX},
+  {badgeX:9, badgeWidth:22, stemX:20, artX:39, labelX:61})
+assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1,
+  inline.guideOffset, inline.stemOffset), inline.stemX)
+assert.equal(Interaction.sidebarTreeGuideColumnX(5, 2,
+  inline.guideOffset, inline.stemOffset), inline.artX + guide.iconHalf)
 
-// Rendered guide column: depth-1 stays on the badge column (stemOffset only);
-// every deeper row branches from the parent's rendered icon *center*
-// (parentArt + iconHalf) instead of the nominal left-edge ladder.
-assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, 0, 0), 25,
-  'depth-1 keeps the guide0 badge column with no badge shift')
-assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, 19, 4), 29,
-  'depth-1 tracks the measured badge center; guideOffset never leaks in')
-assert.equal(Interaction.sidebarTreeGuideColumnX(5, 2, 0, 0),
-  Interaction.sidebarTreeIconX(5, 1) + guide.iconHalf,
-  'depth-2 branches from the parent icon center, not its left edge')
-assert.equal(Interaction.sidebarTreeGuideColumnX(5, 3, 11, 4),
-  Interaction.sidebarTreeIconX(5, 2) + 11 + guide.iconHalf,
-  'every deeper depth is parentArt + iconHalf; stemOffset never leaks up')
-
-// Inline workspace badge geometry: art sits after the real badge width + gap.
-{
-  const sp = n => n
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeMaxWidth(sp), 64)
-
-  // One measured chip-width contract for every row of a workspace: real font
-  // advance + padding, floored at 24, capped by the shared ceiling and by the
-  // workspace-wide available slot. No per-row label estimate survives.
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(0, 0, sp), 24)
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(10, 0, sp), 24,
-    '10px label + 8px padding stays on the 24px floor')
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, 0, sp), 32)
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(56, 0, sp), 64,
-    'padding can reach but never exceed the shared ceiling')
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(400, 0, sp), 64,
-    'long labels clamp to the ceiling instead of growing per row')
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(NaN, undefined, sp), 24,
-    'missing measurement keeps the stable floor')
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, 40, sp), 32)
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, 28, sp), 28,
-    'narrow panel clamps every row to the same available slot')
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, 12, sp), 24,
-    'available slot never drops below the floor')
-
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(280, 5, sp), 280 - 13 - 8 - 56,
-    'workspace-wide budget = content - badge left - padding - widest control stack')
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(100, 5, sp), 24,
-    'narrow content keeps the floor')
-  assert.equal(Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(0, 5, sp), 0,
-    'unmapped content reports no budget so rows fall back together')
-
-  // Two direct window rows of one workspace consume the identical measured
-  // width, so artwork, label and hover/selection edges align exactly.
-  const available = Interaction.sidebarInlineWorkspaceBadgeAvailableWidth(280, 5, sp)
-  const workChip = Interaction.sidebarInlineWorkspaceBadgeLayoutWidth(24, available, sp)
-  assert.equal(workChip, 32, 'measured chip keeps its real width (no 8px/glyph rounding up)')
-  const leading = Interaction.sidebarInlineWorkspaceGeometry(5, sp, workChip)
-  const following = Interaction.sidebarInlineWorkspaceGeometry(5, sp, workChip)
-  assert.equal(following.badgeX, leading.badgeX)
-  assert.equal(following.artX, leading.artX)
-  assert.equal(following.labelX, leading.labelX)
-  assert.equal(following.stemX, leading.stemX)
-  assert.equal(leading.stemX, guide.badgeLeft + workChip / 2,
-    'depth-1 stem stays on the badge center for a named badge')
-  const leadingSel = Interaction.sidebarSelectionInsets({
-    kind: 'window', collapsed: false, insideWorkspaceCard: true,
-    workspaceCardInset: 5, artX: leading.artX
-  })
-  const followingSel = Interaction.sidebarSelectionInsets({
-    kind: 'window', collapsed: false, insideWorkspaceCard: true,
-    workspaceCardInset: 5, artX: following.artX
-  })
-  assert.equal(followingSel.left, leadingSel.left,
-    'hover/selection backgrounds start at the same left edge')
-
-  const tight = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 24)
-  assert.equal(tight.badgeX, 13)
-  assert.equal(tight.artX, 13 + 24 + 6 + 5)
-  assert.equal(tight.stemX, 13 + 12)
-  assert.equal(tight.labelX, tight.artX + 18 + 8)
-  assert.equal(tight.guideOffset, tight.artX - Interaction.sidebarTreeIconX(5, 1))
-  assert.equal(tight.stemOffset, 0, '24px badge stem stays on guide0')
-  assert.equal(Interaction.sidebarTreeGuideColumnX(5, 1, tight.guideOffset,
-    tight.stemOffset), tight.stemX,
-    'the rendered depth-1 column matches the measured badge stem')
-  const wide = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 64)
-  assert.equal(wide.artX, 13 + 64 + 6 + 5)
-  assert.equal(wide.stemOffset, wide.stemX - guide.guide0)
-  assert.ok(wide.stemOffset !== wide.guideOffset,
-    'wide badge: stem and icon offsets differ')
-  assert.equal(wide.stemX, guide.badgeLeft + 32)
-  const clamped = Interaction.sidebarInlineWorkspaceGeometry(5, sp, 200)
-  assert.equal(clamped.artX, wide.artX, 'badge width clamps to max before artX')
-  assert.equal(clamped.stemOffset, wide.stemOffset)
-  const defaults = Interaction.sidebarInlineWorkspaceGeometry(5, sp)
-  assert.equal(defaults.artX, tight.artX, 'missing badgeWidth uses the 24px minimum')
-  assert.equal(defaults.stemOffset, 0)
-
-  // Wide badge: deeper columns still center the (shifted) parent icon.
-  assert.equal(Interaction.sidebarTreeGuideColumnX(5, 2, wide.guideOffset,
-    wide.stemOffset), wide.artX + guide.iconHalf,
-    'wide badge shifts the column with the icon, not with the badge center')
-
-  // Live 24px-chip shape (inset 11): parent art 54 -> depth-2 column 63,
-  // the pixel value verified on the desktop (icon box 54..72).
-  const live = Interaction.sidebarInlineWorkspaceGeometry(11, sp, 24)
-  assert.equal(live.artX, 54)
-  assert.equal(live.guideOffset, 11)
-  assert.equal(Interaction.sidebarTreeGuideColumnX(11, 2, live.guideOffset,
-    live.stemOffset), 63, 'live depth-2 guide sits on the parent icon center')
-  assert.equal(Interaction.sidebarTreeGuideColumnX(11, 3, live.guideOffset,
-    live.stemOffset), 87, 'live depth-3 guide uses the same center rule')
-}
-
-// Inline guide/alignment wiring: one viewport-owned measurement, badge-edge
-// connectors, workspace-scoped stem continuation, no header connector text.
-assert.doesNotMatch(rowQml, /sidebarInlineWorkspaceBadgeWidthForLabel/,
-  'rows never re-estimate chip width from the label')
-assert.match(rowQml, /viewport\.inlineWorkspaceBadgeWidths/,
-  'rows read the viewport-owned per-workspace measurement')
+// Inline guide/alignment wiring: fixed badge, workspace-scoped stem continuation.
 assert.match(rowQml, /width: root\.inlineBadgeLayoutWidth/,
-  'the rendered chip binds the shared measurement')
-assert.match(viewportQml, /sidebarInlineWorkspaceBadgeLayoutWidth/,
-  'the viewport owns the shared chip-width contract')
-assert.match(viewportQml, /inlineBadgeProbe/,
-  'the viewport measures the badge font independently of delegates')
+  'the rendered chip binds the shared geometry')
+assert.doesNotMatch(viewportQml, /inlineBadgeProbe/,
+  'fixed badges need no offscreen font probes')
 assert.doesNotMatch(rowQml, /hasVisibleNestedTreeChildren/,
   'expanded descendants alone must not continue the badge stem')
 assert.match(rowQml,
@@ -483,6 +397,28 @@ assert.doesNotMatch(rowQml,
   'workspace badge input must stay enabled after beginRowDrag owns interactionBusy')
 assert.match(rowQml, /activeFocusOnTab: true/,
   'inline workspace badge is an explicit keyboard focus target')
+assert.doesNotMatch(rowQml, /focusReason/,
+  'plain Item has no focusReason; rows track pointer focus explicitly')
+assert.match(rowQml,
+  /keyboardFocusVisible: root\.activeFocus && !root\.pointerFocused/,
+  'row focus decoration requires non-pointer focus')
+assert.match(rowQml, /activeFocus: root\.keyboardFocusVisible,/,
+  'mouse focus does not produce the stale row focus fill')
+assert.match(rowQml, /borderSpec: root\.keyboardFocusVisible/,
+  'mouse focus does not produce the stale row focus border')
+assert.doesNotMatch(rowQml, /root\.forceActiveFocus\(Qt\.MouseFocusReason\);|onFocusRequested: root\.forceActiveFocus/,
+  'every row pointer focus path goes through focusFromPointer')
+assert.match(rowInputQml,
+  /id: hover[\s\S]{0,100}?cursorShape: Qt\.ArrowCursor/,
+  'ordinary rows override the panel-wide drag cursor')
+assert.match(sidebarQml,
+  /id: headerBar[\s\S]{0,140}?HoverHandler \{ cursorShape: Qt\.ArrowCursor \}/,
+  'header controls override the panel-wide drag cursor')
+assert.match(pinnedStripQml, /HoverHandler \{ cursorShape: Qt\.ArrowCursor \}/,
+  'the pinned area overrides the panel-wide drag cursor')
+assert.match(viewportQml,
+  /visible: isWorkspace && geom\.height > 0\s*&& !InteractionModel\.isMonitorFinalKey\(modelData\.lastKey, root\.sectionSpans\)/,
+  'the final workspace in each monitor does not draw a trailing divider')
 assert.match(rowQml,
   /id: leadingWorkspaceBadge[\s\S]{0,260}?readonly property string rowKey: root\.inlineWorkspaceBadgeKey/,
   'inline workspace badge exposes its workspace rowKey so context refresh keeps a valid menu open')
@@ -538,8 +474,8 @@ assert.match(rowQml, /objectName:\s*"sidebar-alert-count"/,
   'expanded numeric alert uses compact badge objectName')
 assert.match(rowQml, /objectName:\s*"sidebar-rail-alert-count"/,
   'rail numeric alert uses compact badge objectName')
-assert.match(rowQml, /id:\s*alertCount[\s\S]*?radius:\s*Style\.space\(3\)/,
-  'alert badge radius is Style.space(3)')
+assert.match(rowQml, /id:\s*alertCount[\s\S]*?radius:\s*height\s*\/\s*2/,
+  'alert badge is a rounded pill')
 assert.match(rowQml, /id:\s*alertCount[\s\S]*?Style\.space\(4\)\s*\*\s*2/,
   'alert badge uses 4px horizontal padding')
 assert.match(rowQml, /selectionLeft/,
@@ -664,6 +600,21 @@ assert.equal(Interaction.sidebarWindowDisplayTitle({
   kind: 'browser-tab', isBrowser: true,
   entryName: 'Google Chrome', windowTitle: 'Chrome', tabTitle: 'Linear'
 }), 'Linear', 'tab children keep individual titles')
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind: 'browser-tab', tabTitle: '(5) Instagram', pillCount: 5, countPillVisible: true
+}), 'Instagram', 'matching visible pill removes one duplicate prefix')
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind: 'browser-tab', tabTitle: '(5) (5) Instagram', pillCount: 5, countPillVisible: true
+}), '(5) Instagram', 'only one prefix is removed')
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind: 'window', windowTitle: '(2024) Report', pillCount: 5, countPillVisible: true
+}), '(2024) Report', 'unrelated leading numbers remain')
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind: 'window', windowTitle: '(5) Report', pillCount: 5, countPillVisible: false
+}), '(5) Report', 'hidden pills do not change titles')
+assert.equal(Interaction.sidebarWindowTooltipTitle({
+  kind: 'browser-tab', displayTitle: 'Instagram', windowTitle: '(5) Instagram'
+}), '(5) Instagram', 'tooltip preserves the raw title after count cleanup')
 assert.equal(Interaction.sidebarWindowTooltipTitle({
   kind: 'window', isBrowser: true,
   displayTitle: 'Google Chrome', windowTitle: 'Inbox - Gmail - Google Chrome'
@@ -673,8 +624,24 @@ assert.equal(Interaction.sidebarWindowTooltipTitle({
   kind: 'window', isBrowser: false,
   displayTitle: 'nvim main.rs', windowTitle: 'nvim main.rs'
 }), 'nvim main.rs', 'non-browser tooltip stays the window title')
+for (const path of ['~', '~/src', '/etc']) {
+  const input = {kind:'window', entryName:'Terminal', windowTitle:path}
+  assert.equal(Interaction.sidebarWindowDisplayTitle(input), 'Terminal',
+    `a path-only title ${path} uses the entry name`)
+  assert.equal(Interaction.sidebarWindowSecondaryTitle(input), path,
+    `a path-only title ${path} stays visible as secondary text`)
+  assert.equal(Interaction.sidebarWindowTooltipTitle({
+    ...input, displayTitle:'Terminal'
+  }), `Terminal · ${path}`, 'tooltip retains the raw path')
+}
+assert.equal(Interaction.sidebarWindowDisplayTitle({
+  kind:'window', entryName:'Terminal', windowTitle:'nvim main.rs'
+}), 'nvim main.rs', 'ordinary window titles remain primary')
+assert.equal(Interaction.sidebarWindowSecondaryTitle({
+  kind:'window', entryName:'Terminal', windowTitle:'nvim main.rs'
+}), '', 'ordinary titles have no path subtitle')
 
-// Phase 3: 13×9 topology strip still leaves positive elide room for monitor
+// Phase 3: 14×10 topology strip still leaves positive elide room for monitor
 // titles at the live ~271px and 300px content widths (glyph+gaps+strip).
 const monitorPad = 8
 const monitorGlyph = 24

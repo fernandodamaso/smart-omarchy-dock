@@ -505,27 +505,41 @@ If the view needs a provider action, call an explicit method exposed through
 `widgetContext.provider`; do not create a second provider/subscription inside the
 view.
 
-## Coding-agent checklist for a new Widget
+## Coding-agent checklist for a custom Widget
 
-1. Read `docs/SIDEBAR_WIDGETS.md` for provider/registry/lifecycle ownership.
-2. Read this file and pick existing `Widget*` primitives before writing custom UI.
-3. Copy the closest composition from `tests/widget-gallery/WidgetGallery.qml` or
-   `components/widgets/DemoWidget*Body.qml`.
+1. Keep custom Widget source in a **separate directory/repository**. Do not add it
+   to SmartDock core or an installed Omarchy SmartDock plugin checkout.
+2. Read `docs/WIDGET_PACKAGES.md` and create the package with
+   `smartdock widget create <stable-id>`.
+3. Import `SmartDock.WidgetKit 1.0` and choose existing `Widget*` primitives
+   before writing custom presentation controls.
 4. Keep `widgetContext` non-required and tolerate `({})` / missing data.
-5. Register the trusted descriptor in `DockHost.sidebarWidgetRegistry` and add
-   the same ID to `config/settings-schema.json` → `sidebarWidgets.registeredIds`.
-6. Add provider/view tests appropriate to the integration.
-7. Run at minimum:
+5. Install the explicit source with `smartdock widget install <source>`, then use
+   `smartdock widget dev use <source>` and `smartdock widget dev reload` while
+   developing. `dev reset` returns to the installed snapshot without deleting
+   developer source.
+6. Keep `dock.json` ID-only. Do not add QML paths, commands, URLs, provider
+   lifecycle, settings writers, card chrome, or popup ownership to configuration.
+7. Add package-specific tests in the package repository and validate the package
+   through the CLI before enabling its ID.
 
-```sh
-node tests/test_widgetkit_structure.mjs
-node tests/test_sidebar_widgets.mjs
-python3 -m unittest discover -s tests -p 'test_sidebar_widget_config.py'
-QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components
-python3 -m unittest tests.test_sidebar_qml_syntax
-git diff --check
+When work is intentionally a **SmartDock source-owned integration** rather than a
+custom package, follow `AGENTS.md` and this repository's normal branch/worktree
+workflow. Source-owned integrations may register a descriptor directly in
+`DockHost.sidebarWidgetRegistry`; that is not the workflow for external custom
+Widgets.
+
+## External package import surface
+
+Widget package API v1 exposes this kit to separately owned external packages as
+a versioned QML module:
+
+```qml
+import SmartDock.WidgetKit 1.0
 ```
 
-Then run the complete current Headless CI matrix on the exact final head. Runtime
-pointer/theme/font qualification still follows the gates in
-`docs/SIDEBAR_WIDGETS.md`.
+External packages should compose the exported `Widget*` primitives rather than
+importing SmartDock implementation files by relative path. The module is shipped
+with standalone SmartDock installations and is resolved by the host when an
+external package entry is loaded. Package manifests, source/deployment
+boundaries, and CLI workflow are documented in `docs/WIDGET_PACKAGES.md`.

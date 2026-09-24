@@ -55,7 +55,7 @@ function projectSession({ transport, host, session, focusAgent, health = 'live' 
 }
 
 // Exercise the actual projection, not hand-built controller row fixtures.
-// Removing the capability copy from multi-panel children must fail this test:
+// Removing the capability copy from projected agents must fail this test:
 // the production controller and delegate both require that exact metadata.
 for (const transport of ['local', 'remote']) {
   for (const focusAgent of [true, false, undefined, 'true']) {
@@ -67,10 +67,10 @@ for (const transport of ['local', 'remote']) {
         ? host + ' · ' + session : host
       assert.equal(f.parent.herdrDisplayLabel, transport === 'remote' ? expectedLabel : 'Herdr')
       const children = f.rows.filter(row => row.kind === 'herdr-agent')
-      assert.equal(children.length, 2)
+      assert.equal(children.length, 3)
       for (const child of children) {
         assert.equal(child.focusAgentSupported, expectedFocus,
-          transport + ': multi-panel child must preserve the server focus capability')
+          transport + ': agent row must preserve the server focus capability')
         assert.equal(child.actionable, expectedFocus)
         assert.equal(child.transport, transport)
         assert.equal(child.host, host)
@@ -85,12 +85,7 @@ for (const transport of ['local', 'remote']) {
         assert.equal(Interaction.rowHoverFillEligible(child.kind,
           child.actionable === true && child.focusAgentSupported === true), expectedFocus)
       }
-      for (const tab of f.rows.filter(row => row.kind === 'herdr-tab')) {
-        assert.equal(tab.focusAgentSupported, expectedFocus)
-        assert.equal(tab.actionable, expectedFocus)
-        assert.equal(tab.transport, transport)
-        assert.equal(tab.serverLabel, expectedLabel)
-      }
+      assert.ok(!f.rows.some(row => row.kind === 'herdr-tab'))
       assert.equal(children.find(row => row.paneId === 'a').status, 'working',
         'focus support must never suppress the working status')
     }
@@ -135,4 +130,4 @@ assert.deepEqual(ambiguous.unmatchedServerIds, ['remote-a'])
 assert.equal(Sidebar.herdrFallbackVisible({ servers }, ambiguous), true)
 assert.notEqual(Herdr.serverDisplayLabel(servers[1]), Herdr.serverDisplayLabel(servers[2]))
 
-console.log('herdr remote and local multi-panel projection: PASS')
+console.log('herdr remote and local flat-agent projection: PASS')

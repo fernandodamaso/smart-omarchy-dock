@@ -96,12 +96,12 @@ test -s "$repo_root/assets/lucide/panel-left-close.svg" \
 test -s "$repo_root/assets/lucide/panel-left-open.svg" \
   || fail 'missing bundled Lucide panel-left-open.svg'
 
-# Match the current 13x9 miniature geometry and topologyStripWidth contract.
+# Match the current 14x10 miniature geometry and topologyStripWidth contract.
 row="$repo_root/components/DockSidebarRow.qml"
-grep -Fq 'width: 13' "$row" \
-  || fail 'monitor topology miniatures must be 13px wide'
-grep -Fq 'height: 9' "$row" \
-  || fail 'monitor topology miniatures must be 9px tall'
+grep -Fq 'width: 14' "$row" \
+  || fail 'monitor topology miniatures must be 14px wide'
+grep -Fq 'height: 10' "$row" \
+  || fail 'monitor topology miniatures must be 10px tall'
 grep -Fq 'radius: 2' "$row" \
   || fail 'monitor topology miniatures must use radius 2'
 

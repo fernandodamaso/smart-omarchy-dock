@@ -58,6 +58,7 @@ PanelWindow {
     + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
   readonly property real expandedHeaderRightInset: root.panelInnerPad
     + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
+  readonly property var pinStrip: pinnedStrip
   readonly property var pinStripAdd: pinnedStrip.addPinButton
   // Per-output clamp of the shared expanded-width preference.
   readonly property var panelGeometry: controller.geometryFor(screen)
@@ -121,6 +122,7 @@ PanelWindow {
   function closeSurfaces() {
     sidebarContext.dismiss()
     picker.visible = false
+    if (root.pinStrip) root.pinStrip.close()
     sidebarViewport.cancelInputs("surface-close")
     root.controller.cancelResize("surface-close")
     // A dying or hidden panel must not carry a half-finished mode gesture.
@@ -141,8 +143,7 @@ PanelWindow {
     var row = target && target.key ? (root.controller.rowsByKey[target.key] || target) : target
     if (!root.controller.targetIsCurrent(row || target)) return false
     // Nested Herdr rows have no app/window menu.
-    if (row && (row.kind === "herdr-agent" || row.kind === "herdr-tab"
-        || row.kind === "herdr-state"))
+    if (row && (row.kind === "herdr-agent" || row.kind === "herdr-state"))
       return false
     // Tab rows have no app menu of their own; reuse the owning window.
     if (row && row.kind === "browser-tab") {
@@ -287,6 +288,7 @@ PanelWindow {
         id: headerBar
         width: parent.width
         height: Style.space(44)
+        HoverHandler { cursorShape: Qt.ArrowCursor }
         Row {
           id: brandRow
           visible: !root.panelCollapsed
@@ -367,7 +369,7 @@ PanelWindow {
             anchors.centerIn: parent
             width: 14
             height: 14
-            iconName: "plus"
+            iconName: "layout-grid"
             iconSize: 14
             tint: Color.foreground
             visible: widgetManage.visible
@@ -477,7 +479,7 @@ PanelWindow {
             ? Style.pressedFillFor(Color.foreground, Color.accent)
             : (launcherHover.hovered || launcher.activeFocus)
               ? root.sidebarAppearance.workspaceHoverFill
-              : root.sidebarAppearance.workspaceFill
+              : Qt.tint(root.sidebarAppearance.workspaceFill, Style.normalFill)
           borderSpec: launcher.activeFocus
             ? Border.controlSpec("focus", Color.foreground, Color.accent)
             : Border.none()
@@ -517,7 +519,7 @@ PanelWindow {
           height: 14
           iconName: "chevron-right"
           iconSize: 14
-          tint: Util.alpha(Color.foreground, 0.55)
+          tint: Color.foreground
         }
         HoverHandler { id: launcherHover }
         TapHandler {
@@ -632,7 +634,8 @@ PanelWindow {
       if (root.menuEntry && typeof root.menuEntry.execute === "function") root.menuEntry.execute()
     }
     onVisibleChanged: root.controller.interactionBusy = visible || picker.visible
-      || root.controller.resizeActive || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
+      || pinnedStrip.overflowOpen || root.controller.resizeActive
+      || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
     onKeyboardDismissed: root.controller.releaseNavigationFocus()
   }
   Connections {
@@ -650,7 +653,8 @@ PanelWindow {
     onApplicationSelected: desktopId => root.host.pinApplication(desktopId)
     onVisibleChanged: {
       root.controller.interactionBusy = visible || sidebarContext.visible || root.controller.resizeActive
-        || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
+        || pinnedStrip.overflowOpen || root.controller.rowDragActive
+        || root.controller.widgetPopupId !== ""
       if (visible) root.controller.closeWidgetPopup()
       if (!visible) root.pickerAnchorItem = null
     }
@@ -660,6 +664,14 @@ PanelWindow {
     ignoreUnknownSignals: true
     function onVisibleChanged() { root.refreshPickerAnchor() }
     function onWidthChanged() { root.refreshPickerAnchor() }
+  }
+  Connections {
+    target: pinnedStrip
+    function onOverflowOpenChanged() {
+      root.controller.interactionBusy = pinnedStrip.overflowOpen || picker.visible
+        || sidebarContext.visible || root.controller.resizeActive
+        || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
+    }
   }
   Connections {
     target: root.controller

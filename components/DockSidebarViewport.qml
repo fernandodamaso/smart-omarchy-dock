@@ -75,43 +75,6 @@ FocusScope {
   property int sectionChromeRevision: 0
   FontMetrics { id: metrics; font.family: Style.font.family; font.pixelSize: Style.font.body }
 
-  // Inline workspace chips are measured here, once per workspace, so every row
-  // of that workspace renders the same badge width and therefore the same
-  // artwork/label/hover/selection/guide geometry — including rows whose
-  // leading delegate is scrolled out of view. The probes are invisible Text
-  // nodes that exist only to measure the production badge font; nothing paints
-  // them and they never join the hierarchy list.
-  readonly property var inlineWorkspaceTargets: root.panelCollapsed
-    ? [] : (root.viewProjection.workspaceTargets || [])
-  readonly property real inlineWorkspaceBadgeAvailable: InteractionModel
-    .sidebarInlineWorkspaceBadgeAvailableWidth(list.width, root.workspaceCardInset, Style.space)
-  readonly property var inlineWorkspaceBadgeWidths: {
-    var widths = {}
-    for (var i = 0; i < inlineBadgeProbe.count; ++i) {
-      var probe = inlineBadgeProbe.itemAt(i)
-      if (probe) widths[probe.workspaceKey] = probe.layoutWidth
-    }
-    return widths
-  }
-
-  Repeater {
-    id: inlineBadgeProbe
-    model: ScriptModel { objectProp: "key"; values: root.inlineWorkspaceTargets }
-    delegate: Text {
-      required property var modelData
-      visible: false
-      text: InteractionModel.workspaceBadgeLabel(modelData.workspaceIdentity, modelData.label)
-      textFormat: Text.PlainText
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      font.bold: true
-      renderType: Text.NativeRendering
-      readonly property string workspaceKey: String(modelData.key)
-      readonly property real layoutWidth: InteractionModel.sidebarInlineWorkspaceBadgeLayoutWidth(
-        implicitWidth, root.inlineWorkspaceBadgeAvailable, Style.space)
-    }
-  }
-
   function rowIntersectsViewport(rowY, rowHeightValue) {
     return root.presentationVisible && !root.panelCollapsed
       && InteractionModel.viewportIntersects(rowY, rowHeightValue, list.contentY, list.height)
@@ -362,8 +325,12 @@ FocusScope {
           && item.leadingWorkspaceBadgeVisible === true
           && typeof item.focusInlineWorkspaceBadge === "function")
         item.focusInlineWorkspaceBadge(Qt.TabFocusReason)
-      else
+      else {
+        // Keyboard navigation always shows focus, even on a row the pointer
+        // focused earlier.
+        if (item.pointerFocused === true) item.pointerFocused = false
         item.forceActiveFocus(Qt.TabFocusReason)
+      }
     }
     return item !== null
   }
@@ -721,31 +688,22 @@ FocusScope {
           required property int index
           readonly property bool isWorkspace: modelData && modelData.kind === "workspace"
           readonly property var geom: isWorkspace ? root.sectionSpanRect(modelData) : { y: 0, height: 0 }
-          readonly property bool hoveredCard: isWorkspace
-            && root.hoveredWorkspaceKey !== ""
-            && modelData.key === root.hoveredWorkspaceKey
           visible: isWorkspace && geom.height > 0
-          x: root.workspaceCardInset
+            && !InteractionModel.isMonitorFinalKey(modelData.lastKey, root.sectionSpans)
+          x: root.workspaceCardInset + Style.space(4)
           y: geom.y
-          width: Math.max(0, sectionChromeHost.width - root.workspaceCardInset * 2)
+          width: Math.max(0, sectionChromeHost.width - (root.workspaceCardInset + Style.space(4)) * 2)
           height: geom.height
           z: 1
           enabled: false
 
-          Ui.BorderSurface {
-            anchors.fill: parent
-            radius: root.cardRadius
-            color: parent.hoveredCard ? root.workspaceHoverFill : root.workspaceFill
-            borderSpec: Border.none()
-          }
-
-          // Faint separator at the whole workspace card end (not under heading).
+          // Separate groups without a second card inside the monitor card.
           Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             height: 1
-            color: Util.alpha(Color.foreground, 0.08)
+            color: Util.alpha(Color.foreground, 0.06)
           }
         }
       }

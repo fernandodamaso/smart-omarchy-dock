@@ -78,6 +78,7 @@ Item {
   HoverHandler {
     id: hover
     enabled: root.inputEnabled
+    cursorShape: Qt.ArrowCursor
     onHoveredChanged: root.syncWorkspaceHover(hovered)
   }
 
