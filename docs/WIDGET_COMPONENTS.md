@@ -80,8 +80,10 @@ Status dot + label, with an optional reference badge.
 | `label` | string | `""` |
 | `semantic` | string | `"neutral"` |
 | `reference` | string | `""` |
-| `referenceSemantic` | string | `""` | Optional semantic for the reference badge. Empty preserves the previous behavior and inherits `semantic`. |
+| `referenceSemantic` | string | `""` |
 | `compact` | bool | `true` |
+
+When `referenceSemantic` is empty, the reference badge preserves the previous behavior and inherits `semantic`.
 
 ### `WidgetDivider`
 
@@ -457,8 +459,8 @@ Central theme-aware semantic palette used by the primitives. Most Widget bodies
 should pass semantic names to the public components instead of instantiating this
 directly.
 
-It exposes read-only `danger`, `warning`, `success`, `info`, `neutral`
-colors and the helper `tone(semantic)`. At the Omarchy revision audited by
+It exposes read-only `danger`, `warning`, `success`, `info`, `neutral`,
+`mutedTextBase`, and `mutedText` colors plus the helper `tone(semantic)`. At the Omarchy revision audited by
 FDM-998, `danger` maps directly to `Color.urgent`; `warning` and `success`
 retain their existing background-aware HSL implementation because that exact
 revision has no foundational warning/success token.
