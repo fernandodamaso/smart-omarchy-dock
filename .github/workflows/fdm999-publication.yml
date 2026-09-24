@@ -1,0 +1,142 @@
+name: FDM-999 durable source verification
+on:
+  push:
+    branches: [agent/fdm-999-publication]
+    paths: ['.github/workflows/fdm999-publication.yml', '.agent/fdm999/run-token']
+permissions:
+  contents: write
+concurrency:
+  group: fdm999-publication
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PARENT: 168f4924af61e5f6339df95d60b2a7f4993d70f8
+      MAIN: 3dcf8ad1049a202b0ae614c83fd3df8461007469
+      QT_QPA_PLATFORM: offscreen
+      QT_QUICK_BACKEND: software
+      QML_XHR_ALLOW_FILE_READ: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install normal CI Qt dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-dialogs qml6-module-qtquick-templates qml6-module-qtquick-layouts qml6-module-qtquick-shapes qml6-module-qt5compat-graphicaleffects qml6-module-qttest libqt6svg6 qt6-image-formats-plugins qt6-declarative-dev-tools ripgrep xvfb libgl1-mesa-dri
+      - name: Build isolated candidate with failing-first gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evidence"
+          test "$(git ls-remote origin refs/heads/feat/fdm-998-widgetkit-tokens | cut -f1)" = "$PARENT"
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MAIN"
+          git config user.name 'Fernando Dâmaso'
+          git config user.email 'fernando.yarrum@gmail.com'
+          git worktree add -b fdm999-candidate "$RUNNER_TEMP/candidate" "$PARENT"
+          cd "$RUNNER_TEMP/candidate"
+          git merge --no-edit "$MAIN"
+          cp "$GITHUB_WORKSPACE/.agent/fdm999/tests/test_sidebar_split_layout.mjs" tests/
+          if node tests/test_sidebar_split_layout.mjs > "$RUNNER_TEMP/evidence/allocator-red.log" 2>&1; then
+            echo 'Expected missing-allocator regression to fail' >&2; exit 1
+          fi
+          grep -q 'FDM-999 allocator is missing' "$RUNNER_TEMP/evidence/allocator-red.log"
+          python3 "$GITHUB_WORKSPACE/.agent/fdm999/apply.py" model
+          node tests/test_sidebar_split_layout.mjs | tee "$RUNNER_TEMP/evidence/allocator-green.log"
+          node tests/test_sidebar_geometry.mjs
+          git add components/DockSidebarWidgetModel.js components/DockSidebarViewport.qml tests/test_sidebar_split_layout.mjs
+          git commit -m 'feat(FDM-999): allocate independent panes from canonical demand'
+          cp "$GITHUB_WORKSPACE/.agent/fdm999/tests/SidebarSplitSourceHarness.js" tests/
+          cp "$GITHUB_WORKSPACE/.agent/fdm999/tests/tst_sidebarsplitscroll.qml" tests/
+          if /usr/lib/qt6/bin/qmltestrunner -input tests/tst_sidebarsplitscroll.qml -import components -import tests/qml-imports SidebarSplitScroll::test_independent_scroll_and_demand > "$RUNNER_TEMP/evidence/split-red.log" 2>&1; then
+            echo 'Expected missing split-scroll integration to fail' >&2; exit 1
+          fi
+          python3 "$GITHUB_WORKSPACE/.agent/fdm999/apply.py" source
+          python3 "$GITHUB_WORKSPACE/.agent/fdm999/migrate.py"
+          if test -f "$GITHUB_WORKSPACE/.agent/fdm999/docs.py"; then python3 "$GITHUB_WORKSPACE/.agent/fdm999/docs.py"; fi
+          /usr/lib/qt6/bin/qmltestrunner -input tests/tst_sidebarsplitscroll.qml -import components -import tests/qml-imports | tee "$RUNNER_TEMP/evidence/split-green.log"
+          git diff --check
+          printf '%s\n' 'source-built' > "$RUNNER_TEMP/evidence/source-built"
+      - name: Shell and structural guards
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/evidence/source-built"
+          cd "$RUNNER_TEMP/candidate"
+          for f in install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh; do bash -n "$f"; done
+          status=0
+          for f in tests/check_*.sh; do echo "::group::$f"; bash "$f" || status=1; echo '::endgroup::'; done
+          exit "$status"
+      - name: All JavaScript suites
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/evidence/source-built"
+          cd "$RUNNER_TEMP/candidate"
+          status=0
+          for f in tests/test_*.mjs; do echo "::group::$f"; node "$f" || status=1; echo '::endgroup::'; done
+          exit "$status"
+      - name: Python suites and external packages
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/evidence/source-built"
+          cd "$RUNNER_TEMP/candidate"
+          python3 -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee "$RUNNER_TEMP/evidence/python.log"
+      - name: Provider suites
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/evidence/source-built"
+          cd "$RUNNER_TEMP/candidate"
+          python3 -m unittest discover -s provider/browser-profiles/tests -p 'test_*.py'
+          python3 -B -m unittest discover -s tests -p 'test_herdr_*.py' -v
+          python3 -B -m unittest discover -s provider/herdr/tests -p 'test_*.py' -v
+      - name: Full Qt/QML suite
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/evidence/source-built"
+          cd "$RUNNER_TEMP/candidate"
+          /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports | tee "$RUNNER_TEMP/evidence/qml.log"
+      - name: Seal verified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/candidate"
+          git diff --check
+          git add components tests docs README.md AGENTS.md
+          git commit -m 'feat(FDM-999): integrate split scrolling, focus and popup ownership'
+          printf 'base=%s\nmain=%s\nhead=%s\ntree=%s\n' "$PARENT" "$MAIN" "$(git rev-parse HEAD)" "$(git rev-parse HEAD^{tree})" | tee "$RUNNER_TEMP/evidence/exact-source.txt"
+          git diff --check "$PARENT...HEAD"
+          git diff --stat "$PARENT...HEAD" > "$RUNNER_TEMP/evidence/diff-stat.txt"
+          git bundle create "$RUNNER_TEMP/evidence/candidate.bundle" fdm999-candidate
+          if test -f "$GITHUB_WORKSPACE/.agent/fdm999/publish" && grep -qx yes "$GITHUB_WORKSPACE/.agent/fdm999/publish"; then
+            test -z "$(git ls-remote origin refs/heads/feat/fdm-999-split-scroll)"
+            git push origin HEAD:refs/heads/feat/fdm-999-split-scroll
+          fi
+      - name: Preserve source and diagnostics even after a failed check
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          if test -d "$RUNNER_TEMP/candidate"; then
+            cd "$RUNNER_TEMP/candidate"
+            git status --short > "$RUNNER_TEMP/evidence/status.txt"
+            git diff > "$RUNNER_TEMP/evidence/source.diff"
+            tar --exclude=.git --exclude=__pycache__ -czf "$RUNNER_TEMP/evidence/source.tar.gz" .
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: fdm999-durable-source-evidence
+          path: ${{ runner.temp }}/evidence
+          retention-days: 7
+          if-no-files-found: error
