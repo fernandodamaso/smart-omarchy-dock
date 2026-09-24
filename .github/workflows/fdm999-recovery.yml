@@ -1,0 +1,40 @@
+name: FDM-999 recover existing candidate
+on:
+  push:
+    branches: [agent/fdm-999-recovery]
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify and export the already-uploaded Git bundle
+        env:
+          EXPECTED: 742405ea4998e1c0e051760d87c2e601c2c6a3e6
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/fdm999-recovered"
+          bundle="$GITHUB_WORKSPACE/.agent/fdm999-candidate.bundle"
+          git bundle list-heads "$bundle"
+          git bundle verify "$bundle"
+          target_ref=$(git bundle list-heads "$bundle" | awk -v sha="$EXPECTED" '$1 == sha {print $2; exit}')
+          test -n "$target_ref"
+          git fetch "$bundle" "$target_ref"
+          test "$(git rev-parse FETCH_HEAD)" = "$EXPECTED"
+          git update-ref refs/heads/recovered-fdm999 "$EXPECTED"
+          git bundle create "$RUNNER_TEMP/fdm999-recovered/candidate-full.bundle" refs/heads/recovered-fdm999
+          git show -s --format=fuller "$EXPECTED" > "$RUNNER_TEMP/fdm999-recovered/commit.txt"
+          git log --oneline -12 "$EXPECTED" > "$RUNNER_TEMP/fdm999-recovered/history.txt"
+          git diff --stat 168f4924af61e5f6339df95d60b2a7f4993d70f8 "$EXPECTED" > "$RUNNER_TEMP/fdm999-recovered/diff-stat.txt"
+          cat "$RUNNER_TEMP/fdm999-recovered/commit.txt" "$RUNNER_TEMP/fdm999-recovered/history.txt"
+          printf 'Recovered existing candidate %s. No feature branch or main was changed.\n' "$EXPECTED" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fdm999-recovered-candidate
+          path: ${{ runner.temp }}/fdm999-recovered
+          retention-days: 7
+          if-no-files-found: error
