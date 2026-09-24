@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 menu="$repo_root/components/DockContextMenu.qml"
 action="$repo_root/components/DockMenuAction.qml"
+model="$repo_root/components/DockMenuModel.js"
 
 status=0
 
@@ -39,5 +40,31 @@ fi
 if ! grep -q 'ensureActiveVisible' "$menu"; then
   fail 'keyboard cursor movement must keep the selected row inside the viewport'
 fi
+
+if ! grep -q 'function agentRecord(id, title, kind, status, enabled, target)' "$model"; then
+  fail 'agent rows must use the explicit agentRecord contract'
+fi
+
+if ! grep -q 'DockHerdrStatusMark[[:space:]]*{' "$menu"; then
+  fail 'agent rows must reuse the shared Herdr status mark'
+fi
+
+if ! grep -q 'captureAgentTarget(agent.toplevel, agent)' "$menu"; then
+  fail 'the menu must capture each exact Herdr target when it opens'
+fi
+
+if ! grep -q 'actions.activateHerdrTarget(record.target)' "$menu"; then
+  fail 'agent activation must route only through DockHerdrAgentActions'
+fi
+
+if grep -Eq 'Go to waiting agent|AGENTS|send agent|steer agent|stop agent' "$menu"; then
+  fail 'the menu must not add forbidden Herdr controls or labels'
+fi
+
+if ! grep -q 'text: "remote"' "$menu"; then
+  fail 'disabled remote agent rows must show the plain remote tag'
+fi
+
+node "$repo_root/tests/test_context_menu_herdr_records.mjs" || status=1
 
 exit "$status"

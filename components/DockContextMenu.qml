@@ -9,6 +9,7 @@ import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
 import "DockMenuModel.js" as DockMenuModel
+import "DockHerdrModel.js" as HerdrModel
 import "DockIconModel.js" as DockIconModel
 import "DockFullscreenModel.js" as FullscreenModel
 import "DockWorkspaceGroupModel.js" as WorkspaceGroupModel
@@ -30,6 +31,7 @@ PopupWindow {
   property bool sidebarMode: false
   property var workspaceContext: null
   property var externalTargetValidator: null
+  property var herdrAgentActions: null
   signal keyboardDismissed()
 
   signal openLauncher()
@@ -56,6 +58,7 @@ PopupWindow {
   property string pendingClipboardText: ""
   property var groupCandidateSnapshot: []
   property string openedWorkspaceGroupsSignature: ""
+  property var herdrMenuRecords: []
 
   readonly property string desktopId: !root.controlItem && root.anchorItem
     ? String(root.anchorItem.desktopId || "") : ""
@@ -113,6 +116,7 @@ PopupWindow {
   function open() {
     root.openGeneration += 1
     root.targetContexts = root.buildTargetContexts()
+    root.herdrMenuRecords = root.captureHerdrMenuRecords()
     root.pageStack = []
     root.pageTarget = root.targetContexts.length === 1
       ? root.targetContexts[0] : null
@@ -157,6 +161,36 @@ PopupWindow {
     root.copyProfileDirectory = ""
     root.groupCandidateSnapshot = []
     root.openedWorkspaceGroupsSignature = ""
+    root.herdrMenuRecords = []
+  }
+
+  function captureHerdrMenuRecords() {
+    var anchor = root.anchorItem
+    var actions = root.herdrAgentActions
+    var agents = anchor && Array.isArray(anchor["previewAgents"])
+      ? anchor["previewAgents"] : []
+    if (!actions || agents.length === 0) return []
+
+    var ordered = HerdrModel.sortAgentsForDisplay(agents)
+    var label = String(anchor["previewHerdrLabel"] || "").trim()
+      || root.applicationName
+    var header = DockMenuModel.headerRecord(
+      "herdr:header", "Herdr · " + label, "")
+    header.muted = true
+    var records = [header]
+    for (var i = 0; i < ordered.length; ++i) {
+      var agent = ordered[i]
+      var target = actions.captureAgentTarget(agent.toplevel, agent)
+      var enabled = agent.focusAgentSupported === true && target !== null
+      records.push(DockMenuModel.agentRecord(
+        "herdr:" + String(agent.serverId || "") + ":"
+          + String(agent.id || i),
+        HerdrModel.displayAgentTitle(agent),
+        HerdrModel.displayAgentKind(agent.agent || agent.agentKind || ""),
+        agent.status, enabled, target))
+    }
+    records.push(DockMenuModel.separatorRecord("herdr:separator"))
+    return records
   }
 
   function targetContextFor(toplevel, index) {
@@ -988,7 +1022,7 @@ PopupWindow {
     return records
   }
 
-  function buildPageActions() {
+  function baselinePageActions() {
     if (root.sidebarMode && root.workspaceContext)
       return root.page === "sidebar-monitors" ? root.sidebarMonitorActions() : root.sidebarWorkspaceActions()
     if (root.controlItem || root.page === "controls") return root.controlPageActions()
@@ -997,6 +1031,12 @@ PopupWindow {
     if (root.page === "workspaces") return root.workspacePageActions()
     if (root.page === "copy-command") return root.copyCommandPageActions()
     return root.appPageActions()
+  }
+
+  function buildPageActions() {
+    var records = root.baselinePageActions()
+    return root.pageStack.length === 0 && (root.herdrMenuRecords || []).length > 0
+      ? root.herdrMenuRecords.concat(records) : records
   }
 
   function decorateWithFeedback(records) {
@@ -1050,8 +1090,15 @@ PopupWindow {
       root.dismiss()
       return false
     }
-    if (!record || record.kind !== "action" || record.enabled === false)
+    if (!record || record.enabled === false)
       return false
+    if (record.kind === "agent") {
+      var actions = root.herdrAgentActions
+      root.dismiss()
+      return !!(actions && record.target
+        && actions.activateHerdrTarget(record.target))
+    }
+    if (record.kind !== "action") return false
     root.setActiveMenuIndex(index)
     var targetContext = record.targetContext || null
     if (targetContext && !root.targetIsValid(targetContext)) {
@@ -1129,7 +1176,8 @@ PopupWindow {
   readonly property real sidebarAvailableHeight: root.anchor.window
     ? Math.max(1, root.anchor.window.height - 16) : 520
   implicitWidth: root.sidebarMode ? Math.min(Style.space(320), root.sidebarAvailableWidth)
-    : root.controlItem ? Style.space(210) : Style.space(320)
+    : root.controlItem ? Style.space(210)
+      : Style.space((root.herdrMenuRecords || []).length > 0 ? 340 : 320)
   implicitHeight: Math.min(root.sidebarMode ? root.sidebarAvailableHeight : 520, 520, actionColumn.implicitHeight + 12)
   color: "transparent"
   grabFocus: true
@@ -1237,7 +1285,9 @@ PopupWindow {
               ? Style.space(10)
               : modelData.kind === "header"
                 ? (modelData.subtitle ? Style.space(52) : Style.space(34))
-                : Style.spacing.popupRowHeight
+                : modelData.kind === "agent"
+                  ? Style.space(32)
+                  : Style.spacing.popupRowHeight
 
             PanelSeparator {
               visible: parent.modelData.kind === "separator"
@@ -1260,10 +1310,11 @@ PopupWindow {
                 width: parent.width
                 text: String(parent.parent.modelData.text || "")
                 textFormat: Text.PlainText
-                color: Color.menu.text
+                color: parent.parent.modelData.muted === true
+                  ? Util.alpha(Color.menu.text, 0.62) : Color.menu.text
                 font.family: Style.font.family
                 font.pixelSize: Style.font.bodySmall
-                font.bold: true
+                font.bold: parent.parent.modelData.muted !== true
                 elide: Text.ElideRight
                 maximumLineCount: 1
               }
@@ -1292,6 +1343,142 @@ PopupWindow {
               hasCursor: root.activeMenuIndex === parent.index
               onCursorRequested: root.setActiveMenuIndex(parent.index)
               onTriggered: root.dispatchAction(parent.modelData, parent.index)
+            }
+
+            Item {
+              id: agentRecordRow
+              visible: parent.modelData.kind === "agent"
+              anchors.fill: parent
+              opacity: parent.modelData.enabled !== false ? 1 : 0.62
+
+              Accessible.role: parent.modelData.enabled !== false
+                ? Accessible.Button : Accessible.StaticText
+              Accessible.name: String(parent.modelData.title || "")
+              Accessible.description: parent.modelData.enabled !== false
+                ? "Focus this Herdr agent pane" : "Remote Herdr agent"
+              Accessible.onPressAction: if (parent.modelData.enabled !== false)
+                root.dispatchAction(parent.modelData, parent.index)
+
+              Rectangle {
+                anchors.fill: parent
+                radius: Style.space(8)
+                color: root.activeMenuIndex === agentRecordRow.parent.index
+                  ? Style.focusFillFor(Color.menu.text, Color.accent)
+                  : agentHover.hovered && agentRecordRow.parent.modelData.enabled !== false
+                    ? Style.hoverFillFor(Color.menu.text, Color.accent)
+                    : "transparent"
+              }
+
+              DockHerdrStatusColors { id: agentStatusColors }
+
+              Item {
+                id: agentStatusGlyph
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(16)
+                height: width
+
+                DockHerdrStatusMark {
+                  anchors.fill: parent
+                  status: agentRecordRow.parent.modelData.status
+                  size: parent.width
+                  ringColor: Color.menu.background
+                  animationsEnabled: root.interfaceAnimationsEnabled
+                }
+
+                Rectangle {
+                  anchors.centerIn: parent
+                  visible: {
+                    var status = HerdrModel.normalizeStatus(
+                      agentRecordRow.parent.modelData.status)
+                    return status === "idle" || status === "unknown"
+                  }
+                  width: Style.space(8)
+                  height: width
+                  radius: width / 2
+                  color: agentStatusColors.hollow(
+                    agentRecordRow.parent.modelData.status)
+                    ? "transparent" : agentStatusColors.color(
+                      agentRecordRow.parent.modelData.status)
+                  border.width: Style.spacing.hairline
+                  border.color: agentStatusColors.color(
+                    agentRecordRow.parent.modelData.status)
+                }
+              }
+
+              Item {
+                id: agentTrailing
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                width: agentRecordRow.parent.modelData.enabled !== false
+                  ? agentKindText.implicitWidth : remoteTag.width
+                height: Math.max(agentKindText.implicitHeight, remoteTag.height)
+
+                Text {
+                  id: agentKindText
+                  visible: agentRecordRow.parent.modelData.enabled !== false
+                  anchors.centerIn: parent
+                  text: String(agentRecordRow.parent.modelData.agentKind || "")
+                  textFormat: Text.PlainText
+                  color: Util.alpha(Color.menu.text, 0.62)
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.caption
+                }
+
+                Rectangle {
+                  id: remoteTag
+                  visible: agentRecordRow.parent.modelData.enabled === false
+                  anchors.centerIn: parent
+                  width: remoteTagText.implicitWidth + Style.space(12)
+                  height: remoteTagText.implicitHeight + Style.space(4)
+                  radius: Style.space(5)
+                  color: "transparent"
+                  border.width: Style.spacing.hairline
+                  border.color: Util.alpha(Color.menu.text, 0.30)
+
+                  Text {
+                    id: remoteTagText
+                    anchors.centerIn: parent
+                    text: "remote"
+                    textFormat: Text.PlainText
+                    color: Util.alpha(Color.menu.text, 0.62)
+                    font.family: Style.font.menuFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                }
+              }
+
+              Text {
+                anchors.left: agentStatusGlyph.right
+                anchors.leftMargin: Style.space(10)
+                anchors.right: agentTrailing.left
+                anchors.rightMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                text: String(agentRecordRow.parent.modelData.title || "")
+                textFormat: Text.PlainText
+                color: Color.menu.text
+                font.family: Style.font.menuFamily
+                font.pixelSize: Style.font.body
+                elide: Text.ElideRight
+                maximumLineCount: 1
+              }
+
+              HoverHandler {
+                id: agentHover
+                enabled: agentRecordRow.parent.modelData.enabled !== false
+                cursorShape: Qt.PointingHandCursor
+                onHoveredChanged: if (hovered)
+                  root.setActiveMenuIndex(agentRecordRow.parent.index)
+              }
+
+              TapHandler {
+                enabled: agentRecordRow.parent.modelData.enabled !== false
+                acceptedButtons: Qt.LeftButton
+                onTapped: root.dispatchAction(
+                  agentRecordRow.parent.modelData, agentRecordRow.parent.index)
+              }
             }
           }
         }

@@ -155,6 +155,13 @@ assert.equal(result.data.persisted, true);
 assert.equal(result.data.writeState, 'saved');
 assert.equal(writes, 1);
 assert.equal(JSON.parse(disk).iconSize, 48);
+result = apply({ dockHerdrIndicators: true });
+assert.equal(result.ok, true);
+assert.equal(host.settings.dockHerdrIndicators, true);
+assert.equal(JSON.parse(disk).dockHerdrIndicators, true);
+result = apply({ dockHerdrIndicators: 'true' });
+assert.equal(result.error.code, 'E_VALIDATION');
+assert.equal(host.settings.dockHerdrIndicators, true);
 
 // Runtime source registration, not transient readiness, authorizes sidebarWidgets writes.
 host.sidebarWidgetRegistry = {
@@ -176,6 +183,8 @@ host.sidebarWidgetRegistry = {};
 disk = JSON.stringify({ ...current, hoverGlowOpacity: .4 });
 cached = disk;
 host.settingsFileLoaded(disk);
+assert.equal(host.settings.dockHerdrIndicators, false,
+  'External config reload updates the Herdr indicator setting');
 const snapshot = JSON.stringify(host.settings);
 const beforeDryWrites = writes;
 result = apply({ hoverGlowOpacity: .72 }, true);

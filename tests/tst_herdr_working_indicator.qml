@@ -15,6 +15,11 @@ TestCase {
     DockHerdrWorkingIndicator {}
   }
 
+  Component {
+    id: markFactory
+    DockHerdrStatusMark {}
+  }
+
   function findByName(node, name) {
     if (!node) return null
     if (node.objectName === name) return node
@@ -26,80 +31,92 @@ TestCase {
     return null
   }
 
-  function test_geometry_and_fixed_dot_grid() {
+  function rotationDistance(a, b) {
+    var delta = Math.abs(Number(a) - Number(b)) % 360
+    return Math.min(delta, 360 - delta)
+  }
+
+  function test_spinner_geometry_and_arc() {
     var indicator = createTemporaryObject(indicatorFactory, test)
     verify(indicator !== null)
-    compare(indicator.width, 10)
-    compare(indicator.height, 10)
-    compare(indicator.implicitWidth, 10)
-    compare(indicator.implicitHeight, 10)
+    compare(indicator.width, 20)
+    compare(indicator.height, 20)
+    compare(indicator.implicitWidth, 20)
+    compare(indicator.implicitHeight, 20)
     compare(indicator.activeFocusOnTab, false)
     compare(indicator.focus, false)
-
-    var positions = [
-      [0, 0], [4, 0], [8, 0], [8, 4],
-      [8, 8], [4, 8], [0, 8], [0, 4]
-    ]
-    for (var i = 0; i < positions.length; ++i) {
-      var dot = findByName(indicator, "herdr-working-dot-" + String(i))
-      verify(dot !== null)
-      compare(dot.x, positions[i][0])
-      compare(dot.y, positions[i][1])
-      compare(dot.width, 2)
-      compare(dot.height, 2)
-      compare(dot.radius, 1)
-    }
+    verify(indicator.arc !== null)
+    compare(indicator.arc.objectName, "herdr-working-arc")
+    compare(indicator.arc.strokeWidth, 3)
+    var shape = findByName(indicator, "herdr-working-shape")
+    verify(shape !== null)
   }
 
-  function test_all_eight_phases_have_exact_three_step_trail() {
-    var indicator = createTemporaryObject(indicatorFactory, test)
-    verify(indicator !== null)
-
-    for (var phase = 0; phase < 8; ++phase) {
-      indicator.phase = phase
-      compare(indicator.trailOpacity(phase), 1.0)
-      compare(indicator.trailOpacity((phase + 7) % 8), 0.65)
-      compare(indicator.trailOpacity((phase + 6) % 8), 0.30)
-      for (var distance = 3; distance < 8; ++distance)
-        compare(indicator.trailOpacity((phase - distance + 8) % 8), 0.0)
-    }
-  }
-
-  function test_shared_clock_stop_reset_restart_and_tint() {
+  function test_instances_share_wall_clock_rotation() {
     var indicator = createTemporaryObject(indicatorFactory, test)
     var sibling = createTemporaryObject(indicatorFactory, test)
     verify(indicator !== null)
     verify(sibling !== null)
-    compare(indicator.timerRunning, false)
-    compare(indicator.phase, 0)
-
-    indicator.tint = "#ff3366"
-    var firstDot = findByName(indicator, "herdr-working-dot-0")
-    verify(firstDot !== null)
-    compare(firstDot.color, indicator.tint)
-
     indicator.active = true
     sibling.active = true
-    compare(indicator.timerRunning, true)
-    compare(sibling.timerRunning, true)
+    compare(indicator.animating, true)
+    compare(sibling.animating, true)
     tryVerify(function() {
-      return indicator.phase === sibling.phase
-        && indicator.phase === indicator.synchronizedPhase()
+      return rotationDistance(indicator.rotation, sibling.rotation) < 4
+        && rotationDistance(indicator.rotation, indicator.synchronizedRotation()) < 8
     }, 300)
-    indicator.active = false
-    compare(indicator.timerRunning, false)
-    compare(indicator.phase, 0)
-    for (var i = 0; i < 8; ++i) {
-      var dot = findByName(indicator, "herdr-working-dot-" + String(i))
-      compare(dot.opacity, 0)
-      compare(dot.visible, false)
-    }
+  }
+
+  function test_inactive_and_animations_off_are_static() {
+    var indicator = createTemporaryObject(indicatorFactory, test)
+    verify(indicator !== null)
+    indicator.tint = "#ff3366"
+    compare(indicator.arc.strokeColor, indicator.tint)
+    compare(indicator.animating, false)
+    compare(indicator.rotation, 0)
+    wait(80)
+    compare(indicator.rotation, 0)
 
     indicator.active = true
-    compare(indicator.timerRunning, true)
-    tryVerify(function() {
-      return indicator.phase === sibling.phase
-        && indicator.phase === indicator.synchronizedPhase()
-    }, 300)
+    compare(indicator.animating, true)
+    indicator.animationsEnabled = false
+    compare(indicator.animating, false)
+    compare(indicator.rotation, 0)
+    wait(80)
+    compare(indicator.rotation, 0)
+    verify(indicator.arc !== null)
+  }
+
+  function test_status_mark_states_and_reduced_motion() {
+    var mark = createTemporaryObject(markFactory, test, {
+      status: "blocked",
+      size: 24,
+      ringColor: "#123456"
+    })
+    verify(mark !== null)
+    compare(mark.width, 24)
+    compare(mark.height, 24)
+    compare(mark.pulsing, true)
+    verify(findByName(mark, "herdr-status-blocked-glyph").visible)
+    var disc = findByName(mark, "herdr-status-disc")
+    verify(disc !== null)
+    compare(disc.border.width, 3)
+    compare(disc.border.color, mark.ringColor)
+    compare(disc.color, "#e0af68")
+
+    mark.animationsEnabled = false
+    compare(mark.pulsing, false)
+    mark.status = "working"
+    var spinner = findByName(mark, "herdr-status-working-spinner")
+    verify(spinner !== null)
+    verify(spinner.visible)
+    compare(spinner.animating, false)
+    verify(spinner.arc !== null)
+
+    mark.status = "done"
+    compare(disc.color, "#9ece6a")
+    verify(findByName(mark, "herdr-status-done-glyph").visible)
+    mark.status = "idle"
+    compare(mark.visible, false)
   }
 }

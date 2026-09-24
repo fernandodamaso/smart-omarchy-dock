@@ -11,9 +11,10 @@ function livePreviewMembers(candidates, liveToplevels) {
   return DockWindowModel.liveGroupMembers(candidates, liveToplevels)
 }
 
-function hasPreviewContent(memberCount, activityCount) {
+function hasPreviewContent(memberCount, activityCount, agentCount) {
   return Number(memberCount) >= 2
-    || (Number(memberCount) >= 1 && Number(activityCount) > 0)
+    || (Number(memberCount) >= 1
+      && (Number(activityCount) > 0 || Number(agentCount) > 0))
 }
 
 function activityViewportHeight(rowCount, rowHeight, separatorHeight,

@@ -27,9 +27,9 @@ state="${1:-default}"
 position="${2:-bottom}"
 
 case "$state" in
-  default|one-window|no-activity|overflow) ;;
+  default|one-window|no-activity|overflow|herdr-only|herdr-mixed) ;;
   *)
-    echo "usage: $0 [default|one-window|no-activity|overflow] [bottom|top|left|right]" >&2
+    echo "usage: $0 [default|one-window|no-activity|overflow|herdr-only|herdr-mixed] [bottom|top|left|right]" >&2
     exit 2
     ;;
 esac

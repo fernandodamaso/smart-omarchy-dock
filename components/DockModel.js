@@ -437,6 +437,7 @@ function settingsDefaults() {
     groupWindows: true,
     interfaceAnimationsEnabled: true,
     browserProfileBadgesEnabled: true,
+    dockHerdrIndicators: false,
     windowIconOverrides: []
   }
 }
@@ -776,6 +777,7 @@ function normalizeSetting(key, value) {
   case "borderWidthEnabled":
   case "interfaceAnimationsEnabled":
   case "browserProfileBadgesEnabled":
+  case "dockHerdrIndicators":
   case "sidebarBrowserTabsEnabled":
     return typeof value === "boolean" ? value : defaults[key]
   case "backgroundColor":

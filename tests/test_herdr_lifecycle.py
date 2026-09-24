@@ -39,10 +39,12 @@ class HerdrLifecycleContractTests(unittest.TestCase):
         self.assertIn("repeat: false", timer[:700])
         self.assertIn("root.scheduleFocusDeadline()\n    return requestId", service)
 
-    def test_sidebar_registry_delegates_to_the_shared_service(self):
+    def test_sidebar_registry_delegates_to_the_host_bridge(self):
         host = self.read("DockHost.qml")
         self.assertIn('"herdr.agents"', host)
-        self.assertIn("root.herdrService.acquire(owner)", host)
+        self.assertIn("root.herdrWindowAgents.createConsumerLease(owner)", host)
+        bridge = self.read("components/DockHerdrWindowAgents.qml")
+        self.assertIn('root.herdrService.acquire("host.herdr-window-agents")', bridge)
         self.assertIn("DockHerdrAgentsView", host)
         view = self.read("components/DockHerdrAgentsView.qml")
         self.assertIn("property var widgetContext", view)
