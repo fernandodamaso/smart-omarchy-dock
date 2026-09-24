@@ -907,9 +907,13 @@ Classic preferences remain unchanged. This source slice is Draft, not a deployed
 or fully interactive sidebar release. [Implementation and qualification](docs/SIDEBAR.md).
 
 The [Widget foundation](docs/SIDEBAR_WIDGETS.md) keeps the FDM-967 host-owned
-provider leases while FDM-973 renders Widget cards as a content tail of the existing
-hierarchy scroll. Pinned and Applications remain fixed below that viewport. The
-production registry may be empty; Add/Manage discovers only source-registered types.
+provider leases while FDM-999 lays out independently scrollable hierarchy and
+Widget body panes. The Widget header, PINNED and Applications remain fixed.
+A content-aware 55% hierarchy cap returns unused space; constrained height
+preserves the full Widget header when possible and otherwise hides the section
+without removing the main-header Add/Manage entry. Hidden Herdr fallback cards
+reserve no space while keeping their leases. This is not the retired compact
+footer or a configurable splitter.
 `sidebarWidgets` stores enabled order and `sidebarWidgetCollapsed` stores card
 body state. Empty configuration adds no Widget-section height/work; unknown imported
 IDs are unavailable and never executed. Test providers exist only in fixtures.

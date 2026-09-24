@@ -173,7 +173,17 @@ exception. Run widgetkit/sidebar Node tests, full QML, Python sidebar syntax,
 git diff --check, current full gates and exact-head CI. Native theme/font/contrast
 and package rendering not available remotely stay under 1001, not assumed passed.
 
-## FDM-999 / WIDGET-07 — independent Widget scroll (not implemented here)
+## FDM-999 / WIDGET-07 — independent Widget scroll (source candidate)
+
+Execution integrates PR #114 exact parent
+`168f4924af61e5f6339df95d60b2a7f4993d70f8` with main
+`3dcf8ad1049a202b0ae614c83fd3df8461007469` (merged PR #111).
+The historical unmerged-#111 notes below describe the planning baseline, not
+current branch status. PR #113/#114 remain untouched. Final candidate refs and
+fresh CI belong in the Draft PR/Linear handoff. The allocator, independent
+scroll/presentation/focus/popup source and executable tests implement R1;
+FDM-1001 still owns full native acceptance. No FDM-1000 setting/UI is selected.
+See `docs/FDM-999-split-scroll-handoff.md`.
 
 https://linear.app/fdamaso/issue/FDM-999 is authoritative for allocation, units,
 short-space and interaction policy. Requires accepted 997/998/994 source first.

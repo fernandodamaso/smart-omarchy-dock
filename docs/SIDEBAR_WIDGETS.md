@@ -1,8 +1,8 @@
 # SmartDock sidebar Widget contract
 
-**FDM-967 owns provider lifecycle; FDM-973 owns the shared-scroll Widget area and management foundation; FDM-970 registers the source-owned `herdr.agents` provider.**
+**FDM-967 owns provider lifecycle; FDM-973 owns the management foundation; FDM-999 supersedes its shared-scroll placement; FDM-970 registers the source-owned `herdr.agents` provider.**
 Classic remains the default. `sidebarWidgets` defaults to `[]`; that starts no
-provider, loads no widget view and reserves zero footer height. FDM-970 now
+provider, loads no widget view and reserves zero Widget-pane height. FDM-970 now
 registers the source-owned `herdr.agents` adapter on top of this contract.
 Clock/calendar (FDM-969) and Todoist (FDM-971) remain independent follow-ups.
 No credential, stock topbar change, second host or notification daemon is needed.
@@ -122,19 +122,45 @@ exact provider-instance token, activation generation and snapshot revision. An o
 view therefore cannot poison a removed/re-enabled or already recovered widget.
 Failure unloads that view, not the window list or other providers.
 
-## Shared-scroll layout, management and persistence
+## Split-scroll layout, management and persistence
 
-The normal Widget section is a content tail of the existing
-`DockSidebarViewport` hierarchy `ListView`. It does not own a second normal
-Flickable, scrollbar, height cap, compact-footer mode or overflow mode. Hierarchy
-rows remain Monitor/Workspace/Window domain rows; Widget cards are not injected
-into `visibleRows` or section-span keys.
+FDM-999 gives the hierarchy and Widget bodies **independent sibling scroll
+viewports** in the bounded middle region of `DockSidebar`. The Widget section
+header is fixed above its body Flickable. PINNED and Applications remain fixed.
+The old `contentTail` API/Loader is removed; Widgets are not domain hierarchy
+rows and do not enter `visibleRows` or section-span keys.
 
-The expanded content order is hierarchy first, then the Widgets section. Pinned
-and Applications stay fixed below that shared viewport. Rail mode gives the
-Widget tail zero height. With zero enabled Widgets the section itself also has
-zero height; the expanded SmartDock header still exposes Add/Manage so an empty
-configuration is discoverable.
+`sidebarSplitLayout()` allocates logical pixels from canonical hierarchy row
+metrics and the natural Widget header/card-column demands. Its automatic
+hierarchy cap is 55% of the middle region; short content returns unused space
+to the other pane. Allocated heights never feed back into natural demand.
+The desired minimums are one monitor heading plus two rows and one Widget
+header plus a collapsed card, each limited by actual content demand.
+
+When those minimums cannot fit, reserve the whole Widget header if possible,
+then the hierarchy minimum, then remaining Widget body space. Header-only is
+valid. Below the complete header height, hide the section entirely and keep
+Add/Manage reachable from the main SmartDock header. Rail and zero *presented*
+Widget cards allocate zero Widget height. A filtered-out Herdr fallback does
+not count as presented and retains its provider lease.
+
+This is not the retired `min(240, 30%)` compact footer or an overflow sentinel.
+There is no adjustable splitter/setting in this slice (FDM-1000 remains optional).
+The actual residual blank area alone accepts mode-switch dragging.
+
+Each panel retains an in-memory first-visible Widget ID, offset and old order.
+Width/font/content/reorder changes restore that anchor after layout; removal
+uses the next surviving old neighbor, then previous, then origin. Rail and
+temporary zero space preserve the expanded anchor. Wheel/touch/reorder input
+is not fought by restoration; focused-descendant reveal runs after pending
+restoration. No scroll offsets are written to dock.json or shared across mirrors.
+
+Vertical input over hierarchy changes hierarchy only; input over Widget bodies
+changes Widgets only, even at bounds. Fixed headers/blank background change
+neither. Native nested scrollables must contain vertical input at their bounds
+and retain first refusal; ordinary content uses the outer Widget scroller.
+Prefer a native `Controls.ScrollView` for a nested editor instead of a blanket
+overlay handler. External packages need no new required property.
 
 `sidebarWidgets` remains the canonical ordered list for both enabled state and
 Widget order. Add/remove/reorder always go through the existing host settings
@@ -163,7 +189,11 @@ provider ABI for compatibility but is not used by the expanded sidebar area;
 `popupView` remains available through the single host-owned Widget popup.
 
 Drag starts from the card drag affordance, computes insertion boundaries only
-among Widget cards and uses the hierarchy viewport's edge auto-scroll. It cannot
+among Widget cards and uses only the Widget body viewport's edge auto-scroll.
+A release over hierarchy, section header, PINNED, Applications, blank space or
+outside the panel cancels with zero settings writes. Escape, removed source,
+external order changes or invalidated ownership also cancel. Geometry is mapped
+from the retained scene point on every tick; reflow is not an external reorder. It cannot
 drop into Monitor/Workspace/Window rows or reorder with Pinned/Applications.
 Reorder and collapse are presentation/settings changes only: the host-owned
 provider manager keeps the same leases/subscriptions.
@@ -172,8 +202,8 @@ The controller still owns `{widgetPopupId, widgetPopupAnchor}` for
 Widget-specific popup content. There is no normal-card overflow sentinel.
 Destroyed/hidden/scrolled-out anchors, removal, collapse, host invalidation and
 surface teardown close safely. The Add/Manage picker is a panel-owned native Omarchy popup, independent of the
-shared-scroll Widget tail. It therefore remains available from the SmartDock
-header even when zero Widget cards are enabled and the tail has zero height.
+independent Widget pane. It therefore remains available from the SmartDock
+header even when zero Widget cards are enabled and the pane has zero height.
 Outside clicks dismiss it through Omarchy's normal click-popup focus handling.
 It lists only trusted source descriptors whose `manageable` flag is not false
 and routes add/remove back through the controller. Source-owned integrations such
@@ -183,11 +213,31 @@ optional-Widget toggle surface.
 `widgetManager.diagnostics()` and CLI `data.presentation.widgets` retain the
 bounded, payload-free lifecycle diagnostics from FDM-967.
 
-## Verification and SB-06 handoff
+## Focus, presentation and popup geometry
+
+Tab proceeds from hierarchy navigation to section Add/Manage, card root/header,
+collapse and enabled body controls, then PINNED and Applications/Trash. Backtab
+reverses those boundaries. The pointer grip is not a keyboard stop. Collapsed,
+disabled and zero-body-area controls are skipped, while offscreen controls can
+be revealed. An oversized card reveals the actual focused descendant rather
+than attempting to fit its entire body. A focused removed Widget transfers only
+its owning panel's focus to next/previous surviving card, section manager or
+main-header manager. Provider refresh and geometry changes never request focus.
+
+`layoutRevision` covers pane/ancestor geometry, clipping, card position/size,
+contentY, screen/edge and effective visibility. Cards use the Widget body's
+clip, and fully clipped presentations stop animating without unloading their
+bodies or stopping providers. The one controller-owned popup follows actual
+anchor geometry, including split changes at unchanged contentY; hidden,
+destroyed, removed or fully clipped anchors close it. Fixed section and main
+manager anchors are independent of the hierarchy viewport.
+
+## Verification and FDM-1001 handoff
 
 Source gates:
 
 ```sh
+node tests/test_sidebar_split_layout.mjs
 node tests/test_sidebar_widgets.mjs
 python3 -m unittest discover -s tests -p 'test_sidebar_widget_config.py'
 node tests/test_sidebar_host.mjs
@@ -306,3 +356,12 @@ Source-owned integrations can opt out of Add/Manage with `manageable: false`.
 for runtime features. External packages are manageable by default. See
 [`WIDGET_PACKAGES.md`](WIDGET_PACKAGES.md) for package validation, install/update,
 development, and source-location rules.
+
+FDM-999 executable coverage additionally includes
+`tests/tst_sidebarsplitscroll.qml`, `tests/test_sidebar_split_qml.py`, and the
+queued-drop/overflow regression in `tests/tst_sidebardropfeedback.qml`.
+The source harness executes production methods/bindings and actual Qt input;
+its compositor popup endpoints and Commons/Ui dependencies are fixtures.
+Full Omarchy/Quickshell rendering, device input, native grabs/tooltips and both
+host modes remain FDM-1001, not claims made by headless tests.
+See [the source handoff](FDM-999-split-scroll-handoff.md).

@@ -46,6 +46,17 @@ ShellRoot {
     fixtureTimer.running = false
     Qt.quit()
   }
+  function named(node, name) {
+    if (node.objectName === name) return node
+    for (var i = 0; node.children && i < node.children.length; ++i) {
+      var found = root.named(node.children[i], name)
+      if (found) return found
+    }
+    return null
+  }
+  function cardAnchor(area, index) {
+    return root.named(area.cards.itemAt(index), "widget-card-header")
+  }
   function windows() { return root.host.sidebarController.projection.rows.filter(function(r) { return r.kind === "window" }) }
   function delegateFor(key) {
     var panel = root.host.sidebarPanel
@@ -134,12 +145,12 @@ ShellRoot {
           require(h.sidebarPanel !== null, "sidebar surface missing")
           var footer = h.sidebarPanel.widgetArea
           require(footer.height > 0 && footer.height <= footer.layout.cap, "actual footer bounds")
-          require(footer.slots.count === 3, "ordered provider slots missing")
-          require(footer.slots.itemAt(0).modelData === "fixture.one", "provider order changed")
-          require(footer.slots.itemAt(0).view.loadedItem !== null, "real expanded widget view missing")
+          require(footer.cards.count === 3, "ordered provider slots missing")
+          require(footer.cards.itemAt(0).widgetId === "fixture.one", "provider order changed")
+          require(root.named(footer.cards.itemAt(0), "widget-card-view").loadedItem !== null, "real expanded widget view missing")
           require(widgetOne.acquisitions === 1 && widgetOne.subscriptions === 1, "host lease not singular")
           root.windowScrollBefore = h.sidebarPanel.viewport.listView.contentY
-          footer.scrollView.contentY = Math.min(10, Math.max(0,footer.scrollView.contentHeight-footer.height))
+          footer.scrollView.contentY = Math.min(10, Math.max(0,footer.scrollView.contentHeight-footer.scrollView.height))
           require(h.sidebarPanel.viewport.listView.contentY === root.windowScrollBefore, "widget scrolling moved windows")
           require(h.workspaceMonitorDrag.docks.length === 0, "classic docks also exist")
           require(root.windows().length === 3, "three actual window rows required")
@@ -175,7 +186,7 @@ ShellRoot {
         } else if (root.step === 4) {
           require(controller.collapsedFor(controller.selectedScreen), "collapse not accepted by the sole writer")
           require(widgetOne.subscriptions === 1 && widgetTwo.subscriptions === 1, "collapse restarted providers")
-          require(h.sidebarPanel.widgetArea.slots.itemAt(0).view.presentation === "compact", "rail did not load compact factory")
+          require(h.sidebarPanel.widgetArea.height === 0 && h.sidebarPanel.widgetArea.naturalWidgetContentHeight > 0, "rail must hide Widgets without discarding body demand")
           widgetOne.notify("once"); widgetOne.notify("once")
           require(widgetOne.notifications === 1, "duplicate fixture notification")
           require(JSON.stringify(root.windows().map(function(r) {return r.key})) === JSON.stringify(root.windowKeys), "rail lost/reordered members")
@@ -289,7 +300,7 @@ ShellRoot {
           require(h.settings.sidebarExpandedWidth === 400, "fallback/reconnect forgot requested width")
           require(widgetOne.subscriptions === 3 && widgetOne.acquisitions === 1, "screen recovery lifecycle")
           var area = h.sidebarPanel.widgetArea
-          area.openWidget("fixture.one",area.slots.itemAt(0).button)
+          area.openWidget("fixture.one",root.cardAnchor(area,0))
           root.savedPopup = area.popupWindow
         } else if (root.step === 18) {
           var area = h.sidebarPanel.widgetArea
@@ -298,7 +309,7 @@ ShellRoot {
           require(area.popupGeometry.y >= 0 && area.popupGeometry.y + area.popupGeometry.height <= h.sidebarPanel.height,
             "bottom popup escaped the available screen height")
           require(area.popupWindow.width > 0 && area.popupWindow.height > 0, "native popup geometry absent")
-          area.openWidget("fixture.two",area.slots.itemAt(1).button)
+          area.openWidget("fixture.two",root.cardAnchor(area,1))
         } else if (root.step === 19) {
           require(controller.widgetPopupId === "fixture.two", "second selection did not replace first popup")
           require(h.sidebarPanel.widgetArea.popupWindow === root.savedPopup, "second popup host was created")
@@ -307,32 +318,33 @@ ShellRoot {
           require(!h.sidebarPanel.widgetArea.popupWindow.visible, "removed provider retained its popup")
           require(widgetTwo.releases === 1 && widgetTwo.stops === 3, "disabled provider cleanup not exactly once")
           var area = h.sidebarPanel.widgetArea
-          area.availableContentHeight = 90
-          area.windowRowHeight = 120 // Large-font/low-height boundary on the actual area.
+          // Test-only constrained allocation on the actual pane; restore the
+          // production binding before finishing. Never write these pixels to settings.
+          area.height = 0
         } else if (root.step === 21) {
           var area = h.sidebarPanel.widgetArea
-          require(area.height === 0 && area.overflowNeeded, "tiny footer did not move to header overflow")
-          require(h.sidebarPanel.widgetOverflowButton.visible, "widget header overflow unreachable")
-          require(h.sidebarPanel.viewport.height > 0, "footer displaced window navigation")
-          area.openOverflow(h.sidebarPanel.widgetOverflowButton)
+          require(!area.sectionVisible && area.scrollView.height === 0, "zero allocation left an unusable section")
+          require(h.sidebarPanel.widgetManageControl.visible, "main-header manager unreachable")
+          h.sidebarPanel.openWidgetManager(h.sidebarPanel.widgetManageControl)
         } else if (root.step === 22) {
-          require(h.sidebarPanel.widgetArea.popupWindow.visible && controller.widgetPopupId === "*", "header overflow popup missing")
-          controller.openWidgetPopup("fixture.one",controller.widgetPopupAnchor)
-          require(h.sidebarPanel.widgetArea.popupWindow === root.savedPopup, "overflow created another popup host")
+          require(h.sidebarPanel.widgetManager.managerOpen, "main-header manager missing at zero Widget space")
+          h.sidebarPanel.widgetManager.close()
           root.widgetRequests = []
         } else if (root.step === 23) {
-          require(h.sidebarPanel.widgetArea.height === 0 && !h.sidebarPanel.widgetOverflowButton.visible, "disabled widgets left blank gap/overflow")
+          require(h.sidebarPanel.widgetArea.height === 0, "disabled Widgets left an allocation")
           require(controller.widgetPopupId === "", "empty list kept a popup")
           require(widgetOne.releases === 1, "removed provider cleanup count")
+          var area = h.sidebarPanel.widgetArea
+          area.height = Qt.binding(function() { return area.parent.split.widgetHeight })
           root.widgetRequests = ["fixture.one"]
-          h.saveSetting("sidebarEdge","left") // New actual area restores normal geometry bindings.
+          h.saveSetting("sidebarEdge", "left")
         } else if (root.step === 24) {
           require(widgetOne.acquisitions === 2, "provider not acquired once on re-enable")
           widgetOne.callbacks[0]({status:"error",revision:99999})
           require(controller.widgetView("fixture.one").status === "ready", "old lease result poisoned re-enabled widget")
           var area = h.sidebarPanel.widgetArea
-          root.disposableAnchor = widgetAnchorFactory.createObject(h.sidebarPanel.contentItem,
-            {x:0,y:h.sidebarPanel.height-44,width:44,height:44})
+          root.disposableAnchor = widgetAnchorFactory.createObject(area.cards.itemAt(0),
+            {x:0,y:0,width:44,height:34})
           controller.openWidgetPopup("fixture.one",root.disposableAnchor)
         } else if (root.step === 25) {
           var area=h.sidebarPanel.widgetArea
@@ -343,7 +355,7 @@ ShellRoot {
         } else if (root.step === 26) {
           require(controller.widgetPopupId === "", "destroyed anchor retained popup")
           var area=h.sidebarPanel.widgetArea
-          area.openWidget("fixture.one",area.slots.itemAt(0).button)
+          area.openWidget("fixture.one",root.cardAnchor(area,0))
           h.saveSetting("sidebarExpandedWidth",240)
         } else if (root.step === 27) {
           require(widgetOne.subscriptions === 4, "resize restarted backend")

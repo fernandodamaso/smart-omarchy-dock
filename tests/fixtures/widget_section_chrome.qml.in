@@ -40,7 +40,9 @@ TestCase {
       property alias viewport: hierarchy
       readonly property var widgetArea: null // main-header entry must not depend on a tail
       @@MAIN_OPEN@@
-      Item { id: hierarchy; x: 14; width: parent.width - 28; property real workspaceCardInset: Style.space(5) }
+      Item { id: middle; x:14; width:parent.width-28
+        Item { id:hierarchy; x:0; width:parent.width; property real workspaceCardInset:Style.space(5) }
+      }
       Item {
         width: parent.width; height: 34
         Item { id: collapseButton; anchors.right: parent.right; width: 30; height: 30 }
@@ -59,7 +61,7 @@ TestCase {
       @@AREA_INSET@@
       function closePopup() { testCase.closes++ }
       @@AREA_OPEN@@
-      x: viewport.x; y: 44; width: viewport.width; height: 160
+      x: panel.viewport.parent.x + viewport.x; y: 44; width: viewport.width; height: 160
       @@AREA_HEADER@@
       DockWidgetCard {
         id: card
@@ -116,7 +118,7 @@ TestCase {
     compare(label.font.weight, pinned.font.weight)
     compare(label.color, pinned.color)
     verify(label.topPadding > 0)
-    var expected = host.mapToItem(testCase, host.viewport.x + host.viewport.workspaceCardInset + Style.space(4), 0).x
+    var expected = host.mapToItem(testCase, host.viewport.parent.x + host.viewport.x + host.viewport.workspaceCardInset + Style.space(4), 0).x
     for (var item of [label, pinned, icon, body])
       fuzzyCompare(item.mapToItem(testCase, 0, 0).x, expected, 0.01)
     var plus = named(area, "widget-section-manage")

@@ -12,6 +12,7 @@ import "DockModel.js" as DockModel
 FocusScope {
   id: root
   required property var controller
+  property Item tabForwardTarget: null
   // Theme-reactive card fills from the owning panel (phase 4).
   property var appearance: null
   // Connector of the owning PanelWindow; rows stamp this for Ctrl/drag.
@@ -33,10 +34,6 @@ FocusScope {
   // then every pixel is occupied and there is no blank space to claim.
   readonly property var blankRegion: DockModel.sidebarBlankRegion(
     list.contentHeight, list.height, list.contentY, list.width)
-  property Component contentTail: null
-  readonly property var contentTailItem: list.footerItem ? list.footerItem.contentTailItem : null
-  property var contentTailDragPoint: null
-  signal contentTailAutoScrolled()
   // Allocate from canonical projection metrics, never a virtualized estimate.
   readonly property real naturalContentHeight: {
     var total = 0
@@ -107,6 +104,20 @@ FocusScope {
     interval: 0
     repeat: false
     onTriggered: root.restoreAnchor()
+  }
+
+  function focusLastRow() {
+    var key = InteractionModel.nextKey(root.visibleRows, "", "end")
+    if (!key) return false
+    root.controller.clearAlertControl()
+    var row = root.controller.rowsByKey[key]
+    if (row && root.controller.rowHasAlertControl(row)) root.controller.alertControlKey = key
+    return root.focusRow(key)
+  }
+  function focusPaneBoundary(backwards) {
+    if (backwards || !root.tabForwardTarget || !root.tabForwardTarget.visible) return false
+    root.tabForwardTarget.forceActiveFocus(Qt.TabFocusReason)
+    return true
   }
 
   function rowIntersectsViewport(rowY, rowHeightValue) {
@@ -201,17 +212,11 @@ FocusScope {
     root.controller.updateRowDrag(root.dropKey())
   }
 
-  function beginContentTailDrag(sceneX, sceneY) {
-    root.contentTailDragPoint = root.mapFromItem(null, sceneX, sceneY)
-  }
 
-  function updateContentTailDrag(sceneX, sceneY) {
-    root.contentTailDragPoint = root.mapFromItem(null, sceneX, sceneY)
-  }
 
-  function endContentTailDrag() {
-    root.contentTailDragPoint = null
-  }
+
+
+
 
   function heightMap() {
     var rows = root.visibleRows
@@ -818,10 +823,9 @@ FocusScope {
   Timer {
     interval: 16
     repeat: true
-    running: (root.controller.rowDragActive && root.dragPoint !== null)
-      || root.contentTailDragPoint !== null
+    running: root.controller.rowDragActive && root.dragPoint !== null
     onTriggered: {
-      var point = root.controller.rowDragActive ? root.dragPoint : root.contentTailDragPoint
+      var point = root.dragPoint
       var delta = point && point.x >= 0 && point.x < root.width
         ? InteractionModel.autoScrollStep(point.y, root.height) : 0
       if (!delta) return
@@ -829,7 +833,6 @@ FocusScope {
         Math.max(list.originY, list.contentHeight - list.height + list.originY), list.contentY + delta))
       list.forceLayout()
       if (root.controller.rowDragActive) root.controller.updateRowDrag(root.dropKey())
-      else root.contentTailAutoScrolled()
     }
   }
 
@@ -862,28 +865,7 @@ FocusScope {
       herdrAnimationEligible: root.rowIntersectsViewport(y, height)
       width: list.width
     }
-    footer: Item {
-      id: contentTailHost
-      readonly property var contentTailItem: contentTailLoader.item
-      width: list.width
-      height: root.panelCollapsed || !contentTailLoader.item
-        ? 0 : Math.max(0, contentTailLoader.item.implicitHeight)
-      Loader {
-        id: contentTailLoader
-        anchors.fill: parent
-        active: root.contentTail !== null
-        sourceComponent: root.contentTail
-        onLoaded: Qt.callLater(root.requestRestore)
-      }
-      onHeightChanged: {
-        root.bumpSectionChrome()
-        root.refreshDragTarget()
-        if (!root.restoring && !root.pendingRestore) {
-          root.pendingRestore = true
-          root.requestRestore()
-        }
-      }
-    }
+
     onMovementEnded: root.captureAnchor()
     onContentYChanged: {
       if (!root.pendingRestore) root.captureAnchor()
@@ -1266,7 +1248,6 @@ FocusScope {
     root.dropSurfaceReady = false
     root.controller.releaseDropSurface(root.dropSurfaceGeneration)
     root.clearDropPresentation()
-    root.endContentTailDrag()
     root.cancelInputs("viewport-destroyed")
     root.captureAnchor()
   }

@@ -564,3 +564,14 @@ importing SmartDock implementation files by relative path. The module is shipped
 with standalone SmartDock installations and is resolved by the host when an
 external package entry is loaded. Package manifests, source/deployment
 boundaries, and CLI workflow are documented in `docs/WIDGET_PACKAGES.md`.
+
+## Host scrolling and nested input — FDM-999
+
+The host owns the independent outer Widget Flickable, fixed section header,
+per-panel scroll anchor and focused-descendant reveal. Widget bodies continue
+to supply finite natural implicit heights at their assigned width. Do not add
+a second outer scroller or unload bodies merely because their card is clipped.
+A genuinely nested editor may compose a native `Controls.ScrollView`; it must
+contain vertical input at its bounds rather than chain into the outer Widget
+or hierarchy panes. Keep child first refusal and deliberate wheel actions.
+No new required WidgetKit/provider/package property is introduced.

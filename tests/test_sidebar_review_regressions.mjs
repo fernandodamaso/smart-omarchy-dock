@@ -93,14 +93,14 @@ test('pin reorder preserves pending exits and cancels a reinserted exit', () => 
 })
 
 function popups() {
-  const panelA = { contentItem: { parent: null }, visible: true }
-  const panelB = { contentItem: { parent: null }, visible: true }
-  const viewportA = { parent:panelA.contentItem, height:800, anchorY:0,
-    mapFromItem(){ return {y:this.anchorY} }, listView:{} }
-  const viewportB = { parent:panelB.contentItem, height:800, anchorY:0,
-    mapFromItem(){ return {y:this.anchorY} }, listView:{} }
-  const anchorA = { visible: true, height:44, parent: viewportA }
-  const anchorB = { visible: true, height:44, parent: viewportB }
+  const panelA = { contentItem: { parent: null, visible:true, opacity:1 }, visible: true }
+  const panelB = { contentItem: { parent: null, visible:true, opacity:1 }, visible: true }
+  const viewportA = { parent:panelA.contentItem, height:800, width:280, visible:true, opacity:1, anchorY:0,
+    mapFromItem(){ return {x:0,y:this.anchorY} }, listView:{} }
+  const viewportB = { parent:panelB.contentItem, height:800, width:280, visible:true, opacity:1, anchorY:0,
+    mapFromItem(){ return {x:0,y:this.anchorY} }, listView:{} }
+  const anchorA = { visible: true, opacity:1, width:44, height:44, parent: viewportA }
+  const anchorB = { visible: true, opacity:1, width:44, height:44, parent: viewportB }
   const controller = {
     widgetPopupId: '', widgetPopupAnchor: null, interactionBusy: false,
     resizeActive: false, rowDragActive: false,
@@ -113,11 +113,14 @@ function popups() {
   }
   function area(panel, viewport) {
     const result = qmlMethods('DockSidebarWidgetArea.qml', {
-      controller, panel, viewport,
+      controller, panel, viewport, widgetScroll:viewport, sectionVisible:true, visible:true, opacity:1, parent:panel.contentItem,
       popup: { anchor: { updateAnchor() {} } },
       managerPopup: { anchor: { updateAnchor() {} } },
       managerOpen:false, managerAnchor:null, anchorRevision:0, managerAnchorRevision:0,
     })
+    // Keep fixture ancestry inside its contextified VM identity.
+    vm.runInContext("widgetScroll.parent = root", result)
+    viewport.contentItem = viewport
     result.testViewport = viewport
     return result
   }
@@ -158,7 +161,7 @@ test('non-owning panel teardown preserves the widget session and busy state', ()
   assert.equal(p.controller.interactionBusy, false)
 })
 
-test('scrolling the shared viewport closes a popup whose card leaves view', () => {
+test('scrolling the Widget viewport closes a popup whose card leaves view', () => {
   const p = popups()
   p.controller.openWidgetPopup('fixture.one', p.anchorA)
   p.viewportA.anchorY = 900

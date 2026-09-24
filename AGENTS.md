@@ -98,6 +98,12 @@ form/action control when the existing Widget framework owns it. New Widget UI
 should compose `components/widgets/` primitives first; custom presentation code
 must be justified by a contract the kit does not already cover.
 
+FDM-999 assigns one hierarchy scroll owner and one independent Widget body scroll
+owner per panel; the section header and pinned/footer controls stay fixed.
+Preserve natural-demand allocation, per-panel stable-ID anchors, nested-control
+first refusal and the existing single host-owned provider/settings/popup owners.
+See `docs/FDM-999-split-scroll-handoff.md` for the exact remote/native boundary.
+
 External Widget packages are a different source boundary from SmartDock core.
 Create them in a separate repository/directory with `smartdock widget create`,
 install or select development sources with the `smartdock widget` package API,
