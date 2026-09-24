@@ -7,6 +7,7 @@ Row {
   property string label: ""
   property string semantic: "neutral"
   property string reference: ""
+  property string referenceSemantic: ""
   property bool compact: true
   spacing: Style.space(6)
 
@@ -33,7 +34,7 @@ Row {
     visible: root.reference !== ""
     anchors.verticalCenter: parent.verticalCenter
     text: root.reference
-    semantic: root.semantic
+    semantic: root.referenceSemantic === "" ? root.semantic : root.referenceSemantic
     compact: root.compact
   }
 }
