@@ -49,7 +49,6 @@ Item {
     Shape {
       objectName: "herdr-working-shape"
       anchors.fill: parent
-      preferredRendererType: Shape.CurveRenderer
 
       ShapePath {
         objectName: "herdr-working-track"
