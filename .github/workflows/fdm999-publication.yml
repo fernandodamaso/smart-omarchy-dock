@@ -56,7 +56,10 @@ jobs:
           python3 "$GITHUB_WORKSPACE/.agent/fdm999/apply.py" source
           python3 "$GITHUB_WORKSPACE/.agent/fdm999/migrate.py"
           python3 "$GITHUB_WORKSPACE/.agent/fdm999/docs.py"
+          python3 "$GITHUB_WORKSPACE/.agent/fdm999/final_review.py"
           /usr/lib/qt6/bin/qmltestrunner -input tests/tst_sidebarsplitscroll.qml -import components -import tests/qml-imports | tee "$RUNNER_TEMP/evidence/split-green.log"
+          /usr/lib/qt6/bin/qmltestrunner -input tests/tst_sidebarkeyboard.qml -import components -import tests/qml-imports | tee "$RUNNER_TEMP/evidence/keyboard-green.log"
+          node tests/test_sidebar_split_focus.mjs
           git diff --check
           git diff --quiet "$PARENT" -- docs/widget-gallery/reference
           printf '%s\n' 'source-built' > "$RUNNER_TEMP/evidence/source-built"
