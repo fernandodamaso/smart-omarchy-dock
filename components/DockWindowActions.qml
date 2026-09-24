@@ -536,20 +536,20 @@ Item {
     return newWorkspaceMovePlan(members, monitorIdentity) !== null
   }
 
-  function moveCapturedToplevelsToNewWorkspace(members, monitorIdentity) {
+  function moveCapturedToplevelsToNewWorkspaceResult(members, monitorIdentity) {
     var plan = newWorkspaceMovePlan(members, monitorIdentity)
-    if (!plan) return false
+    if (!plan) return {accepted:false}
 
     // Revalidate the target monitor, free workspace id and every surviving
     // captured member immediately before the first compositor side effect.
     var reMonitor = canonicalMonitorIdentity(monitorIdentity)
-    if (!reMonitor || reMonitor !== plan.monitor) return false
-    if (occupiedNumericWorkspaceIds()[plan.id] === true) return false
+    if (!reMonitor || reMonitor !== plan.monitor) return {accepted:false}
+    if (occupiedNumericWorkspaceIds()[plan.id] === true) return {accepted:false}
     var confirmed = workspaceMoveMembers(members)
-    if (!confirmed || confirmed.length === 0) return false
+    if (!confirmed || confirmed.length === 0) return {accepted:false}
     for (var checkIndex = 0; checkIndex < confirmed.length; ++checkIndex) {
       if (!canMoveToplevelToWorkspace(confirmed[checkIndex].toplevel, plan.identity))
-        return false
+        return {accepted:false}
     }
 
     var requests = []
@@ -560,7 +560,7 @@ Item {
           current.address, plan.target, Hyprland.usingLua)
         : DockModel.moveWindowRequest(
           current.address, plan.target, Hyprland.usingLua)
-      if (!moveRequest) return false
+      if (!moveRequest) return {accepted:false}
       requests.push(moveRequest)
     }
 
@@ -577,18 +577,30 @@ Item {
     }
     var focusRequest = DockModel.focusWindowRequest(
       focusMember.address, Hyprland.usingLua)
-    if (!relocateRequest || !activateRequest || !focusRequest) return false
+    if (!relocateRequest || !activateRequest || !focusRequest) return {accepted:false}
     requests.push(relocateRequest)
     requests.push(activateRequest)
     requests.push(focusRequest)
-    if (!dispatchRequests(requests)) return false
+    if (!dispatchRequests(requests)) return {accepted:false}
     for (var forgetIndex = 0; forgetIndex < confirmed.length; ++forgetIndex)
       forgetOrigin(confirmed[forgetIndex].address)
-    return true
+    return {accepted:true, expectedWorkspace:plan.identity, expectedMonitor:reMonitor,
+      members:confirmed.map(function(member) {
+        return {toplevel:member.toplevel, address:member.address}
+      })}
+  }
+
+  // Legacy callers retain strict boolean contracts and exactly one submission.
+  function moveCapturedToplevelsToNewWorkspace(members, monitorIdentity) {
+    return moveCapturedToplevelsToNewWorkspaceResult(members, monitorIdentity).accepted === true
+  }
+
+  function moveCapturedWindowToNewWorkspaceResult(member, monitorIdentity) {
+    return moveCapturedToplevelsToNewWorkspaceResult([member], monitorIdentity)
   }
 
   function moveCapturedWindowToNewWorkspace(member, monitorIdentity) {
-    return moveCapturedToplevelsToNewWorkspace([member], monitorIdentity)
+    return moveCapturedWindowToNewWorkspaceResult(member, monitorIdentity).accepted === true
   }
 
   function reliableWorkspaceForToplevel(toplevel) {
@@ -665,9 +677,9 @@ Item {
     return true
   }
 
-  function pullToplevelToMonitorWorkspace(toplevel, originOnly, monitor) {
+  function monitorActiveWorkspaceIdentity(monitor) {
     var requested = canonicalMonitorIdentity(monitor)
-    if (!requested) return false
+    if (!requested) return ""
     var monitors = currentMonitors()
     var workspace = ""
     for (var monitorIndex = 0; monitorIndex < monitors.length; ++monitorIndex) {
@@ -676,6 +688,12 @@ Item {
         DockWindowModel.monitorActiveWorkspace(monitors[monitorIndex]))
       break
     }
+    return canonicalWorkspaceIdentity(workspace)
+  }
+
+  function pullToplevelToMonitorWorkspace(toplevel, originOnly, monitor) {
+    var requested = canonicalMonitorIdentity(monitor)
+    var workspace = monitorActiveWorkspaceIdentity(monitor)
     if (!workspace) return false
     if (reliableWorkspaceForToplevel(toplevel) === workspace)
       return activateToplevel(toplevel, originOnly, "", true)

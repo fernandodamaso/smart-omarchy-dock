@@ -91,3 +91,73 @@ assert.equal(g({width:1920},requested,false).width,420)
 assert.equal(requested,420)
 
 console.log('SB-03 sidebar logical geometry and stable resize delta: PASS')
+
+// R1: one production rectangle contract for paint, clipped drops and gaps.
+const drag = loadModel('DockSidebarInteractionModel')
+assert.equal(typeof drag.workspaceGroupRects, 'function')
+const painted = drag.workspaceGroupRects([
+  {key:'ws1',monitorKey:'m0',workspaceIdentity:'id:1',y:30,height:40},
+  {key:'ws3',monitorKey:'m0',workspaceIdentity:'id:3',y:80,height:40},
+  {key:'ws7',monitorKey:'m1',workspaceIdentity:'id:7',y:160,height:50}
+], 200, 9)
+assert.deepEqual(JSON.parse(JSON.stringify(painted)), [
+  {key:'ws1',monitorKey:'m0',workspaceIdentity:'id:1',kind:'workspace',x:9,y:30,width:182,height:45},
+  {key:'ws3',monitorKey:'m0',workspaceIdentity:'id:3',kind:'workspace',x:9,y:75,width:182,height:45},
+  {key:'ws7',monitorKey:'m1',workspaceIdentity:'id:7',kind:'workspace',x:9,y:160,width:182,height:50}
+])
+const clipped = drag.clipRect(painted[0],{x:0,y:40,width:200,height:60})
+assert.deepEqual(JSON.parse(JSON.stringify(clipped)),{x:9,y:40,width:182,height:35})
+assert.equal(drag.hitWindowDrop({x:10,y:72},[],painted,[],{x:0,y:0,width:200,height:100},''),'ws1','gap assigned to previous group')
+assert.equal(drag.hitWindowDrop({x:10,y:77},[],painted,[],{x:0,y:0,width:200,height:100},'ws1'),'ws1','small shared-boundary stickiness')
+assert.equal(drag.hitWindowDrop({x:10,y:80},[],painted,[],{x:0,y:0,width:200,height:100},'ws1'),'ws3','stickiness is bounded')
+assert.equal(drag.hitWindowDrop({x:1,y:77},[],painted,[],{x:0,y:0,width:200,height:100},'ws1'),'','never stretch over horizontal inset')
+assert.equal(drag.hitWindowDrop({x:10,y:160},[],painted,[],{x:0,y:0,width:200,height:220},'ws3'),'ws7','never sticky across monitors')
+console.log('R1 painted workspace groups, insets, clipping and shared-boundary stickiness: PASS')
+
+// Execute the actual viewport functions against fixed layout input, not a
+// separately reimplemented painter/hit formula.
+const {qmlMethods} = await import('./sidebar_interaction_fixture.mjs')
+const productionRows = [
+  {kind:'monitor',key:'m',monitorKey:'m'},
+  {kind:'window',key:'win',monitorKey:'m',workspaceKey:'ws',workspaceIdentity:'id:3',layoutGapBefore:'children',layoutPadWorkspaceEnd:true}
+]
+const view = qmlMethods('DockSidebarViewport.qml', {
+  InteractionModel:drag, Style:{space:n=>n},width:180,height:75,rowHeight:34,
+  panelCollapsed:false,workspaceCardInset:5,workspacePlaceholder:null,sectionChromeRevision:0,
+  visibleRows:productionRows,
+  sectionSpans:[{kind:'monitor',key:'m',firstKey:'m',lastKey:'win'},
+    {kind:'workspace',key:'ws',firstKey:'win',lastKey:'win'}],
+  controller:{rowsByKey:Object.fromEntries(productionRows.map(r=>[r.key,r])),
+    attentionForRow:()=>({countVisible:false}),rowDragActive:false,dragSession:null},
+  list:{width:180,originY:0,contentItem:{},itemAtIndex:i=>({y:i*40})},
+  mapFromItem:(_item,x,y)=>({x,y:y-10})
+})
+view.workspaceRects=view.workspaceGroupRects()
+const paint=view.workspacePaintRect('ws'), groupHit=view.workspaceSpanHits()[0]
+assert.equal(groupHit.key,'ws')
+assert.equal(groupHit.x,paint.x)
+assert.equal(groupHit.width,paint.width)
+assert.equal(groupHit.y,paint.y-10)
+assert.equal(groupHit.height,Math.min(paint.y-10+paint.height,view.height)-groupHit.y)
+assert.ok(groupHit.y+groupHit.height<=view.height,'clipped above any Widget tail')
+console.log('R1 actual viewport painter/drop geometry: PASS')
+
+// Production header rectangles exclude group side gutters and footer extra height.
+{
+  const root = qmlMethods('DockSidebarViewport.qml', {
+    InteractionModel: drag, width:200, height:220,
+    list:{width:200, contentItem:{}},
+    sectionSpans:[{kind:'monitor',key:'m',lastKey:'last'}],
+    workspaceRects:[{monitorKey:'m',y:30,height:130}],
+    controller:{rowsByKey:{m:{monitorIdentity:'id:0'}}},
+    mapFromItem:(_item,x,y)=>({x,y})
+  })
+  root.sectionSpanRect=()=>({y:0,height:220})
+  root.windowFooterActive=()=>true; root.footerExtraHeight=()=>50
+  const headers = JSON.parse(JSON.stringify(root.monitorHeaderHits()))
+  assert.deepEqual(headers.map(h=>[h.y,h.height]),[[0,30],[160,10]])
+  for(const point of [{x:2,y:80},{x:20,y:175},{x:20,y:215}])
+    assert.equal(drag.hitTarget(point,headers,{x:0,y:0,width:200,height:220},'window'),'')
+  assert.equal(drag.hitTarget({x:20,y:10},headers,{x:0,y:0,width:200,height:220},'window'),'m')
+}
+console.log('R1 production header/padding geometry: PASS')
