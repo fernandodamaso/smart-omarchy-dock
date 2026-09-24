@@ -9,6 +9,14 @@ Item {
   id: root
   required property var controller
   required property string widgetId
+  property var appearance: null
+  readonly property color idleCardFill: appearance
+    ? appearance.monitorFill : Qt.tint(Color.background, Util.alpha(Color.foreground, 0.035))
+  readonly property color headerHoverFill: appearance
+    ? appearance.workspaceHoverFill
+    : Qt.tint(Qt.darker(Color.background, 1.04), Util.alpha(Color.foreground, 0.09))
+  readonly property real widgetCardRadius: appearance && appearance.cardRadius !== undefined
+    ? appearance.cardRadius : Math.min(3, Style.cornerRadius)
   property bool collapsed: false
   property bool dropBefore: false
   property bool dropAfter: false
@@ -40,10 +48,8 @@ Item {
     id: cardSurface
     objectName: "widget-card-surface"
     anchors.fill: parent
-    radius: Math.min(4, Style.cornerRadius)
-    color: root.activeFocus || cardHover.hovered || cardContext.pressed
-      ? Qt.tint(Color.background, Util.alpha(Color.foreground, 0.09))
-      : Qt.darker(Color.background, 1.04)
+    radius: root.widgetCardRadius
+    color: root.idleCardFill
     borderSpec: root.activeFocus
       ? Border.controlSpec("focus", Color.foreground, Color.accent)
       : Border.none()
@@ -80,6 +86,15 @@ Item {
     objectName: "widget-card-header"
     width: parent.width
     height: Style.space(34)
+
+    HoverHandler { id: headerHover }
+    Rectangle {
+      objectName: "widget-card-header-highlight"
+      anchors.fill: parent
+      radius: root.widgetCardRadius
+      color: headerHover.hovered || root.activeFocus || cardContext.pressed
+        ? root.headerHoverFill : "transparent"
+    }
 
     // Header double-click keeps ordinary pointer ownership stealable so the
     // parent ListView can still take vertical drags for scrolling. Reorder
@@ -182,10 +197,11 @@ Item {
       text: root.title
       textFormat: Text.PlainText
       elide: Text.ElideRight
-      color: Color.foreground
+      color: !root.collapsed || root.activeFocus
+        ? Color.foreground : Util.alpha(Color.foreground, 0.85)
       font.family: Style.font.family
-      font.pixelSize: Style.font.bodySmall
-      font.bold: true
+      font.pixelSize: Style.font.body
+      font.weight: Font.DemiBold
     }
 
     Rectangle {
@@ -252,16 +268,12 @@ Item {
     clip: true
 
     Rectangle {
-      anchors.fill: parent
-      color: Qt.tint(Color.background, Util.alpha(Color.foreground, 0.025))
-    }
-
-    Rectangle {
+      objectName: "widget-card-divider"
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: parent.top
       height: 1
-      color: Util.alpha(Color.foreground, 0.10)
+      color: Util.alpha(Color.foreground, 0.07)
     }
 
     DockSidebarWidgetView {

@@ -10,6 +10,7 @@ import "DockSidebarModel.js" as SidebarModel
 // this item owns only card composition, picker state, drag targeting and popup views.
 Item {
   id: root
+  property var appearance: null
   required property var controller
   required property var panel
   required property var viewport
@@ -242,6 +243,7 @@ Item {
         model: root.presentationWidgetIds
 
         delegate: DockWidgetCard {
+          appearance: root.appearance
           id: widgetCard
           required property string modelData
           required property int index

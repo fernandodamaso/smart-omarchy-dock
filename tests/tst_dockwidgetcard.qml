@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import qs.Commons
 import "../components"
 
 TestCase {
@@ -11,6 +12,21 @@ TestCase {
   height: 240
 
   property int toggleCount: 0
+
+  QtObject {
+    id: testAppearance
+    property color monitorFill: "#343747"
+    property color workspaceHoverFill: "#484c60"
+    property real cardRadius: 2
+  }
+
+  function init() {
+    testAppearance.monitorFill = "#343747"
+    testAppearance.workspaceHoverFill = "#484c60"
+    testAppearance.cardRadius = 2
+    mouseMove(testCase, 350, 230)
+  }
+
 
   QtObject {
     id: mockController
@@ -52,12 +68,62 @@ TestCase {
     return null
   }
 
+  // Qt Quick Text quantizes alpha to 8 bits; JS colors may retain 16-bit precision.
+  function compareColor(actual, expected) {
+    for (var channel of ["r", "g", "b", "a"])
+      fuzzyCompare(actual[channel], expected[channel], 1 / 255)
+  }
+
   function makeCard() {
     testCase.toggleCount = 0
     var card = createTemporaryObject(cardFactory, testCase)
     verify(card !== null)
     waitForRendering(card)
     return card
+  }
+
+  function test_optional_appearance_matches_sidebar_fallback() {
+    var card = makeCard()
+    compare(card.appearance, null)
+    var surface = findByName(card, "widget-card-surface")
+    compare(surface.color, Qt.tint(Color.background, Util.alpha(Color.foreground, 0.035)))
+    compare(surface.radius, Math.min(3, Style.cornerRadius))
+  }
+
+  function test_appearance_fill_and_radius_remain_live_on_hover_and_focus() {
+    var card = makeCard()
+    card.appearance = testAppearance
+    var surface = findByName(card, "widget-card-surface")
+    compare(surface.color, testAppearance.monitorFill)
+    compare(surface.radius, 2)
+    mouseMove(card, 20, 15)
+    compare(surface.color, testAppearance.monitorFill)
+    card.forceActiveFocus()
+    compare(surface.color, testAppearance.monitorFill)
+    verify(surface.border.width > 0)
+    testAppearance.monitorFill = "#a2b3c4"
+    testAppearance.cardRadius = 0
+    compare(surface.color, testAppearance.monitorFill)
+    compare(surface.radius, 0)
+    card.appearance = null
+    compare(surface.color, Qt.tint(Color.background, Util.alpha(Color.foreground, 0.035)))
+    compare(surface.radius, Math.min(3, Style.cornerRadius))
+  }
+
+  function test_title_matches_monitor_hierarchy_and_divider_is_subtle() {
+    var card = makeCard()
+    var title = findByName(card, "widget-card-title")
+    compare(title.font.pixelSize, Style.font.body)
+    compare(title.font.weight, Font.DemiBold)
+    compare(title.color, Color.foreground)
+    card.collapsed = true
+    compareColor(title.color, Util.alpha(Color.foreground, 0.85))
+    card.forceActiveFocus()
+    compare(title.color, Color.foreground)
+    var divider = findByName(card, "widget-card-divider")
+    verify(divider !== null)
+    compare(divider.height, 1)
+    compareColor(divider.color, Util.alpha(Color.foreground, 0.07))
   }
 
   function test_idle_wrapper_has_no_border_and_focus_restores_feedback() {

@@ -188,6 +188,13 @@ const areaSource = read('components/DockSidebarWidgetArea.qml');
 const managerSource = read('components/DockSidebarWidgetManager.qml');
 const hostSource = read('DockHost.qml');
 const cardSource = read('components/DockWidgetCard.qml');
+// FDM-997: optional appearance propagation cannot alter scroll/provider ownership.
+assert.match(sidebarSource, /DockSidebarWidgetArea\s*\{[^}]*appearance: root\.sidebarAppearance/);
+assert.match(areaSource, /property var appearance: null/);
+assert.match(areaSource, /DockWidgetCard\s*\{[^}]*appearance: root\.appearance/);
+assert.match(cardSource, /property var appearance: null/);
+assert.doesNotMatch(cardSource, /0\.025/, 'header/body must share one idle surface');
+
 assert.match(viewportSource, /property Component contentTail/);
 assert.match(viewportSource, /footer: Item\s*\{/);
 assert.match(sidebarSource, /contentTail: Component/);
