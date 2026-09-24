@@ -37,21 +37,18 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = 22ed8f26ffbc531de8470c49528454e16be4be35
           git checkout c660325bf437e4330b00f12cdd2beb3679d79ab9 -- docs/plans/2026-09-23-sidebar-widget-split-scroll.md docs/widget-gallery/reference/sidebar-redesign-2026-09-23 docs/widget-gallery/README.md
-          git diff --cached --stat
-          git ls-tree -r c660325bf437e4330b00f12cdd2beb3679d79ab9 docs/widget-gallery/reference/sidebar-redesign-2026-09-23
-          echo '--- Native target ---'
-          git -C ../native rev-parse HEAD
-          cat ../native/version
-          dpkg-query -W libqt6core6t64 qt6-declarative-dev-tools
-          echo '--- Native first-party callers ---'
-          rg -n -C 5 'PanelSectionHeader|Ui.Button' ../native/shell/plugins/network | head -200 || true
-          echo '--- Test-native primitives ---'
-          cat tests/qml-imports/qs/Ui/Button.qml
-          cat tests/qml-imports/qs/Ui/qmldir
-          echo '--- Sidebar chrome sources ---'
-          rg -n -C 4 'workspaceCardInset|monitorFill|workspaceHoverFill|cardRadius|DockSidebarWidgetArea|pinnedStrip' components/DockSidebar.qml components/DockSidebarAppearance.qml
-          echo '--- Visual reference rules ---'
-          rg -n -C 3 'grip|w-head|w-header|badge|WIDGETS|PINNED' docs/widget-gallery/reference/sidebar-redesign-2026-09-23/source/Main.dc.html | head -180 || true
+          mkdir -p .fdm997-evidence
+          {
+            git -C ../native rev-parse HEAD
+            cat ../native/version
+            dpkg-query -W libqt6core6t64 qt6-declarative-dev-tools
+            command -v quickshell || true
+            rg -n -C 3 'PanelSectionHeader|Ui.Button' ../native/shell/plugins/panels | head -200 || true
+            rg -n -C 3 'workspaceCardInset|monitorFill|workspaceHoverFill|cardRadius' components/DockSidebar.qml components/DockSidebarViewport.qml
+          } > .fdm997-evidence/native-audit.txt
+          cat .fdm997-evidence/native-audit.txt
+          tar --exclude=.git --exclude=.fdm997-evidence -czf .fdm997-evidence/source.tar.gz .
+          tar -C ../native --exclude=.git -czf .fdm997-evidence/native.tar.gz shell version
       - name: Execute staged checkpoint
         env:
           GH_TOKEN: ${{ github.token }}
@@ -64,13 +61,14 @@ jobs:
           else
             node tests/test_sidebar_widgets.mjs
             node tests/test_widgetkit_structure.mjs
-            /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
+            /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports > .fdm997-evidence/baseline-qml.log 2>&1
+            tail -5 .fdm997-evidence/baseline-qml.log
           fi
       - name: Keep checkpoint evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fdm-997-staging-evidence
-          path: |
-            candidate/.fdm997-evidence/
-          if-no-files-found: ignore
+          path: candidate/.fdm997-evidence/
+          include-hidden-files: true
+          if-no-files-found: error
