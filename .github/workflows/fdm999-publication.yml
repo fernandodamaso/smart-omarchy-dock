@@ -25,7 +25,7 @@ jobs:
       - name: Install normal CI Qt dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-dialogs qml6-module-qtquick-templates qml6-module-qtquick-layouts qml6-module-qtquick-shapes qml6-module-qt5compat-graphicaleffects qml6-module-qttest libqt6svg6 qt6-image-formats-plugins qt6-declarative-dev-tools ripgrep xvfb libgl1-mesa-dri
+          sudo apt-get install -y --no-install-recommends qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-dialogs qml6-module-qtquick-templates qml6-module-qtquick-layouts qml6-module-qtquick-shapes qml6-module-qt5compat-graphicaleffects qml6-module-qttest libqt6svg6 qt6-image-formats-plugins qt6-declarative-dev-tools ripgrep xvfb xauth libxcb-cursor0 libgl1-mesa-dri
       - name: Build isolated candidate with failing-first gates
         shell: bash
         run: |
@@ -55,9 +55,10 @@ jobs:
           fi
           python3 "$GITHUB_WORKSPACE/.agent/fdm999/apply.py" source
           python3 "$GITHUB_WORKSPACE/.agent/fdm999/migrate.py"
-          if test -f "$GITHUB_WORKSPACE/.agent/fdm999/docs.py"; then python3 "$GITHUB_WORKSPACE/.agent/fdm999/docs.py"; fi
+          python3 "$GITHUB_WORKSPACE/.agent/fdm999/docs.py"
           /usr/lib/qt6/bin/qmltestrunner -input tests/tst_sidebarsplitscroll.qml -import components -import tests/qml-imports | tee "$RUNNER_TEMP/evidence/split-green.log"
           git diff --check
+          git diff --quiet "$PARENT" -- docs/widget-gallery/reference
           printf '%s\n' 'source-built' > "$RUNNER_TEMP/evidence/source-built"
       - name: Shell and structural guards
         if: ${{ !cancelled() }}
@@ -106,6 +107,12 @@ jobs:
           test -f "$RUNNER_TEMP/evidence/source-built"
           cd "$RUNNER_TEMP/candidate"
           /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports | tee "$RUNNER_TEMP/evidence/qml.log"
+      - name: Render supplementary dark and light Widget panes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/candidate"
+          PYTHONPATH="$PWD" python3 "$GITHUB_WORKSPACE/.agent/fdm999/render.py"
       - name: Seal verified source
         shell: bash
         run: |
@@ -127,6 +134,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
+          tar -czf "$RUNNER_TEMP/evidence/staging-payload.tar.gz" .agent/fdm999
           if test -d "$RUNNER_TEMP/candidate"; then
             cd "$RUNNER_TEMP/candidate"
             git status --short > "$RUNNER_TEMP/evidence/status.txt"
