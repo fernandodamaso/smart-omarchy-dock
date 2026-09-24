@@ -1,0 +1,276 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Window
+import QtQuick.Controls as Controls
+import Qt5Compat.GraphicalEffects
+import Quickshell
+import qs.Commons
+import qs.Ui as Ui
+import "widgets"
+import "DockSidebarWidgetModel.js" as WidgetModel
+import "DockSidebarInteractionModel.js" as InteractionModel
+import "DockSidebarModel.js" as SidebarModel
+
+// Panel-local presentation only. The controller still owns leases/settings/popup.
+Item {
+  id: root
+  property var appearance: null
+  required property var controller
+  required property var panel
+  required property var viewport
+  required property real windowRowHeight
+  readonly property real contentInset: (viewport && viewport.workspaceCardInset !== undefined
+    ? viewport.workspaceCardInset : Style.space(5)) + Style.space(4)
+
+  readonly property var presentationWidgetIds: {
+    var revision = root.controller.widgetRevision
+    var ids = root.controller.widgetIds || []
+    var view = root.controller.widgetView("herdr.agents")
+    var snap = view && view.status === "ready" && view.data ? view.data : null
+    var showHerdr = SidebarModel.herdrFallbackVisible(snap, root.controller.herdrAssociations)
+    return ids.filter(function(id) { return id !== "herdr.agents" || showHerdr })
+  }
+  readonly property int presentedWidgetCount: presentationWidgetIds.length
+  readonly property real naturalWidgetHeaderHeight: Math.max(Style.space(32), sectionLabel.implicitHeight) + Style.space(6)
+  readonly property real naturalWidgetContentHeight: presentedWidgetCount ? cardColumn.implicitHeight + Style.space(8) : 0
+  readonly property bool sectionVisible: !panel.panelCollapsed && presentedWidgetCount > 0
+    && height >= naturalWidgetHeaderHeight
+  readonly property var scrollView: widgetScroll
+  readonly property var manageControl: manageButton
+  readonly property var popupWindow: popup
+  readonly property var managerWindow: panel.widgetManager ? panel.widgetManager.popupWindow : null
+  readonly property var cards: cardRepeater
+  readonly property real maximumScroll: Math.max(0, widgetScroll.contentHeight - widgetScroll.height)
+  readonly property real fadeHeight: Math.min(28, widgetScroll.height)
+  readonly property bool remainingBelow: widgetScroll.contentY + widgetScroll.height < widgetScroll.contentHeight - 0.5
+  property int layoutRevision: 0
+  property int anchorRevision: 0
+  property string dragWidgetId: ""
+  property var dragOrder: []
+  property int dragTargetSlot: -1
+  property real dragSceneX: 0
+  property real dragSceneY: 0
+  property var savedAnchor: ({})
+  property bool pendingRestore: true
+  property bool restoring: false
+  property bool wheelActive: false
+  property real lastContentY: 0
+  property Item pendingFocusedItem: null
+  property string focusedWidgetId: ""
+  property Item lastFocusedControl: null
+  property bool ownsWidgetFocus: false
+  property var focusRecovery: null
+  readonly property bool inputBusy: wheelActive || widgetScroll.moving || verticalScrollBar.pressed || dragWidgetId !== ""
+  // Read ancestor geometry, not just contentY: hierarchy/font changes move us.
+  readonly property point panelOrigin: {
+    var item = root, x = 0, y = 0
+    while (item && item !== root.panel.contentItem) { x += item.x; y += item.y; item = item.parent }
+    return Qt.point(x, y)
+  }
+  visible: sectionVisible
+  implicitHeight: naturalWidgetHeaderHeight + naturalWidgetContentHeight
+
+  function cardRects() {
+    var out = []
+    for (var i = 0; i < cardRepeater.count; ++i) {
+      var card = cardRepeater.itemAt(i)
+      if (card) out.push({id:card.widgetId, y:card.y, height:card.height})
+    }
+    return out
+  }
+  function cardFor(item) {
+    while (item && item !== root) {
+      if (item.parent === cardColumn && item.widgetId !== undefined) return item
+      item = item.parent
+    }
+    return null
+  }
+  function containsItem(parentItem, item) {
+    while (item) { if (item === parentItem) return true; item = item.parent }
+    return false
+  }
+  function effectivelyVisible(item) {
+    while (item) {
+      if (!item.visible || item.opacity === 0) return false
+      if (item === root.panel.contentItem) return true
+      item = item.parent
+    }
+    return false
+  }
+  function captureAnchor() {
+    if (root.restoring || root.pendingRestore || !root.sectionVisible || widgetScroll.height <= 0) return
+    root.savedAnchor = WidgetModel.widgetScrollAnchor(root.cardRects(), widgetScroll.contentY)
+  }
+  function requestLayout() {
+    root.pendingRestore = true
+    layoutTimer.restart()
+    geometryTimer.restart()
+  }
+  function settleLayout() {
+    cardColumn.forceLayout()
+    if (!root.sectionVisible || widgetScroll.height <= 0) { root.recoverFocus(); return }
+    if (root.inputBusy) return
+    root.restoring = true
+    widgetScroll.contentY = WidgetModel.widgetScrollPosition(root.savedAnchor, root.cardRects(), root.maximumScroll)
+    root.lastContentY = widgetScroll.contentY
+    root.restoring = false
+    root.pendingRestore = false
+    root.captureAnchor()
+    root.recoverFocus()
+    if (root.pendingFocusedItem) {
+      var item = root.pendingFocusedItem
+      root.pendingFocusedItem = null
+      root.ensureFocusedItemVisible(item)
+    }
+  }
+  function ensureFocusedItemVisible(item) {
+    if (!item || !root.cardFor(item) || widgetScroll.height <= 0) return
+    if (root.pendingRestore || root.inputBusy) { root.pendingFocusedItem = item; layoutTimer.restart(); return }
+    var point = cardColumn.mapFromItem(item, 0, 0)
+    widgetScroll.contentY = WidgetModel.widgetFocusScroll(point.y, item.height,
+      widgetScroll.contentY, widgetScroll.height, root.maximumScroll)
+    root.captureAnchor()
+  }
+  function trackFocus() {
+    var item = root.Window.window ? root.Window.window.activeFocusItem : null
+    var card = root.cardFor(item)
+    if (card) {
+      root.ownsWidgetFocus = true
+      root.focusedWidgetId = card.widgetId
+      root.lastFocusedControl = item
+      root.ensureFocusedItemVisible(item)
+    } else if (root.Window.window && item === root.Window.window.contentItem && root.ownsWidgetFocus
+        && (root.focusRecovery || !root.lastFocusedControl || !root.lastFocusedControl.visible)) {
+      if (!root.focusRecovery) root.focusRecovery = {id:root.focusedWidgetId, ids:root.savedAnchor.ids || []}
+      root.requestLayout()
+    } else if (item) {
+      root.ownsWidgetFocus = false
+      root.focusedWidgetId = ""
+    }
+  }
+  function recoverFocus() {
+    if (!root.focusRecovery) return
+    var recovery = root.focusRecovery
+    root.focusRecovery = null
+    if (!root.ownsWidgetFocus || !root.panel.visible) return
+    var rects = root.cardRects(), ids = rects.map(function(r) { return r.id })
+    var old = recovery.ids || [], at = old.indexOf(recovery.id), chosen = ids.indexOf(recovery.id)
+    for (var i = at + 1; i < old.length && chosen < 0; ++i) chosen = ids.indexOf(old[i])
+    for (var j = at - 1; j >= 0 && chosen < 0; --j) chosen = ids.indexOf(old[j])
+    var target = root.sectionVisible && widgetScroll.height > 0 && chosen >= 0
+      ? cardRepeater.itemAt(chosen) : root.sectionVisible ? manageButton : root.panel.widgetManageControl
+    if (target) {
+      if (target.collapsed === true) target.focusCollapseControl()
+      else target.forceActiveFocus(Qt.TabFocusReason)
+    }
+  }
+  function focusSectionBoundary(backwards) {
+    if (backwards) return root.viewport.focusLastRow()
+    if (widgetScroll.height > 0 && cardRepeater.count) {
+      cardRepeater.itemAt(0).forceActiveFocus(Qt.TabFocusReason)
+      return true
+    }
+    var target = root.panel.footerControl
+    if (!target) return false
+    target.forceActiveFocus(Qt.TabFocusReason)
+    return true
+  }
+  function prepareCollapse(card) {
+    var item = root.Window.window ? root.Window.window.activeFocusItem : null
+    if (!card.collapsed && card.hasCardFocus && item !== card) card.focusCollapseControl()
+  }
+  function ownsPopupAnchor() { return root.containsItem(root, root.controller.widgetPopupAnchor) }
+  function itemIntersectsViewport(item) {
+    if (!root.sectionVisible || !root.panel.visible || widgetScroll.height <= 0 || !item) return false
+    var point = widgetScroll.mapFromItem(item, 0, 0)
+    return point.x + item.width > 0 && point.x < widgetScroll.width
+      && point.y + item.height > 0 && point.y < widgetScroll.height
+  }
+  function anchorInsideViewport(anchor) { return root.containsItem(widgetScroll.contentItem, anchor) }
+  function anchorOutsideViewport(anchor) { return root.anchorInsideViewport(anchor) && !root.itemIntersectsViewport(anchor) }
+  function popupGeometryFor(anchor, wantedWidth, wantedHeight) {
+    var point = anchor && panel.contentItem ? panel.contentItem.mapFromItem(anchor, 0, anchor.height / 2) : {y:0}
+    return WidgetModel.popupGeometry(panel.screen ? panel.screen.width : 1,
+      Math.min(panel.height, panel.screen ? panel.screen.height : panel.height), panel.width,
+      controller.edge, point.y, wantedWidth, wantedHeight)
+  }
+  readonly property var popupGeometry: {
+    var revision = root.layoutRevision
+    return root.popupGeometryFor(root.ownsPopupAnchor() ? root.controller.widgetPopupAnchor : null, 320, 400)
+  }
+  function closePopup() { if (root.ownsPopupAnchor()) root.controller.closeWidgetPopup() }
+  function openWidget(id, anchor) {
+    root.closeManager()
+    if (root.ownsPopupAnchor() && root.controller.widgetPopupId === id) root.closePopup()
+    else root.controller.openWidgetPopup(id, anchor)
+  }
+  function openManager(anchor) {
+    root.closePopup()
+    if (!root.panel || typeof root.panel.openWidgetManager !== "function") return false
+    return root.panel.openWidgetManager(anchor)
+  }
+  function closeManager() {
+    if (root.panel && root.panel.widgetManager && typeof root.panel.widgetManager.close === "function")
+      root.panel.widgetManager.close()
+  }
+  function updatePopupAnchor() {
+    if (!root.controller.widgetPopupId || !root.ownsPopupAnchor()) return
+    var anchor = root.controller.widgetPopupAnchor
+    if (!root.effectivelyVisible(anchor) || !root.panel.visible || root.anchorOutsideViewport(anchor)) {
+      root.closePopup(); return
+    }
+    popup.anchor.updateAnchor()
+  }
+  function dragPointInBody(sceneX, sceneY) {
+    var p = widgetScroll.mapFromItem(null, sceneX, sceneY)
+    return root.sectionVisible && widgetScroll.height > 0
+      && p.x >= 0 && p.x < widgetScroll.width && p.y >= 0 && p.y < widgetScroll.height
+  }
+  function slotForSceneY(sceneY) {
+    var point = cardColumn.mapFromItem(null, root.dragSceneX, sceneY)
+    for (var i = 0; i < root.presentedWidgetCount; ++i) {
+      var card = cardRepeater.itemAt(i)
+      if (card && point.y < card.y + card.height / 2) return i
+    }
+    return root.presentedWidgetCount
+  }
+  function fullReorderSlot(presentationSlot) {
+    var ids = root.presentationWidgetIds, fullIds = root.controller.widgetIds || []
+    if (ids.length === fullIds.length) return presentationSlot
+    if (presentationSlot >= ids.length) {
+      var last = ids.length ? fullIds.indexOf(ids[ids.length - 1]) : -1
+      return last < 0 ? fullIds.length : last + 1
+    }
+    var target = fullIds.indexOf(ids[presentationSlot])
+    return target < 0 ? fullIds.length : target
+  }
+  function beginDrag(id, sceneX, sceneY) {
+    if (!root.dragPointInBody(sceneX, sceneY) || root.presentationWidgetIds.indexOf(id) < 0) return false
+    root.closeManager()
+    root.captureAnchor()
+    if (!root.controller.beginWidgetReorder(id)) return false
+    root.dragOrder = root.presentationWidgetIds.slice()
+    root.dragWidgetId = id
+    root.updateDrag(sceneX, sceneY)
+    return true
+  }
+  function updateDrag(sceneX, sceneY) {
+    if (!root.dragWidgetId) return
+    root.dragSceneX = sceneX; root.dragSceneY = sceneY
+    root.dragTargetSlot = root.dragPointInBody(sceneX, sceneY) ? root.slotForSceneY(sceneY) : -1
+  }
+  function syncDragFromController() {
+    if (root.controller.widgetDragId) return
+    root.dragWidgetId = ""; root.dragTargetSlot = -1
+  }
+  function finishDrag(sceneX, sceneY, cancelled) {
+    if (!root.dragWidgetId) return
+    var valid = cancelled !== true && root.dragPointInBody(sceneX, sceneY)
+      && JSON.stringify(root.dragOrder) === JSON.stringify(root.presentationWidgetIds)
+      && root.controller.widgetDragId === root.dragWidgetId
+    if (valid) root.updateDrag(sceneX, sceneY)
+    var slot = root.dragTargetSlot
+    root.dragWidgetId = ""; root.dragTargetSlot = -1
+    root.controller.finishWidgetReorder(root.fullReorderSlot(slot), !valid || slot < 0)
+    root.requestLayout()
+  }
