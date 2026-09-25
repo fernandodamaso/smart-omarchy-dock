@@ -160,6 +160,7 @@ validation gate when the owning issue requires it:
 ```bash
 timeout 6s ./scripts/run --no-color
 bash -n install.sh uninstall.sh scripts/dockrail scripts/smartdock scripts/run tests/check_window_actions.sh
+python3 -m py_compile scripts/dockrail_paths.py scripts/dockrail_migrate.py
 QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
 omarchy plugin validate .
 /usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" \
