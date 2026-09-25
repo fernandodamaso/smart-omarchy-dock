@@ -268,12 +268,25 @@ class Store:
         self.home = Path(home or Path.home()).resolve()
         self.data_home = Path(data_home or os.environ.get("XDG_DATA_HOME", self.home / ".local/share")).expanduser().resolve()
         self.config_home = Path(config_home or os.environ.get("XDG_CONFIG_HOME", self.home / ".config")).expanduser().resolve()
-        self.root = self.data_home / "smartdock/widgets"
+        self.canonical_root = self.data_home / "dockrail/widgets"
+        self.legacy_root = self.data_home / "smartdock/widgets"
+        self.root = self.canonical_root if (self.canonical_root.exists() or not self.legacy_root.exists()) else self.legacy_root
         self.registry_path = self.root / "registry.json"
         self.dev_state_path = self.root / ".dev-state.json"
         self.dev_root = self.root / ".dev"
         self.lock_path = self.root / ".package.lock"
-        self.config_path = Path(os.environ.get("SMARTDOCK_CONFIG", self.config_home / "smartdock/dock.json")).expanduser()
+        canonical_config = self.config_home / "dockrail/dock.json"
+        legacy_config = self.config_home / "smartdock/dock.json"
+        canonical_override = os.environ.get("DOCKRAIL_CONFIG", "")
+        legacy_override = os.environ.get("SMARTDOCK_CONFIG", "")
+        if canonical_override:
+            self.config_path = Path(canonical_override).expanduser()
+        elif legacy_override:
+            self.config_path = Path(legacy_override).expanduser()
+        elif canonical_config.exists() or not legacy_config.exists():
+            self.config_path = canonical_config
+        else:
+            self.config_path = legacy_config
         self.qml_import_paths = [Path(path).expanduser().resolve() for path in (qml_import_paths or [])]
 
     def _qml_tool(self, name):
@@ -292,7 +305,7 @@ class Store:
         omarchy_shell = Path(os.environ.get("OMARCHY_PATH", "/usr/share/omarchy")) / "shell"
         if (omarchy_shell / "Commons").is_dir():
             cache_home = Path(os.environ.get("XDG_CACHE_HOME", self.home / ".cache")).expanduser().resolve()
-            import_root = cache_home / "smartdock/qml-imports"
+            import_root = cache_home / "dockrail/qml-imports"
             import_root.mkdir(parents=True, exist_ok=True)
             qs_link = import_root / "qs"
             if not qs_link.exists() and not qs_link.is_symlink():
@@ -445,6 +458,7 @@ class Store:
     def forbidden_source_roots(self):
         roots = [
             self.home / ".config/omarchy/plugins" / PLUGIN_ID,
+            self.data_home / "dockrail",
             self.data_home / "smartdock",
             self.bundle,
         ]
