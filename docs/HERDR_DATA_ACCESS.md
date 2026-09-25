@@ -1,6 +1,6 @@
-# Herdr data access: SmartDock-owned local + attached-remote provider (FDM-970 / FDM-980)
+# Herdr data access: Dockrail-owned local + attached-remote provider (FDM-970 / FDM-980)
 
-SmartDock owns the Herdr integration. It does **not** require omaherdr to be
+Dockrail owns the Herdr integration. It does **not** require omaherdr to be
 installed or running and it does not import, call, stop or configure omaherdr.
 Local servers are discovered directly; remote servers are considered only while
 this desktop has a verified attached `herdr --remote <target>` TUI process.
@@ -31,14 +31,14 @@ not start Herdr work.
 Enable the production widget explicitly:
 
 ```sh
-smartdock config set sidebarWidgets '["herdr.agents"]'
+dockrail config set sidebarWidgets '["herdr.agents"]'
 ```
 
 When the sidebar has usable mapped screens, the host acquires one lease from the
 shared `DockHerdrService`. The first active lease starts exactly one provider
-process. Additional SmartDock views share it. Suspending or removing the final
+process. Additional Dockrail views share it. Suspending or removing the final
 active lease sends `quit`, waits briefly for clean provider/helper shutdown and
-then terminates only if the process did not exit. SmartDock never stops Herdr or
+then terminates only if the process did not exit. Dockrail never stops Herdr or
 an omaherdr process.
 
 Plugin mode exposes the service through the plugin singleton
@@ -94,13 +94,13 @@ ssh
 
 The bootstrap is fixed. Session, executable, helper source and socket values are
 validated or base64-encoded fixed-position data. Remote `~` expansion and
-canonicalization happen on the remote host; SmartDock never applies the local
+canonicalization happen on the remote host; Dockrail never applies the local
 home or local `realpath()` to a remote path. No password prompt, saved-machine
 scan, credential persistence, remote install, Herdr startup/reconfiguration, or
 generic remote command passthrough is introduced.
 
 The repository-owned helper is shipped in memory and executed with remote
-Python 3; no SmartDock file is persisted remotely. A private `lease` renewal
+Python 3; no Dockrail file is persisted remotely. A private `lease` renewal
 does no Herdr work and causes a remote helper to self-exit when its owning
 provider disappears. Initial remote acquisition also has a fixed bootstrap
 deadline: if SSH/helper startup does not produce a live normalized server state
@@ -192,7 +192,7 @@ overall total.
 
 ## Installation
 
-Standalone installation copies `provider/herdr/` into the installed SmartDock
+Standalone installation copies `provider/herdr/` into the installed Dockrail
 tree beside `components/`. The helper and provider are invoked with Python 3;
 no omaherdr package, daemon, D-Bus service or runtime download is installed.
 
