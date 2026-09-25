@@ -31,7 +31,7 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 - Keep user-facing defaults in `config/dock.json`; `DockControl` loads them for
   both host modes. Keep CLI metadata in `config/settings-schema.json` and retain
   compatible runtime normalization in `DockModel.js`.
-- Installed user settings live outside the application at `~/.config/smartdock/dock.json`; updates must never overwrite them.
+- Installed user settings use the canonical `~/.config/dockrail/dock.json`; the managed legacy `~/.config/smartdock` alias remains a compatibility path after migration. Updates must never overwrite user settings.
 - Keep `install.sh`, `uninstall.sh`, `scripts/dockrail`, and the `scripts/smartdock` compatibility shim compatible with custom XDG directory variables.
 - Prefer Quickshell APIs over shelling out to external commands.
 - Use freedesktop desktop-entry IDs without the `.desktop` suffix.
@@ -111,7 +111,7 @@ and import the public `SmartDock.WidgetKit 1.0` module. Never develop external
 Widget source inside the canonical SmartDock checkout, an installed Omarchy
 plugin deployment, or `${XDG_DATA_HOME:-$HOME/.local/share}/smartdock`.
 `dock.json` stores Widget IDs only; package paths and executable QML are owned
-by the package registry under the SmartDock XDG data root. See
+by the package registry under the canonical Dockrail XDG data root; migrated legacy package paths resolve through managed compatibility aliases. See
 `docs/WIDGET_PACKAGES.md`.
 
 ## Configuration workflow
