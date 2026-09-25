@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "io.github.fernandodamaso.smartdock",
-  "name": "SmartDock for Omarchy",
+  "name": "Dockrail",
   "version": "2.1.0",
-  "author": "SmartDock for Omarchy contributors",
+  "author": "Dockrail contributors",
   "license": "MIT",
-  "description": "A theme-aware application, window, and workspace dock for Omarchy and Hyprland.",
+  "description": "A developer-focused workspace rail for Hyprland — apps, windows, workspaces, widgets, and coding-agent sessions in one surface.",
   "kinds": [
     "overlay",
     "service"
