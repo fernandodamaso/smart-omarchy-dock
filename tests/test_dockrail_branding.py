@@ -51,7 +51,8 @@ class DockrailBrandingTests(unittest.TestCase):
         for path in current_docs:
             text = self.read(path)
             with self.subTest(path=path):
-                self.assertNotIn("SmartDock for Omarchy", text)
+                current = text.replace("formerly SmartDock for Omarchy", "")
+                self.assertNotIn("SmartDock for Omarchy", current)
         self.assertTrue(self.read("README.md").startswith("# Dockrail\n"))
         self.assertIn("dockrail status --json", self.read("README.md"))
         self.assertIn("import Dockrail.WidgetKit 1.0", self.read("docs/WIDGET_PACKAGES.md"))
