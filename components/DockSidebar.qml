@@ -166,6 +166,12 @@ PanelWindow {
   }
 
   property Item pickerAnchorItem: null
+  Timer {
+    id: refreshContextTimer
+    interval: 0
+    repeat: false
+    onTriggered: root.refreshContext()
+  }
 
   function openPinPicker(anchor) {
     if (root.controller.interactionBusy && !picker.visible) return false
@@ -678,21 +684,21 @@ PanelWindow {
     target: root.controller
     function onRefreshed() { root.syncBadges(); root.refreshContext() }
     function onPinPickerRequested(anchor) { root.openPinPicker(anchor) }
-    function onToplevelsChanged() { Qt.callLater(root.refreshContext) }
-    function onHyprToplevelsChanged() { Qt.callLater(root.refreshContext) }
-    function onScopeRevisionChanged() { Qt.callLater(root.refreshContext) }
-    function onWorkspacesChanged() { Qt.callLater(root.refreshContext) }
-    function onMonitorsChanged() { Qt.callLater(root.refreshContext) }
-    function onMinimizedOriginsChanged() { Qt.callLater(root.refreshContext) }
+    function onToplevelsChanged() { refreshContextTimer.restart() }
+    function onHyprToplevelsChanged() { refreshContextTimer.restart() }
+    function onScopeRevisionChanged() { refreshContextTimer.restart() }
+    function onWorkspacesChanged() { refreshContextTimer.restart() }
+    function onMonitorsChanged() { refreshContextTimer.restart() }
+    function onMinimizedOriginsChanged() { refreshContextTimer.restart() }
     function onSettingsChanged() {
-      Qt.callLater(root.refreshContext)
+      refreshContextTimer.restart()
     }
     function onSurfaceInvalidated() { root.closeSurfaces() }
   }
   onVisibleChanged: { root.syncBadges(); if (!visible) root.closeSurfaces() }
   onPanelCollapsedChanged: root.syncBadges()
-  onWidthChanged: Qt.callLater(root.refreshContext)
-  onHeightChanged: Qt.callLater(root.refreshContext)
+  onWidthChanged: refreshContextTimer.restart()
+  onHeightChanged: refreshContextTimer.restart()
   Component.onCompleted: root.syncBadges()
   Component.onDestruction: root.closeSurfaces()
 }

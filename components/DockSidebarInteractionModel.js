@@ -1,5 +1,6 @@
 .pragma library
 .import "DockHerdrModel.js" as HerdrModel
+.import "DockWorkspaceModel.js" as WorkspaceModel
 
 // Geometry is supplied by the actual clipped ListView delegates. Indices are
 // never action identities, and offscreen/utility/footer rectangles are not hits.
@@ -34,6 +35,7 @@ function hitTarget(point, hits, viewport, sourceKind) {
     if (!contains(hit, point)) continue
     if (sourceKind === "workspace")
       return hit.kind === "monitor" && hit.monitorIdentity ? hit.key : ""
+    if (hit.kind === "monitor") return hit.headerOnly === true && hit.monitorIdentity ? hit.key : ""
     return ["workspace", "application", "window"].indexOf(hit.kind) >= 0
       && hit.workspaceIdentity ? hit.key : ""
   }
@@ -48,10 +50,8 @@ function autoScrollStep(y, height) {
   return 0
 }
 
-// Drag-ghost offset: the pointer-anchored proxy (+12 cursor offset applied by
-// the caller) follows the cursor across the panel. Clamp by the leading
-// visible extent — the 22px artwork for horizontal travel — not the full
-// proxy width, which otherwise pins the ghost near the left edge.
+// Clamp the whole visible ghost, not just its leading artwork. The caller
+// supplies the pointer offset and the actual expanded/rail width.
 function dragProxyOffset(pointer, viewportExtent, visibleExtent) {
   var p = Number(pointer)
   if (!isFinite(p)) return 0
@@ -575,4 +575,121 @@ function herdrCompactLabelWidths(input) {
     controlsWidth: controlsWidth,
     reserved: reserved
   }
+}
+
+// Display-only helpers: callers pass canonical identities and a verified
+// monitor label. None of these results participates in action eligibility.
+function formatDragDestination(sourceKind, target, rejection, monitorName) {
+  var state = target || rejection
+  var label = state && /^(id:[1-9][0-9]*|name:.+)$/.test(String(state.identity || ""))
+    ? workspaceBadgeLabel(state.identity) : ""
+  var monitor = String(monitorName || "")
+  var text = "", tone = "muted", blocked = false
+  if (target) {
+    if (sourceKind === "workspace") text = monitor ? "→ " + monitor : ""
+    else if (target.kind === "new-workspace")
+      text = monitor ? "→ New workspace on " + monitor : ""
+    else if (target.kind === "monitor")
+      text = monitor && label ? "→ " + monitor + " · workspace " + label : ""
+    else if (label) text = "→ Workspace " + label
+    tone = text ? "accent" : "muted"
+    if (!text) text = "Destination unavailable"
+  } else if (rejection) {
+    var reason = rejection.reason
+    if (sourceKind === "window" && reason === "same-workspace" && label)
+      text = "Already in workspace " + label
+    else if (sourceKind === "window" && reason === "pinned" && label) {
+      text = "Pinned to workspace " + label; tone = "urgent"; blocked = true
+    } else if (sourceKind === "workspace" && reason === "same-monitor")
+      text = "Already on this monitor"
+    else if (sourceKind === "workspace" && reason === "workspace-pinned" && monitor) {
+      text = "Workspace pinned to " + monitor; tone = "urgent"; blocked = true
+    } else if (reason === "stale") text = "Destination changed"
+    else if (reason === "owner-mismatch") text = "Workspace no longer on this monitor"
+    else text = "Destination unavailable"
+  }
+  return {text:text, tone:tone, blocked:blocked}
+}
+
+function dragSourceOpacity(row, session) {
+  if (!row || !session || !session.target) return 1
+  if (session.target.kind === "window") return row.key === session.target.key ? 0.4 : 1
+  return session.target.kind === "workspace" && session.location
+    && row.workspaceIdentity === session.location.identity ? 0.4 : 1
+}
+
+function dragGhostWidth(viewportWidth, collapsed) {
+  var width = Number(viewportWidth)
+  if (!isFinite(width)) return 0
+  return Math.max(0, Math.min(collapsed ? 32 : 168, width - 16))
+}
+
+// Shared content-coordinate geometry. Painted groups and their hit rectangles
+// consume this same result; only the hit caller maps/clips it to the viewport.
+// Split intra-monitor gaps at their midpoint; never bridge monitor boundaries.
+function workspaceGroupRects(spans, width, inset) {
+  var inner = Math.max(0, Number(inset) || 0)
+  var result = (spans || []).map(function(span) {
+    return {key:span.key, monitorKey:span.monitorKey,
+      workspaceIdentity:span.workspaceIdentity, kind:"workspace",
+      x:inner, y:Number(span.y), width:Math.max(0, Number(width) - 2 * inner),
+      height:Math.max(0, Number(span.height) || 0)}
+  })
+  for (var i = 1; i < result.length; ++i) {
+    var previous = result[i - 1], current = result[i]
+    var previousBottom = previous.y + previous.height
+    if (!previous.monitorKey || previous.monitorKey !== current.monitorKey
+        || previous.height <= 0 || current.height <= 0 || previousBottom > current.y) continue
+    var boundary = (previousBottom + current.y) / 2
+    var bottom = current.y + current.height
+    previous.height = boundary - previous.y
+    current.y = boundary
+    current.height = bottom - boundary
+  }
+  return result
+}
+
+// Geometric first-hit is final. Controller policy can refuse that key but may
+// not search through it for a different action underneath (not even a header).
+function hitWindowDrop(point, footers, groups, headers, viewport, previousKey) {
+  if (!contains(viewport, point)) return ""
+  for (var f = 0; f < (footers || []).length; ++f)
+    if (contains(footers[f], point)) return footers[f].key
+  for (var i = 0; i < (groups || []).length; ++i) {
+    var hit = groups[i]
+    if (!contains(hit, point)) continue
+    if (previousKey && previousKey !== hit.key) {
+      for (var j = Math.max(0, i - 1); j <= Math.min(groups.length - 1, i + 1); ++j) {
+        var previous = groups[j]
+        if (j === i || previous.key !== previousKey || !previous.monitorKey
+            || previous.monitorKey !== hit.monitorKey
+            || point.x < previous.x || point.x >= previous.x + previous.width) continue
+        var above = j < i ? previous : hit, below = j < i ? hit : previous
+        var boundary = above.y + above.height
+        // No sticky area at clipped outer edges, headers, footers or monitors.
+        if (Math.abs(boundary - below.y) < 0.01
+            && boundary > viewport.y && boundary < viewport.y + viewport.height
+            && Math.abs(point.y - boundary) <= 3) return previous.key
+      }
+    }
+    return hit.key
+  }
+  return hitTarget(point, headers, viewport, "window")
+}
+
+// A view-only gap, never a synthetic action/model row. Use the same comparator
+// as the dock's real workspace ordering, including numeric-before-named rules.
+function workspacePlaceholderSlot(identity, monitorKey, spans, rowsByKey) {
+  if (!identity || !monitorKey) return null
+  var monitor = null
+  for (var i = 0; i < (spans || []).length; ++i) {
+    var span = spans[i]
+    if (span.kind === "monitor" && span.key === monitorKey) monitor = span
+    if (span.kind !== "workspace") continue
+    var first = rowsByKey[span.firstKey]
+    if (!first || first.monitorKey !== monitorKey || !first.workspaceIdentity) continue
+    if (WorkspaceModel.workspaceCompare(identity, first.workspaceIdentity) < 0)
+      return {beforeKey:span.firstKey, afterKey:"", monitorKey:monitorKey, identity:identity}
+  }
+  return monitor ? {beforeKey:"", afterKey:monitor.lastKey, monitorKey:monitorKey, identity:identity} : null
 }
