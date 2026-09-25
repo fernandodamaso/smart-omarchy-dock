@@ -61,7 +61,7 @@ class LauncherContractTests(unittest.TestCase):
         text = (ROOT / "scripts/smartdock").read_text()
         self.assertIn('exec bash "$script_dir/dockrail" "$@"', text)
         self.assertNotIn("qs ", text)
-        self.assertNotIn("python3", text)\n        self.assertNotIn("qs ", text)
+        self.assertNotIn("python3", text)
 
     def test_canonical_launcher_keeps_stable_ipc_client(self):
         text = (ROOT / "scripts/dockrail").read_text()
