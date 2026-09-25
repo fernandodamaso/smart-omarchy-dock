@@ -5,8 +5,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_dir="$repo_root/provider/launcher-badges"
 cache_home="${XDG_CACHE_HOME:-$HOME/.cache}"
 data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
-build_dir="$cache_home/smartdock/launcher-badge-provider-build"
-install_dir="$data_home/smartdock/providers"
+build_dir="$cache_home/dockrail/launcher-badge-provider-build"
+install_dir="$data_home/dockrail/providers"
 
 for command in cmake ctest install; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -28,5 +28,5 @@ cat <<EOF
 Launcher badge provider installed:
   $install_dir/smartdock-launcher-badge-provider
 
-Restart/reload the SmartDock plugin so its service can start the provider.
+Restart/reload the Dockrail plugin so its service can start the provider.
 EOF
