@@ -85,6 +85,7 @@ install_client_bundle() {
     install -m 0644 "$source_dir/scripts/smartdock_cli.py" "$destination/scripts/smartdock_cli.py"
     install -m 0644 "$source_dir/scripts/smartdock_dev.py" "$destination/scripts/smartdock_dev.py"
     install -m 0644 "$source_dir/scripts/smartdock_widget.py" "$destination/scripts/smartdock_widget.py"
+    install -m 0644 "$source_dir/scripts/dockrail_paths.py" "$destination/scripts/dockrail_paths.py"
     install -m 0755 "$source_dir/scripts/smartdock_seed_demo_widgets.py" "$destination/scripts/smartdock_seed_demo_widgets.py"
     install -m 0644 "$source_dir/config/settings-schema.json" "$destination/config/settings-schema.json"
     install -m 0644 "$source_dir/config/dock.json" "$destination/config/dock.json"
@@ -94,6 +95,7 @@ install_client_bundle() {
     done
     install -m 0755 "$source_dir/uninstall.sh" "$destination/uninstall.sh"
   fi
+  install -m 0755 "$source_dir/scripts/dockrail" "$bin_home/dockrail"
   install -m 0755 "$source_dir/scripts/smartdock" "$bin_home/smartdock"
 }
 
@@ -101,7 +103,8 @@ if $cli_only; then
   command -v python3 >/dev/null 2>&1 || { echo 'Python 3 is required for the CLI.' >&2; exit 1; }
   install_client_bundle "$client_dir"
   printf '%s\n' "$source_dir" >"$client_dir/.source-dir"
-  echo "Installed SmartDock client: $bin_home/smartdock"
+  echo "Installed Dockrail client: $bin_home/dockrail"
+  echo "Installed SmartDock compatibility command: $bin_home/smartdock"
   echo 'No dock, configuration, autostart or terminal-agent assets were installed.'
   exit
 fi
