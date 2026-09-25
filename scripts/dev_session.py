@@ -1724,6 +1724,33 @@ def _host_omarchy_shell() -> Path:
     return _host_omarchy_root() / "shell"
 
 
+def _host_omarchy_package_metadata() -> dict:
+    """Capture the installed package record for the host supplying staged assets."""
+    command = ["pacman", "-Qi", "omarchy"]
+    try:
+        result = subprocess.run(command, check=False, capture_output=True, text=True)
+    except OSError as exc:
+        return {
+            "status": "unavailable",
+            "command": command,
+            "returncode": None,
+            "stderr": str(exc),
+        }
+    if result.returncode != 0 or not (result.stdout or "").strip():
+        return {
+            "status": "unavailable",
+            "command": command,
+            "returncode": result.returncode,
+            "stderr": (result.stderr or "").strip() or None,
+        }
+    return {
+        "status": "available",
+        "command": command,
+        "returncode": result.returncode,
+        "output": result.stdout.strip(),
+    }
+
+
 def _extract_omarchy_archive(record: dict, tar_path: Path, remote: str, tests: list[str]) -> None:
     extract = r"""
 import os, tarfile, sys
@@ -1798,8 +1825,10 @@ def stage_omarchy_plugin_host(record: dict) -> dict:
         )
     evidence = Path(record["evidence_path"])
     evidence.mkdir(mode=0o700, parents=True, exist_ok=True)
+    package_metadata = _host_omarchy_package_metadata()
     inspected = {
-        "omarchy_package": "omarchy 4.0.3-1",
+        "omarchy_package": package_metadata.get("output"),
+        "omarchy_package_metadata": package_metadata,
         "omarchy_version_file": version.read_text(encoding="utf-8").strip() if version.is_file() else None,
         "shell_qml_sha256": hashlib.sha256((shell / "shell.qml").read_bytes()).hexdigest(),
         "plugin_registry_sha256": hashlib.sha256(registry.read_bytes()).hexdigest(),
