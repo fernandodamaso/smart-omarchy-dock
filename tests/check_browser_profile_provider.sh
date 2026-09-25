@@ -227,8 +227,12 @@ PYEOF
 
 grep -Fq 'DockBrowserProfileService {' Service.qml \
   || fail 'Service.qml must own DockBrowserProfileService'
-grep -Fq 'property alias browserProfileService' Service.qml \
-  || fail 'Service.qml must expose the profile service alias'
+grep -Fq 'readonly property var browserProfileService: browserLoader.item' Service.qml \
+  || fail 'Service.qml must expose the migration-gated profile service'
+grep -Fq 'active: migration.ready' Service.qml \
+  || fail 'Service.qml must gate provider loaders on migration readiness'
+grep -Fq 'DockBrowserProfileService {' Service.qml \
+  || fail 'Service.qml must instantiate DockBrowserProfileService after migration'
 grep -Fq 'browserProfileService: root.browserProfileService' components/Dock.qml \
   || fail 'Dock.qml must consume the profile service'
 grep -Fq 'profileKey: root.browserProfileKey' components/DockItem.qml \
