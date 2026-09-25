@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""SmartDock Widget package API v1 manager.
+"""Dockrail Widget package API v1 manager.
 
 Owns external Widget source scaffolds, installed package snapshots and development
-overrides. It never writes dock.json and never mutates the SmartDock source or
+overrides. It never writes dock.json and never mutates the Dockrail source or
 installed Omarchy plugin checkout.
 """
 from __future__ import annotations
@@ -147,13 +147,13 @@ def validate_manifest(package_root: Path, *, allow_protected=False, allow_runtim
     if type(manifest.get("apiVersion")) is not int or manifest["apiVersion"] != API_VERSION:
         raise WidgetError(
             "E_INCOMPATIBLE",
-            f"Unsupported Widget package API version {manifest.get('apiVersion')!r}; SmartDock supports v{API_VERSION}.",
+            f"Unsupported Widget package API version {manifest.get('apiVersion')!r}; Dockrail supports v{API_VERSION}.",
         )
     widget_id = manifest.get("id")
     if not valid_widget_id(widget_id):
         raise WidgetError("E_VALIDATION", "Widget id must be a valid stable lower-case ID (maximum 64 characters).")
     if not allow_protected and widget_id in PROTECTED_WIDGETS:
-        raise WidgetError("E_PROTECTED", f"Widget id {widget_id!r} is owned by SmartDock and cannot be replaced externally.")
+        raise WidgetError("E_PROTECTED", f"Widget id {widget_id!r} is owned by Dockrail and cannot be replaced externally.")
     name = manifest.get("name")
     if not isinstance(name, str) or not name.strip() or len(name.strip()) > 128:
         raise WidgetError("E_VALIDATION", "Widget name must be a non-empty string up to 128 characters.")
@@ -492,11 +492,11 @@ class Store:
             if _is_within(resolved, forbidden):
                 raise WidgetError(
                     "E_SOURCE_FORBIDDEN",
-                    "Refusing Widget source under deployed/read-only SmartDock state: "
+                    "Refusing Widget source under deployed/read-only Dockrail state: "
                     + str(forbidden)
                     + ". Custom Widget source must live in a separate directory/repository. "
-                    "Use `smartdock widget create ...` outside SmartDock, then `smartdock widget install <source>` "
-                    "or `smartdock widget dev use <source>`.",
+                    "Use `smartdock widget create ...` outside SmartDock, then `dockrail widget install <source>` "
+                    "or `dockrail widget dev use <source>`.",
                     {"source": str(resolved), "forbiddenRoot": str(forbidden)},
                 )
         return resolved
@@ -552,11 +552,11 @@ class Store:
         if not valid_widget_id(widget_id):
             raise WidgetError("E_VALIDATION", "Widget id must be a valid stable lower-case ID (maximum 64 characters).")
         if widget_id in PROTECTED_WIDGETS:
-            raise WidgetError("E_PROTECTED", f"Widget id {widget_id!r} is owned by SmartDock.")
+            raise WidgetError("E_PROTECTED", f"Widget id {widget_id!r} is owned by Dockrail.")
         display_name = name.strip() if isinstance(name, str) and name.strip() else widget_id.rsplit(".", 1)[-1].replace("-", " ").title()
         if len(display_name) > 128:
             raise WidgetError("E_VALIDATION", "Widget name must be at most 128 characters.")
-        target = Path(destination).expanduser() if destination else self.home / "Projects/smartdock-widgets" / widget_id
+        target = Path(destination).expanduser() if destination else self.home / "Projects/dockrail-widgets" / widget_id
         target = self.source_preflight(target)
         if target.exists() or target.is_symlink():
             raise WidgetError("E_CONFLICT", "Widget scaffold destination already exists: " + str(target))
@@ -582,7 +582,7 @@ class Store:
                 "    id: content\n"
                 "    width: parent.width\n"
                 f"    title: {json.dumps(display_name, ensure_ascii=False)}\n"
-                "    subtitle: \"External SmartDock Widget\"\n\n"
+                "    subtitle: \"External Dockrail Widget\"\n\n"
                 "    WidgetText {\n"
                 "      width: parent.width\n"
                 "      text: \"Ready\"\n"
@@ -594,13 +594,13 @@ class Store:
             )
             (target / "README.md").write_text(
                 f"# {display_name}\n\n"
-                "SmartDock Widget package API v1 source. Keep this repository separate from SmartDock itself.\n\n"
+                "Dockrail Widget package API v1 source. Keep this repository separate from Dockrail itself.\n\n"
                 "Development:\n\n"
                 "```bash\n"
-                f"smartdock widget install {target}\n"
-                f"smartdock widget dev use {target}\n"
-                "smartdock widget dev reload\n"
-                "smartdock widget dev reset\n"
+                f"dockrail widget install {target}\n"
+                f"dockrail widget dev use {target}\n"
+                "dockrail widget dev reload\n"
+                "dockrail widget dev reset\n"
                 "```\n\n"
                 "Component API: https://github.com/fernandodamaso/smart-omarchy-dock/blob/main/docs/WIDGET_COMPONENTS.md\n\n"
                 "Package API: https://github.com/fernandodamaso/smart-omarchy-dock/blob/main/docs/WIDGET_PACKAGES.md\n",
@@ -627,7 +627,7 @@ class Store:
     def source_metadata(self, package_dir: Path):
         path = self._metadata_path(package_dir)
         try:
-            value = read_json(path, "SmartDock Widget source metadata")
+            value = read_json(path, "Dockrail Widget source metadata")
         except WidgetError:
             return None
         if (
@@ -692,7 +692,7 @@ class Store:
             with self.locked():
                 target = self.root / manifest["id"]
                 if target.exists():
-                    raise WidgetError("E_CONFLICT", f"Widget {manifest['id']!r} is already installed; use `smartdock widget update {manifest['id']}`.")
+                    raise WidgetError("E_CONFLICT", f"Widget {manifest['id']!r} is already installed; use `dockrail widget update {manifest['id']}`.")
                 stage, staged_manifest = self._stage_from_source(source, source_metadata)
                 if staged_manifest != manifest:
                     shutil.rmtree(stage, ignore_errors=True)
@@ -800,7 +800,7 @@ class Store:
         if not self.config_path.exists():
             return set()
         try:
-            value = read_json(self.config_path, "SmartDock configuration")
+            value = read_json(self.config_path, "Dockrail configuration")
         except WidgetError as error:
             raise WidgetError("E_CONFIG", "Cannot verify Widget enabled state before this operation: " + str(error)) from error
         ids = value.get("sidebarWidgets", []) if isinstance(value, dict) else []
@@ -904,7 +904,7 @@ class Store:
             if widget_id in enabled:
                 raise WidgetError(
                     "E_ENABLED",
-                    f"Widget {widget_id!r} is enabled. Remove its ID through the existing SmartDock Widget/settings UI before uninstalling it.",
+                    f"Widget {widget_id!r} is enabled. Remove its ID through the existing Dockrail Widget/settings UI before uninstalling it.",
                 )
             state = self._read_dev_state()
             if state and state["id"] == widget_id:
@@ -1043,7 +1043,7 @@ class Store:
         with self.locked():
             state = self._read_dev_state()
             if not state:
-                raise WidgetError("E_NOT_FOUND", "No Widget development source is selected. Run `smartdock widget dev use <source>` first.")
+                raise WidgetError("E_NOT_FOUND", "No Widget development source is selected. Run `dockrail widget dev use <source>` first.")
             source = self.source_preflight(Path(state["source"]))
             if not source.is_dir():
                 raise WidgetError("E_SOURCE", "Selected Widget development source no longer exists; previous working snapshot remains active.")
@@ -1091,7 +1091,7 @@ class Store:
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(prog="smartdock widget", add_help=True)
+    parser = argparse.ArgumentParser(prog="dockrail widget", add_help=True)
     actions = parser.add_subparsers(dest="action", required=True)
     create = actions.add_parser("create", help="Create a Widget package API v1 source scaffold")
     create.add_argument("id")
@@ -1138,7 +1138,7 @@ def execute(args, store=None):
 
 def print_human(reply):
     if not reply["ok"]:
-        print(f"smartdock widget: {reply['error']['code']}: {reply['error']['message']}", file=sys.stderr)
+        print(f"dockrail widget: {reply['error']['code']}: {reply['error']['message']}", file=sys.stderr)
         if reply.get("data"):
             print(json.dumps(reply["data"], ensure_ascii=False, indent=2), file=sys.stderr)
         return
@@ -1150,11 +1150,11 @@ def print_human(reply):
             mode = "dev" if row["development"] else ("installed" if row["installed"] else "source")
             print(f"{row['id']}\t{row['name']}\tapi={row['apiVersion']}\tversion={version}\t{mode}\tenabled={enabled}\t{row['ownership']}\t{row['validation']}")
         for item in data.get("errors", []):
-            print("smartdock widget: invalid package: " + item.get("path", "") + ": " + item.get("error", ""), file=sys.stderr)
+            print("dockrail widget: invalid package: " + item.get("path", "") + ": " + item.get("error", ""), file=sys.stderr)
     else:
         print(json.dumps(data, ensure_ascii=False, indent=2))
     for warning in reply.get("warnings", []):
-        print("smartdock widget: " + str(warning), file=sys.stderr)
+        print("dockrail widget: " + str(warning), file=sys.stderr)
 
 
 def main(argv=None):
