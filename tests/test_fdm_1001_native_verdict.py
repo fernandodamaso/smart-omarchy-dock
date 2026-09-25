@@ -49,9 +49,9 @@ class Fdm1001NativeVerdictTests(unittest.TestCase):
         earlier["widgets"]["contentY"] = 2
         log = self.write_log([
             "unrelated output",
-            ready("DP-1"),
-            "sidebar-native: " + json.dumps({"event": "viewport-state", "state": earlier}),
-            "sidebar-native: " + json.dumps({"event": "viewport-state", "state": state()}),
+            " DEBUG qml: " + ready("DP-1"),
+            " DEBUG qml: sidebar-native: " + json.dumps({"event": "viewport-state", "state": earlier}),
+            " DEBUG qml: sidebar-native: " + json.dumps({"event": "viewport-state", "state": state()}),
         ])
         result = verdict.verdict(log, "SB-06", ["DP-1"], 1)
         self.assertEqual(result["status"], "PASS")

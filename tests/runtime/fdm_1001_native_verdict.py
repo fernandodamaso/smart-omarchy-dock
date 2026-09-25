@@ -32,9 +32,10 @@ def read_records(log_path):
         return records, ["LOG_UNREADABLE:" + type(error).__name__]
 
     for line_number, line in enumerate(lines, start=1):
-        if not line.startswith(PREFIX):
+        prefix_index = line.find(PREFIX)
+        if prefix_index < 0:
             continue
-        payload = line[len(PREFIX):]
+        payload = line[prefix_index + len(PREFIX):]
         try:
             record = json.loads(payload)
         except json.JSONDecodeError:
