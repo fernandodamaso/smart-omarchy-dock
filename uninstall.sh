@@ -99,7 +99,7 @@ rm -f -- "$config_home/autostart/smartdock.desktop"
 rm -f -- "$desktop_file"
 # Remove standalone deployment files without deleting shared Widget/provider
 # state that can still be consumed by the Omarchy plugin.
-rm -rf -- "$app_dir/components" "$app_dir/SmartDock" "$app_dir/assets"   "$app_dir/provider" "$app_dir/scripts" "$app_dir/config" "$app_dir/docs"
+rm -rf -- "$app_dir/components" "$app_dir/SmartDock" "$app_dir/Dockrail" "$app_dir/assets"   "$app_dir/provider" "$app_dir/scripts" "$app_dir/config" "$app_dir/docs"
 rm -f -- "$app_dir/shell.qml" "$app_dir/DockHost.qml" "$app_dir/LICENSE"   "$app_dir/install.sh" "$app_dir/uninstall.sh" "$app_dir/.source-dir"
 rmdir "$app_dir" 2>/dev/null || true
 
