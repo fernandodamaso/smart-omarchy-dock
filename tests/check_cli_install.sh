@@ -82,6 +82,7 @@ test -f "$XDG_DATA_HOME/dockrail-cli/scripts/smartdock_cli.py"
 "$XDG_BIN_HOME/smartdock" agent-guide >/dev/null
 cli_remove
 cli_remove
+test ! -e "$XDG_BIN_HOME/dockrail"
 test ! -e "$XDG_BIN_HOME/smartdock"
 test "$config_before" = "$(cat "$XDG_CONFIG_HOME/dockrail/dock.json")"
 echo 'CLI-only installation/coexistence checks passed.'
