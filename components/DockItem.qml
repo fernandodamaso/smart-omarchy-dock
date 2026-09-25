@@ -79,9 +79,23 @@ Item {
   property string workspaceActivationTarget: ""
   property bool presentationVisible: true
   property bool motionReady: false
+  property bool launchPending: false
   readonly property var attentionScope: attentionScopeKey
     ? ({ localUrgent: localUrgent, primaryOwner: primaryBadgeOwner }) : null
   readonly property bool motionOwner: attentionScopeKey !== "" || primaryBadgeOwner
+
+  function beginLaunchFeedback() {
+    if (!root.pinnedItem || root.runningCount > 0) return
+    root.launchPending = true
+    launchFeedbackTimeout.restart()
+    launchMotion.restart()
+  }
+
+  function clearLaunchFeedback() {
+    root.launchPending = false
+    launchFeedbackTimeout.stop()
+    launchMotion.stop()
+  }
 
   function hasPreviewContent() {
     return PreviewModel.hasPreviewContent(
@@ -215,6 +229,8 @@ Item {
 
   function launch() {
     if (root.workspaceInputSuppressed) return
+    if (root.pinnedItem && root.runningCount === 0)
+      root.beginLaunchFeedback()
     if (entry)
       entry.execute()
     else
@@ -288,6 +304,8 @@ Item {
   }
 
   onRunningToplevelsChanged: {
+    if (root.launchPending && root.runningCount > 0)
+      root.clearLaunchFeedback()
     lastActivatedToplevel = -1
     wheelRemainder = 0
     lastWheelTimestamp = 0
@@ -297,6 +315,7 @@ Item {
 
   onPresentationActiveChanged: {
     if (!presentationActive) {
+      clearLaunchFeedback()
       cancelWorkspaceDrag("presentation removed")
       dismissPopups()
       attentionReminderTimer.stop()
@@ -375,6 +394,7 @@ Item {
     requestUrgentMotion()
   }
   onHerdrBlockedTransitionRevisionChanged: requestHerdrBlockedMotion()
+  onPinnedItemChanged: if (!pinnedItem) clearLaunchFeedback()
 
   Timer {
     id: attentionReminderTimer
@@ -385,6 +405,13 @@ Item {
       && root.attentionBadgesEnabled
       && root.urgentWindowAnimationEnabled
     onTriggered: root.requestUrgentMotion(true)
+  }
+
+  Timer {
+    id: launchFeedbackTimeout
+    interval: 8000
+    repeat: false
+    onTriggered: root.clearLaunchFeedback()
   }
 
   width: vertical ? slotSize + 6 : slotSize
@@ -402,6 +429,13 @@ Item {
   DockAttentionMotion {
     id: attentionMotion
     position: root.position
+  }
+
+  DockLaunchMotion {
+    id: launchMotion
+    position: root.position
+    active: root.launchPending
+    animationsEnabled: root.interfaceAnimationsEnabled
   }
 
   Item {
@@ -433,8 +467,8 @@ Item {
 
       anchors.fill: parent
       transform: Translate {
-        x: attentionMotion.xOffset
-        y: attentionMotion.yOffset
+        x: attentionMotion.xOffset + launchMotion.xOffset
+        y: attentionMotion.yOffset + launchMotion.yOffset
       }
 
       RectangularShadow {
