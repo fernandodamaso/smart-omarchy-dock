@@ -1,31 +1,36 @@
 import QtQuick
-import Quickshell
+import "components"
 
-DockHost {
-  runtimeMode: "plugin"
+Item {
+  id: root
 
-  // Properties injected by the Omarchy shell plugin host.
+  // Properties injected by the Omarchy shell plugin host stay on the plugin
+  // entry object even while DockHost activation is migration-gated.
   property var shell: null
   property var manifest: null
 
-  // Reuse the host-owned notification service when Omarchy exposes it. Older
-  // or standalone hosts can leave this null; SmartDock never starts a second
-  // notification daemon just to power attention dots.
-  notificationService: shell && typeof shell.firstPartyServiceFor === "function"
-    ? shell.firstPartyServiceFor("omarchy.notifications")
-    : shell && typeof shell.serviceFor === "function"
-      ? shell.serviceFor("omarchy.notifications") : null
-
-  // FDM-811 is a multi-kind plugin. Omarchy owns one headless service instance
-  // and the overlay only consumes its provider-neutral count snapshot. The same
-  // singleton also exposes browser-window profile snapshots.
   readonly property var pluginService: shell && typeof shell.serviceFor === "function"
     ? shell.serviceFor("io.github.fernandodamaso.smartdock") : null
-  launcherBadgeService: pluginService
-  browserProfileService: pluginService ? pluginService.browserProfileService : null
-  herdrService: pluginService ? pluginService.herdrService : null
+  readonly property bool migrationReady: !!pluginService && pluginService.migrationReady === true
 
-  configPath: (Quickshell.env("XDG_CONFIG_HOME")
-    || Quickshell.env("HOME") + "/.config")
-    + "/smartdock/dock.json"
+  Loader {
+    id: dockLoader
+    active: root.migrationReady
+    sourceComponent: Component {
+      DockHost {
+        runtimeMode: "plugin"
+        configPath: root.pluginService.migration.configPath
+        dataRoot: root.pluginService.migration.dataRoot
+
+        notificationService: root.shell && typeof root.shell.firstPartyServiceFor === "function"
+          ? root.shell.firstPartyServiceFor("omarchy.notifications")
+          : root.shell && typeof root.shell.serviceFor === "function"
+            ? root.shell.serviceFor("omarchy.notifications") : null
+
+        launcherBadgeService: root.pluginService.launcherBadgeService
+        browserProfileService: root.pluginService.browserProfileService
+        herdrService: root.pluginService.herdrService
+      }
+    }
+  }
 }
