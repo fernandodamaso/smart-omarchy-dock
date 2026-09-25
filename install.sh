@@ -144,13 +144,13 @@ command -v python3 >/dev/null 2>&1 || { echo 'Python 3 is required for the CLI.'
 
 migration_json=""
 migration_was_running=false
-migration_migrated=false
+migration_provenance=
 if ! migration_json="$(python3 -B "$source_dir/scripts/dockrail_migrate.py" startup --runtime standalone --handoff-standalone)"; then
   printf '%s\n' "$migration_json" >&2
   exit 1
 fi
 migration_was_running="$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["data"]["standaloneWasRunning"] else "false")' <<<"$migration_json")"
-migration_migrated="$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["data"]["migrated"] else "false")' <<<"$migration_json")"
+migration_provenance="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["selectionProvenance"])' <<<"$migration_json")"
 
 install -d "$app_dir" "$config_dir" "$bin_home" "$desktop_dir"
 if [[ "$source_dir" != "$app_dir" ]]; then
@@ -195,7 +195,7 @@ else
   echo "Preserved configuration: $config_dir/dock.json"
 fi
 
-if ! $migration_migrated; then
+if [[ "$migration_provenance" == "canonical-clean" ]]; then
   demo_widget_seed_marker="$config_dir/.demo-widgets-seeded-v2"
   demo_widget_seed_result="$(python3 "$source_dir/scripts/smartdock_seed_demo_widgets.py" "$config_dir/dock.json" "$demo_widget_seed_marker")"
   case "$demo_widget_seed_result" in
