@@ -69,7 +69,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for script in install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh; do
+          for script in install.sh uninstall.sh scripts/dockrail scripts/smartdock scripts/run tests/check_*.sh; do
             bash -n "$script"
           done
 
