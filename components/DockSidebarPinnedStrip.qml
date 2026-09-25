@@ -33,7 +33,7 @@ Item {
   readonly property int hiddenCount: layout.hidden
   readonly property var hiddenPins: pins.slice(visibleCount)
   // Rail hides the strip entirely — zero height and no residual gap.
-  implicitHeight: collapsed ? 0 : (shelfPadTop + Style.space(1) + Style.space(30)
+  implicitHeight: collapsed ? 0 : (shelfPadTop + Style.space(1) + Style.space(4) + sectionLabel.height
     + cellHeight + shelfPadBottom)
   height: implicitHeight
   visible: !collapsed
@@ -225,19 +225,20 @@ Item {
     anchors.topMargin: root.shelfPadTop
   }
 
-  Text {
+  Ui.PanelSectionHeader {
     id: sectionLabel
+    objectName: "pinned-section-label"
     anchors.left: parent.left
+    // The pin shelf has a different outer inset. Align only its label to the
+    // hierarchy's content origin; leave pin cells and hit targets unchanged.
+    anchors.leftMargin: root.panel && root.panel.viewport
+      ? root.panel.viewport.x - root.x + root.panel.viewport.workspaceCardInset + Style.space(4)
+      : Style.space(5) + Style.space(4)
     anchors.top: divider.bottom
     anchors.topMargin: Style.space(4)
-    height: Style.space(26)
+    height: Math.max(Style.space(26), implicitHeight)
     verticalAlignment: Text.AlignVCenter
     text: "PINNED"
-    textFormat: Text.PlainText
-    color: Color.muted
-    font.family: Style.font.family
-    font.pixelSize: Style.font.caption
-    font.bold: true
   }
 
   Item {

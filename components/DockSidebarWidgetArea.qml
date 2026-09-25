@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import qs.Ui as Ui
+import "widgets"
 import "DockSidebarWidgetModel.js" as WidgetModel
 import "DockSidebarModel.js" as SidebarModel
 
@@ -10,10 +11,13 @@ import "DockSidebarModel.js" as SidebarModel
 // this item owns only card composition, picker state, drag targeting and popup views.
 Item {
   id: root
+  property var appearance: null
   required property var controller
   required property var panel
   required property var viewport
   required property real windowRowHeight
+  readonly property real contentInset: (viewport && viewport.workspaceCardInset !== undefined
+    ? viewport.workspaceCardInset : Style.space(5)) + Style.space(4)
 
   // Keep the Herdr provider lease active while suppressing its fallback card
   // whenever live agents are already represented under associated window rows.
@@ -204,31 +208,42 @@ Item {
     Item {
       id: sectionHeader
       width: parent.width
-      height: Style.space(32)
+      height: Math.max(Style.space(32), sectionLabel.implicitHeight)
 
-      Text {
+      Ui.PanelSectionHeader {
+        id: sectionLabel
+        objectName: "widget-section-label"
         anchors.left: parent.left
-        anchors.leftMargin: Style.space(5)
+        anchors.leftMargin: root.contentInset
         anchors.verticalCenter: parent.verticalCenter
-        text: "Widgets"
-        textFormat: Text.PlainText
-        color: Util.alpha(Color.foreground, 0.76)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
+        text: "WIDGETS"
       }
 
       Ui.Button {
         id: manageButton
+        objectName: "widget-section-manage"
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
+        width: Style.space(28)
         height: Style.space(28)
-        text: "Add/Manage"
+        iconText: ""
         tooltipText: "Add or manage Widgets"
         Accessible.role: Accessible.Button
         Accessible.name: tooltipText
         focusable: true
         onClicked: root.openManager(manageButton)
+
+        WidgetIcon {
+          objectName: "widget-section-plus"
+          anchors.centerIn: parent
+          width: 13
+          height: 13
+          iconName: "plus"
+          sizeToken: "xs"
+          containerVariant: "plain"
+          tint: Color.foreground
+          accessibleName: manageButton.tooltipText
+        }
       }
     }
 
@@ -243,6 +258,8 @@ Item {
 
         delegate: DockWidgetCard {
           id: widgetCard
+          appearance: root.appearance
+          contentInset: root.contentInset
           required property string modelData
           required property int index
           width: cardColumn.width

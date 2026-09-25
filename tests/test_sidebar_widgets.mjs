@@ -188,6 +188,19 @@ const areaSource = read('components/DockSidebarWidgetArea.qml');
 const managerSource = read('components/DockSidebarWidgetManager.qml');
 const hostSource = read('DockHost.qml');
 const cardSource = read('components/DockWidgetCard.qml');
+// FDM-997: optional appearance propagation cannot alter scroll/provider ownership.
+assert.match(sidebarSource, /DockSidebarWidgetArea\s*\{[^}]*appearance: root\.sidebarAppearance/);
+assert.match(areaSource, /property var appearance: null/);
+assert.match(areaSource, /DockWidgetCard\s*\{[^}]*appearance: root\.appearance/);
+assert.match(cardSource, /property var appearance: null/);
+assert.doesNotMatch(cardSource, /0\.025/, 'header/body must share one idle surface');
+assert.match(areaSource, /Ui\.PanelSectionHeader\s*\{[\s\S]*?text: "WIDGETS"/);
+assert.match(read('components/DockSidebarPinnedStrip.qml'), /Ui\.PanelSectionHeader\s*\{[\s\S]*?text: "PINNED"/);
+assert.match(areaSource, /iconName: "plus"/);
+assert.doesNotMatch(normalHeader(areaSource), /text: "Add\/Manage"/);
+function normalHeader(source) { return source.slice(source.indexOf('id: sectionHeader'), source.indexOf('id: cardColumn')); }
+
+
 assert.match(viewportSource, /property Component contentTail/);
 assert.match(viewportSource, /footer: Item\s*\{/);
 assert.match(viewportSource,

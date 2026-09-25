@@ -404,6 +404,7 @@ PanelWindow {
       onDismissContextRequested: sidebarContext.dismiss()
       contentTail: Component {
         DockSidebarWidgetArea {
+          appearance: root.sidebarAppearance
           controller: root.controller
           panel: root
           viewport: sidebarViewport
