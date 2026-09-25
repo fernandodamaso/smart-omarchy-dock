@@ -40,6 +40,12 @@ Item {
   enabled: !collapsed
   clip: true
   readonly property var addPinButton: addPin
+  readonly property var firstFocusControl: root.visibleCount > 0
+    ? pinRepeater.itemAt(0) : overflowButton.visible ? overflowButton : addPin
+  Keys.onBacktabPressed: function(event) {
+    if (root.firstFocusControl && root.firstFocusControl.activeFocus)
+      event.accepted = root.panel.focusBeforeFooter()
+  }
   property bool overflowOpen: false
   property bool overflowOpenedByKeyboard: false
   property double overflowDismissedAt: 0
@@ -231,9 +237,12 @@ Item {
     anchors.left: parent.left
     // The pin shelf has a different outer inset. Align only its label to the
     // hierarchy's content origin; leave pin cells and hit targets unchanged.
-    anchors.leftMargin: root.panel && root.panel.viewport
-      ? root.panel.viewport.x - root.x + root.panel.viewport.workspaceCardInset + Style.space(4)
-      : Style.space(5) + Style.space(4)
+    anchors.leftMargin: {
+      if (!root.panel || !root.panel.viewport) return Style.space(5) + Style.space(4)
+      var item = root.panel.viewport, x = 0
+      while (item && item !== root.parent) { x += item.x; item = item.parent }
+      return x - root.x + root.panel.viewport.workspaceCardInset + Style.space(4)
+    }
     anchors.top: divider.bottom
     anchors.topMargin: Style.space(4)
     height: Math.max(Style.space(26), implicitHeight)
@@ -258,6 +267,7 @@ Item {
       clip: true
 
       Repeater {
+        id: pinRepeater
         model: displayModel
         delegate: Item {
           id: pinCell

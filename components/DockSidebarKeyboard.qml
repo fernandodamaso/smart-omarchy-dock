@@ -73,7 +73,12 @@ Item {
 
       var next = InteractionModel.nextKey(root.viewport.visibleRows,
         focusedKey, direction)
-      if (isTab && next === focusedKey) return
+      if (isTab && next === focusedKey) {
+        controller.clearAlertControl()
+        if (typeof root.viewport.focusPaneBoundary === "function")
+          event.accepted = root.viewport.focusPaneBoundary(direction < 0)
+        return
+      }
 
       controller.clearAlertControl()
       if (isTab && direction === -1 && next && next !== focusedKey) {

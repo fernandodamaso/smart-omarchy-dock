@@ -130,6 +130,51 @@ class ContractTests(unittest.TestCase):
             self.assertIn(")?$", expression)
             self.assertIn("SmartDock visual", expression)
 
+    def test_omarchy_package_metadata_records_installed_build(self):
+        from dev_session import _host_omarchy_package_metadata
+
+        result = subprocess.CompletedProcess(
+            ["pacman", "-Qi", "omarchy"],
+            0,
+            stdout="Name            : omarchy\nVersion         : 4.0.4-1\nBuild Date      : today\n",
+            stderr="",
+        )
+        with mock.patch("dev_session.subprocess.run", return_value=result) as run:
+            metadata = _host_omarchy_package_metadata()
+
+        run.assert_called_once_with(
+            ["pacman", "-Qi", "omarchy"], check=False, capture_output=True, text=True
+        )
+        self.assertEqual(metadata["status"], "available")
+        self.assertEqual(metadata["returncode"], 0)
+        self.assertEqual(
+            metadata["output"],
+            "Name            : omarchy\nVersion         : 4.0.4-1\nBuild Date      : today",
+        )
+
+    def test_omarchy_package_metadata_marks_command_or_package_unavailable(self):
+        from dev_session import _host_omarchy_package_metadata
+
+        with mock.patch(
+            "dev_session.subprocess.run", side_effect=FileNotFoundError("pacman missing")
+        ):
+            command_missing = _host_omarchy_package_metadata()
+        self.assertEqual(command_missing["status"], "unavailable")
+        self.assertEqual(command_missing["command"], ["pacman", "-Qi", "omarchy"])
+        self.assertIsNone(command_missing["returncode"])
+        self.assertNotIn("output", command_missing)
+        self.assertIn("pacman missing", command_missing["stderr"])
+
+        result = subprocess.CompletedProcess(
+            ["pacman", "-Qi", "omarchy"], 1, stdout="", stderr="package not found\n"
+        )
+        with mock.patch("dev_session.subprocess.run", return_value=result):
+            package_missing = _host_omarchy_package_metadata()
+        self.assertEqual(package_missing["status"], "unavailable")
+        self.assertEqual(package_missing["returncode"], 1)
+        self.assertEqual(package_missing["stderr"], "package not found")
+        self.assertNotIn("output", package_missing)
+
     def test_qemu_heads_are_exactly_two_owned_titles_and_ordered(self):
         from dev_session import _show_both_qemu_heads
 

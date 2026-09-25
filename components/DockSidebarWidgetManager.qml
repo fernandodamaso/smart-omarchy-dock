@@ -5,8 +5,8 @@ import qs.Ui as Ui
 import "DockSidebarWidgetModel.js" as WidgetModel
 
 // Panel-owned Widget management popup. This intentionally lives outside the
-// shared-scroll Widget tail so Add/Manage remains available even when there are
-// zero enabled Widget cards and the tail collapses to zero height.
+// independent Widget pane so Add/Manage remains available even when there are
+// zero enabled Widget cards and the section collapses to zero height.
 Item {
   id: root
 
@@ -19,6 +19,22 @@ Item {
 
   property bool managerOpen: false
   property Item managerAnchor: null
+  readonly property bool managerAnchorVisible: {
+    var item = root.managerAnchor
+    while (item) {
+      if (!item.visible || item.opacity === 0) return false
+      if (item === root.panel.contentItem) return true
+      item = item.parent
+    }
+    return false
+  }
+  readonly property point managerAnchorPosition: {
+    var item = root.managerAnchor, x = 0, y = 0
+    while (item && item !== root.panel.contentItem) { x += item.x; y += item.y; item = item.parent }
+    return Qt.point(x, y)
+  }
+  onManagerAnchorPositionChanged: anchorTimer.restart()
+  onManagerAnchorVisibleChanged: anchorTimer.restart()
 
   width: 0
   height: 0
@@ -44,7 +60,7 @@ Item {
     }
     root.managerAnchor = anchor
     root.managerOpen = true
-    Qt.callLater(root.updateAnchor)
+    anchorTimer.restart()
     return true
   }
 
@@ -56,7 +72,7 @@ Item {
   function updateAnchor() {
     if (!root.managerOpen) return
     var anchor = root.managerAnchor
-    if (!anchor || !anchor.visible || !root.panel.visible || root.panel.panelCollapsed
+    if (!anchor || !root.managerAnchorVisible || !root.panel.visible || root.panel.panelCollapsed
         || root.anchorOutsideViewport(anchor)) {
       root.close()
       return
@@ -100,7 +116,7 @@ Item {
         + Math.min(managerRows.implicitHeight, Style.space(280)),
       Style.space(420))
 
-    onOpenChanged: if (open) Qt.callLater(root.updateAnchor)
+    onOpenChanged: if (open) anchorTimer.restart()
 
     Column {
       id: managerLayout
@@ -301,17 +317,17 @@ Item {
   Connections {
     target: root.viewport.listView
     function onContentYChanged() {
-      Qt.callLater(root.updateAnchor)
+      anchorTimer.restart()
     }
   }
 
   Connections {
     target: root.panel
     function onWidthChanged() {
-      Qt.callLater(root.updateAnchor)
+      anchorTimer.restart()
     }
     function onHeightChanged() {
-      Qt.callLater(root.updateAnchor)
+      anchorTimer.restart()
     }
     function onVisibleChanged() {
       if (!root.panel.visible) root.close()
@@ -321,5 +337,11 @@ Item {
     }
   }
 
+  Timer { id: anchorTimer; interval: 0; onTriggered: root.updateAnchor() }
+  Connections {
+    target: root.panel.widgetArea || null
+    function onLayoutRevisionChanged() { anchorTimer.restart() }
+    function onSectionVisibleChanged() { anchorTimer.restart() }
+  }
   Component.onDestruction: root.close()
 }

@@ -181,13 +181,14 @@ assert.deepEqual(plain(Model.manageableRows(managerRegistry).map(row => row.id))
 assert.equal(typeof Model.footerLayout, 'undefined',
   'the retired bounded footer layout must not survive the shared-scroll migration');
 
-// Shared-scroll structure: hierarchy ListView remains the only normal scroll owner.
+// FDM-999: independent sibling scroll ownership, with one host-owned lifecycle.
 const viewportSource = read('components/DockSidebarViewport.qml');
 const sidebarSource = read('components/DockSidebar.qml');
 const areaSource = read('components/DockSidebarWidgetArea.qml');
 const managerSource = read('components/DockSidebarWidgetManager.qml');
 const hostSource = read('DockHost.qml');
 const cardSource = read('components/DockWidgetCard.qml');
+const runtimeSidebarSource = read('tests/runtime/sidebar.qml');
 // FDM-997: optional appearance propagation cannot alter scroll/provider ownership.
 assert.match(sidebarSource, /DockSidebarWidgetArea\s*\{[^}]*appearance: root\.sidebarAppearance/);
 assert.match(areaSource, /property var appearance: null/);
@@ -201,33 +202,35 @@ assert.doesNotMatch(normalHeader(areaSource), /text: "Add\/Manage"/);
 function normalHeader(source) { return source.slice(source.indexOf('id: sectionHeader'), source.indexOf('id: cardColumn')); }
 
 
-assert.match(viewportSource, /property Component contentTail/);
-assert.match(viewportSource, /footer: Item\s*\{/);
-assert.match(viewportSource,
-  /readonly property var contentTailItem:\s*list\.footerItem\s*\?\s*list\.footerItem\.contentTailItem\s*:\s*null/,
-  'Bound root must resolve the Widget tail through the instantiated footer boundary');
-assert.match(viewportSource,
-  /footer: Item\s*\{[\s\S]*?readonly property var contentTailItem:\s*contentTailLoader\.item[\s\S]*?Loader\s*\{\s*id:\s*contentTailLoader/,
-  'footer must expose its locally scoped Loader item to the viewport root');
-assert.match(sidebarSource, /contentTail: Component/);
-assert.match(sidebarSource, /anchors\.bottom: pinnedStrip\.top/);
+assert.doesNotMatch(viewportSource, /\bcontentTail\w*\b|ContentTailDrag|footer:\s*Item/,
+  'retired Widget-tail APIs must be removed, not left as unused hooks');
+assert.doesNotMatch(runtimeSidebarSource, /\bfooter\.layout\.cap\b/,
+  'the runtime sidebar fixture must observe the split allocation, not the retired footer cap');
+assert.doesNotMatch(runtimeSidebarSource, /\b(?:contentTail\w*|ContentTailDrag|endContentTailDrag|sharedTail\w*)\b/,
+  'the runtime sidebar fixture must not revive a retired shared-tail API');
+assert.match(viewportSource, /readonly property real naturalContentHeight:/);
+assert.match(sidebarSource, /id:\s*middleRegion/);
+assert.match(sidebarSource, /hierarchyContentHeight:\s*sidebarViewport\.naturalContentHeight/);
+assert.match(sidebarSource, /readonly property var widgetArea:\s*sidebarWidgets/);
+assert.match(sidebarSource, /height:\s*middleRegion\.split\.blankHeight/);
+assert.match(sidebarSource, /anchors\.bottom:\s*pinnedStrip\.top/);
 assert.doesNotMatch(sidebarSource, /widgetOverflowButton|id:\s*widgetOverflow/);
 assert.doesNotMatch(areaSource, /footerLayout|openOverflow|overflowNeeded/);
 const normalArea = areaSource.slice(0, areaSource.indexOf('  PopupWindow {'));
-assert.doesNotMatch(normalArea, /\bFlickable\b|\bListView\b/,
-  'normal Widget section must use the hierarchy ListView scroll owner');
-assert.match(areaSource, /presentationWidgetIds/);
+assert.equal((normalArea.match(/\bFlickable\s*\{/g) || []).length, 1);
+assert.match(areaSource, /readonly property int presentedWidgetCount:\s*presentationWidgetIds\.length/);
 assert.match(areaSource, /SidebarModel\.herdrFallbackVisible/);
-assert.match(areaSource, /sectionVisible: !panel\.panelCollapsed && root\.presentationWidgetIds\.length > 0/);
-assert.match(areaSource, /implicitHeight: root\.sectionVisible \?/);
-assert.match(areaSource, /target: root\.viewport\.listView/);
+assert.match(areaSource, /boundsBehavior:\s*Flickable\.StopAtBounds/);
+assert.match(areaSource, /blocking:\s*false/);
+assert.match(areaSource, /presentationClipItem:\s*widgetScroll/);
+assert.match(areaSource, /presentationRevision:\s*root\.layoutRevision/);
 assert.match(areaSource, /anchorOutsideViewport/);
 assert.match(sidebarSource, /DockSidebarWidgetManager\s*\{/,
-  'Widget manager must be panel-owned, not tied to the zero-height content tail');
+  'Widget manager must be panel-owned, not tied to a zero-height Widget section');
 assert.match(sidebarSource, /onClicked:\s*root\.openWidgetManager\(widgetManage\)/,
   'header Add\/Manage must open the persistent panel-owned manager directly');
 assert.doesNotMatch(sidebarSource, /widgetArea\.openManager\(widgetManage\)/,
-  'header Add\/Manage must not depend on the Widget tail existing');
+  'header Add\/Manage must not depend on the Widget section existing');
 assert.match(managerSource, /Ui\.PopupCard\s*\{[\s\S]*?id:\s*managerPopup/,
   'Widget manager must use Omarchy native PopupCard chrome');
 assert.match(managerSource, /triggerMode:\s*"click"/,
@@ -249,7 +252,7 @@ assert.match(cardSource, /presentation: "expanded"/);
 assert.doesNotMatch(cardSource, /presentation: "compact"/);
 assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"/);
 
-// Header Add/Manage remains callable even when the shared-scroll Widget tail is absent.
+// Header Add/Manage remains callable even when the Widget section is absent.
 {
   let opened = null;
   const anchor = {visible:true};
@@ -363,7 +366,6 @@ assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"
 
 // Widget area drag cleanup stays synced with controller cancel and preserves hidden IDs.
 {
-  let ended = 0;
   const controller = qmlMethods('DockSidebarController.qml', {
     SidebarWidgetModel: Model,
     host: { saveSettingIntent() {
@@ -377,16 +379,13 @@ assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"
     mutationFeedback:'',
     closeWidgetPopup() { this.widgetPopupId = ''; this.widgetPopupAnchor = null },
   });
-  const viewport = {
-    contentTailDragPoint: null,
-    beginContentTailDrag() { this.contentTailDragPoint = {x:1,y:1} },
-    updateContentTailDrag() {},
-    endContentTailDrag() { this.contentTailDragPoint = null; ended += 1 },
-  };
+  const viewport = {};
+  const widgetScroll = {width:280,height:200,contentItem:{},mapFromItem(_item,x,y){return {x,y}}};
   const area = qmlMethods('DockSidebarWidgetArea.qml', {
     controller,
     panel: { panelCollapsed: false, visible: true, contentItem: {}, height: 400, width: 280, screen: {width:1920,height:1080} },
-    viewport,
+    viewport, widgetScroll, sectionVisible:true, presentedWidgetCount:2, pendingRestore:true,
+    layoutTimer:{restart(){}}, geometryTimer:{restart(){}},
     presentationWidgetIds: ['fixture.one', 'fixture.two'],
     dragWidgetId: '',
     dragTargetSlot: -1,
@@ -399,12 +398,11 @@ assert.match(cardSource, /Accessible\.name: root\.badgeCount \+ " notifications"
   assert.equal(area.fullReorderSlot(2), 3, 'append stays after the last visible id in the full list');
   assert.equal(area.beginDrag('fixture.one', 10, 20), true);
   assert.equal(area.dragWidgetId, 'fixture.one');
-  assert.ok(viewport.contentTailDragPoint);
+  assert.equal(area.dragTargetSlot, 2, 'target is computed in the independent Widget column');
   controller.cancelWidgetReorder();
   area.syncDragFromController();
   assert.equal(area.dragWidgetId, '');
-  assert.equal(viewport.contentTailDragPoint, null, 'controller cancel clears autoscroll');
-  assert.ok(ended >= 1);
+  assert.equal(area.dragTargetSlot, -1, 'controller cancel clears Widget auto-scroll target');
   area.finishDrag(0, 0, true);
   area.finishDrag(0, 0, true);
   assert.equal(controller.interactionBusy, false, 'finish stays idempotent after cancel');
@@ -433,4 +431,4 @@ const controllerSource=read('components/DockSidebarController.qml');
 assert.match(controllerSource,/SidebarWidgetModel\.createManager/,'the actual host-owned controller must create the manager');
 assert.match(controllerSource,/widgetManager\.dispose\(/,'the host must clean up leases');
 assert.match(read('DockHost.qml'),/widgetRegistry: root\.sidebarWidgetRegistry/,'production registry supplied by host, not settings');
-console.log('Widget registry lifecycle, shared-scroll management helpers and host config: PASS');
+console.log('Widget registry lifecycle, split-scroll management helpers and host config: PASS');

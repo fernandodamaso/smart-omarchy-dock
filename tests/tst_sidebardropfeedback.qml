@@ -2,6 +2,7 @@ import QtQuick
 import QtTest
 import "SidebarDropSourceHarness.js" as Harness
 import "../components/DockSidebarModel.js" as SidebarModel
+import "../components/DockSidebarWidgetModel.js" as WidgetModel
 
 TestCase {
   id: test
@@ -121,5 +122,29 @@ TestCase {
     wait(30)
     compare(origin.dropFlashKey,"");compare(origin.listView.contentY,0)
     compare(controller.dropOperation,null)
+  }
+
+  Component { id: widgetScrollFactory; Flickable { width:200; height:100; contentHeight:1200; contentWidth:200; boundsBehavior:Flickable.StopAtBounds } }
+  function test_confirmation_with_overflowing_widget_sibling_preserves_both_anchors() {
+    var split=WidgetModel.sidebarSplitLayout({availableHeight:240,hierarchyContentHeight:720,
+      widgetHeaderHeight:38,widgetContentHeight:1200,presentedWidgetCount:3,
+      minHierarchyHeight:90,minWidgetHeight:72,requestedSplitPx:null})
+    origin.height=split.hierarchyHeight
+    var widgets=createTemporaryObject(widgetScrollFactory,test,{y:origin.height,height:split.widgetHeight-38})
+    widgets.contentY=275
+    var other=JSON.stringify(controller.readScrollState("HDMI-A-1",true))
+    origin.previousHeightMap="split-resized"
+    origin.requestRestore()
+    controller.dropOperation=operation()
+    tryCompare(origin,"dropFlashKey","destination")
+    var item=origin.listView.itemAtIndex(origin.indexForKey("destination"))
+    verify(item!==null)
+    verify(item.y>=origin.listView.contentY && item.y+item.height<=origin.listView.contentY+origin.listView.height)
+    compare(widgets.contentY,275)
+    compare(mirror.listView.contentY,64)
+    compare(JSON.stringify(controller.readScrollState("HDMI-A-1",true)),other)
+    var position=origin.listView.contentY
+    Qt.callLater(origin.restoreAnchor);wait(30)
+    compare(origin.listView.contentY,position);compare(widgets.contentY,275)
   }
 }

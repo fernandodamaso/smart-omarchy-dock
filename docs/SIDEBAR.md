@@ -6,7 +6,8 @@ outputs, app folding/rail,
 typed preferences and initial reservation. SB-03 adds live resize, cancellation and
 conflict-safe preference commits. SB-04 adds exact-window actions, menus, keyboard
 navigation and single-sidebar drag adapters. SB-05 adds host-owned widget leases and
-a bounded footer with no production providers. These slices do not deploy or qualify
+a bounded footer with no production providers (historical SB-05 placement;
+FDM-999 now uses independent, content-aware hierarchy and Widget panes). These slices do not deploy or qualify
 a compositor. Classic remains the default; per-monitor `presentationModeByMonitor`
 overrides let one output run the classic dock while another runs the sidebar.
 Parent contract: FDM-962. Detailed SB-03
@@ -246,3 +247,14 @@ keyboard and drag. **FDM-967/SB-05** supplies bounded widget lifecycle/popups; s
 [the provider/view API](SIDEBAR_WIDGETS.md). **FDM-968/SB-06** owns this integrated
 candidate and physical runtime qualification. Keep the feature-bearing PR Draft until the
 integrated core passes SB-06. Source acceptance does not merge, install or deploy.
+
+## Current Widget split layout — FDM-999
+
+The middle region excludes fixed controls, PINNED, Applications and margins
+once, in logical pixels. Canonical row metrics (including alerts, Herdr/browser
+rows and drag footers) drive hierarchy demand, never ListView's virtualized
+content-height estimate. A fixed Widget header and clipped body Flickable are
+siblings of the hierarchy. Only residual blank space accepts mode dragging.
+Rail/hidden Herdr/zero-card and constrained-header policies, stable-ID anchors,
+focus and input ownership are specified in [SIDEBAR_WIDGETS.md](SIDEBAR_WIDGETS.md).
+Existing FDM-994 origin-only confirmation and FDM-995 native boundaries remain.

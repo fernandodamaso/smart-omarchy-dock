@@ -32,6 +32,7 @@ TestCase {
     id: viewport
     property var controller: actionController
     property var visibleRows: actionController.projection.rows
+    function focusPaneBoundary(backwards) { events.push("boundary:"+backwards); return !backwards }
     function focusRow(key) { actionController.focusedRowKey=key; events.push("focus:"+key); return true }
     function activate(target, control, connector, modifiers) {
       events.push({key:target.key,control:control,connector:connector}); return true
@@ -108,5 +109,13 @@ TestCase {
     keyClick(Qt.Key_Tab); compare(actionController.alertControlKey,"tab")
     keyClick(Qt.Key_Escape)
     compare(actionController.alertControlKey,""); compare(events[events.length-1],"return-focus")
+  }
+
+  function test_tab_leaves_last_row_after_alert_control() {
+    actionController.projection={rows:[{key:"last",kind:"browser-tab"}]}
+    actionController.focusedRowKey="last"
+    keyClick(Qt.Key_Tab);compare(actionController.alertControlKey,"last")
+    keyClick(Qt.Key_Tab);compare(events[events.length-1],"boundary:false")
+    compare(actionController.alertControlKey,"")
   }
 }

@@ -312,3 +312,63 @@ function createManager(onChanged) {
     }
   }
 }
+
+// Natural demands and allocations are logical pixels. Never allocate from a
+// virtualized ListView estimate or persist a runtime clamp as a preference.
+function sidebarSplitLayout(input) {
+  input = input || {}
+  var A = Math.max(0, finite(input.availableHeight, 0))
+  var H = Math.max(0, finite(input.hierarchyContentHeight, 0))
+  var Wh = Math.max(0, finite(input.widgetHeaderHeight, 0))
+  var W = Math.max(0, finite(input.widgetContentHeight, 0))
+  var count = Math.max(0, Math.floor(finite(input.presentedWidgetCount, 0)))
+  var h = 0, w = 0
+  if (input.rail === true || count === 0 || A < Wh) {
+    h = Math.min(H, A)
+  } else {
+    var wanted = Math.min(Number.MAX_VALUE, Wh + W)
+    var hmin = Math.min(H, Math.max(0, finite(input.minHierarchyHeight, 0)))
+    var wmin = Math.min(wanted, Math.max(Wh, finite(input.minWidgetHeight, Wh)))
+    if (A < hmin + wmin) {
+      h = Math.min(hmin, Math.max(0, A - Wh))
+    } else {
+      var request = finite(input.requestedSplitPx, 0.55 * A)
+      var cap = Math.max(hmin, Math.min(A - wmin, request))
+      h = Math.min(H, Math.max(cap, A - wanted))
+    }
+    w = Math.min(wanted, Math.max(0, A - h))
+  }
+  return {hierarchyHeight:h, widgetHeight:w, blankHeight:Math.max(0, A - h - w)}
+}
+
+// Panel-local stable-ID scroll anchors. These helpers never write settings.
+function widgetScrollAnchor(cards, contentY) {
+  cards = cards || []
+  var y = Math.max(0, finite(contentY, 0))
+  var ids = cards.map(function(card) { return card.id })
+  if (!cards.length) return {id:"", offset:0, ids:ids}
+  var index = cards.length - 1
+  for (var i = 0; i < cards.length; ++i) {
+    if (cards[i].y + cards[i].height > y) { index = i; break }
+  }
+  return {id:cards[index].id, offset:y - cards[index].y, ids:ids}
+}
+function widgetScrollPosition(anchor, cards, maximum) {
+  anchor = anchor || {}; cards = cards || []
+  var ids = cards.map(function(card) { return card.id })
+  var index = ids.indexOf(anchor.id), offset = finite(anchor.offset, 0)
+  if (index < 0) {
+    var old = anchor.ids || [], at = old.indexOf(anchor.id)
+    offset = 0
+    for (var i = at + 1; i < old.length && index < 0; ++i) index = ids.indexOf(old[i])
+    for (var j = at - 1; j >= 0 && index < 0; --j) index = ids.indexOf(old[j])
+  }
+  var y = index < 0 ? 0 : cards[index].y + offset
+  return Math.max(0, Math.min(Math.max(0, finite(maximum, 0)), y))
+}
+function widgetFocusScroll(y, height, contentY, viewportHeight, maximum) {
+  y = finite(y, 0); height = Math.max(0, finite(height, 0))
+  var top = finite(contentY, 0), size = Math.max(0, finite(viewportHeight, 0))
+  var next = height > size || y < top ? y : y + height > top + size ? y + height - size : top
+  return Math.max(0, Math.min(Math.max(0, finite(maximum, 0)), next))
+}

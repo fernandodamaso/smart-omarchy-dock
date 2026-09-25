@@ -19,6 +19,8 @@ Item {
     : Qt.tint(Qt.darker(Color.background, 1.04), Util.alpha(Color.foreground, 0.09))
   readonly property real widgetCardRadius: appearance && appearance.cardRadius !== undefined
     ? appearance.cardRadius : Math.min(3, Style.cornerRadius)
+  property bool bodyNavigationEnabled: true
+  function focusCollapseControl() { collapseButton.forceActiveFocus(Qt.TabFocusReason) }
   property bool collapsed: false
   property bool dropBefore: false
   property bool dropAfter: false
@@ -288,6 +290,7 @@ Item {
   Item {
     id: body
     objectName: "widget-card-body"
+    visible: !root.collapsed && root.bodyNavigationEnabled
     anchors.top: header.bottom
     width: parent.width
     implicitHeight: widgetView.hasView ? widgetView.implicitHeight + Style.space(16) : Style.space(56)
