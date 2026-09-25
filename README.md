@@ -65,7 +65,7 @@ omarchy plugin add https://github.com/fernandodamaso/smart-omarchy-dock.git --en
 The normal update command is:
 
 ```bash
-omarchy plugin update io.github.fernandodamaso.dockrail --yes
+omarchy plugin update io.github.fernandodamaso.smartdock --yes
 ```
 
 Updates pull the fork's default `main` branch and preserve
