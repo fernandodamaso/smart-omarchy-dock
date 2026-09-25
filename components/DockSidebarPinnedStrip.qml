@@ -33,13 +33,19 @@ Item {
   readonly property int hiddenCount: layout.hidden
   readonly property var hiddenPins: pins.slice(visibleCount)
   // Rail hides the strip entirely — zero height and no residual gap.
-  implicitHeight: collapsed ? 0 : (shelfPadTop + Style.space(1) + Style.space(30)
+  implicitHeight: collapsed ? 0 : (shelfPadTop + Style.space(1) + Style.space(4) + sectionLabel.height
     + cellHeight + shelfPadBottom)
   height: implicitHeight
   visible: !collapsed
   enabled: !collapsed
   clip: true
   readonly property var addPinButton: addPin
+  readonly property var firstFocusControl: root.visibleCount > 0
+    ? pinRepeater.itemAt(0) : overflowButton.visible ? overflowButton : addPin
+  Keys.onBacktabPressed: function(event) {
+    if (root.firstFocusControl && root.firstFocusControl.activeFocus)
+      event.accepted = root.panel.focusBeforeFooter()
+  }
   property bool overflowOpen: false
   property bool overflowOpenedByKeyboard: false
   property double overflowDismissedAt: 0
@@ -225,19 +231,23 @@ Item {
     anchors.topMargin: root.shelfPadTop
   }
 
-  Text {
+  Ui.PanelSectionHeader {
     id: sectionLabel
+    objectName: "pinned-section-label"
     anchors.left: parent.left
+    // The pin shelf has a different outer inset. Align only its label to the
+    // hierarchy's content origin; leave pin cells and hit targets unchanged.
+    anchors.leftMargin: {
+      if (!root.panel || !root.panel.viewport) return Style.space(5) + Style.space(4)
+      var item = root.panel.viewport, x = 0
+      while (item && item !== root.parent) { x += item.x; item = item.parent }
+      return x - root.x + root.panel.viewport.workspaceCardInset + Style.space(4)
+    }
     anchors.top: divider.bottom
     anchors.topMargin: Style.space(4)
-    height: Style.space(26)
+    height: Math.max(Style.space(26), implicitHeight)
     verticalAlignment: Text.AlignVCenter
     text: "PINNED"
-    textFormat: Text.PlainText
-    color: Color.muted
-    font.family: Style.font.family
-    font.pixelSize: Style.font.caption
-    font.bold: true
   }
 
   Item {
@@ -257,6 +267,7 @@ Item {
       clip: true
 
       Repeater {
+        id: pinRepeater
         model: displayModel
         delegate: Item {
           id: pinCell

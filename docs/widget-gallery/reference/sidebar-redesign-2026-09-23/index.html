@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sidebar Widgets Redesign</title>
+<!-- Static index of the FDM-996 design canvas. Boards are generated from source/*.dc.html. -->
+<style>
+:root{color-scheme:dark}
+body{margin:0;padding:32px;background:#0f1019;color:#c0caf5;font-family:'JetBrains Mono',ui-monospace,monospace}
+h1{margin:0 0 6px;font-size:22px}
+p{margin:0 0 24px;color:#7c82a0;font-size:12px;max-width:900px;line-height:1.5}
+.boards{display:flex;gap:48px;flex-wrap:wrap;align-items:flex-start}
+figure{margin:0}
+figcaption{font-size:12px;color:#7c82a0;margin-bottom:8px}
+iframe{border:0;display:block;background:#181925}
+.notes{display:flex;gap:16px;flex-wrap:wrap;margin-top:32px}
+.notes section{background:#1f202c;border-radius:3px;padding:12px 14px;width:300px}
+pre{margin:0;white-space:pre-wrap;font:inherit;font-size:11px;line-height:1.5}
+</style>
+</head>
+<body>
+<h1>Widgets: current vs proposed</h1>
+<p>Visual reference for Linear FDM-996 (slices FDM-997 to FDM-1001). A mockup, not a pixel contract. Colors are the Tokyo Night values sampled from a live screenshot; the QML implementation must use Omarchy tokens. Static renders show each board's default state. The interactive originals (collapse, hover grip, draggable split, tweaks) are the canvas sources in <code>source/</code>.</p>
+<div class="boards">
+<figure><figcaption>Current</figcaption><iframe src="Current.html" width="312" height="1060" title="Current" loading="lazy"></iframe></figure>
+<figure><figcaption>Proposed</figcaption><iframe src="Main.html" width="312" height="1060" title="Proposed" loading="lazy"></iframe></figure>
+<figure><figcaption>Proposed · split scroll</figcaption><iframe src="Split.html" width="312" height="1060" title="Proposed · split scroll" loading="lazy"></iframe></figure>
+</div>
+<div class="notes">
+<section><pre>Color
+• Accent is the only default hue
+• Status dot + DEMO pill go neutral
+• Amber only when it needs attention: drag the Memory tweak past 85%
+• Captions use the theme muted gray
+• Fade above the pinned shelf hints at more content</pre></section>
+<section><pre>Split scroll
+• Monitors/windows keep their natural height up to a cap, then scroll on their own
+• Widgets fill the rest and scroll on their own; the WIDGETS header never leaves
+• Drag the bar above WIDGETS to move the split (Play mode)
+• Tweak ‘Many windows’ off to see widgets take the freed space
+• Both regions keep a minimum height</pre></section>
+<section><pre>Surfaces
+• Cards use the monitor fill (#1f202c), not a darker well
+• Header + body share one surface; the divider alone splits them
+• Hover highlights the header only
+• One 3px radius everywhere; tiles/inputs never rounder than the card</pre></section>
+<section><pre>Type &amp; chrome
+• WIDGETS label matches PINNED (caption, muted, caps)
+• Add/Manage → quiet + icon button
+• Titles DemiBold like monitor names; muted when collapsed
+• Grip (⋮⋮) shows only on hover/focus
+• Collapse uses ▾/▴, so › keeps meaning ‘open’
+• Shared 9px text inset for labels and content</pre></section>
+</div>
+</body>
+</html>

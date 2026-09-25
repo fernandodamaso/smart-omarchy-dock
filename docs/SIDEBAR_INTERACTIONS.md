@@ -90,7 +90,7 @@ acceptance is still required before Task 4 merges; source execution is not a
 record of that product decision. Dropping into one's current workspace is a no-op.
 
 Only header/top and unclaimed bottom padding are window-to-monitor targets.
-Workspace content, separators, side gutters, Widget tail, footer extra height,
+Workspace content, separators, side gutters, independent Widget pane, hierarchy drag-footer extra height,
 offscreen/clipped areas and gaps between cards cannot fall through to a header.
 Window pins and workspace monitor pins have distinct rejection labels. A dimmed
 source and clipped, theme-aware pill identify the source and destination without
@@ -255,3 +255,19 @@ merge is present; this source slice neither recreates that fix nor upgrades its
 historical evidence. SB-06 establishes fresh native evidence on the integrated
 candidate and owns demonstrated runtime fixes. No human code-approval ritual is
 required, and no deployment is implied by remote source acceptance.
+
+## Independent Widget input boundary — FDM-999
+
+Hierarchy wheel/row-drag auto-scroll stays in the hierarchy; Widget wheel/grip
+edge-scroll stays in the Widget body clip. Fixed headers and residual blank
+space do not scroll either pane. Nested native scrollables retain first refusal
+and contain wheel input at their bounds. A passive bottom alpha fade paints no
+new surface and handles no input. Widget title drags remain stealable for
+scrolling; only the explicit grip reorders, and release outside the Widget body
+cancels with zero writes. The actual blank-region gesture remains included in
+mode-drag selection/cancellation/preview feedback.
+
+Tab/Backtab cross the pane boundaries without changing hierarchy arrows,
+Home/End or inline workspace/alert semantics. Reveal only the focused body
+control after deferred anchor restoration. No geometry/provider update takes
+focus. See SIDEBAR_WIDGETS.md for per-panel restoration and popup ownership.

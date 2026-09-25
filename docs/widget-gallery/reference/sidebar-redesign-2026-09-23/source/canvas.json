@@ -1,0 +1,82 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Current.dc.html": {
+      "h": 1060,
+      "title": "Current",
+      "w": 312,
+      "x": 0,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 1060,
+      "is_interactive": true,
+      "title": "Proposed",
+      "w": 312,
+      "x": 392,
+      "y": 0
+    },
+    "Split.dc.html": {
+      "h": 1060,
+      "is_interactive": true,
+      "title": "Proposed · split scroll",
+      "w": 312,
+      "x": 1504,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-23T12:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "color": {
+      "fill": "orange",
+      "text": "Color\n• Accent is the only default hue\n• Status dot + DEMO pill go neutral\n• Amber only when it needs attention: drag the Memory tweak past 85%\n• Captions use the theme muted gray\n• Fade above the pinned shelf hints at more content",
+      "w": 300,
+      "x": 1124,
+      "y": 0
+    },
+    "heading": {
+      "kind": "title1",
+      "maxW": 704,
+      "text": "Widgets: current vs proposed",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "split": {
+      "fill": "purple",
+      "text": "Split scroll\n• Monitors/windows keep their natural height up to a cap, then scroll on their own\n• Widgets fill the rest and scroll on their own; the WIDGETS header never leaves\n• Drag the bar above WIDGETS to move the split (Play mode)\n• Tweak ‘Many windows’ off to see widgets take the freed space\n• Both regions keep a minimum height",
+      "w": 300,
+      "x": 1896,
+      "y": 0
+    },
+    "surface": {
+      "fill": "blue",
+      "text": "Surfaces\n• Cards use the monitor fill (#1f202c), not a darker well\n• Header + body share one surface; the divider alone splits them\n• Hover highlights the header only\n• One 3px radius everywhere; tiles/inputs never rounder than the card",
+      "w": 300,
+      "x": 784,
+      "y": 0
+    },
+    "type": {
+      "fill": "teal",
+      "text": "Type & chrome\n• WIDGETS label matches PINNED (caption, muted, caps)\n• Add/Manage → quiet + icon button\n• Titles DemiBold like monitor names; muted when collapsed\n• Grip (⋮⋮) shows only on hover/focus\n• Collapse uses ▾/▴, so › keeps meaning ‘open’\n• Shared 9px text inset for labels and content",
+      "w": 300,
+      "x": 824,
+      "y": 319
+    }
+  },
+  "order": [
+    "Current.dc.html",
+    "Main.dc.html",
+    "Split.dc.html"
+  ],
+  "pages": [],
+  "title": "Sidebar Widgets Redesign"
+}

@@ -2,11 +2,11 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-  readonly property color foreground: "#f0f2f8"
-  readonly property color background: "#171a22"
-  readonly property color accent: "#7d8cff"
-  readonly property color urgent: "#e06c75"
-  readonly property color muted: "#7f8490"
+  property color foreground: "#f0f2f8"
+  property color background: "#171a22"
+  property color accent: "#7d8cff"
+  property color urgent: "#e06c75"
+  property color muted: "#7f8490"
   readonly property QtObject menu: QtObject {
     readonly property color text: "#f0f2f8"
     readonly property color background: "#20242e"

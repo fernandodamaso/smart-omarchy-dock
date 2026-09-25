@@ -3,13 +3,14 @@ import qs.Commons
 
 Text {
   id: root
+  WidgetSemanticPalette { id: semanticPalette }
   property string role: "body"
   property bool muted: false
   property bool allowWrap: true
   property int maxLines: 0
 
   textFormat: Text.PlainText
-  color: root.muted ? Util.alpha(Color.foreground, 0.62) : Color.foreground
+  color: root.muted ? semanticPalette.mutedText : Color.foreground
   font.family: Style.font.family
   font.pixelSize: root.role === "title" ? Style.font.body
     : root.role === "caption" ? Style.font.caption : Style.font.bodySmall

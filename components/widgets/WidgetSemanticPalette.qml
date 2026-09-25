@@ -11,11 +11,18 @@ QtObject {
     0.2126 * Color.background.r + 0.7152 * Color.background.g + 0.0722 * Color.background.b
   readonly property bool darkBackground: root.backgroundLuminance < 0.5
 
-  readonly property color danger: Qt.hsla(0.985, 0.78, root.darkBackground ? 0.68 : 0.46, 1)
+  readonly property color danger: Color.urgent
   readonly property color warning: Qt.hsla(0.115, 0.82, root.darkBackground ? 0.66 : 0.42, 1)
   readonly property color success: Qt.hsla(0.43, 0.62, root.darkBackground ? 0.62 : 0.36, 1)
   readonly property color info: Color.accent
   readonly property color neutral: Color.foreground
+  // Color.muted is the sidebar's preferred secondary role. The audited dark/light
+  // themes fail WCAG 4.5:1 for normal Widget text on card/stat/input surfaces,
+  // and the legacy 0.62 foreground alpha also fails. Keep the preferred token
+  // visible for theme propagation/audits, but centralize the required normal-text
+  // exception here instead of scattering opacity literals across primitives.
+  readonly property color mutedTextBase: Color.muted
+  readonly property color mutedText: Color.foreground
 
   function tone(semantic) {
     return semantic === "danger" ? root.danger

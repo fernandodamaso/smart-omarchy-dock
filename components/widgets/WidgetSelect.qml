@@ -34,7 +34,7 @@ Controls.ComboBox {
   }
 
   background: Rectangle {
-    radius: Math.min(6, Style.cornerRadius)
+    radius: Math.min(3, Style.cornerRadius)
     color: Qt.darker(Color.background, 1.03)
     border.width: 1
     border.color: root.validationState === "error" ? semanticPalette.danger

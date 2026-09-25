@@ -6,6 +6,7 @@ import Quickshell.Wayland._BackgroundEffect
 import qs.Commons
 import qs.Ui as Ui
 import "DockModel.js" as DockModel
+import "DockSidebarWidgetModel.js" as WidgetModel
 import "DockSidebarInteractionModel.js" as InteractionModel
 
 PanelWindow {
@@ -15,7 +16,9 @@ PanelWindow {
   readonly property var viewport: sidebarViewport
   readonly property var resizeHandle: resizeHandle
   readonly property var contextMenu: sidebarContext
-  readonly property var widgetArea: sidebarViewport.contentTailItem
+  readonly property var widgetArea: sidebarWidgets
+  readonly property var widgetManageControl: widgetManage
+  readonly property var footerControl: pinnedStrip.visible ? pinnedStrip.firstFocusControl : launcher
   readonly property var widgetManager: widgetManagerPopup
   readonly property var collapseControl: collapseButton
   property var menuTarget: null
@@ -84,6 +87,9 @@ PanelWindow {
     item: root.contentItem
   }
 
+  function focusBeforeFooter() {
+    return sidebarWidgets.sectionVisible ? sidebarWidgets.focusLastControl() : sidebarViewport.focusLastRow()
+  }
   function syncBadges() {
     if (root.host && root.host.badgeTracker) root.host.badgeTracker.syncWorkspaceScopes(
       root.badgeScopeOwner,
@@ -101,7 +107,7 @@ PanelWindow {
   }
 
   // The panel-level surface owns header, margin, pin-shelf and utility gaps;
-  // the viewport surface owns only the list's blank tail. Only one can be
+  // the middle-region surface owns only residual blank space. Only one can be
   // pressed at a time, so feedback and the silhouette follow the live one.
   readonly property var activeModeDrag: positionDragSurface.gestureActive
     ? positionDragSurface
@@ -393,23 +399,9 @@ PanelWindow {
         font.pixelSize: Style.font.caption
       }
     }
-    DockSidebarViewport {
-      id: sidebarViewport
-      controller: root.controller
-      appearance: root.sidebarAppearance
-      panelConnector: String(root.screen && root.screen.name || "")
-      panelCollapsed: root.panelCollapsed
-      presentationVisible: root.visible
-      onContextRequested: (target, anchorItem) => root.openContext(target, anchorItem)
-      onDismissContextRequested: sidebarContext.dismiss()
-      contentTail: Component {
-        DockSidebarWidgetArea {
-          controller: root.controller
-          panel: root
-          viewport: sidebarViewport
-          windowRowHeight: sidebarViewport.rowHeight
-        }
-      }
+    Item {
+      id: middleRegion
+      objectName: "sidebar-middle-region"
       anchors.top: controls.bottom
       anchors.topMargin: Style.space(6)
       anchors.bottom: pinnedStrip.top
@@ -418,6 +410,59 @@ PanelWindow {
       anchors.right: parent.right
       anchors.leftMargin: Style.space(6) + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
       anchors.rightMargin: Style.space(6) + (!root.panelCollapsed ? root.resizeEdgeAllowance : 0)
+      readonly property var split: WidgetModel.sidebarSplitLayout({
+        availableHeight: Math.max(0, height),
+        hierarchyContentHeight: sidebarViewport.naturalContentHeight,
+        widgetHeaderHeight: sidebarWidgets.naturalWidgetHeaderHeight,
+        widgetContentHeight: sidebarWidgets.naturalWidgetContentHeight,
+        presentedWidgetCount: sidebarWidgets.presentedWidgetCount,
+        rail: root.panelCollapsed,
+        minHierarchyHeight: InteractionModel.sidebarRowMetrics({kind:"monitor"}, false,
+          sidebarViewport.rowHeight, Style.space, false).height + 2 * sidebarViewport.rowHeight,
+        minWidgetHeight: sidebarWidgets.naturalWidgetHeaderHeight + Style.space(34),
+        requestedSplitPx: null
+      })
+      DockSidebarViewport {
+        id: sidebarViewport
+        width: parent.width
+        height: middleRegion.split.hierarchyHeight
+        controller: root.controller
+        appearance: root.sidebarAppearance
+        panelConnector: String(root.screen && root.screen.name || "")
+        panelCollapsed: root.panelCollapsed
+        presentationVisible: root.visible
+        tabForwardTarget: sidebarWidgets.sectionVisible ? sidebarWidgets.manageControl : root.footerControl
+        onContextRequested: (target, anchorItem) => root.openContext(target, anchorItem)
+        onDismissContextRequested: sidebarContext.dismiss()
+      }
+      DockSidebarWidgetArea {
+        id: sidebarWidgets
+        y: sidebarViewport.height
+        width: parent.width
+        height: middleRegion.split.widgetHeight
+        appearance: root.sidebarAppearance
+        controller: root.controller
+        panel: root
+        viewport: sidebarViewport
+        windowRowHeight: sidebarViewport.rowHeight
+      }
+      DockPositionDragSurface {
+        id: viewportDragSurface
+        y: middleRegion.split.hierarchyHeight + middleRegion.split.widgetHeight
+        width: parent.width
+        height: middleRegion.split.blankHeight
+        visible: width > 0 && height > 0
+        dockPosition: root.sidebarEdge
+        requestedPosition: root.sidebarEdge
+        switchThreshold: 48
+        presentationMode: root.presentationMode
+        gestureToken: root.modeGestureToken
+        sidebarEdge: root.sidebarEdge
+        animationsEnabled: root.animationsEnabled
+        interactionAllowed: visible && !root.controller.interactionBusy
+        onPositionRequested: (position, expectedPosition, gestureToken) =>
+          root.commitModeSwitch(position, gestureToken)
+      }
     }
     DockSidebarWidgetManager {
       id: widgetManagerPopup
@@ -430,25 +475,7 @@ PanelWindow {
     // the blank tail below the last row is background. This surface sits above
     // the list and covers exactly that region, so a press on a row or on the
     // scrolling content still belongs to the list.
-    DockPositionDragSurface {
-      id: viewportDragSurface
 
-      x: sidebarViewport.x + sidebarViewport.blankRegion.x
-      y: sidebarViewport.y + sidebarViewport.blankRegion.y
-      width: sidebarViewport.blankRegion.width
-      height: sidebarViewport.blankRegion.height
-      visible: width > 0 && height > 0
-      dockPosition: root.sidebarEdge
-      requestedPosition: root.sidebarEdge
-      switchThreshold: 48
-      presentationMode: root.presentationMode
-      gestureToken: root.modeGestureToken
-      sidebarEdge: root.sidebarEdge
-      animationsEnabled: root.animationsEnabled
-      interactionAllowed: visible && !root.controller.interactionBusy
-      onPositionRequested: (position, expectedPosition, gestureToken) =>
-        root.commitModeSwitch(position, gestureToken)
-    }
     DockSidebarPinnedStrip {
       id: pinnedStrip
       controller: root.controller
@@ -546,6 +573,11 @@ PanelWindow {
           }
         }
         Keys.onPressed: function(event) {
+          if (!pinnedStrip.visible && (event.key === Qt.Key_Backtab
+              || (event.key === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier)))) {
+            event.accepted = root.focusBeforeFooter()
+            return
+          }
           if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
             var command = DockModel.normalizeSetting("controlCommand", root.controller.settings.controlCommand)
             if (command) Quickshell.execDetached(["sh", "-lc", command])

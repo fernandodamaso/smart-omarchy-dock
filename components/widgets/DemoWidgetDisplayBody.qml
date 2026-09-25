@@ -5,6 +5,8 @@ Item {
   id: root
   property var widgetContext: ({})
   readonly property var snapshotData: widgetContext && widgetContext.data ? widgetContext.data : ({})
+  readonly property real memoryValue: Number(root.snapshotData.memory || 0)
+  readonly property string memorySemantic: root.memoryValue >= 0.85 ? "warning" : "neutral"
   implicitHeight: content.implicitHeight
 
   Column {
@@ -14,7 +16,7 @@ Item {
 
     WidgetText { width: parent.width; text: "Synthetic display primitives"; role: "caption"; muted: true }
 
-    WidgetStatus { label: root.snapshotData.status || "Healthy"; semantic: "success"; reference: "DEMO" }
+    WidgetStatus { label: root.snapshotData.status || "Healthy"; semantic: "info"; reference: "DEMO"; referenceSemantic: "neutral" }
 
     WidgetStatGrid {
       width: parent.width
@@ -40,9 +42,9 @@ Item {
     WidgetMeter {
       width: parent.width
       label: "Memory"
-      valueText: Math.round(Number(root.snapshotData.memory || 0) * 100) + "%"
-      value: Number(root.snapshotData.memory || 0)
-      semantic: "warning"
+      valueText: Math.round(root.memoryValue * 100) + "%"
+      value: root.memoryValue
+      semantic: root.memorySemantic
     }
 
     WidgetText { width: parent.width; text: "Synthetic trend"; role: "caption"; muted: true }

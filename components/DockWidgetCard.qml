@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as Controls
 import qs.Commons
 import qs.Ui as Ui
@@ -9,6 +10,17 @@ Item {
   id: root
   required property var controller
   required property string widgetId
+  property var appearance: null
+  property real contentInset: Style.space(5) + Style.space(4)
+  readonly property color idleCardFill: appearance
+    ? appearance.monitorFill : Qt.tint(Color.background, Util.alpha(Color.foreground, 0.035))
+  readonly property color headerHoverFill: appearance
+    ? appearance.workspaceHoverFill
+    : Qt.tint(Qt.darker(Color.background, 1.04), Util.alpha(Color.foreground, 0.09))
+  readonly property real widgetCardRadius: appearance && appearance.cardRadius !== undefined
+    ? appearance.cardRadius : Math.min(3, Style.cornerRadius)
+  property bool bodyNavigationEnabled: true
+  function focusCollapseControl() { collapseButton.forceActiveFocus(Qt.TabFocusReason) }
   property bool collapsed: false
   property bool dropBefore: false
   property bool dropAfter: false
@@ -32,6 +44,17 @@ Item {
   property bool dragActive: false
   readonly property int dragThreshold: 6
 
+  // Item.activeFocus does not include descendants (for example a body input).
+  // Track the window's actual focus item without moving focus or adding a Tab stop.
+  readonly property bool hasCardFocus: {
+    var item = root.Window.window ? root.Window.window.activeFocusItem : null
+    while (item) {
+      if (item === root) return true
+      item = item.parent
+    }
+    return root.activeFocus
+  }
+
   activeFocusOnTab: true
   implicitHeight: header.height + (collapsed ? 0 : body.implicitHeight)
   height: implicitHeight
@@ -40,11 +63,9 @@ Item {
     id: cardSurface
     objectName: "widget-card-surface"
     anchors.fill: parent
-    radius: Math.min(4, Style.cornerRadius)
-    color: root.activeFocus || cardHover.hovered || cardContext.pressed
-      ? Qt.tint(Color.background, Util.alpha(Color.foreground, 0.09))
-      : Qt.darker(Color.background, 1.04)
-    borderSpec: root.activeFocus
+    radius: root.widgetCardRadius
+    color: root.idleCardFill
+    borderSpec: root.hasCardFocus
       ? Border.controlSpec("focus", Color.foreground, Color.accent)
       : Border.none()
   }
@@ -81,6 +102,19 @@ Item {
     width: parent.width
     height: Style.space(34)
 
+    HoverHandler { id: headerHover }
+    Rectangle {
+      objectName: "widget-card-header-highlight"
+      anchors.fill: parent
+      // Keep native focus-border strokes visible above the transient fill.
+      anchors.leftMargin: cardSurface.contentLeftInset
+      anchors.rightMargin: cardSurface.contentRightInset
+      anchors.topMargin: cardSurface.contentTopInset
+      radius: root.widgetCardRadius
+      color: headerHover.hovered || root.hasCardFocus || cardContext.pressed
+        ? root.headerHoverFill : "transparent"
+    }
+
     // Header double-click keeps ordinary pointer ownership stealable so the
     // parent ListView can still take vertical drags for scrolling. Reorder
     // stays on the explicit drag handle below, where stealing is intentional.
@@ -98,7 +132,9 @@ Item {
 
     Item {
       id: dragHandle
-      anchors.right: collapseButton.left
+      objectName: "widget-card-grip"
+      anchors.right: badge.visible ? badge.left : collapseButton.left
+      anchors.rightMargin: badge.visible ? Style.space(4) : 0
       anchors.verticalCenter: parent.verticalCenter
       width: Style.space(22)
       height: parent.height
@@ -107,10 +143,13 @@ Item {
       Accessible.name: "Drag " + root.title + " to reorder"
 
       WidgetIcon {
+        objectName: "widget-card-grip-icon"
         anchors.centerIn: parent
         width: 13
         height: 13
-        iconName: "move"
+        // Only the glyph fades. The invisible grip keeps its pointer target.
+        opacity: cardHover.hovered || root.hasCardFocus || root.dragActive ? 1 : 0
+        iconName: "grip-vertical"
         sizeToken: "xs"
         containerVariant: "plain"
         tint: Util.alpha(Color.foreground, 0.55)
@@ -159,8 +198,9 @@ Item {
 
     WidgetIcon {
       id: widgetIcon
+      objectName: "widget-card-icon"
       anchors.left: parent.left
-      anchors.leftMargin: Style.space(9)
+      anchors.leftMargin: root.contentInset
       anchors.verticalCenter: parent.verticalCenter
       width: 18
       height: 18
@@ -176,22 +216,24 @@ Item {
       objectName: "widget-card-title"
       anchors.left: widgetIcon.right
       anchors.leftMargin: Style.space(7)
-      anchors.right: badge.visible ? badge.left : dragHandle.left
+      anchors.right: dragHandle.left
       anchors.rightMargin: Style.space(6)
       anchors.verticalCenter: parent.verticalCenter
       text: root.title
       textFormat: Text.PlainText
       elide: Text.ElideRight
-      color: Color.foreground
+      color: !root.collapsed || root.hasCardFocus
+        ? Color.foreground : Util.alpha(Color.foreground, 0.85)
       font.family: Style.font.family
-      font.pixelSize: Style.font.bodySmall
-      font.bold: true
+      font.pixelSize: Style.font.body
+      font.weight: Font.DemiBold
     }
 
     Rectangle {
       id: badge
+      objectName: "widget-card-badge"
       visible: root.badgeCount > 0
-      anchors.right: dragHandle.left
+      anchors.right: collapseButton.left
       anchors.rightMargin: Style.space(4)
       anchors.verticalCenter: parent.verticalCenter
       width: Math.max(17, badgeText.implicitWidth + 8)
@@ -203,6 +245,7 @@ Item {
 
       Text {
         id: badgeText
+        objectName: "widget-card-badge-text"
         anchors.centerIn: parent
         text: root.badgeCount > 99 ? "99+" : String(root.badgeCount)
         textFormat: Text.PlainText
@@ -233,11 +276,12 @@ Item {
         anchors.centerIn: parent
         width: 13
         height: 13
-        iconName: "chevron-right"
+        objectName: "widget-card-collapse-icon"
+        iconName: "chevron-down"
         sizeToken: "xs"
         containerVariant: "plain"
         accessibleName: collapseButton.tooltipText
-        rotation: root.collapsed ? 0 : 90
+        rotation: root.collapsed ? 0 : 180
         tint: Color.foreground
       }
     }
@@ -245,6 +289,8 @@ Item {
 
   Item {
     id: body
+    objectName: "widget-card-body"
+    visible: !root.collapsed && root.bodyNavigationEnabled
     anchors.top: header.bottom
     width: parent.width
     implicitHeight: widgetView.hasView ? widgetView.implicitHeight + Style.space(16) : Style.space(56)
@@ -252,20 +298,17 @@ Item {
     clip: true
 
     Rectangle {
-      anchors.fill: parent
-      color: Qt.tint(Color.background, Util.alpha(Color.foreground, 0.025))
-    }
-
-    Rectangle {
+      objectName: "widget-card-divider"
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.top: parent.top
       height: 1
-      color: Util.alpha(Color.foreground, 0.10)
+      color: Util.alpha(Color.foreground, 0.07)
     }
 
     DockSidebarWidgetView {
       id: widgetView
+      objectName: "widget-card-view"
       controller: root.controller
       widgetId: root.widgetId
       presentation: "expanded"
@@ -275,9 +318,9 @@ Item {
       presentationVisible: root.presentationVisible && !root.collapsed && root.visible
       presentationClipItem: root.presentationClipItem
       presentationRevision: root.presentationRevision
-      x: Style.space(9)
+      x: root.contentInset
       y: Style.space(7)
-      width: Math.max(0, parent.width - Style.space(18))
+      width: Math.max(0, parent.width - 2 * root.contentInset)
       height: implicitHeight
     }
 
@@ -286,6 +329,8 @@ Item {
       visible: !widgetView.hasView
       anchors.fill: parent
       anchors.margins: Style.space(6)
+      anchors.leftMargin: root.contentInset
+      anchors.rightMargin: root.contentInset
       compact: true
       kind: !root.snapshot ? "unavailable"
         : root.snapshot.status === "loading" ? "loading"
@@ -300,6 +345,7 @@ Item {
 
   Controls.Menu {
     id: cardMenu
+    objectName: "widget-card-menu"
     Controls.MenuItem {
       text: "Remove from Widgets"
       onTriggered: root.removeRequested()

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import "." as Plugin
 
@@ -60,9 +61,20 @@ ShellRoot {
       property var watchedPanel: null
       readonly property var watchedViewport: watchedPanel ? watchedPanel.viewport : null
 
-      function report(reason) {
+      property string lastStateSignature: ""
+
+      function report(reason, heartbeat) {
         if (!watchedViewport) return
-        root.emitRecord(root.viewportRecord(watchedViewport, reason))
+        try {
+          var record = root.viewportRecord(watchedPanel, watchedViewport, reason)
+          var signature = JSON.stringify(record.state)
+          if (heartbeat !== true && signature === lastStateSignature) return
+          lastStateSignature = signature
+          root.emitRecord(record)
+        } catch (error) {
+          // The panel may be disappearing between a notify signal and this
+          // observer callback. Native teardown must remain observational.
+        }
       }
 
       property Connections viewportConnections: Connections {
@@ -79,12 +91,39 @@ ShellRoot {
         function onDropFlashOpacityChanged() { panelHook.report("flash-opacity") }
         function onPanelConnectorChanged() { panelHook.report("connector") }
         function onPresentationVisibleChanged() { panelHook.report("visibility") }
+        function onNaturalContentHeightChanged() { panelHook.report("hierarchy-demand") }
+        function onRowCountChanged() { panelHook.report("hierarchy-count") }
       }
       property Connections listConnections: Connections {
         target: panelHook.watchedViewport ? panelHook.watchedViewport.listView : null
         function onContentYChanged() { panelHook.report("content-y") }
+        function onContentHeightChanged() { panelHook.report("hierarchy-content-height") }
+        function onHeightChanged() { panelHook.report("hierarchy-viewport-height") }
       }
-      Component.onCompleted: report("panel-observed")
+      property Connections widgetConnections: Connections {
+        target: panelHook.watchedPanel ? panelHook.watchedPanel.widgetArea : null
+        function onHeightChanged() { panelHook.report("widget-allocation") }
+        function onNaturalWidgetHeaderHeightChanged() { panelHook.report("widget-header-demand") }
+        function onNaturalWidgetContentHeightChanged() { panelHook.report("widget-content-demand") }
+        function onPresentedWidgetCountChanged() { panelHook.report("widget-count") }
+        function onLayoutRevisionChanged() { panelHook.report("widget-layout") }
+        function onPendingRestoreChanged() { panelHook.report("widget-pending-restore") }
+        function onRestoringChanged() { panelHook.report("widget-restoring") }
+        function onInputBusyChanged() { panelHook.report("widget-input") }
+        function onPresentationWidgetIdsChanged() { panelHook.report("widget-ids") }
+      }
+      property Connections widgetScrollConnections: Connections {
+        target: panelHook.watchedPanel && panelHook.watchedPanel.widgetArea
+          ? panelHook.watchedPanel.widgetArea.scrollView : null
+        function onContentYChanged() { panelHook.report("widget-content-y") }
+        function onContentHeightChanged() { panelHook.report("widget-content-height") }
+        function onHeightChanged() { panelHook.report("widget-viewport-height") }
+      }
+      property Connections managerConnections: Connections {
+        target: panelHook.watchedPanel ? panelHook.watchedPanel.widgetManager : null
+        function onManagerOpenChanged() { panelHook.report("manager-open") }
+      }
+      Component.onCompleted: report("panel-observed", true)
     }
   }
 
@@ -125,22 +164,173 @@ ShellRoot {
       offset:anchor ? Number(anchor.offset || 0) : 0}
   }
 
-  function viewportRecord(viewport, reason) {
+  function rectRecord(item, relativeTo) {
+    try {
+      if (!item || !relativeTo || !item.visible || item.Window.window !== relativeTo.Window.window)
+        return {present:false,x:0,y:0,width:0,height:0}
+      var point = relativeTo.mapFromItem(item, 0, 0)
+      return {present:true, x:Number(point.x), y:Number(point.y),
+        width:Number(item.width || 0), height:Number(item.height || 0)}
+    } catch (error) {
+      return {present:false,x:0,y:0,width:0,height:0}
+    }
+  }
+
+  function safeFocusObjectName(item) {
+    var name = item ? String(item.objectName || "") : ""
+    var safeNames = ["smartdock-sidebar", "sidebar-widget-scroll",
+      "widget-section-label", "widget-section-manage", "widget-section-plus"]
+    return safeNames.indexOf(name) >= 0 ? name : ""
+  }
+
+  function safeWidgetId(value) {
+    var id = typeof value === "string" ? value : ""
+    return id.length <= 64 && /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(id) ? id : ""
+  }
+
+  function focusedWidgetId(area, item) {
+    if (!area || !area.cards || !item) return ""
+    for (var parent = item; parent; parent = parent.parent) {
+      for (var index = 0; index < area.cards.count; ++index) {
+        var card = area.cards.itemAt(index)
+        if (card === parent) return safeWidgetId(card.widgetId)
+      }
+    }
+    return ""
+  }
+
+  function activeFocusRecord(panel) {
+    try {
+      var window = panel && panel.contentItem ? panel.contentItem.Window.window : null
+      var item = window ? window.activeFocusItem : null
+      var owner = ""
+      for (var parent = item; parent && !owner; parent = parent.parent)
+        owner = safeFocusObjectName(parent)
+      var widgetId = focusedWidgetId(panel ? panel.widgetArea : null, item)
+      return {owner:owner || (widgetId ? "widget-card" : ""), widgetId:widgetId,
+        connector:connectorFor(panel ? panel.viewport : null),
+        rect:rectRecord(item, panel ? panel.contentItem : null)}
+    } catch (error) {
+      return {owner:"",widgetId:"",connector:"",rect:{present:false,x:0,y:0,width:0,height:0}}
+    }
+  }
+
+  function widgetAnchorRecord(area, panel) {
+    var anchor = area && area.controller ? area.controller.widgetPopupAnchor : null
+    return rectRecord(anchor, panel ? panel.contentItem : null)
+  }
+
+  function widgetIds(area) {
+    return area && Array.isArray(area.presentationWidgetIds)
+      ? area.presentationWidgetIds.map(function(id) { return safeWidgetId(id) })
+        .filter(function(id) { return id !== "" }).slice(0, 32) : []
+  }
+
+  function geometryRecord(geometry, present) {
+    return {present:present === true, x:Number(geometry ? geometry.x : 0),
+      y:Number(geometry ? geometry.y : 0), width:Number(geometry ? geometry.width : 0),
+      height:Number(geometry ? geometry.height : 0)}
+  }
+
+  function widgetManagerCounters() {
+    try {
+      var manager = root.host && root.host.sidebarController
+        ? root.host.sidebarController.widgetManager : null
+      var counters = manager && typeof manager.diagnostics === "function"
+        ? manager.diagnostics().counters : null
+      return {acquisitions:Number(counters ? counters.acquisitions : 0),
+        releases:Number(counters ? counters.releases : 0),
+        activations:Number(counters ? counters.activations : 0),
+        suspensions:Number(counters ? counters.suspensions : 0),
+        acceptedUpdates:Number(counters ? counters.acceptedUpdates : 0),
+        ignoredUpdates:Number(counters ? counters.ignoredUpdates : 0),
+        failures:Number(counters ? counters.failures : 0)}
+    } catch (error) {
+      return {acquisitions:0,releases:0,activations:0,suspensions:0,
+        acceptedUpdates:0,ignoredUpdates:0,failures:0}
+    }
+  }
+
+  function viewportRecord(panel, viewport, reason) {
     var presentation = viewport.dropPresentation
-    return {event:"viewport-state", sequence:root.gestureSequence, time:Date.now(),
-      reason:reason, connector:connectorFor(viewport),
-      surfaceGeneration:generationFor(viewport),
-      visible:viewport.presentationVisible === true,
-      collapsed:viewport.panelCollapsed === true,
-      pendingRestore:viewport.pendingRestore === true,
-      restoring:viewport.restoring === true,
-      contentY:Number(viewport.listView ? viewport.listView.contentY : 0),
-      anchor:anchorRecord(viewport),
-      flash:{active:scalar(viewport.dropFlashKey) !== "",
-        key:scalar(viewport.dropFlashKey), opacity:Number(viewport.dropFlashOpacity || 0)},
-      presentation:{present:!!presentation,
-        token:presentation ? Number(presentation.token || 0) : 0,
-        state:presentation ? scalar(presentation.state) : ""}}
+    var area = panel ? panel.widgetArea : null
+    var widgetScroll = area ? area.scrollView : null
+    var manager = panel ? panel.widgetManager : null
+    var middle = root.findObject(panel ? panel.contentItem : null, "sidebar-middle-region")
+    var split = middle ? middle.split : null
+    var popup = area ? area.popupWindow : null
+    var managerPopup = manager ? manager.popupWindow : null
+    var host = root.host
+    return {event:"viewport-state", sequence:root.gestureSequence, time:Date.now(), reason:reason,
+      state:{connector:connectorFor(viewport), surfaceGeneration:generationFor(viewport),
+        visible:viewport.presentationVisible === true, collapsed:viewport.panelCollapsed === true,
+        allocation:{availableMiddleHeight:Number(middle ? middle.height : 0),
+          hierarchyHeight:Number(viewport.height || 0), widgetHeight:Number(area ? area.height : 0),
+          blankHeight:Number(split ? split.blankHeight || 0 : 0),
+          conservationError:Number(middle ? middle.height : 0) - Number(viewport.height || 0)
+            - Number(area ? area.height : 0) - Number(split ? split.blankHeight || 0 : 0),
+          conserved:Math.abs(Number(middle ? middle.height : 0) - Number(viewport.height || 0)
+            - Number(area ? area.height : 0) - Number(split ? split.blankHeight || 0 : 0)) < 0.01},
+        hierarchy:{naturalDemand:Number(viewport.naturalContentHeight || 0),
+          presentedCount:Number(viewport.rowCount || 0), contentY:Number(viewport.listView ? viewport.listView.contentY : 0),
+          contentHeight:Number(viewport.listView ? viewport.listView.contentHeight : 0),
+          viewportHeight:Number(viewport.listView ? viewport.listView.height : 0),
+          maximumScroll:Math.max(0, Number(viewport.listView ? viewport.listView.contentHeight - viewport.listView.height : 0)),
+          anchor:anchorRecord(viewport), pendingRestore:viewport.pendingRestore === true,
+          restoring:viewport.restoring === true},
+        widgets:{naturalHeaderDemand:Number(area ? area.naturalWidgetHeaderHeight : 0),
+          naturalContentDemand:Number(area ? area.naturalWidgetContentHeight : 0),
+          presentedCount:Number(area ? area.presentedWidgetCount : 0), ids:widgetIds(area),
+          visible:area ? area.sectionVisible === true : false,
+          contentY:Number(widgetScroll ? widgetScroll.contentY : 0),
+          contentHeight:Number(widgetScroll ? widgetScroll.contentHeight : 0),
+          viewportHeight:Number(widgetScroll ? widgetScroll.height : 0),
+          maximumScroll:Number(area ? area.maximumScroll : 0),
+          anchor:{id:area && area.savedAnchor ? safeWidgetId(area.savedAnchor.id) : "",
+            offset:area && area.savedAnchor ? Number(area.savedAnchor.offset || 0) : 0},
+          pendingRestore:area ? area.pendingRestore === true : false,
+          restoring:area ? area.restoring === true : false,
+          inputBusy:area ? area.inputBusy === true : false,
+          layoutRevision:Number(area ? area.layoutRevision : 0)},
+        focus:activeFocusRecord(panel),
+        popup:{open:popup ? popup.visible === true : false, anchor:widgetAnchorRecord(area, panel),
+          rect:geometryRecord(area ? area.popupGeometry : null, popup ? popup.visible === true : false)},
+        manager:{open:manager ? manager.managerOpen === true : false,
+          anchor:rectRecord(manager ? manager.managerAnchor : null, panel ? panel.contentItem : null),
+          anchorPosition:{x:Number(manager ? manager.managerAnchorPosition.x : 0),
+            y:Number(manager ? manager.managerAnchorPosition.y : 0)},
+          // Ui.PopupCard may live in a separate native window; mapFromItem is
+          // invalid across that boundary. Its dimensions plus the panel-local
+          // manager anchor remain observable and comparable between records.
+          rect:geometryRecord(managerPopup ? {x:manager ? manager.managerAnchorPosition.x : 0,
+            y:manager ? manager.managerAnchorPosition.y : 0, width:managerPopup.width,
+            height:managerPopup.height} : null, manager ? manager.managerOpen === true : false)},
+        settings:{revision:Number(host ? host.settingsRevision : 0),
+          writeState:host ? scalar(host.settingsWriteState) : ""},
+        diagnostics:{widgetRevision:Number(root.host && root.host.sidebarController
+          ? root.host.sidebarController.widgetRevision : 0),
+          enabledWidgetCount:Number(root.host && root.host.sidebarController
+            ? root.host.sidebarController.widgetIds.length : 0),
+          widgetManager:widgetManagerCounters(),
+          widgetReorderActive:root.host && root.host.sidebarController
+            ? root.host.sidebarController.widgetReorderActive === true : false,
+          interactionBusy:root.host && root.host.sidebarController
+            ? root.host.sidebarController.interactionBusy === true : false},
+        flash:{active:scalar(viewport.dropFlashKey) !== "", key:scalar(viewport.dropFlashKey),
+          opacity:Number(viewport.dropFlashOpacity || 0)},
+        presentation:{present:!!presentation, token:presentation ? Number(presentation.token || 0) : 0,
+          state:presentation ? scalar(presentation.state) : ""}}}
+  }
+
+  function findObject(item, name) {
+    if (!item) return null
+    if (item.objectName === name) return item
+    var children = item.children || []
+    for (var i = 0; i < children.length; ++i) {
+      var found = root.findObject(children[i], name)
+      if (found) return found
+    }
+    return null
   }
 
   function operationRecord(operation) {
@@ -319,9 +509,34 @@ ShellRoot {
     function onScrollStatesChanged() {
       root.panelHooks.forEach(function(hook) { hook.report("anchor") })
     }
+    function onWidgetRevisionChanged() {
+      root.panelHooks.forEach(function(hook) { hook.report("widget-revision") })
+    }
+    function onWidgetPopupIdChanged() {
+      root.panelHooks.forEach(function(hook) { hook.report("widget-popup") })
+    }
+    function onInteractionBusyChanged() {
+      root.panelHooks.forEach(function(hook) { hook.report("interaction-busy") })
+    }
+  }
+
+  Connections {
+    target: root.host
+    function onSettingsRevisionChanged() {
+      root.panelHooks.forEach(function(hook) { hook.report("settings-revision") })
+    }
+    function onSettingsWriteStateChanged() {
+      root.panelHooks.forEach(function(hook) { hook.report("settings-write") })
+    }
   }
 
   Timer { interval:100; repeat:true; running:true; onTriggered:root.observePanelsAndInputs() }
+  Timer {
+    interval:2000
+    repeat:true
+    running:true
+    onTriggered: root.panelHooks.forEach(function(hook) { hook.report("heartbeat", true) })
+  }
   Component.onCompleted: root.host = hostFactory.createObject(root)
   Component.onDestruction: {
     root.inputHooks.forEach(function(hook) { hook.destroy() })
