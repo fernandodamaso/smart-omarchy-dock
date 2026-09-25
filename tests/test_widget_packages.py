@@ -101,9 +101,11 @@ class WidgetPackagesTest(unittest.TestCase):
     def test_source_in_core_or_standalone_bundle_is_forbidden(self):
         with self.assertRaises(widget.WidgetError):
             self.store.source_preflight(self.bundle / "custom")
-        standalone = self.data / "smartdock" / "custom-source"
-        with self.assertRaises(widget.WidgetError):
-            self.store.source_preflight(standalone)
+        for root_name in ("dockrail", "smartdock"):
+            with self.subTest(root_name=root_name):
+                standalone = self.data / root_name / "custom-source"
+                with self.assertRaises(widget.WidgetError):
+                    self.store.source_preflight(standalone)
 
     def test_create_scaffold_is_external_and_uses_widgetkit(self):
         result = self.store.create("io.example.scaffold", "My Widget")
