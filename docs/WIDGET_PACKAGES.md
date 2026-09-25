@@ -1,32 +1,32 @@
 # External Widget packages -- API v1
 
-SmartDock custom Widgets are independent packages. They do **not** live in the
-SmartDock repository and must never be developed in the installed Omarchy plugin
+Dockrail custom Widgets are independent packages. They do **not** live in the
+Dockrail repository and must never be developed in the installed Omarchy plugin
 checkout.
 
 ## Source, deployment and runtime boundaries
 
 There are three different locations with different ownership:
 
-1. **SmartDock core source** -- `/home/admin/Projects/smart-omarchy-dock` on the
+1. **Dockrail core source** -- `/home/admin/Projects/smart-omarchy-dock` on the
    development machine. Core changes use an ordinary branch/worktree and
-   `smartdock dev use`.
+   `dockrail dev use`.
 2. **Custom Widget source** -- a separate directory or Git repository owned by the
-   Widget developer, normally under `~/Projects/smartdock-widgets/`. Use the
-   `smartdock widget ...` commands below.
-3. **Installed SmartDock plugin** --
+   Widget developer, normally under `~/Projects/dockrail-widgets/`. Use the
+   `dockrail widget ...` commands below.
+3. **Installed Dockrail plugin** --
    `~/.config/omarchy/plugins/io.github.fernandodamaso.smartdock/`. This is
    deployment state. Never edit it or create Widget source under it.
 
 Installed external package snapshots live at:
 
 ```text
-${XDG_DATA_HOME:-$HOME/.local/share}/smartdock/widgets/<widget-id>/
+${XDG_DATA_HOME:-$HOME/.local/share}/dockrail/widgets/<widget-id>/
 ```
 
-SmartDock upgrades copy/update core files without owning that `widgets/`
+Dockrail upgrades copy/update core files without owning that `widgets/`
 subdirectory. Widget package updates operate only there and never run `git pull`
-in the SmartDock plugin checkout.
+in the Dockrail plugin checkout.
 
 ## Package API v1
 
@@ -56,7 +56,7 @@ Fields are deliberately small and closed in v1:
 
 - `apiVersion` -- integer `1`. Incompatible packages are not registered or run.
 - `id` -- stable lower-case Widget ID, maximum 64 characters. External packages
-  cannot replace SmartDock-owned IDs such as `herdr.agents` or `demo.*`.
+  cannot replace Dockrail-owned IDs such as `herdr.agents` or `demo.*`.
 - `name` -- display name, maximum 128 characters.
 - `version` -- package version string used for diagnostics/listing.
 - `entry` -- relative `.qml` entry inside the package. Absolute paths and `..`
@@ -64,19 +64,19 @@ Fields are deliberately small and closed in v1:
 - `icon` -- Lucide-style lower-case icon name.
 
 Package trees are bounded and may not contain symlinked files/directories. The
-top-level `SmartDock/` directory is reserved for host-owned runtime files and
+top-level `Dockrail/` directory is reserved for host-owned runtime files and
 is rejected in developer source packages. A validated package is copied into
-SmartDock-owned data, then SmartDock materializes the public WidgetKit beside
+Dockrail-owned data, then Dockrail materializes the public WidgetKit beside
 the installed entry. Developer source keeps the versioned
-`import SmartDock.WidgetKit 1.0` contract; only the SmartDock-owned
-installed/development snapshot adapts that import to the package-local runtime
-copy so dynamically loaded QML does not depend on an engine-global SmartDock
+`import Dockrail.WidgetKit 1.0` contract; only the Dockrail-owned
+installed/development snapshot adapts either the canonical or legacy named import to the package-local runtime
+copy so dynamically loaded QML does not depend on an engine-global Dockrail
 import path. The developer source is never rewritten. The host constructs the
 file URL from that trusted package root; `dock.json` never receives the path or
 URL.
 
 > External Widget packages are trusted local code. Installation is explicit;
-> SmartDock does not auto-execute arbitrary repositories or marketplace entries.
+> Dockrail does not auto-execute arbitrary repositories or marketplace entries.
 
 ## Runtime contract
 
@@ -90,7 +90,7 @@ URL.
 
 The package subsystem maps validated installed IDs to package-relative entry paths
 in its own atomic registry. The host reconstructs executable file URLs only from
-that SmartDock-owned package root. The host merges those descriptors into the **existing**
+that Dockrail-owned package root. The host merges those descriptors into the **existing**
 Widget registry. From there the normal `DockSidebarWidgetModel` lease manager,
 `DockWidgetCard`, shared-scroll area, popup ownership and existing settings writer
 remain authoritative.
@@ -103,7 +103,7 @@ The Widget entry root follows the existing body contract:
 
 ```qml
 import QtQuick
-import SmartDock.WidgetKit 1.0
+import Dockrail.WidgetKit 1.0
 
 Item {
   property var widgetContext: ({})
@@ -131,30 +131,30 @@ settings, recreate card chrome or own sidebar scrolling. See
 ### Create source
 
 ```bash
-smartdock widget create io.example.weather --name "Weather"
-smartdock widget create io.example.weather --destination ~/Projects/weather-widget
+dockrail widget create io.example.weather --name "Weather"
+dockrail widget create io.example.weather --destination ~/Projects/weather-widget
 ```
 
-The default source root is `~/Projects/smartdock-widgets/<id>`. The command
+The default source root is `~/Projects/dockrail-widgets/<id>`. The command
 creates `widget.json`, `Widget.qml` and `README.md`, then validates its own output.
-A destination inside SmartDock source/deployment state is a hard error.
+A destination inside Dockrail source/deployment state is a hard error.
 
 ### Install
 
 ```bash
-smartdock widget install ~/Projects/weather-widget
-smartdock widget install https://github.com/example/weather-widget.git
+dockrail widget install ~/Projects/weather-widget
+dockrail widget install https://github.com/example/weather-widget.git
 ```
 
 Only an explicit local directory or explicit supported Git repository source is
-accepted. SmartDock validates before installing and atomically exposes the new
+accepted. Dockrail validates before installing and atomically exposes the new
 snapshot. Installing an already installed ID fails; use `update` instead.
 
 ### List
 
 ```bash
-smartdock widget list
-smartdock widget list --json
+dockrail widget list
+dockrail widget list --json
 ```
 
 Rows report ID, name, API/package version, source/install/dev state, enabled
@@ -165,19 +165,19 @@ registered.
 ### Remove
 
 ```bash
-smartdock widget remove io.example.weather
+dockrail widget remove io.example.weather
 ```
 
 Removal is targeted. The developer source is never deleted. An enabled Widget or
 one with an active dev override must first be removed from the enabled Widget list
-or reset respectively. SmartDock does not silently edit unrelated settings to
+or reset respectively. Dockrail does not silently edit unrelated settings to
 make removal succeed.
 
 ### Update
 
 ```bash
-smartdock widget update io.example.weather
-smartdock widget update
+dockrail widget update io.example.weather
+dockrail widget update
 ```
 
 The stored explicit source metadata is reused. Local sources are recopied; Git
@@ -191,32 +191,32 @@ updating.
 Install the package once, then select a separate local source:
 
 ```bash
-smartdock widget install ~/Projects/weather-widget
-smartdock widget dev use ~/Projects/weather-widget
+dockrail widget install ~/Projects/weather-widget
+dockrail widget dev use ~/Projects/weather-widget
 ```
 
-`dev use` validates the source and creates a SmartDock-owned working snapshot.
+`dev use` validates the source and creates a Dockrail-owned working snapshot.
 The source is never checked out, reset, pulled, rewritten or linked into the
-SmartDock plugin. The installed package remains available as the reset target.
+Dockrail plugin. The installed package remains available as the reset target.
 
 After editing source:
 
 ```bash
-smartdock widget dev reload
+dockrail widget dev reload
 ```
 
 Reload validates and snapshots the candidate first, including QML syntax and
 import resolution before registry metadata switches. A failed reload retains
 the previous working snapshot. The existing host observes the package registry
-change, so no second SmartDock or Quickshell process is started.
+change, so no second Dockrail or Quickshell process is started.
 
 Return to the installed package:
 
 ```bash
-smartdock widget dev reset
+dockrail widget dev reset
 ```
 
-Reset removes only the SmartDock-owned dev override/snapshot and preserves the
+Reset removes only the Dockrail-owned dev override/snapshot and preserves the
 developer source directory.
 
 ## Source-location safety
@@ -224,10 +224,14 @@ developer source directory.
 `create`, local `install`, and `dev use/reload` resolve symlinks before accepting
 a source. They hard-reject direct or nested locations inside:
 
-- the installed Omarchy SmartDock plugin tree;
-- the standalone SmartDock application deployment under XDG data;
-- the SmartDock source checkout used by the running CLI bundle.
+- the installed Omarchy Dockrail plugin tree;
+- the standalone Dockrail application deployment under XDG data;
+- the Dockrail source checkout used by the running CLI bundle.
 
-If a coding agent is asked to "create a SmartDock Widget", use
-`smartdock widget create` in a separate repository. Do not add custom package
+If a coding agent is asked to "create a Dockrail Widget", use
+`dockrail widget create` in a separate repository. Do not add custom package
 source to `components/`, and do not edit the installed plugin checkout.
+
+## Legacy module compatibility
+
+Existing package sources and installed snapshots using `SmartDock.WidgetKit 1.0` remain supported. New source should import `Dockrail.WidgetKit 1.0`. Dockrail does not rewrite external source repositories or legacy installed snapshots merely to change the module name.
