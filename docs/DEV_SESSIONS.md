@@ -1,6 +1,6 @@
-# SmartDock development sessions
+# Dockrail development sessions
 
-Local isolated docks for agent testing. A named KVM guest runs Hyprland, screenshots, and one SmartDock host (standalone or Omarchy plugin) without opening a PR for each edit and without touching the production dock.
+Local isolated docks for agent testing. A named KVM guest runs Hyprland, screenshots, and one Dockrail host (standalone or Omarchy plugin) without opening a PR for each edit and without touching the production dock.
 
 ## Status
 
@@ -8,12 +8,12 @@ Local isolated docks for agent testing. A named KVM guest runs Hyprland, screens
 | --- | --- |
 | Host-nested Hyprland (Aquamarine Wayland backend) | **Not qualified** — `grim` times out while the outer window is on an inactive host workspace (2026-09-15 Task 1 evidence). |
 | KVM guest (virtio-vga + guest Hyprland DRM) | **Display/capture PASS; pointer/focus PASS_WITH_ATTRIBUTION** — task8d (QEMU PID `1936345`, address `0x5559cc3397f0`, inactive ws `4`) completed three guest `wtype` inputs against a focused counter fixture; visible counter frames `frame-011.png`..`frame-014.png` are four distinct hashes. Host focus/workspace stayed unchanged. Cursor changes coincided with passive X/Y events from physical Razer `event9`; no host pointer dispatch was used. Literal coordinate equality remains a stricter, user-activity-sensitive check. Evidence: `~/.local/state/smartdock/dev-sessions/task8d/evidence/pointer-focus-gate-task8d-final.json` and `host-evdev-input4.jsonl`. |
-| KVM guest standalone SmartDock | **LIVE PASS** — task4a qs pid 2816, private `~/.config/smartdock/dock.json`, frame-010.png. |
-| KVM guest Omarchy plugin SmartDock | **LIVE PASS (stripped shell)** — Omarchy `4.0.3-1` (`version` file `4.0.0.alpha`); one guest qs pid 3415 at copied `smartdock-omarchy-test/shell/shell.qml` with Overlay.qml enabled and first-party plugins disabled. This is not a full desktop Omarchy host. `--runtime plugin --instance 3415`; iconSize 42→48 guest-only; frame-011.png. Host `/usr/share/omarchy` and host `~/.config/smartdock/dock.json` were not edited. |
-| Two concurrent standalone sessions | **LIVE PASS** — task4a (port 22000, source feat-nested-dev-sessions, marker TASK7A) and task7b (port 22001, source task7b-src, marker TASK7B); distinct overlay/vars/seed/SSH/known-hosts/evidence; dirty syncs did not cross; stop A left B capturing (frame-003.png); both stopped with no leftover SmartDock QEMU. Host production qs 743034 / settings `7ccbbaf5…` unchanged. |
+| KVM guest standalone Dockrail | **LIVE PASS** — task4a qs pid 2816, private `~/.config/dockrail/dock.json`, frame-010.png. |
+| KVM guest Omarchy plugin Dockrail | **LIVE PASS (stripped shell)** — Omarchy `4.0.3-1` (`version` file `4.0.0.alpha`); one guest qs pid 3415 at copied `smartdock-omarchy-test/shell/shell.qml` with Overlay.qml enabled and first-party plugins disabled. This is not a full desktop Omarchy host. `--runtime plugin --instance 3415`; iconSize 42→48 guest-only; frame-011.png. Host `/usr/share/omarchy` and host `~/.config/dockrail/dock.json` were not edited. |
+| Two concurrent standalone sessions | **LIVE PASS** — task4a (port 22000, source feat-nested-dev-sessions, marker TASK7A) and task7b (port 22001, source task7b-src, marker TASK7B); distinct overlay/vars/seed/SSH/known-hosts/evidence; dirty syncs did not cross; stop A left B capturing (frame-003.png); both stopped with no leftover Dockrail QEMU. Host production qs 743034 / settings `7ccbbaf5…` unchanged. |
 | Two-session targeting with one plugin guest | **LIVE PASS** — task4a stayed `--runtime standalone --instance 4577`; task7b switched to `--runtime plugin --instance 2558` at copied `smartdock-omarchy-test/shell/shell.qml`; B `iconSize` 36 did not change A's guest settings hash. |
 
-Do not launch a second dock on the production display. Do not use `omarchy-shell` newest-instance targeting. Do not edit `/usr/share/omarchy` or host `~/.config/smartdock/dock.json`.
+Do not launch a second dock on the production display. Do not use `omarchy-shell` newest-instance targeting. Do not edit `/usr/share/omarchy` or host `~/.config/dockrail/dock.json`.
 
 ## Quickstart
 
@@ -100,11 +100,11 @@ unset XDG_STATE_HOME
 
 Do not wait on `start` in the controller pane. Poll `~/.local/state/smartdock/dev-sessions/NAME/evidence/progress.json` and the flushed `guest_setup_complete` JSON line. `start` then remains alive until `stop`.
 
-Plugin mode uses `--mode plugin` on one name only. That session copies Omarchy `shell/` plus theme `colors.toml`/`shell.toml` into the guest as read-only test assets and runs one `qs -p …/shell` with `Overlay.qml` enabled and first-party plugins listed in `disabledPlugins`. That is a stripped Omarchy shell for SmartDock qualification, not a full desktop Omarchy host. Never start a second dock in the same guest.
+Plugin mode uses `--mode plugin` on one name only. That session copies Omarchy `shell/` plus theme `colors.toml`/`shell.toml` into the guest as read-only test assets and runs one `qs -p …/shell` with `Overlay.qml` enabled and first-party plugins listed in `disabledPlugins`. That is a stripped Omarchy shell for Dockrail qualification, not a full desktop Omarchy host. Never start a second dock in the same guest.
 
 ### Commands (guest-only CLI targeting)
 
-Public `dock` injects `--runtime standalone|plugin --instance GUEST_DOCK_PID` from the named record. Do not pass `--instance` or `--runtime` yourself. `status --json` labels targeting with `target: guest`, `guest_dock_pid`, and `guest_config_path` (inside the VM). Those fields are never the host production dock; `host_pid`/`config_path` are aliases for the same guest process and guest file. Keep using SSH to the named guest. Never write host `~/.config/smartdock/dock.json`.
+Public `dock` injects `--runtime standalone|plugin --instance GUEST_DOCK_PID` from the named record. Do not pass `--instance` or `--runtime` yourself. `status --json` labels targeting with `target: guest`, `guest_dock_pid`, and `guest_config_path` (inside the VM). Those fields are never the host production dock; `host_pid`/`config_path` are aliases for the same guest process and guest file. Keep using SSH to the named guest. Never write host `~/.config/dockrail/dock.json`.
 
 `sync` of a `ready` session stops the guest dock, clears `host_pid`/`guest_dock_pid`, and sets `state=starting` while retaining the private `guest_seeded` record flag. The first `dock NAME` runs `seed-desktop`, verifies its JSON payload into `evidence/guest-seed.json`, and sets `guest_seeded=true`; later restarts skip seeding. The next `dock NAME` (no argv) restarts it through the guest host contract. `dock NAME -- …` is rejected until that restart.
 
@@ -171,7 +171,7 @@ Installed with graphical authorization (`pkexec pacman`) when missing.
 
 ```bash
 qemu-system-x86_64 \
-  -name 'SmartDock KVM Feasibility,process=smartdock-kvm-feasibility' \
+  -name 'Dockrail KVM Feasibility,process=smartdock-kvm-feasibility' \
   -machine q35,accel=kvm,usb=off \
   -cpu host -smp 4 -m 4096 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2/x64/OVMF_CODE.4m.fd \
@@ -190,7 +190,7 @@ qemu-system-x86_64 \
 
 The feasibility experiment verified that its QEMU window ended on workspace `4` without following focus. Its temporary script selected the first window with class `qemu`; that shortcut must **not** be copied into the launcher because another QEMU window could already belong to the user.
 
-The launcher establishes one escaped silent/no-initial-focus title rule before QEMU starts. It matches both exact owned titles: `QEMU (SmartDock NAME)` and `QEMU (SmartDock NAME): virtio-vga.1`. After detaching the second head, it requires exactly two PID-owned clients with distinct exact addresses, records the left-to-right `qemu_window_addresses` list, and retains the leftmost `qemu_window_address` for compatibility. If a delegated window ignores the rule, move only those exact addresses with `movetoworkspacesilent` and verify the target workspace afterward. A class-only match or an active-window dispatcher is an ownership failure. Before/after active workspace and window evidence must be unchanged.
+The launcher establishes one escaped silent/no-initial-focus title rule before QEMU starts. It matches both exact owned titles: `QEMU (Dockrail NAME)` and `QEMU (Dockrail NAME): virtio-vga.1`. After detaching the second head, it requires exactly two PID-owned clients with distinct exact addresses, records the left-to-right `qemu_window_addresses` list, and retains the leftmost `qemu_window_address` for compatibility. If a delegated window ignores the rule, move only those exact addresses with `movetoworkspacesilent` and verify the target workspace afterward. A class-only match or an active-window dispatcher is an ownership failure. Before/after active workspace and window evidence must be unchanged.
 
 Authorized test workspace for this run was `4`. General sessions use the coding agent's workspace unless the user explicitly selects another. Never switch the user's active workspace.
 
@@ -211,7 +211,7 @@ Headless Weston starts but **does not** implement the screencopy protocol grim n
 With host active workspace ≠ `4` and QEMU on workspace `4`:
 
 - Distinct red / green / blue Quickshell surfaces produced distinct PNGs (`HOST_INACTIVE_COLOR_CAPTURE_PASS`).
-- Production `~/.config/smartdock/dock.json` SHA-256 unchanged across the run.
+- Production `~/.config/dockrail/dock.json` SHA-256 unchanged across the run.
 - QEMU stopped by recorded PID; no leftover qemu window.
 
 ### Source bytes
