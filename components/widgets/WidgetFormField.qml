@@ -33,7 +33,7 @@ Column {
     text: root.errorText !== "" ? root.errorText : root.helperText
     role: "caption"
     muted: root.errorText === ""
-    color: root.errorText !== "" ? semanticPalette.danger : Util.alpha(Color.foreground, 0.62)
+    color: root.errorText !== "" ? semanticPalette.danger : semanticPalette.mutedText
     maxLines: 2
   }
 }

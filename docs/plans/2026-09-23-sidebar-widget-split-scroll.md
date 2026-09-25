@@ -22,7 +22,8 @@ The full linked Linear descriptions remain authoritative for future revisions.
   Treat colors as token guidance, not sampled QML literals or a pixel contract.
 - FDM-997/05 and FDM-998/06 are remote (`execution:chatgpt-github`) source slices,
   may share an independently reviewed polish Draft PR from current main, and do
-  not need FDM-994 solely for visual changes. This execution implements 997 only.
+  not need FDM-994 solely for visual changes. FDM-997 is handed off on Draft PR
+  #113; FDM-998 executes as its stacked child so the accepted 997 head stays immutable.
 - FDM-999/07 is remote, after accepted 997, 998 and 994 source is on the actual
   candidate. FDM-994's #111 (`feat/sidebar-drag-feedback`, recorded head
   `cc60762a1b9c559dabd35c840897d8eb90cdea74`) is a Draft/unmerged source handoff,
@@ -129,7 +130,13 @@ is not native qualification. Installed/full-shell version matching remains local
   exact-head CI. Full local gate and both-edge KVM screenshots are still required
   under 1001; no source/headless assertion implies that acceptance.
 
-## FDM-998 / WIDGET-06 — WidgetKit token alignment (not implemented here)
+## FDM-998 / WIDGET-06 — WidgetKit token alignment (execution source slice)
+
+Execution handoff: branch `feat/fdm-998-widgetkit-tokens`, Draft PR #114,
+stacked on FDM-997 exact head `8da5ad5ac9bfb05e1c450b4b9c9cf3cd973e8941`.
+Native/token and measured contrast evidence is in
+`docs/FDM-998-widgetkit-token-audit.md`. Exact-head CI evidence is recorded in
+the PR/Linear handoff only after the final source head is green.
 
 https://linear.app/fdamaso/issue/FDM-998 . Visual-only public WidgetKit 1.0; no
 property/signal/import removal or rename; additive properties allowed, not required.

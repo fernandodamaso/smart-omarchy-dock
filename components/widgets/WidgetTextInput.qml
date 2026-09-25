@@ -15,14 +15,14 @@ Controls.TextField {
   selectByMouse: true
   echoMode: TextInput.Normal
   color: Color.foreground
-  placeholderTextColor: Util.alpha(Color.foreground, 0.46)
+  placeholderTextColor: semanticPalette.mutedText
   selectionColor: Color.accent
   selectedTextColor: Color.background
   font.family: Style.font.family
   font.pixelSize: Style.font.bodySmall
 
   background: Rectangle {
-    radius: Math.min(6, Style.cornerRadius)
+    radius: Math.min(3, Style.cornerRadius)
     color: Qt.darker(Color.background, 1.03)
     border.width: 1
     border.color: root.validationState === "error" ? semanticPalette.danger

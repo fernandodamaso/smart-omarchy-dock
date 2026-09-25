@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtTest
+import qs.Commons
 import "../components/widgets"
 import "widget-gallery" as Gallery
 
@@ -263,6 +264,73 @@ TestCase {
       width: 180, compact: false, kind: "empty", message: "Synthetic empty state"
     })
     compare(comfortable.resolvedVerticalPadding, 16)
+  }
+
+  function test_sidebar_token_bindings_follow_live_theme() {
+    var originalMuted = Color.muted
+    var originalForeground = Color.foreground
+    var originalUrgent = Color.urgent
+    var component = Qt.createComponent(Qt.resolvedUrl("../components/widgets/WidgetSemanticPalette.qml"))
+    compare(component.status, Component.Ready, component.errorString())
+    var palette = createTemporaryObject(component, testCase)
+    var text = make("WidgetText", {text: "Secondary", muted: true})
+    verify(palette !== null)
+    try {
+      Color.muted = "#667788"
+      Color.foreground = "#ddeeff"
+      Color.urgent = "#ff3355"
+      wait(0)
+      compare(String(palette.mutedTextBase), String(Color.muted))
+      compare(String(palette.danger), String(Color.urgent))
+      compare(String(text.color), String(Color.foreground))
+    } finally {
+      Color.muted = originalMuted
+      Color.foreground = originalForeground
+      Color.urgent = originalUrgent
+    }
+  }
+
+  function test_rectangular_radii_track_sidebar_cap_and_circles_stay_round() {
+    var originalRadius = Style.cornerRadius
+    var stat = make("WidgetStat", {label: "Agents", value: "4"})
+    var input = make("WidgetTextInput", {placeholderText: "Name"})
+    var area = make("WidgetTextArea", {placeholderText: "Notes"})
+    var select = make("WidgetSelect", {model: ["One", "Two"]})
+    var badge = make("WidgetBadge", {text: "3", width: 40, height: 22})
+    var progress = make("WidgetProgressBar", {value: 0.5, width: 136, height: 8})
+    try {
+      for (var radius of [0, 2, 8]) {
+        Style.cornerRadius = radius
+        wait(0)
+        var expected = Math.min(3, radius)
+        compare(stat.children[0].radius, expected)
+        compare(input.background.radius, expected)
+        compare(area.background.radius, expected)
+        compare(select.background.radius, expected)
+        compare(badge.children[0].radius, badge.height / 2)
+        compare(progress.children[0].radius, progress.height / 2)
+        compare(progress.children[1].radius, progress.height / 2)
+      }
+    } finally {
+      Style.cornerRadius = originalRadius
+    }
+  }
+
+  function test_demo_memory_warning_threshold() {
+    var component = Qt.createComponent(Qt.resolvedUrl("../components/widgets/DemoWidgetDisplayBody.qml"))
+    compare(component.status, Component.Ready, component.errorString())
+    var demo = createTemporaryObject(component, testCase, {
+      width: 220,
+      widgetContext: {data: {memory: 0.849}}
+    })
+    verify(demo !== null)
+    compare(demo.memorySemantic, "neutral")
+    demo.widgetContext = {data: {memory: 0.85}}
+    wait(0)
+    compare(demo.memorySemantic, "warning")
+    demo.widgetContext = {data: {memory: 1.0}}
+    wait(0)
+    compare(demo.memorySemantic, "warning")
   }
 
 }

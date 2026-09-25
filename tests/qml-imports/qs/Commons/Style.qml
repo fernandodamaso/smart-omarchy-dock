@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-  readonly property int cornerRadius: 8
+  property int cornerRadius: 8
   readonly property int normalBorderWidth: 1
   readonly property QtObject font: QtObject {
     readonly property string family: "Sans Serif"

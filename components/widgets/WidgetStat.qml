@@ -11,10 +11,8 @@ Item {
 
   Rectangle {
     anchors.fill: parent
-    radius: Math.min(7, Style.cornerRadius)
+    radius: Math.min(3, Style.cornerRadius)
     color: Util.alpha(Color.foreground, 0.04)
-    border.width: 1
-    border.color: Util.alpha(Color.foreground, 0.08)
   }
 
   Column {

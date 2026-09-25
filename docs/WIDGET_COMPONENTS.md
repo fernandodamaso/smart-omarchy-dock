@@ -21,6 +21,11 @@ surfaces.
 - Render user/provider strings as plain text. The reusable text primitives already
   use `Text.PlainText`.
 - Use the semantic vocabulary below instead of provider-supplied colors.
+- Follow the sidebar surface-token contract: rectangular nested surfaces cap
+  their radius at `Math.min(3, Style.cornerRadius)`; deliberately circular or
+  pill-shaped indicators keep their geometry.
+- Use hue for semantic state or attention, not as default decoration. Neutral
+  content stays on neutral/sidebar roles; `danger` follows `Color.urgent`.
 - Properties listed below are the SmartDock-owned API. Components that inherit a
   Qt Quick Control also retain the normal inherited Qt properties/signals noted in
   the table; inspect the component source before depending on less-common inherited
@@ -52,7 +57,7 @@ Theme-aware plain-text primitive. Inherits Qt `Text`, including `text`,
 | Property | Type | Default | Purpose |
 | --- | --- | --- | --- |
 | `role` | string | `"body"` | `body | title | caption | label` typography. |
-| `muted` | bool | `false` | Uses muted foreground opacity. |
+| `muted` | bool | `false` | Uses the centralized secondary-text role. The preferred sidebar token is `Color.muted`; see the FDM-998 contrast exception below. |
 | `allowWrap` | bool | `true` | Wrap when true; single-line elide when false. |
 | `maxLines` | int | `0` | `0` means effectively unlimited; positive values cap line count. |
 
@@ -75,7 +80,10 @@ Status dot + label, with an optional reference badge.
 | `label` | string | `""` |
 | `semantic` | string | `"neutral"` |
 | `reference` | string | `""` |
+| `referenceSemantic` | string | `""` |
 | `compact` | bool | `true` |
+
+When `referenceSemantic` is empty, the reference badge preserves the previous behavior and inherits `semantic`.
 
 ### `WidgetDivider`
 
@@ -159,7 +167,8 @@ Left label + right value row.
 
 ### `WidgetStat`
 
-Small stat tile.
+Small stat tile. Its nested rectangular surface uses the sidebar radius cap and
+a foreground-at-4% fill with no independent border.
 
 | Property | Type | Default |
 | --- | --- | --- |
@@ -223,7 +232,8 @@ Small line chart for already-prepared numeric values.
 | `lineColor` | color | `Color.accent` |
 | `lineWidth` | real | `2` |
 
-At least two numeric values are required to draw a line.
+At least two numeric values are required to draw a line. FDM-998 deliberately
+does not add an area fill or `fillOpacity`; that visual feature remains deferred.
 
 ### `WidgetIconText`
 
@@ -277,7 +287,8 @@ When `errorText` is non-empty it replaces helper text and uses the danger tone.
 
 ### `WidgetTextInput`
 
-Styled `Controls.TextField`. Standard inherited properties/signals include
+Styled `Controls.TextField`. Its rectangular background uses the sidebar radius
+cap. Standard inherited properties/signals include
 `text`, `placeholderText`, `editingFinished`, `accepted`, `enabled` and
 focus behavior.
 
@@ -448,9 +459,19 @@ Central theme-aware semantic palette used by the primitives. Most Widget bodies
 should pass semantic names to the public components instead of instantiating this
 directly.
 
-It exposes read-only `danger`, `warning`, `success`, `info`, `neutral`
-colors and the helper `tone(semantic)`. Its colors adapt to
-`Color.background` luminance.
+It exposes read-only `danger`, `warning`, `success`, `info`, `neutral`,
+`mutedTextBase`, and `mutedText` colors plus the helper `tone(semantic)`. At the Omarchy revision audited by
+FDM-998, `danger` maps directly to `Color.urgent`; `warning` and `success`
+retain their existing background-aware HSL implementation because that exact
+revision has no foundational warning/success token.
+
+Secondary normal text is centralized here as well. `mutedTextBase` follows the
+sidebar-preferred `Color.muted` token. The audited Tokyo Night and Catppuccin
+Latte normal-text samples did not reach the required 4.5:1 contrast with either
+`Color.muted` or the previous 0.62-alpha foreground, so `mutedText` uses
+`Color.foreground` as the documented passing fallback. Do not reintroduce
+scattered muted-alpha literals. Exact colors, composited surfaces and ratios are
+recorded in [the FDM-998 token audit](FDM-998-widgetkit-token-audit.md).
 
 ## Recommended composition
 

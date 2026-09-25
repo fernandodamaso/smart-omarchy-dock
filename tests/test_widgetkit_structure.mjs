@@ -231,6 +231,44 @@ test('Widget semantic colors are centralized and theme-aware', () => {
   }
 })
 
+test('WidgetKit follows sidebar text, radius, and semantic token contracts', () => {
+  const palette = source('WidgetSemanticPalette')
+  assert.match(palette, /property color danger:\s*Color\.urgent/)
+  assert.match(palette, /property color mutedTextBase:\s*Color\.muted/)
+  assert.match(palette, /property color mutedText:/)
+
+  for (const name of all)
+    assert.doesNotMatch(source(name), /Util\.alpha\(Color\.foreground,\s*0\.62\)/,
+      name + ' must not retain the legacy 0.62 muted alpha')
+
+  const stat = source('WidgetStat')
+  assert.match(stat, /radius:\s*Math\.min\(3,\s*Style\.cornerRadius\)/)
+  assert.match(stat, /color:\s*Util\.alpha\(Color\.foreground,\s*0\.04\)/)
+  assert.doesNotMatch(stat, /border\.width/,
+    'WidgetStat is a fill-only nested surface')
+
+  for (const name of ['WidgetTextInput', 'WidgetTextArea', 'WidgetSelect'])
+    assert.match(source(name), /radius:\s*Math\.min\(3,\s*Style\.cornerRadius\)/,
+      name + ' must not exceed the sidebar card radius')
+
+  assert.match(source('WidgetBadge'), /radius:\s*height\s*\/\s*2/,
+    'pill badges keep their deliberate circular geometry')
+  assert.match(source('WidgetProgressBar'), /radius:\s*height\s*\/\s*2/,
+    'progress tracks keep their deliberate pill geometry')
+  assert.doesNotMatch(source('WidgetSparkline'), /\bfillOpacity\b/,
+    'FDM-998 must not add the deferred sparkline area fill')
+
+  const status = source('WidgetStatus')
+  assert.match(status, /property string referenceSemantic:/,
+    'status reference badges can be neutral without changing status hue')
+  const demo = fs.readFileSync(
+    new URL('../components/widgets/DemoWidgetDisplayBody.qml', import.meta.url), 'utf8')
+  assert.match(demo, /semantic:\s*"info"/)
+  assert.match(demo, /referenceSemantic:\s*"neutral"/)
+  assert.match(demo, /memorySemantic/)
+  assert.match(demo, />=\s*0\.85/)
+})
+
 test('WidgetButtonGroup fills width and avoids non-wrapping Row/Flow shells', () => {
   const group = source('WidgetButtonGroup')
   assert.match(group, /width:\s*root\.width/)
