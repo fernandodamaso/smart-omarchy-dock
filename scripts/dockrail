@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/smartdock"
-client_dir="${XDG_DATA_HOME:-$HOME/.local/share}/smartdock-cli"
+data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+app_dir="$data_home/dockrail"
+legacy_app_dir="$data_home/smartdock"
+client_dir="$data_home/dockrail-cli"
+legacy_client_dir="$data_home/smartdock-cli"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
-config_file="${DOCKRAIL_CONFIG:-${SMARTDOCK_CONFIG:-$config_home/smartdock/dock.json}}"
+config_file="${DOCKRAIL_CONFIG:-${SMARTDOCK_CONFIG:-$config_home/dockrail/dock.json}}"
 autostart_file="$config_home/autostart/smartdock.desktop"
 launcher_path="$(cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")"
 
@@ -14,7 +17,8 @@ case "${1:-}" in
   launch|--daemonize|-d|restart|--restart|stop|--stop|update|--update|uninstall|--uninstall|autostart) ;;
   *)
     for adapter in "$(dirname -- "$launcher_path")/smartdock_cli.py" \
-      "$client_dir/scripts/smartdock_cli.py" "$app_dir/scripts/smartdock_cli.py"; do
+      "$client_dir/scripts/smartdock_cli.py" "$app_dir/scripts/smartdock_cli.py" \
+      "$legacy_client_dir/scripts/smartdock_cli.py" "$legacy_app_dir/scripts/smartdock_cli.py"; do
       if [[ -f "$adapter" ]]; then
         if command -v python3 >/dev/null 2>&1; then
           case "${1:-}" in
@@ -48,7 +52,7 @@ esac
 ensure_omarchy_qml_imports() {
   local omarchy_shell="${OMARCHY_PATH:-/usr/share/omarchy}/shell"
   [[ -d "$omarchy_shell/Commons" && -d "$omarchy_shell/Ui" ]] || return 0
-  local import_root="${XDG_CACHE_HOME:-$HOME/.cache}/smartdock/qml-imports"
+  local import_root="${XDG_CACHE_HOME:-$HOME/.cache}/dockrail/qml-imports"
   install -d "$import_root"
   if [[ ! -e "$import_root/qs" ]]; then
     ln -s "$omarchy_shell" "$import_root/qs"
@@ -96,6 +100,9 @@ case "${1:-}" in
   update|--update)
     [[ $# -eq 1 ]] || { echo 'Usage: smartdock update' >&2; exit 2; }
     source_file="$app_dir/.source-dir"
+    if [[ ! -f "$source_file" && -f "$legacy_app_dir/.source-dir" ]]; then
+      source_file="$legacy_app_dir/.source-dir"
+    fi
     if [[ ! -f "$source_file" ]]; then
       echo "smartdock: standalone source checkout record not found at $source_file" >&2
       echo 'For a client-only update, run install.sh --cli-only from its source checkout.' >&2
@@ -114,19 +121,36 @@ case "${1:-}" in
   stop|--stop)
     [[ $# -eq 1 ]] || { echo 'Usage: smartdock stop' >&2; exit 2; }
     qs kill -p "$app_dir" --any-display >/dev/null 2>&1 || true
+    qs kill -p "$legacy_app_dir" --any-display >/dev/null 2>&1 || true
     exit
     ;;
   uninstall|--uninstall)
     shift
-    if [[ "${1:-}" == --cli-only && -f "$client_dir/uninstall.sh" ]]; then
-      exec bash "$client_dir/uninstall.sh" "$@"
+    if [[ "${1:-}" == --cli-only ]]; then
+      if [[ -f "$client_dir/uninstall.sh" ]]; then
+        exec bash "$client_dir/uninstall.sh" "$@"
+      elif [[ -f "$legacy_client_dir/uninstall.sh" ]]; then
+        exec bash "$legacy_client_dir/uninstall.sh" "$@"
+      fi
     fi
-    [[ -f "$app_dir/uninstall.sh" ]] || { echo 'Standalone uninstaller not found; run source uninstall.sh --cli-only for client-only removal.' >&2; exit 1; }
-    exec bash "$app_dir/uninstall.sh" "$@"
+    if [[ -f "$app_dir/uninstall.sh" ]]; then
+      exec bash "$app_dir/uninstall.sh" "$@"
+    elif [[ -f "$legacy_app_dir/uninstall.sh" ]]; then
+      exec bash "$legacy_app_dir/uninstall.sh" "$@"
+    fi
+    echo 'Standalone uninstaller not found; run source uninstall.sh --cli-only for client-only removal.' >&2
+    exit 1
     ;;
 esac
 
-if [[ ! -f "$app_dir/shell.qml" ]]; then
+selected_app_dir="$app_dir"
+if [[ ! -f "$selected_app_dir/shell.qml" && -f "$legacy_app_dir/shell.qml" ]]; then
+  selected_app_dir="$legacy_app_dir"
+  if [[ -z "${DOCKRAIL_CONFIG:-}" && -z "${SMARTDOCK_CONFIG:-}" ]]; then
+    config_file="$config_home/smartdock/dock.json"
+  fi
+fi
+if [[ ! -f "$selected_app_dir/shell.qml" ]]; then
   echo 'smartdock: standalone application files not found; run the full installer explicitly' >&2
   exit 1
 fi
@@ -136,9 +160,10 @@ case "$1" in
     shift
     ensure_omarchy_qml_imports
     qs kill -p "$app_dir" --any-display >/dev/null 2>&1 || true
-    exec env SMARTDOCK_CONFIG="$config_file" qs -n -d -p "$app_dir" "$@"
+    qs kill -p "$legacy_app_dir" --any-display >/dev/null 2>&1 || true
+    exec env DOCKRAIL_CONFIG="$config_file" SMARTDOCK_CONFIG="$config_file" qs -n -d -p "$selected_app_dir" "$@"
     ;;
   launch) shift ;;
 esac
 ensure_omarchy_qml_imports
-exec env SMARTDOCK_CONFIG="$config_file" qs -n -p "$app_dir" "$@"
+exec env DOCKRAIL_CONFIG="$config_file" SMARTDOCK_CONFIG="$config_file" qs -n -p "$selected_app_dir" "$@"
