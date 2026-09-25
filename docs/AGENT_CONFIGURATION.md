@@ -30,7 +30,7 @@ The following example changes placement, size, visibility and Trash together; us
 
 ```sh
 umask 077
-change_dir="$(mktemp -d "${TMPDIR:-/tmp}/smartdock-change.XXXXXX")"
+change_dir="$(mktemp -d "${TMPDIR:-/tmp}/dockrail-change.XXXXXX")"
 dockrail config export --output "$change_dir/requested-before.json" --json
 ```
 
