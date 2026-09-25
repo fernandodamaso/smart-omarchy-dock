@@ -32,7 +32,7 @@ Preserve all dirty/unpushed work. Do not reset, clean, stash blindly, repoint an
 
 Record Quickshell/Qt/Omarchy/Hyprland versions and the installed command help. `qs --help`, `qs list --help`, `qs ipc --help`, `qs list --all --json` and `hyprctl version` are read-only discovery. Derive Omarchy version/plugin development controls from its installed documentation/package/source; do not invent `omarchy-shell` selectors or assume flags from another version. Capture real instance IDs, native config paths and display/monitor topology.
 
-Use a dedicated test display/session with no production SmartDock instance before launching this candidate. Never start a second dock on Fernando's production display. A temporary client XDG directory alone does not isolate a running plugin; the host's own config path remains authoritative. For the plugin case, use a supported, inspected local source-plugin harness in that isolated Omarchy session and verify that it loads this exact source. Do not copy files into or retarget the deployed plugin checkout. If a safe plugin harness/display is unavailable, record that specific check NOT RUN rather than touch production.
+Use a dedicated test display/session with no production Dockrail instance before launching this candidate. Never start a second dock on Fernando's production display. A temporary client XDG directory alone does not isolate a running plugin; the host's own config path remains authoritative. For the plugin case, use a supported, inspected local source-plugin harness in that isolated Omarchy session and verify that it loads this exact source. Do not copy files into or retarget the deployed plugin checkout. If a safe plugin harness/display is unavailable, record that specific check NOT RUN rather than touch production.
 
 For standalone in the isolated session only, use a private config and the source launcher. The baseline can be shipped defaults or an explicitly inspected copy of a configuration; keep the original bytes/artwork untouched. Do not evaluate copied controlCommand values merely to validate them.
 
@@ -101,7 +101,7 @@ Re-run the repository's existing headless commands from the candidate source:
 ```bash
 set -euo pipefail
 cd "$run_dir/source"
-for script in install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh; do bash -n "$script" || exit; done
+for script in install.sh uninstall.sh scripts/dockrail scripts/run tests/check_*.sh; do bash -n "$script" || exit; done
 for script in tests/check_*.sh; do bash "$script" || exit; done
 for script in tests/test_*.mjs; do node "$script" || exit; done
 python3 -m unittest discover -s tests -p 'test_*.py'
