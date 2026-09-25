@@ -6,7 +6,7 @@ This is the source-controlled migration matrix for FDM-1002. It distinguishes in
 
 - Source baseline: `4db288d5991dae7989add897ee5dc56c5542feb8`
 - Pinned when FDM-1002 execution began on 2026-09-25.
-- Repository cutover remains blocked until the native pre-cutover rehearsal.
+- Repository cutover completed on 2026-09-25 after the MIG-05 native rehearsal (FDM-1010) passed on `92430da`.
 - Omarchy/Quickshell/Hyprland native revisions are recorded by MIG-05, not guessed here.
 
 ## Identifier and ownership matrix
@@ -50,9 +50,10 @@ assume `install.sh` runs, so MIG-02 owns the single service-start bootstrap.
 ## Cutover gate
 
 GitHub repository rename, canonical URL replacement, Linear project rename and
-Dockrail 3.0.0 release remain blocked until a real legacy plugin + standalone
-upgrade rehearsal passes. The old GitHub name is preserved as a redirect and is
-not recreated as a second repository.
+the Dockrail 3.0.0 release were gated on a real legacy plugin + standalone
+upgrade rehearsal. That gate passed in MIG-05; see the MIG-06 section below.
+The old GitHub name is preserved as a redirect and is not recreated as a second
+repository.
 
 ## MIG-02 startup and transaction contract
 
@@ -143,8 +144,31 @@ This branding pass deliberately does **not** rename compatibility contracts:
 `special:smartdock-minimized`, terminal-agent/application IDs, Wayland layer
 namespaces, `smartdock-herdr-helper`, `smartdock-herdr-provider`,
 `SmartDock.WidgetKit 1.0`, legacy XDG aliases/recovery records, historical
-plans/releases, or the pre-cutover GitHub repository URL.
+plans/releases. The GitHub repository URL moved in MIG-06 (see below).
 
 The optional launcher-badge and browser-profile installer scripts now install
 their binaries under the canonical Dockrail data root so they match the MIG-02
 provider consumers; executable filenames remain unchanged.
+
+
+## MIG-06 repository cutover
+
+MIG-05 (FDM-1010) qualified exact head `92430da5d18fea307ea52fc6c2012a8522b8b77d`
+on Omarchy 4.0.4 / Hyprland 0.56.2: a native plugin update with dev-override
+refusal and a committed migration, dev reset and minimized-window recovery across
+restart, plus an isolated frozen-legacy (`5a619f4`) standalone upgrade with
+injected interruption at every phase and removal-ownership checks.
+
+The repository was then renamed in place to `fernandodamaso/dockrail`. The
+old `fernandodamaso/smart-omarchy-dock` name remains a GitHub redirect and must
+never be recreated. Existing plugin checkouts keep their old origin URL and
+continue updating through that redirect. Upstream attribution to
+`nick-friedrich/hyprland-dock` and the fork relationship are unchanged. The
+repository had no GitHub Pages site or external Actions consumers to migrate.
+Local checkout paths such as `/home/admin/Projects/smart-omarchy-dock` were not
+moved.
+
+Current installation examples use `https://github.com/fernandodamaso/dockrail.git`.
+The plugin ID remains `io.github.fernandodamaso.smartdock` because it names the
+installed plugin directory and marketplace identity; renaming it would orphan
+existing installs.

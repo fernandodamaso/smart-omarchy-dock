@@ -602,8 +602,8 @@ class Store:
                 "dockrail widget dev reload\n"
                 "dockrail widget dev reset\n"
                 "```\n\n"
-                "Component API: https://github.com/fernandodamaso/smart-omarchy-dock/blob/main/docs/WIDGET_COMPONENTS.md\n\n"
-                "Package API: https://github.com/fernandodamaso/smart-omarchy-dock/blob/main/docs/WIDGET_PACKAGES.md\n",
+                "Component API: https://github.com/fernandodamaso/dockrail/blob/main/docs/WIDGET_COMPONENTS.md\n\n"
+                "Package API: https://github.com/fernandodamaso/dockrail/blob/main/docs/WIDGET_PACKAGES.md\n",
                 encoding="utf-8",
             )
             validate_manifest(target)

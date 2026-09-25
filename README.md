@@ -10,7 +10,7 @@ for setup, reload, and recovery commands.
 
 A developer-focused workspace rail for Hyprland — apps, windows, workspaces, widgets, and coding-agent sessions in one surface, built with Quickshell and Qt/QML.
 
-![Dockrail running at the bottom of an Omarchy desktop](preview_2.png)
+![Dockrail running at the bottom of an Omarchy desktop](preview.png)
 
 ## Features
 
@@ -52,14 +52,12 @@ A developer-focused workspace rail for Hyprland — apps, windows, workspaces, w
 - A working freedesktop icon theme
 - Optional numeric launcher counts: CMake, a C++20 compiler, and Qt 6.6+ Core/DBus development files to build the native provider
 
-![Dockrail running at the bottom of an Omarchy desktop](preview.png)
-
 ## Install
 
 Install the Git-managed Omarchy plugin:
 
 ```bash
-omarchy plugin add https://github.com/fernandodamaso/smart-omarchy-dock.git --enable --yes
+omarchy plugin add https://github.com/fernandodamaso/dockrail.git --enable --yes
 ```
 
 The normal update command is:
@@ -118,6 +116,18 @@ dockrail uninstall
 
 Uninstalling preserves the configuration; remove it too with
 `dockrail uninstall --purge`.
+
+To remove the Omarchy plugin:
+
+```bash
+omarchy plugin remove io.github.fernandodamaso.smartdock --yes
+```
+
+Plugin removal leaves `~/.config/dockrail/dock.json`, shared Widget packages,
+optional providers, and migration recovery snapshots in place. Delete
+`~/.config/dockrail` yourself only if you no longer want those settings.
+If you switched to a local version with `dockrail dev use`, run
+`dockrail dev reset` before removing or updating the plugin.
 
 ## Run as an Omarchy plugin
 
@@ -285,7 +295,7 @@ second dock, enabling autostart, or changing the dock configuration:
 The plugin itself is installed with:
 
 ```bash
-omarchy plugin add https://github.com/fernandodamaso/smart-omarchy-dock.git --enable --yes
+omarchy plugin add https://github.com/fernandodamaso/dockrail.git --enable --yes
 ```
 
 Agent grouping is best effort. Dockrail uses the terminal window's observed
