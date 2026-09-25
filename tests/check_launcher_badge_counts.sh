@@ -137,3 +137,5 @@ grep -Fq 'count:2:none' tests/tst_launcherbadgemodel.qml \
   || fail 'window-scoped regression must expect count:2:none on the owning Chrome item'
 
 echo 'check_launcher_badge_counts: PASS'
+
+grep -Fq 'install_dir="$data_home/dockrail/providers"' scripts/build-launcher-badge-provider || fail 'launcher badge installer must target canonical Dockrail data root'
