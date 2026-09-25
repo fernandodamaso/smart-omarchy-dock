@@ -125,10 +125,9 @@ start_compositor() {
   mkdir -p "$runtime_dir"
   chmod 700 "$runtime_dir"
   cp "$src_lua" "$config"
-  sudo -n usermod -aG seat,video "$(id -un)" >/dev/null 2>&1 || true
-  sudo -n systemctl start seatd >/dev/null 2>&1 || true
-  sudo -n chmod 770 /run/seatd.sock >/dev/null 2>&1 || true
-  sudo -n chgrp seat /run/seatd.sock >/dev/null 2>&1 || true
+  # cloud-init provisioning adds this user to seat/video and enables seatd;
+  # the guest user has no sudo rights.
+  id -nG | grep -qw seat || { echo "guest user is not in the seat group; re-provision the session" >&2; exit 1; }
   Hyprland --verify-config --config "$config" >/dev/null
 
   lock_info=$(owned_lock_instance || true)
@@ -179,11 +178,7 @@ EOF
     exit 1
   fi
 
-  if id -nG | grep -qw seat; then
-    nohup "$hypr_wrapper" >"$log" 2>&1 &
-  else
-    nohup sudo -n -u "$(id -un)" -g seat "$hypr_wrapper" >"$log" 2>&1 &
-  fi
+  nohup "$hypr_wrapper" >"$log" 2>&1 &
   echo $! >"$pidfile"
 
   for _ in $(seq 1 30); do
