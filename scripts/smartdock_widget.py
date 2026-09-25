@@ -41,9 +41,11 @@ PROTECTED_WIDGETS = {
     "herdr.agents": ("Coding agents", "integration", False),
 }
 RESERVED_PACKAGE_FILES = {".smartdock-source.json", ".smartdock-package.json"}
-RUNTIME_WIDGETKIT_DIR = "SmartDock"
+RUNTIME_WIDGETKIT_DIR = "Dockrail"
+LEGACY_RUNTIME_WIDGETKIT_DIR = "SmartDock"
+RUNTIME_WIDGETKIT_DIRS = {RUNTIME_WIDGETKIT_DIR, LEGACY_RUNTIME_WIDGETKIT_DIR}
 WIDGETKIT_IMPORT_RE = re.compile(
-    r"^(?P<indent>\s*)import\s+SmartDock[.]WidgetKit\s+1[.]0"
+    r"^(?P<indent>\s*)import\s+(?:Dockrail|SmartDock)[.]WidgetKit\s+1[.]0"
     r"(?P<alias>\s+as\s+[A-Za-z_][A-Za-z0-9_]*)?"
     r"(?P<comment>\s*//.*)?\s*\Z"
 )
