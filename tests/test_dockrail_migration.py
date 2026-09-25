@@ -137,7 +137,7 @@ class MigrationTests(unittest.TestCase):
                 paths = self.paths(env)
                 self.legacy_config(paths)
                 if kind == "plugin":
-                    plugins = paths.config_home / "omarchy/plugins"
+                    plugins = paths.home / ".config/omarchy/plugins"
                     plugins.mkdir(parents=True)
                     target = Path(tmp) / "source"
                     target.mkdir()
@@ -157,7 +157,7 @@ class MigrationTests(unittest.TestCase):
             paths = self.paths(env)
             self.legacy_config(paths)
             self.run_startup(env)
-            plugins = paths.config_home / "omarchy/plugins"
+            plugins = paths.home / ".config/omarchy/plugins"
             plugins.mkdir(parents=True, exist_ok=True)
             target = Path(tmp) / "source"
             target.mkdir()
