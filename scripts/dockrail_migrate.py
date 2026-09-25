@@ -475,7 +475,10 @@ def startup(
         if journal is None and legacy_state in {"absent", "alias"}:
             # Clean install/startup. Defaults may be created only by the full
             # installer; ordinary host bootstrap simply selects the canonical path.
-            return _result(paths, "canonical-clean", migrated=False)
+            # A full standalone installer may still need to hand off an old
+            # defaults-only process that never wrote dock.json.
+            was_running = _handoff_standalone(paths, True) if handoff_standalone else False
+            return _result(paths, "canonical-clean", migrated=False, was_running=was_running)
 
         if journal is None:
             if _plugin_development_active(paths):
