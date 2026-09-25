@@ -56,6 +56,12 @@ class DockrailBrandingTests(unittest.TestCase):
         self.assertTrue(self.read("README.md").startswith("# Dockrail\n"))
         self.assertIn("dockrail status --json", self.read("README.md"))
         self.assertIn("import Dockrail.WidgetKit 1.0", self.read("docs/WIDGET_PACKAGES.md"))
+        cli_reference = self.read("docs/CLI_REFERENCE.md")
+        self.assertIn("/dockrail/dock.json", cli_reference)
+        self.assertIn("/dockrail-cli", cli_reference)
+        self.assertIn("/bin/dockrail", cli_reference)
+        self.assertIn("scripts/dockrail", self.read("docs/CLI_RUNTIME_CHECKS.md"))
+        self.assertIn("/dockrail/dev-worktrees/", self.read("docs/DEV_SWITCH.md"))
 
     def test_retained_compatibility_contracts_remain_literal(self):
         migration = self.read("docs/DOCKRAIL_MIGRATION.md")
