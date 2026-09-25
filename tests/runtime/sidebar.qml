@@ -197,6 +197,7 @@ ShellRoot {
           require(root.windows().length === 1, "fold did not remove only this workspace's members")
           require(root.windows().every(function(row) { return row.key !== root.firstKey }),
             "folded member still projected as a window row")
+          root.windowKeys = root.windows().map(function(row) { return row.key })
           // Drop the JS handle after proving domain removal. Some Qt builds keep
           // ListView wrappers alive across frames even after the row leaves the model.
           root.firstDelegate = null
