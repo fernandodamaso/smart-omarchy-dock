@@ -21,6 +21,7 @@ Item {
   property int port: 0
   property bool providerExecutable: false
   property bool shuttingDown: false
+  property string dataRoot: ""
   property int restartAttempts: 0
   readonly property bool activationInFlight: activationProcess.running
 
@@ -33,7 +34,8 @@ Item {
       ? Quickshell.env("XDG_CACHE_HOME")
       : Quickshell.env("HOME") + "/.cache"
   readonly property string providerBinaryPath:
-    dataHome + "/smartdock/providers/smartdock-browser-profile-provider"
+    (root.dataRoot !== "" ? root.dataRoot : dataHome + "/smartdock")
+      + "/providers/smartdock-browser-profile-provider"
   readonly property string statePath:
     runtimeHome + "/smartdock/browser-profiles.json"
 
