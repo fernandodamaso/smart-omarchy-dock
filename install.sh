@@ -70,8 +70,8 @@ if [[ -n "$script_path" ]]; then
   fi
 fi
 if [[ -z "$source_dir" ]]; then
-  echo 'install.sh must be run from a SmartDock for Omarchy source tree.' >&2
-  echo 'Clone or unpack your own SmartDock repository, then run ./install.sh.' >&2
+  echo 'install.sh must be run from a Dockrail source tree.' >&2
+  echo 'Clone or unpack your own Dockrail repository, then run ./install.sh.' >&2
   exit 1
 fi
 
@@ -133,7 +133,7 @@ install_agent_assets() {
 
 if $agent_assets_only; then
   install_agent_assets
-  echo 'Installed SmartDock terminal-agent launchers and icons.'
+  echo 'Installed Dockrail terminal-agent launchers and icons.'
   exit
 fi
 
@@ -180,8 +180,8 @@ install_agent_assets
 cat >"$desktop_file" <<EOF
 [Desktop Entry]
 Type=Application
-Name=SmartDock for Omarchy
-Comment=Start or restart the Omarchy application dock
+Name=Dockrail
+Comment=Developer workspace rail for Hyprland
 Exec="$bin_home/dockrail" restart
 Icon=preferences-desktop
 Terminal=false
@@ -202,7 +202,7 @@ if [[ "$migration_provenance" == "canonical-clean" ]]; then
   demo_widget_seed_marker="$config_dir/.demo-widgets-seeded-v2"
   demo_widget_seed_result="$(python3 "$source_dir/scripts/smartdock_seed_demo_widgets.py" "$config_dir/dock.json" "$demo_widget_seed_marker")"
   case "$demo_widget_seed_result" in
-    seeded) echo "Enabled missing SmartDock demo Widgets for this branch." ;;
+    seeded) echo "Enabled missing Dockrail demo Widgets for this branch." ;;
     preserved) echo "Demo Widget selection already present." ;;
     already) ;;
     invalid) echo "Skipped demo Widget seeding because the existing Widget config needs repair." >&2 ;;
@@ -213,7 +213,7 @@ if $install_autostart; then "$bin_home/dockrail" autostart enable; fi
 
 cat <<EOF
 
-SmartDock for Omarchy installed successfully.
+Dockrail installed successfully.
 
 Run explicitly:
   $bin_home/dockrail launch --daemonize
