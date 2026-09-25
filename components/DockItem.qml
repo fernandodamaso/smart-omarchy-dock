@@ -103,7 +103,7 @@ Item {
   }
 
   function dismissPopups() {
-    contextMenu.dismiss()
+    contextMenu.closeAll()
     previewReleased(root)
   }
 
@@ -131,21 +131,29 @@ Item {
     lastWheelTimestamp = 0
   }
   onWorkspaceDragEnabledChanged: if (!workspaceDragEnabled) cancelWorkspaceDrag("drag disabled")
-  onParentChanged: cancelWorkspaceDrag("source reparented")
+  onParentChanged: {
+    cancelWorkspaceDrag("source reparented")
+    if (typeof contextMenu !== "undefined" && contextMenu) contextMenu.closeAll()
+  }
 
   function refreshPopupGeometry() {
     if (!presentationVisible) return
     tooltip.scheduleReanchor()
-    if (contextMenu.visible) contextMenu.anchor.updateAnchor()
+    contextMenu.updatePopupAnchors()
   }
   onPresentationVisibleChanged: if (!presentationVisible) dismissPopups()
   property int scopeRevision: 0
   property bool menuOpen: false
+  function syncMenuOpen() {
+    var open = contextMenu.visible || contextMenu.iconDialogOpen
+    if (root.menuOpen === open) return
+    root.menuOpen = open
+    root.contextMenuVisibilityChanged(open)
+  }
   onScopeRevisionChanged: if (originOnly && contextMenu.visible) contextMenu.dismiss()
   onVisibleChanged: if (!visible) {
     cancelWorkspaceDrag("source hidden")
-    contextMenu.dismiss()
-    root.previewReleased(root)
+    root.dismissPopups()
   }
   Component.onDestruction: {
     cancelWorkspaceDrag("source destroyed")
@@ -897,12 +905,9 @@ Item {
     herdrAgentActions: root.herdrAgentActions
     interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
     originOnly: root.originOnly
-    onVisibleChanged: {
-      if (root.menuOpen !== visible) {
-        root.menuOpen = visible
-        root.contextMenuVisibilityChanged(visible)
-      }
-    }
+    // The Change Icon dialog keeps the dock shown after the menu closes.
+    onVisibleChanged: root.syncMenuOpen()
+    onIconDialogOpenChanged: root.syncMenuOpen()
     onOpenNewWindow: root.launch()
     onAddApplication: root.addApplicationRequested()
     onRemoveFromDock: root.removeRequested(root.desktopId)

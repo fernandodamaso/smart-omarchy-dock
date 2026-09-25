@@ -136,10 +136,10 @@ smartdock icons reset com.mitchellh.ghostty --title-pattern '*solar*' --json
 The title rule affects every current/future Ghostty window whose full title matches
 `*solar*`; it is not an identity for one window instance. Reset removes only that
 rule and may reveal another matching rule or a lower-priority icon candidate. Do not
-replace invalid/empty/oversized captured titles with broad `*`; the selected-window
-dialog must surface validation instead.
+replace invalid/empty/oversized titles with broad `*`; the **Change Icon…** dialog
+surfaces validation instead.
 
-After replacing bytes at the same path, explicit reload advances the shared artwork revision without saving settings. Other mapped icons can refresh too. Same-source set also requests fresh bytes without a redundant settings write; repeated reset is a true no-op. `reloaded: true` means requested, not decoded; `applied`/`noop` describe settings, so reload can report `applied: false`, `noop: true`, `reloaded: true`. Every successful icon response has `renderVerified: false`. Real cache invalidation, image decoding and multi-monitor redraw remain local qualification, not headless-test claims.
+The dock watches referenced artwork files and refreshes automatically after same-path edits; explicit reload remains available for compatibility or forcing a refresh and advances the shared artwork revision without saving settings. Other mapped icons can refresh too. Same-source set also requests fresh bytes without a redundant settings write; repeated reset is a true no-op. `reloaded: true` means requested, not decoded; `applied`/`noop` describe settings, so reload can report `applied: false`, `noop: true`, `reloaded: true`. Every successful icon response has `renderVerified: false`. Real cache invalidation, image decoding and multi-monitor redraw remain local qualification, not headless-test claims.
 
 ## Persistence, recovery and rollback
 

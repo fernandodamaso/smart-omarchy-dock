@@ -188,6 +188,27 @@ or workspace identity. Reset removes only the targeted rule; another matching ru
 or lower-priority artwork can immediately become visible. Missing/corrupt artwork
 keeps the rule and falls back while `renderVerified` remains false.
 
+The same rules, browser-profile artwork and app-wide overrides can be edited
+without the CLI: right-click an app, window or pinned app and choose **Change
+Icon…**. Pick a recently used image, **Choose file…** (PNG/SVG, via
+Omarchy's `omarchy-file-select` portal chooser) or **Default**,
+then choose whether it applies to all windows of the app, only one browser
+profile, or only windows whose title contains some text (saved as `*text*`).
+The dialog previews the affected open windows, **Reset to default** removes
+exactly the override currently applied, and **Save** performs one settings
+write; both the removed override and destination are checked against the
+opening snapshot, including a destination that was absent. A concurrent edit is
+refused rather than overwritten. Choosing an existing title pattern edits that
+rule in place; renaming a different rule onto it is rejected without deleting
+either rule. Choosing a narrower scope keeps the wider override. The preview
+uses the resulting settings, including surviving title/profile/app overrides;
+reset can reveal a remaining custom icon rather than the stock icon.
+
+Only one Change Icon editing session is active at a time across dock items and
+sidebar panels. Opening another closes the previous editor and ignores any late
+file-picker result. Hidden, removed or recycled source anchors close the editor;
+its file chooser is allowed to finish normally without applying a stale result.
+
 ### Browser profile badges and activity
 
 Chrome can run every profile inside a single browser process, so a window's
@@ -338,9 +359,9 @@ for atomic patches, dry runs, persistence errors, reset scope and safe exports.
 the running configuration.
 
 Configuration is CLI-first: there is no settings window or live preference preview.
-General app/profile icon editing stays CLI-only; the narrow exception is the
-selected-live-window **Change Icon** dialog, which writes only that captured window
-rule through the same host writer. The dock, ordinary window previews, application picker,
+Icon artwork is the one exception: right-click an app, window or pinned app and
+choose **Change Icon…** to edit its app-wide, browser-profile or window-title icon
+through the same host writer. The dock, ordinary window previews, application picker,
 context menus, drag reordering, workspace controls and Trash remain available.
 The first sliders icon opens the existing launcher/add-application/auto-hide menu.
 Changes are applied through the same host-owned writer without resetting existing
@@ -537,10 +558,12 @@ The bounded fallback is **custom file → original desktop icon →
 artwork is not tinted. Missing or corrupt images retain the requested mapping
 and fall back instead of being silently removed.
 
-There is no continuous artwork-file watch. After replacing bytes at the same
-path, use `icons reload ID`; it bumps the global artwork revision without writing
-settings, and other mapped icons may refresh too. Setting an equivalent source
-also requests a reload without a redundant save. Every successful icon response
+The dock watches referenced artwork files and refreshes automatically about
+250 ms after one is edited, replaced, deleted or recreated at the same path.
+`icons reload ID` remains for compatibility and to force a refresh; it bumps the
+global artwork revision without writing settings, and other mapped icons may
+refresh too. Setting an equivalent source also requests a reload without a
+redundant save. Every successful icon response
 reports `renderVerified: false`: persistence and reload requests do not prove
 image decoding or a visible redraw. Real rendering/cache behavior is reserved
 for local Omarchy qualification, not claimed by headless tests.

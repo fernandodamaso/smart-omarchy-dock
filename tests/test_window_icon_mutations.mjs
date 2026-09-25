@@ -66,10 +66,13 @@ expectConflict(ConfigModel.windowIconIntent(settings([b]), "set", {
   appId: a.appId, titlePattern: a.titlePattern, source: "/tmp/c.svg"
 }), "same-rule deletion")
 
-expectConflict(ConfigModel.windowIconIntent(settings([a, b]), "set", {
+const collision = ConfigModel.windowIconIntent(settings([a, b]), "set", {
   mode: "dialog", originalKey: aKey, expected: a,
   appId: b.appId, titlePattern: b.titlePattern, source: "/tmp/c.svg"
-}), "editing onto another stable key")
+})
+assert.equal(collision.ok, false, "editing onto another stable key is refused")
+assert.notEqual(collision.errorCode, "E_CONFLICT", "reopening cannot fix a duplicate key")
+assert.match(collision.errors[0].message, /Another rule already uses/)
 
 expectConflict(ConfigModel.windowIconIntent(settings([a]), "set", {
   mode: "dialog", originalKey: "", expected: null,
@@ -144,32 +147,53 @@ reply = harness.request("icons.reset", {
 assert.equal(reply.ok, true)
 assert.deepEqual(plain(harness.host.settings.windowIconOverrides), [])
 
-const dialogPath = new URL("../components/DockWindowIconDialog.qml", import.meta.url)
-assert.ok(fs.existsSync(dialogPath), "selected-window editing uses DockWindowIconDialog.qml")
-const dialog = fs.readFileSync(dialogPath, "utf8")
-assert.match(dialog, /import QtQuick\.Dialogs/)
-assert.match(dialog, /FileDialog\s*\{/)
-assert.match(dialog, /readOnly:\s*true/)
-assert.match(dialog, /enabled:\s*false/)
-assert.match(dialog, /titlePattern/)
-assert.match(dialog, /originalKey/)
-assert.match(dialog, /expectedRule/)
-assert.match(dialog, /literal.*\*/i)
-assert.match(dialog, /trim/i)
-assert.doesNotMatch(dialog, /titlePattern\s*=\s*"\*"/,
-  "missing/invalid titles must never seed a broad wildcard")
+assert.ok(!fs.existsSync(new URL("../components/DockWindowIconDialog.qml", import.meta.url)),
+  "the window-only dialog is replaced by the shared Change Icon dialog")
+const dialog = read("components/DockIconDialog.qml")
+assert.doesNotMatch(dialog, /QtQuick\.Dialogs|FileDialog/,
+  "no in-process native file dialog runs inside the shell")
+assert.match(dialog, /"omarchy-file-select", "--title", "Choose an icon image", "--extensions", "png svg"/,
+  "Choose file uses Omarchy's out-of-process portal chooser")
+assert.match(dialog, /chosenFileSource\(chooserOutput\.text\)/,
+  "chooser output is parsed by the tested model helper")
+assert.match(dialog, /The file chooser could not be opened\./)
+assert.match(dialog, /chooserLaunchSerial !== root\.chooserSerial/,
+  "a chooser result that outlives its dialog is ignored")
+assert.match(dialog, /saveIconChange\(/, "one host call removes and sets overrides together")
+assert.match(dialog, /iconChangeArguments\(/, "save arguments come from the tested model helper")
+assert.match(dialog, /currentIconTarget\(/, "the dialog preselects the override that applies")
+assert.match(dialog, /reply\.ok === true \|\| \(reply\.data && reply\.data\.applied === true\)/,
+  "dialog dismissal follows applied truth, including persistence-pending replies")
+assert.match(dialog, /E_CONFLICT/, "a concurrent edit is reported inline")
+assert.doesNotMatch(dialog, /FDM-927/, "the narrow window-only exception comment is gone")
 
 const context = read("components/DockContextMenu.qml")
-assert.match(context, /"Change Icon"/)
-assert.match(context, /"Reset Icon"/)
-assert.match(context, /windowIconDialog/)
-assert.match(context, /reply\.ok\s*\|\|\s*reply\.data\.applied/,
-  "dialog dismissal follows applied truth, including persistence-pending replies")
+assert.match(context, /"Change Icon\\u2026"/)
+assert.doesNotMatch(context, /"Reset Icon"|"Copy Icon Command"/)
+assert.match(context, /DockIconDialog/)
 
 const agents = read("AGENTS.md")
-assert.match(agents, /selected live window/i,
-  "AGENTS narrows the CLI-only icon editing rule for the selected-window dialog")
-assert.match(read(".github/workflows/ci.yml"), /qml6-module-qtquick-dialogs/,
-  "CI installs QtQuick.Dialogs for the native FileDialog")
+assert.doesNotMatch(agents, /selected live window|FDM-927/i,
+  "AGENTS no longer carries the narrow window-only dialog exception")
+assert.match(agents, /Preferences remain CLI-first/,
+  "AGENTS keeps preferences CLI-first")
+assert.match(agents, /host permits only one active\s+editing session at a time/,
+  "AGENTS requires one active editing session, not one popup instance")
+assert.match(agents, /DockHost\.saveIconChange` and its existing\s+FileView writer/,
+  "the dialog saves through the existing host writer")
+assert.match(agents, /second config writer/,
+  "AGENTS still forbids a second config writer")
+for (const doc of ["README.md", "docs/CONFIGURATION.md", "docs/CLI_REFERENCE.md",
+  "docs/AGENT_CONFIGURATION.md", "docs/CLI_RUNTIME_CHECKS.md"]) {
+  const text = read(doc)
+  assert.doesNotMatch(text, /Copy Icon Command|selected-window dialog|selected-live-window/i,
+    `${doc} drops the removed icon menu entries`)
+  assert.doesNotMatch(text, /no continuous (artwork-file )?watch/i,
+    `${doc} documents the automatic artwork file watch`)
+}
+for (const doc of ["README.md", "docs/CONFIGURATION.md", "docs/CLI_REFERENCE.md"])
+  assert.match(read(doc), /Change Icon\u2026/, `${doc} describes the Change Icon dialog`)
+assert.doesNotMatch(read(".github/workflows/ci.yml"), /qml6-module-qtquick-dialogs/,
+  "CI no longer needs QtQuick.Dialogs")
 
-console.log("window icon mutation and selected-window dialog contracts: PASS")
+console.log("window icon mutation and Change Icon dialog policy contracts: PASS")

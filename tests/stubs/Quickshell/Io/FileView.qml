@@ -5,6 +5,7 @@ QtObject {
 
   property url path
   property bool watchChanges: false
+  property bool preload: true
   property bool printErrors: false
   property bool blockLoading: false
 
