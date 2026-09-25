@@ -109,3 +109,23 @@ to delete configuration while the Omarchy plugin (including its saved
 development backup) is present. External Widget source repositories, icon
 files, Git worktrees and Herdr-owned external state are never recursively
 deleted by this migration.
+
+
+## MIG-03 WidgetKit and package compatibility
+
+Dockrail exposes `Dockrail.WidgetKit 1.0` as the canonical public QML module while
+retaining `SmartDock.WidgetKit 1.0` for existing Widget sources. Both named module
+surfaces reference the same maintained files under `components/widgets/`; they are
+not independent component implementations.
+
+New package installation and development snapshots materialize one local
+`Dockrail/WidgetKit` runtime copy and rewrite either named import to that
+package-relative runtime path. The rewrite preserves aliases, comments and nested
+QML-relative paths. Source repositories are never modified.
+
+Existing installed/development snapshots that already contain
+`SmartDock/WidgetKit` remain valid and are not rewritten merely because the
+product acquired a canonical Dockrail module name. Legacy metadata filenames,
+package IDs, registry ordering and source locations remain compatibility
+contracts. Both module surfaces ship in full and CLI-only bundles so source
+validation and package preparation do not depend on a separate checkout.
