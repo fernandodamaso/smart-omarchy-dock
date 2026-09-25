@@ -41,9 +41,11 @@ PROTECTED_WIDGETS = {
     "herdr.agents": ("Coding agents", "integration", False),
 }
 RESERVED_PACKAGE_FILES = {".smartdock-source.json", ".smartdock-package.json"}
-RUNTIME_WIDGETKIT_DIR = "SmartDock"
+RUNTIME_WIDGETKIT_DIR = "Dockrail"
+LEGACY_RUNTIME_WIDGETKIT_DIR = "SmartDock"
+RUNTIME_WIDGETKIT_DIRS = {RUNTIME_WIDGETKIT_DIR, LEGACY_RUNTIME_WIDGETKIT_DIR}
 WIDGETKIT_IMPORT_RE = re.compile(
-    r"^(?P<indent>\s*)import\s+SmartDock[.]WidgetKit\s+1[.]0"
+    r"^(?P<indent>\s*)import\s+(?:Dockrail|SmartDock)[.]WidgetKit\s+1[.]0"
     r"(?P<alias>\s+as\s+[A-Za-z_][A-Za-z0-9_]*)?"
     r"(?P<comment>\s*//.*)?\s*\Z"
 )
@@ -172,13 +174,13 @@ def validate_manifest(package_root: Path, *, allow_protected=False, allow_runtim
     entry_path = (root / relative_entry).resolve()
     if not _is_within(entry_path, root) or not entry_path.is_file():
         raise WidgetError("E_VALIDATION", "Widget entry is missing or resolves outside the package.")
-    runtime_widgetkit = root / RUNTIME_WIDGETKIT_DIR
-    if not allow_runtime_widgetkit and (runtime_widgetkit.exists() or runtime_widgetkit.is_symlink()):
+    runtime_widgetkits = [root / name for name in RUNTIME_WIDGETKIT_DIRS]
+    if not allow_runtime_widgetkit and any(path.exists() or path.is_symlink() for path in runtime_widgetkits):
         raise WidgetError(
             "E_VALIDATION",
-            "Widget source may not provide the reserved SmartDock runtime module directory."
+            "Widget source may not provide reserved Dockrail/SmartDock runtime module directories."
         )
-    scan_package(root, ignored_root_names={RUNTIME_WIDGETKIT_DIR} if allow_runtime_widgetkit else None)
+    scan_package(root, ignored_root_names=RUNTIME_WIDGETKIT_DIRS if allow_runtime_widgetkit else None)
     normalized = {
         "apiVersion": API_VERSION,
         "id": widget_id,
@@ -228,7 +230,7 @@ def package_digest(root: Path, manifest):
     digest.update(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     for directory, dirnames, filenames in os.walk(root, followlinks=False):
         directory_path = Path(directory)
-        ignored = {RUNTIME_WIDGETKIT_DIR} if directory_path == root else set()
+        ignored = RUNTIME_WIDGETKIT_DIRS if directory_path == root else set()
         dirnames[:] = sorted(name for name in dirnames if name != ".git" and name not in ignored)
         for name in sorted(filenames):
             if name in RESERVED_PACKAGE_FILES or name == ".git":
@@ -322,9 +324,10 @@ class Store:
         return result
 
     def _materialize_widgetkit(self, package_root: Path):
-        source_qmldir = self.bundle / "SmartDock/WidgetKit/qmldir"
-        if not source_qmldir.is_file():
-            raise WidgetError("E_STATE", "SmartDock WidgetKit runtime files are missing from this CLI bundle.")
+        source_qmldir = self.bundle / "Dockrail/WidgetKit/qmldir"
+        legacy_qmldir = self.bundle / "SmartDock/WidgetKit/qmldir"
+        if not source_qmldir.is_file() or not legacy_qmldir.is_file():
+            raise WidgetError("E_STATE", "Dockrail/SmartDock WidgetKit runtime files are missing from this CLI bundle.")
         target_root = package_root / RUNTIME_WIDGETKIT_DIR / "WidgetKit"
         if target_root.exists() or target_root.is_symlink():
             shutil.rmtree(package_root / RUNTIME_WIDGETKIT_DIR, ignore_errors=True)
@@ -341,12 +344,12 @@ class Store:
                     continue
                 fields = line.split()
                 if len(fields) != 3:
-                    raise WidgetError("E_STATE", "SmartDock WidgetKit qmldir contains an unsupported entry.")
+                    raise WidgetError("E_STATE", "Dockrail WidgetKit qmldir contains an unsupported entry.")
                 type_name, version, relative_source = fields
                 source_file = (source_qmldir.parent / relative_source).resolve()
                 widget_root = (self.bundle / "components/widgets").resolve()
                 if not _is_within(source_file, widget_root) or not source_file.is_file():
-                    raise WidgetError("E_STATE", "SmartDock WidgetKit references a missing public component.")
+                    raise WidgetError("E_STATE", "Dockrail WidgetKit references a missing public component.")
                 target_file = target_root / source_file.name
                 shutil.copy2(source_file, target_file)
                 output.append(f"{type_name} {version} {target_file.name}")
@@ -354,12 +357,12 @@ class Store:
         except WidgetError:
             raise
         except (OSError, UnicodeError) as error:
-            raise WidgetError("E_STATE", "Could not materialize SmartDock WidgetKit: " + str(error)) from error
+            raise WidgetError("E_STATE", "Could not materialize Dockrail WidgetKit: " + str(error)) from error
 
     def _rewrite_widgetkit_imports(self, package_root: Path):
         runtime_root = (package_root / RUNTIME_WIDGETKIT_DIR / "WidgetKit").resolve()
         if not runtime_root.is_dir():
-            raise WidgetError("E_STATE", "SmartDock WidgetKit runtime directory is missing.")
+            raise WidgetError("E_STATE", "Dockrail WidgetKit runtime directory is missing.")
         try:
             qml_files = sorted(package_root.rglob("*.qml"))
         except OSError as error:
@@ -571,7 +574,7 @@ class Store:
             (target / "widget.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             (target / "Widget.qml").write_text(
                 "import QtQuick\n"
-                "import SmartDock.WidgetKit 1.0\n\n"
+                "import Dockrail.WidgetKit 1.0\n\n"
                 "Item {\n"
                 "  property var widgetContext: ({})\n"
                 "  implicitHeight: content.implicitHeight\n\n"
