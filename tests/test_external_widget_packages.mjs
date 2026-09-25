@@ -15,8 +15,8 @@ const defaults = JSON.parse(read('config/dock.json'));
 const schema = JSON.parse(read('config/settings-schema.json'));
 const qmldir = read('SmartDock/WidgetKit/qmldir');
 
-assert.match(host, /DockExternalWidgetRegistry\s*\{\s*id:\s*externalWidgetRegistry\s*\}/,
-  'the host must own external package discovery');
+assert.match(host, /DockExternalWidgetRegistry\s*\{[\s\S]*?id:\s*externalWidgetRegistry[\s\S]*?dataRoot:\s*root\.dataRoot/,
+  'the host must own external package discovery and pass the migration-selected data root');
 assert.match(host, /externalWidgetRegistry\.descriptors/,
   'validated external descriptors must merge into the existing host registry');
 assert.match(host, /"herdr\.agents"[\s\S]*?manageable:\s*false/,
@@ -32,8 +32,12 @@ assert.match(view, /source:\s*root\.factory \? "" : root\.sourceUrl/,
 assert.match(external, /allowedEntryPrefix/);
 assert.match(external, /StandardPaths\.writableLocation\(StandardPaths\.GenericDataLocation\)/,
   'external packages must resolve from the SmartDock-owned XDG data store');
-assert.match(external, /\/smartdock\/widgets/,
-  'the runtime registry must stay under the SmartDock Widget package root');
+assert.match(external, /property string dataRoot:\s*""/,
+  'the registry accepts the host migration-selected data root');
+assert.match(external, /root\.dataRoot !== ""/,
+  'production hosts can select the canonical Dockrail package root');
+assert.match(external, /GenericDataLocation\) \+ "\/smartdock"/,
+  'legacy fallback remains available to isolated component tests and pre-cutover hosts');
 assert.match(external, /if \(packageUrl\.indexOf\("file:"\) !== 0\) packageUrl = "file:\/\/" \+ packageUrl/,
   'runtime entry URLs must preserve StandardPaths file URLs without adding a second scheme');
 assert.doesNotMatch(external, /return\s+"file:\/\/"\s*\+\s*root\.packageRoot/,
@@ -43,7 +47,7 @@ assert.match(external, /acquire:\s*function\(owner\)/,
 assert.doesNotMatch(external, /dock\.json|sidebarWidgets/,
   'runtime package discovery may not turn settings paths into executable QML');
 assert.match(launcher, /smartdock_widget\.py/,
-  'the normal smartdock launcher owns the Widget package CLI');
+  'the canonical dockrail launcher owns the Widget package CLI');
 assert.doesNotMatch(packageManager, /\[\s*["']git["']\s*,\s*["']pull["']/,
   'Widget updates must never git-pull a deployment checkout');
 assert.deepEqual(defaults.sidebarWidgets.every(id => typeof id === 'string'), true);
