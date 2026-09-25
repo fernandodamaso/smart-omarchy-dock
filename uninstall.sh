@@ -4,9 +4,12 @@ set -euo pipefail
 data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 bin_home="${XDG_BIN_HOME:-$HOME/.local/bin}"
-app_dir="$data_home/smartdock"
-client_dir="$data_home/smartdock-cli"
-config_dir="$config_home/smartdock"
+app_dir="$data_home/dockrail"
+legacy_app_dir="$data_home/smartdock"
+client_dir="$data_home/dockrail-cli"
+legacy_client_dir="$data_home/smartdock-cli"
+config_dir="$config_home/dockrail"
+legacy_config_dir="$config_home/smartdock"
 desktop_file="$data_home/applications/smartdock.desktop"
 purge=false
 agent_assets_only=false
@@ -56,10 +59,18 @@ if $agent_assets_only && $purge; then
   exit 2
 fi
 
+has_supported_bundle() {
+  [[ -f "$app_dir/shell.qml" || -f "$legacy_app_dir/shell.qml"
+    || -f "$client_dir/scripts/smartdock_cli.py"
+    || -f "$legacy_client_dir/scripts/smartdock_cli.py" ]]
+}
+
 if $cli_only; then
   rm -rf -- "$client_dir"
-  if [[ ! -f "$app_dir/shell.qml" ]]; then rm -f -- "$bin_home/smartdock"; fi
-  echo 'Removed SmartDock client-only files. Plugin, standalone and configuration were not changed.'
+  if ! has_supported_bundle; then
+    rm -f -- "$bin_home/dockrail" "$bin_home/smartdock"
+  fi
+  echo 'Removed Dockrail client-only files. Plugin, standalone and configuration were not changed.'
   exit
 fi
 
@@ -86,14 +97,33 @@ fi
 remove_agent_assets
 rm -f -- "$config_home/autostart/smartdock.desktop"
 rm -f -- "$desktop_file"
-rm -rf -- "$app_dir"
-if [[ ! -f "$client_dir/scripts/smartdock_cli.py" ]]; then
-  rm -f -- "$bin_home/smartdock"
+# Remove standalone deployment files without deleting shared Widget/provider
+# state that can still be consumed by the Omarchy plugin.
+rm -rf -- "$app_dir/components" "$app_dir/SmartDock" "$app_dir/assets"   "$app_dir/provider" "$app_dir/scripts" "$app_dir/config" "$app_dir/docs"
+rm -f -- "$app_dir/shell.qml" "$app_dir/DockHost.qml" "$app_dir/LICENSE"   "$app_dir/install.sh" "$app_dir/uninstall.sh" "$app_dir/.source-dir"
+rmdir "$app_dir" 2>/dev/null || true
+
+if ! has_supported_bundle; then
+  rm -f -- "$bin_home/dockrail" "$bin_home/smartdock"
 fi
 if $purge; then
+  plugin_root="$HOME/.config/omarchy/plugins/io.github.fernandodamaso.smartdock"
+  plugin_backup="$HOME/.config/omarchy/plugins/.io.github.fernandodamaso.smartdock.smartdock-installed"
+  if [[ -e "$plugin_root" || -L "$plugin_root" || -e "$plugin_backup" ]]; then
+    echo 'Refusing --purge while the Omarchy SmartDock/Dockrail plugin is installed or in development mode.' >&2
+    echo "Configuration preserved at: $config_dir/dock.json" >&2
+    exit 1
+  fi
   rm -rf -- "$config_dir"
-  echo 'Removed SmartDock for Omarchy and its configuration.'
+  if [[ -L "$legacy_config_dir" ]]; then
+    legacy_target="$(readlink -f -- "$legacy_config_dir" 2>/dev/null || true)"
+    canonical_target="$(readlink -f -- "$config_dir" 2>/dev/null || printf '%s' "$config_dir")"
+    if [[ "$legacy_target" == "$canonical_target" || ! -e "$legacy_config_dir" ]]; then
+      rm -f -- "$legacy_config_dir"
+    fi
+  fi
+  echo 'Removed standalone Dockrail configuration. Shared Widget/provider state was preserved.'
 else
-  echo 'Removed SmartDock for Omarchy. Configuration preserved at:'
+  echo 'Removed standalone Dockrail. Configuration preserved at:'
   echo "  $config_dir/dock.json"
 fi
