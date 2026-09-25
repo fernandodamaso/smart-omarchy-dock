@@ -69,8 +69,7 @@ function fixture(usingLua = false) {
     interfaceAnimationsEnabled: false, visible: false, openGeneration: 0,
     page: 'app', pageStack: [], targetContexts: [], pageTarget: null,
     activeMenuIndex: -1, groupCandidateSnapshot: [], openedWorkspaceGroupsSignature: '',
-    feedbackTitle: '', feedbackText: '', pendingMutationAction: '', pendingMutationLabel: '',
-    copyProfileDirectory: ''
+    feedbackTitle: '', feedbackText: '', pendingMutationAction: '', pendingMutationLabel: ''
   })
   // Model-only fixtures mirror the QML bindings without replacing action logic.
   Object.defineProperties(menu, {
@@ -277,11 +276,192 @@ test('pin-strip shortcut menu omits window choose/minimize even if app would be 
     .map(record => record.command)
   assert.ok(commands.includes('unpin-app'))
   assert.ok(commands.includes('open-new'))
-  assert.ok(commands.includes('copy-icon-command'))
+  assert.ok(commands.includes('change-icon'))
   assert.ok(!commands.includes('open-chooser-page'))
   assert.ok(!commands.includes('minimize-visible'))
   assert.ok(!commands.includes('close-represented'))
   assert.ok(!commands.includes('hide-app'))
   assert.ok(f.menu.pageActions.some(record =>
     record.kind === 'header' && String(record.subtitle || '').includes('No open windows')))
+})
+
+test('one Change Icon entry opens the shared dialog with both app identities', () => {
+  const f = fixture()
+  const opened = []
+  f.menu.iconDialogLoader = { active: false, item: { openFor(options) { opened.push(options); return true } } }
+  f.menu.anchorItem = {
+    desktopId: 'editor', entry: { name: 'Editor', icon: 'editor-icon' },
+    browserProfileKey: 'Default',
+    browserProfileService: {
+      profileKeyForAddress: address => address === '0xb2' ? 'Profile 1' : '',
+      profileFor: key => ({ name: key === 'Profile 1' ? 'Work' : 'Personal', avatarPath: '' })
+    }
+  }
+  f.menu.open()
+  assert.equal(f.menu.page, 'app')
+  const appCommands = f.menu.pageActions.filter(record => record.kind === 'action')
+    .map(record => record.command)
+  assert.equal(appCommands.filter(command => command === 'change-icon').length, 1)
+  choose(f.menu, 'change-icon')
+  assert.equal(f.menu.visible, false, 'the menu closes when the dialog opens')
+  assert.equal(f.menu.iconDialogLoader.active, true)
+  let options = opened.pop()
+  assert.equal(options.desktopId, 'editor')
+  assert.equal(options.appId, 'editor', 'title rules use the raw Wayland app ID')
+  assert.equal(options.specificWindow, false)
+  assert.equal(options.profileKey, 'Default')
+  assert.equal(options.profileName, 'Personal')
+  assert.equal(options.desktopIcon, 'editor-icon')
+  assert.deepEqual(JSON.parse(JSON.stringify(options.windows)),
+    [{ appId: 'editor', title: 'A', profileKey: 'Default' }, { appId: 'editor', title: 'B', profileKey: 'Profile 1' }])
+
+  f.menu.open()
+  choose(f.menu, 'open-chooser-page')
+  f.menu.dispatchAction(f.menu.pageActions.find(record => record.command === 'open-window-page'
+    && record.targetContext.toplevel === f.B), 0)
+  assert.equal(f.menu.page, 'window')
+  const windowCommands = f.menu.pageActions.filter(record => record.kind === 'action')
+    .map(record => record.command)
+  assert.equal(windowCommands.filter(command => command === 'change-icon').length, 1)
+  for (const removed of ['change-window-icon', 'reset-window-icon', 'copy-icon-command'])
+    assert.ok(!windowCommands.includes(removed), `${removed} is gone`)
+  choose(f.menu, 'change-icon')
+  options = opened.pop()
+  assert.equal(options.specificWindow, true)
+  assert.equal(options.title, 'B')
+  assert.equal(options.profileKey, 'Profile 1')
+  assert.equal(options.profileName, 'Work')
+})
+
+test('Change Icon preview lists every open window of the app, not only the item', () => {
+  const f = fixture()
+  const opened = []
+  f.menu.iconDialogLoader = { active: false, item: { openFor(options) { opened.push(options); return true } } }
+  f.menu.anchorItem = { desktopId: 'editor', entry: { name: 'Editor' } }
+  // Ungrouped items, other workspaces or monitors: open elsewhere, same app.
+  f.windows.push({ appId: 'editor', title: 'C' }, { appId: 'other', title: 'D' })
+  f.menu.open()
+  choose(f.menu, 'change-icon')
+  assert.deepEqual(JSON.parse(JSON.stringify(opened.pop().windows.map(window => window.title))),
+    ['A', 'B', 'C'])
+})
+
+test('the controls menu has no Change Icon entry', () => {
+  const f = fixture()
+  f.menu.controlItem = true
+  f.menu.open()
+  assert.ok(!f.menu.pageActions.some(record => record.command === 'change-icon'))
+})
+
+
+function attachEditor(menu) {
+  const editor = { visible: true, picking: false, serial: 0, reanchors: 0,
+    get dialogActive() { return this.visible || this.picking },
+    openFor() { this.visible = true; return true },
+    closeDialog() { this.serial++; this.visible = false; this.picking = false },
+    anchor: { updateAnchor() { editor.reanchors++ } }
+  }
+  menu.iconDialogLoader = { active: true, item: editor }
+  Object.defineProperty(menu, 'iconDialogOpen', { get: () => editor.dialogActive })
+  return editor
+}
+
+test('review lifecycle: dismiss is menu-only, closeAll also cancels the editor session', () => {
+  const f = fixture()
+  const editor = attachEditor(f.menu)
+  f.menu.open()
+  f.menu.dismiss()
+  assert.equal(editor.visible, true)
+  f.menu.closeAll()
+  assert.equal(editor.visible, false)
+  assert.equal(editor.serial, 1)
+  f.menu.iconDialogLoader.item = null
+  assert.doesNotThrow(() => f.menu.closeAll(), 'unloaded editor is harmless')
+})
+
+test('review lifecycle: DockItem dismissPopups closes editor and releases menuOpen', () => {
+  const f = fixture()
+  const editor = attachEditor(f.menu)
+  const counts = []
+  const item = methods('DockItem.qml', { contextMenu: f.menu, menuOpen: true,
+    previewReleased() {}, contextMenuVisibilityChanged: value => counts.push(value) })
+  item.dismissPopups()
+  item.syncMenuOpen() // The native property-change signals invoke this method.
+  assert.equal(editor.visible, false)
+  assert.equal(item.menuOpen, false)
+  assert.deepEqual(counts, [false])
+})
+
+test('review lifecycle: menu-to-editor handoff keeps the editor active', () => {
+  const f = fixture()
+  const editor = attachEditor(f.menu)
+  editor.visible = false
+  f.menu.open()
+  assert.equal(f.menu.openIconDialog(null), true)
+  assert.equal(f.menu.visible, false)
+  assert.equal(editor.visible, true)
+})
+
+function sidebarEditorFixture() {
+  const f = fixture()
+  const editor = attachEditor(f.menu)
+  const controller = { interactionBusy: false, widgetPopupId: '', widgetDragId: '',
+    resizeActive: false, rowDragActive: false, targetIsCurrent: () => true,
+    cancelResize() {} }
+  const sidebar = methods('DockSidebar.qml', { controller, host: {},
+    sidebarContext: f.menu, picker: { visible: false }, pinnedStrip: { overflowOpen: false },
+    sidebarViewport: { height: 400, mapFromItem: () => ({ y: 20 }), cancelInputs() {} },
+    menuAnchor: { visible: true, rowKey: 'window:a', height: 28 },
+    menuTarget: { key: 'window:a' }, pinStrip: null, widgetArea: null, widgetManager: null,
+    positionDragSurface: { cancelGesture() {} }, viewportDragSurface: { cancelGesture() {} }
+  })
+  return { sidebar, controller, editor, menu: f.menu }
+}
+
+test('review lifecycle: sidebar busy state counts an editor and forbids widget reorder', () => {
+  const { sidebar, controller } = sidebarEditorFixture()
+  sidebar.syncInteractionBusy()
+  assert.equal(controller.interactionBusy, true)
+  const reorder = methods('DockSidebarController.qml', { ...controller, widgetIds: ['demo'] })
+  assert.equal(reorder.beginWidgetReorder('demo'), false)
+})
+
+test('review lifecycle: sidebar closeSurfaces closes the editor', () => {
+  const { sidebar, controller, editor } = sidebarEditorFixture()
+  controller.interactionBusy = true
+  sidebar.closeSurfaces()
+  assert.equal(editor.visible, false)
+  assert.equal(controller.interactionBusy, false)
+})
+
+for (const invalid of ['hidden', 'recycled', 'scrolled-out', 'removed', 'no-target']) {
+  test(`review lifecycle: editor-only sidebar refresh closes a ${invalid} anchor`, () => {
+    const { sidebar, controller, editor } = sidebarEditorFixture()
+    if (invalid === 'hidden') sidebar.menuAnchor.visible = false
+    if (invalid === 'recycled') sidebar.menuAnchor.rowKey = 'window:b'
+    if (invalid === 'scrolled-out') sidebar.sidebarViewport.mapFromItem = () => ({ y: 420 })
+    if (invalid === 'removed') controller.targetIsCurrent = () => false
+    if (invalid === 'no-target') sidebar.menuTarget = null
+    sidebar.refreshContext()
+    assert.equal(editor.visible, false)
+  })
+}
+
+test('review lifecycle: a valid sidebar anchor reanchors its editor without closing it', () => {
+  const { sidebar, editor } = sidebarEditorFixture()
+  sidebar.refreshContext()
+  assert.equal(editor.visible, true)
+  assert.equal(editor.reanchors, 1)
+})
+
+
+test('review ownership: a non-owning sidebar cannot release another editor reservation', () => {
+  const { sidebar, controller, editor } = sidebarEditorFixture()
+  editor.visible = false
+  sidebar.host = { iconDialogActive: true }
+  sidebar.closeSurfaces()
+  assert.equal(controller.interactionBusy, true)
+  sidebar.host.iconDialogActive = false
+  sidebar.syncInteractionBusy()
+  assert.equal(controller.interactionBusy, false)
 })

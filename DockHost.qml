@@ -24,6 +24,24 @@ Item {
   property var herdrService: null
   readonly property var applications: DesktopEntries.applications.values || []
   property int iconReloadRevision: 0
+  // Menus may cache popup instances, but only one editor owns a live session.
+  property var activeIconDialog: null
+  readonly property bool iconDialogActive: root.activeIconDialog !== null
+    && root.activeIconDialog.dialogActive === true
+
+  function claimIconDialog(dialog) {
+    if (!dialog || typeof dialog.closeDialog !== "function") return false
+    var previous = root.activeIconDialog
+    // Publish the new owner first: cleanup by the previous owner cannot release it.
+    root.activeIconDialog = dialog
+    if (previous && previous !== dialog && previous.dialogActive === true)
+      previous.closeDialog()
+    return true
+  }
+
+  function releaseIconDialog(dialog) {
+    if (root.activeIconDialog === dialog) root.activeIconDialog = null
+  }
   readonly property var connectedScreens: Quickshell.screens
   readonly property var hyprMonitors: Hyprland.monitors ? Hyprland.monitors.values || [] : []
   readonly property var hyprWorkspaces: Hyprland.workspaces ? Hyprland.workspaces.values || [] : []
@@ -252,6 +270,18 @@ Item {
     return iconResult(reply, iconReloadRevision !== revision)
   }
 
+  // Change Icon dialog: remove the captured override and/or set the new one in
+  // a single settings write.
+  function saveIconChange(args) {
+    var blocked = mutationBlocked()
+    if (blocked) return iconResult(blocked, false)
+    var result = ConfigModel.iconChangeIntent(settings, args)
+    var revision = iconReloadRevision
+    var reply = commitSettings(result, false)
+    if (result.ok && args && args.set && iconReloadRevision === revision) iconReloadRevision++
+    return iconResult(reply, iconReloadRevision !== revision)
+  }
+
   function reloadIcon(desktopId) {
     var blocked = mutationBlocked()
     if (blocked) return iconResult(blocked, false)
@@ -260,7 +290,8 @@ Item {
     if (!key || !Object.prototype.hasOwnProperty.call(configured, key))
       return iconResult(dockControl.failure("E_VALIDATION", "Reload requires an existing local icon mapping."), false)
     // The retained renderer uses one host revision; other mapped icons can also
-    // refresh. No file watch, settings revision or persistence write is involved.
+    // refresh. No settings revision or persistence write is involved; file
+    // edits also refresh automatically through iconReloadScheduler.
     iconReloadRevision++
     return iconResult(mutationOutcome(dockControl.mutationData(settings, settings, [], false, false)), true)
   }
@@ -415,7 +446,7 @@ Item {
       rejected.validationErrors = result.errors
       return dockControl.failure(result.errorCode || "E_VALIDATION",
         result.errorCode === "E_CONFLICT"
-          ? "Window icon rule changed while the edit was open; refresh before retrying."
+          ? "The icon changed while the edit was open; reopen it and try again."
           : "Patch rejected; no values were changed.", rejected)
     }
     if (dryRun === true)
@@ -652,6 +683,29 @@ Item {
     }
     onSaved: root.settingsSaved()
     onSaveFailed: error => root.settingsSaveFailed(error)
+  }
+
+  // Custom icons are referenced in place; editing a referenced PNG/SVG
+  // refreshes the renderer without a CLI reload or any settings write.
+  DockIconReloadScheduler {
+    id: iconReloadScheduler
+    iconOverrides: root.settings.iconOverrides
+    windowIconOverrides: root.settings.windowIconOverrides
+    onReloadRequested: root.iconReloadRevision++
+  }
+
+  Instantiator {
+    model: iconReloadScheduler.watchedPaths
+    delegate: FileView {
+      required property string modelData
+      path: modelData
+      // Watch only: never read image bytes. Deletes, rename-saves and files
+      // that appear later all report fileChanged.
+      preload: false
+      watchChanges: true
+      printErrors: false
+      onFileChanged: iconReloadScheduler.noteFileChanged()
+    }
   }
 
   DockWindowActions {

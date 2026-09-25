@@ -57,6 +57,15 @@ function firstEnabledIndex(records) {
   return -1
 }
 
+function focusableIndexForId(records, id) {
+  var values = records || []
+  if (!id) return -1
+  for (var i = 0; i < values.length; ++i) {
+    if (values[i] && values[i].id === id) return isFocusable(values[i]) ? i : -1
+  }
+  return -1
+}
+
 function nextEnabledIndex(records, currentIndex, delta) {
   var values = records || []
   if (values.length === 0) return -1
@@ -138,37 +147,6 @@ function contentYForRow(contentY, viewportHeight, rowY, rowHeight, contentHeight
     return Math.min(maximum, Math.max(0, bottom - viewport))
 
   return Math.min(maximum, current)
-}
-
-function shellQuote(value) {
-  return "'" + String(value === undefined || value === null ? "" : value)
-    .replace(/'/g, "'\"'\"'") + "'"
-}
-
-function iconCommandSpec(options) {
-  var value = options || ({})
-  var runtime = String(value.runtime || "")
-  var instance = String(value.instance || "")
-  var desktopId = String(value.desktopId || "")
-  var profile = String(value.profile || "")
-  var action = String(value.action || "")
-
-  if (["plugin", "standalone"].indexOf(runtime) < 0
-      || !instance || !desktopId
-      || ["set", "reset", "reload"].indexOf(action) < 0)
-    return { argv: [], text: "" }
-
-  var argv = [
-    "smartdock", "--runtime", runtime, "--instance", instance,
-    "icons", action, desktopId
-  ]
-  if (action === "set") argv.push("<IMAGE_PATH>")
-  if (profile) argv.push("--profile", profile)
-
-  return {
-    argv: argv,
-    text: argv.map(shellQuote).join(" ")
-  }
 }
 
 function mutationPresentation(reply) {

@@ -127,7 +127,8 @@ function popups() {
   const a = area(panelA,viewportA), b = area(panelB,viewportB)
   function shell(widgets) {
     return qmlMethods('DockSidebar.qml', {
-      controller, widgetArea: widgets, host: null, sidebarContext: { dismiss() {} },
+      controller, widgetArea: widgets, host: null, sidebarContext: { visible: false, iconDialogOpen: false, closeAll() {} },
+      pinnedStrip: { overflowOpen: false },
       picker: { visible: false }, sidebarViewport: { cancelInputs() {} },
       positionDragSurface: { cancelGesture() {} },
       viewportDragSurface: { cancelGesture() {} },

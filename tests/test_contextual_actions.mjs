@@ -179,31 +179,8 @@ assert.deepEqual(mutationCalls, [
   ['hide', 'com.example.App']
 ])
 
-const hostileProfile = `Profile O'Malley \"$HOME\" \`echo nope\`; still-data`
-const setSpec = MenuModel.iconCommandSpec({
-  runtime: 'plugin',
-  instance: '4242',
-  desktopId: 'com.google.Chrome',
-  profile: hostileProfile,
-  action: 'set'
-})
-assert.deepEqual(Array.from(setSpec.argv), [
-  'smartdock', '--runtime', 'plugin', '--instance', '4242',
-  'icons', 'set', 'com.google.Chrome', '<IMAGE_PATH>', '--profile', hostileProfile
-], 'command argv round-trips hostile profile text as data')
-assert.equal(setSpec.text,
-  `'smartdock' '--runtime' 'plugin' '--instance' '4242' 'icons' 'set' 'com.google.Chrome' '<IMAGE_PATH>' '--profile' 'Profile O'"'"'Malley \"$HOME\" \`echo nope\`; still-data'`,
-  'every hostile argument stays independently single-quoted in copied shell text')
-assert.ok(!setSpec.text.includes('sh -c'), 'copied commands are data and never shell-executed in tests')
-
-const resetSpec = MenuModel.iconCommandSpec({
-  runtime: 'standalone', instance: '9876', desktopId: 'org.example.App',
-  profile: '', action: 'reset'
-})
-assert.deepEqual(Array.from(resetSpec.argv), [
-  'smartdock', '--runtime', 'standalone', '--instance', '9876',
-  'icons', 'reset', 'org.example.App'
-])
+assert.equal(MenuModel.iconCommandSpec, undefined,
+  'icon editing uses the Change Icon dialog instead of copied shell commands')
 
 const pending = MenuModel.mutationPresentation({
   ok: false,
@@ -227,4 +204,4 @@ assert.equal(failed.state, 'error')
 assert.equal(failed.durable, false)
 assert.match(failed.message, /disk full/)
 
-console.log('CM-02 exact actions, fullscreen, group scope, persistence and command-copy tests: PASS')
+console.log('CM-02 exact actions, fullscreen, group scope, and persistence tests: PASS')

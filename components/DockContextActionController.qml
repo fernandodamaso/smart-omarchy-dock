@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import Quickshell.Hyprland
 import "DockFullscreenModel.js" as FullscreenModel
 
@@ -10,9 +9,6 @@ Item {
 
   readonly property var applicationMutationController:
     root.windowActions ? root.windowActions.applicationMutationController : null
-  readonly property string runtimeMode: root.applicationMutationController
-    ? String(root.applicationMutationController.runtimeMode || "") : ""
-  readonly property string instanceId: String(Quickshell.processId)
 
   visible: false
   width: 0

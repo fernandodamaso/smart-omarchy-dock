@@ -377,7 +377,7 @@ function windowIconIntent(current, action, args) {
         return windowRuleConflict("The icon rule changed while the dialog was open.")
       for (var d = 0; d < list.length; ++d) {
         if (d !== index && DockIconModel.windowRuleKey(list[d].appId, list[d].titlePattern) === key)
-          return windowRuleConflict("Another rule already uses this application ID and title pattern.")
+          return rejectedIntent("titlePattern", "Another rule already uses this application ID and title pattern.")
       }
       if (action === "reset") list.splice(index, 1)
       else list[index] = { appId: appId, titlePattern: titlePattern, source: source }
@@ -425,4 +425,103 @@ function iconIntent(current, id, sourceOrNull) {
   })
   if (sourceOrNull !== null) updated[key] = intent.overrides[key]
   return withPatch(current, { iconOverrides: updated })
+}
+
+function iconTargetConflict(message) {
+  var result = rejectedIntent("iconOverrides", message)
+  result.errorCode = "E_CONFLICT"
+  return result
+}
+
+function windowTargetArguments(target, originalKey, expected) {
+  return {
+    mode: "dialog",
+    originalKey: originalKey || "",
+    expected: expected ? { appId: expected.appId, titlePattern: expected.titlePattern,
+      source: expected.source } : null,
+    appId: target.appId,
+    titlePattern: target.titlePattern,
+    source: target.source
+  }
+}
+
+// Removes the override the dialog captured, if any. App and profile entries
+// carry the source seen when the dialog opened so a concurrent edit is refused.
+function removeIconTarget(current, target) {
+  if (!target) return withPatch(current, {})
+  if (target.kind === "window")
+    return windowIconIntent(current, "reset", windowTargetArguments(target, target.key, {
+      appId: target.appId, titlePattern: target.titlePattern, source: target.source
+    }))
+  if (target.kind !== "app" && target.kind !== "profile")
+    return rejectedIntent("kind", "Unsupported icon target")
+  var key = iconKey(target.key)
+  if (!key) return rejectedIntent("id", "Invalid application ID")
+  var present = DockIconModel.normalizeOverrides(current.iconOverrides)[key] || ""
+  if (present !== DockIconModel.normalizeSource(target.source))
+    return iconTargetConflict("The icon changed while the dialog was open.")
+  return iconIntent(current, key, null)
+}
+
+function setIconTarget(current, target) {
+  if (!isObject(target) || !own(target, "expected"))
+    return rejectedIntent("expected", "An opening destination snapshot is required.")
+  if (target.kind === "window") {
+    var expected = target.expected
+    if (expected !== null && (!isObject(expected)
+        || expected.key !== DockIconModel.windowRuleKey(target.appId, target.titlePattern)
+        || expected.key !== DockIconModel.windowRuleKey(expected.appId, expected.titlePattern)
+        || !DockIconModel.normalizeSource(expected.source)))
+      return rejectedIntent("expected", "Invalid opening title-rule snapshot.")
+    return windowIconIntent(current, "set",
+      windowTargetArguments(target, expected ? expected.key : "", expected))
+  }
+  if (target.kind !== "app" && target.kind !== "profile")
+    return rejectedIntent("kind", "Unsupported icon target")
+  var key = iconKey(target.key)
+  if (!key) return rejectedIntent("id", "Invalid application ID")
+  if (typeof target.expected !== "string"
+      || (target.expected !== "" && DockIconModel.normalizeSource(target.expected) !== target.expected))
+    return rejectedIntent("expected", "Invalid opening icon snapshot.")
+  var present = DockIconModel.normalizeOverrides(current.iconOverrides)[key] || ""
+  if (present !== target.expected)
+    return iconTargetConflict("The destination icon changed while the dialog was open.")
+  if (!DockIconModel.normalizeSource(target.source))
+    return rejectedIntent("source", "Expected a local PNG or SVG source")
+  return iconIntent(current, key, target.source)
+}
+
+// Validate both sides against the same live snapshot BEFORE composing a result.
+// These pure intents never write; the host commits their final patch once.
+function iconChangeIntent(current, args) {
+  args = args || {}
+  var remove = args.remove || null
+  var set = args.set || null
+  var first = removeIconTarget(current, remove)
+  if (!first.ok || !set) return first
+  var second = setIconTarget(current, set)
+  if (!second.ok) return second
+
+  if (remove && remove.kind === "window" && set.kind === "window") {
+    if (set.expected && set.expected.key !== remove.key)
+      return rejectedIntent("titlePattern", "Another title rule already uses “" + set.titlePattern
+        + "”. Change that rule's icon from one of its windows instead.")
+    // Renaming to an absent destination must replace the captured rule in place,
+    // not remove it and append a new rule at the end of the precedence list.
+    return windowIconIntent(current, "set", windowTargetArguments(set, remove.key,
+      set.expected || remove))
+  }
+
+  var patch = {}
+  first.changedKeys.forEach(function(key) { patch[key] = first.settings[key] })
+  second.changedKeys.forEach(function(key) { patch[key] = second.settings[key] })
+  if (remove && remove.kind !== "window" && set.kind !== "window") {
+    // The set subsumes a same-key removal. Reuse its result so an unchanged
+    // source preserves legacy spelling/order and remains a no-write operation.
+    if (iconKey(remove.key) === iconKey(set.key)) return second
+    // Different keys in the same map: compose only after both snapshots passed.
+    var combined = iconIntent(first.settings, set.key, set.source)
+    patch.iconOverrides = combined.settings.iconOverrides
+  }
+  return withPatch(current, patch)
 }

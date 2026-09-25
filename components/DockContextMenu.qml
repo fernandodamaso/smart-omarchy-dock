@@ -4,7 +4,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Wayland
-import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "DockModel.js" as DockModel
@@ -48,14 +47,16 @@ PopupWindow {
   property var selectedToplevel: pageTarget ? pageTarget.toplevel : null
   property int openGeneration: 0
   property int activeMenuIndex: -1
+  // Identity of the highlighted row, so rebuilding the same page (a window
+  // title update, a live icon refresh) keeps the pointer/keyboard position.
+  property string activeMenuId: ""
+  property string activeMenuPage: ""
   property real entranceOpacity: 0
   property real entranceOffset: 0
   property string feedbackTitle: ""
   property string feedbackText: ""
   property string pendingMutationAction: ""
   property string pendingMutationLabel: ""
-  property string copyProfileDirectory: ""
-  property string pendingClipboardText: ""
   property var groupCandidateSnapshot: []
   property string openedWorkspaceGroupsSignature: ""
   property var herdrMenuRecords: []
@@ -101,12 +102,16 @@ PopupWindow {
     windowActions: root.windowActions
   }
 
-  DockWindowIconDialog {
-    id: windowIconDialog
-    anchorItem: root.anchorItem
-    mutationController: root.applicationMutationController
-    targetValidator: function(target) { return root.targetIsValid(target) }
+  // Created on first use. It outlives the menu: opening it closes the menu,
+  // and it captures everything it needs when it opens.
+  LazyLoader {
+    id: iconDialogLoader
+    active: false
+    DockIconDialog {
+      mutationController: root.applicationMutationController
+    }
   }
+  readonly property bool iconDialogOpen: !!iconDialogLoader.item && iconDialogLoader.item.dialogActive
 
   onRunningToplevelsChanged: {
     // Captured exact identities are invalid after any membership change.
@@ -129,7 +134,6 @@ PopupWindow {
     root.feedbackText = ""
     root.pendingMutationAction = ""
     root.pendingMutationLabel = ""
-    root.copyProfileDirectory = ""
     root.entranceOpacity = root.interfaceAnimationsEnabled ? 0 : 1
     root.entranceOffset = root.interfaceAnimationsEnabled ? 6 : 0
     visible = true
@@ -144,8 +148,6 @@ PopupWindow {
   }
 
   function dismiss() {
-    if (typeof windowIconDialog !== "undefined" && windowIconDialog
-        && windowIconDialog.visible) windowIconDialog.closeDialog()
     visible = false
     root.entranceOpacity = 0
     root.entranceOffset = 0
@@ -158,10 +160,23 @@ PopupWindow {
     root.feedbackText = ""
     root.pendingMutationAction = ""
     root.pendingMutationLabel = ""
-    root.copyProfileDirectory = ""
     root.groupCandidateSnapshot = []
     root.openedWorkspaceGroupsSignature = ""
     root.herdrMenuRecords = []
+  }
+
+  // Menu-to-editor handoff uses dismiss(); invalidation closes both surfaces.
+  function closeAll() {
+    root.dismiss()
+    if (typeof iconDialogLoader !== "undefined" && iconDialogLoader && iconDialogLoader.item)
+      iconDialogLoader.item.closeDialog()
+  }
+
+  function updatePopupAnchors() {
+    if (root.visible) root.anchor.updateAnchor()
+    if (typeof iconDialogLoader !== "undefined" && iconDialogLoader
+        && iconDialogLoader.item && iconDialogLoader.item.visible)
+      iconDialogLoader.item.anchor.updateAnchor()
   }
 
   function captureHerdrMenuRecords() {
@@ -411,12 +426,9 @@ PopupWindow {
   function pushPage(nextPage, targetContext) {
     root.pageStack = root.pageStack.concat([{
       page: root.page,
-      targetContext: root.pageTarget,
-      copyProfileDirectory: root.copyProfileDirectory
+      targetContext: root.pageTarget
     }])
     root.pageTarget = targetContext || null
-    if (nextPage === "copy-command")
-      root.copyProfileDirectory = root.profileDirectoryForTarget(targetContext)
     root.page = nextPage
     root.feedbackTitle = ""
     root.feedbackText = ""
@@ -431,7 +443,6 @@ PopupWindow {
     var previous = root.pageStack[root.pageStack.length - 1]
     root.pageStack = root.pageStack.slice(0, root.pageStack.length - 1)
     root.pageTarget = previous.targetContext || null
-    root.copyProfileDirectory = String(previous.copyProfileDirectory || "")
     root.page = previous.page
     root.feedbackTitle = ""
     root.feedbackText = ""
@@ -627,38 +638,6 @@ PopupWindow {
     }
   }
 
-  function iconCommandSpec(action) {
-    return DockMenuModel.iconCommandSpec({
-      runtime: contextActions.runtimeMode,
-      instance: contextActions.instanceId,
-      desktopId: root.desktopId,
-      profile: root.copyProfileDirectory,
-      action: action
-    })
-  }
-
-  function copyIconCommand(action) {
-    var spec = root.iconCommandSpec(action)
-    if (!spec || !spec.text) {
-      root.feedbackTitle = "Copy failed"
-      root.feedbackText = "The current host or application selector is not available."
-      return false
-    }
-    if (clipboardProcess.running) {
-      root.feedbackTitle = "Clipboard busy"
-      root.feedbackText = "Finish the current clipboard request before copying another command."
-      return false
-    }
-    root.pendingClipboardText = spec.text
-    root.feedbackTitle = "Copy Icon Command"
-    root.feedbackText = "Copying command to the clipboard…"
-    clipboardProcess.command = [
-      "omarchy-clipboard-paste-text", "--copy-only", spec.text
-    ]
-    clipboardProcess.running = true
-    return true
-  }
-
   function applicationActionRecords(prefix, targetContext) {
     var controllerAvailable = root.applicationMutationController !== null
       && root.applicationMutationController !== undefined
@@ -680,10 +659,9 @@ PopupWindow {
     }
     records.push(
       DockMenuModel.actionRecord(
-        prefix + ":copy-icon", "Copy Icon Command", "",
-        root.desktopId !== "" && contextActions.runtimeMode !== ""
-          && contextActions.instanceId !== "",
-        "copy-icon-command", targetContext, { submenu: true }),
+        prefix + ":change-icon", "Change Icon\u2026", "image",
+        controllerAvailable && root.desktopId !== "",
+        "change-icon", targetContext),
       DockMenuModel.actionRecord(
         prefix + ":open-new", "Open New Window", "plus", true,
         "open-new", targetContext))
@@ -760,43 +738,70 @@ PopupWindow {
     return records
   }
 
-  function windowIconRuleForTarget(target) {
-    if (!target || !root.targetIsValid(target) || !root.applicationMutationController
-        || !root.applicationMutationController.settings) return null
-    var toplevel = target.toplevel
-    var appId = String(toplevel && (toplevel.appId || toplevel.app_id) || "")
-    var title = String(toplevel && toplevel.title || "")
-    return DockIconModel.matchWindowRule(
-      DockIconModel.normalizeWindowRules(
-        root.applicationMutationController.settings.windowIconOverrides || []),
-      appId, title)
+  function toplevelAppId(toplevel) {
+    return DockIconModel.normalizeWindowAppId(
+      String(toplevel && (toplevel.appId || toplevel.app_id) || ""))
   }
 
-  function openWindowIconDialog(target) {
-    if (!target || !root.targetIsValid(target)) { root.dismiss(); return false }
-    return windowIconDialog.openFor(target)
-  }
-
-  function resetWindowIconRule(target) {
-    var rule = root.windowIconRuleForTarget(target)
-    if (!rule || !root.applicationMutationController || !root.targetIsValid(target))
-      return false
-    var reply = root.applicationMutationController.saveWindowIconOverride("reset", {
-      mode: "dialog",
-      originalKey: rule.key,
-      expected: { appId: rule.appId, titlePattern: rule.titlePattern, source: rule.source },
-      appId: rule.appId,
-      titlePattern: rule.titlePattern,
-      source: rule.source
-    })
-    if (reply && reply.data && (reply.ok || reply.data.applied)) {
-      root.dismiss()
-      return true
+  // Captures the identities the Change Icon dialog needs: the desktop ID for
+  // app/profile icons and the raw Wayland app ID for title rules.
+  function iconDialogOptions(targetContext) {
+    var anchor = root.anchorItem
+    var service = anchor ? anchor.browserProfileService : null
+    var profileKey = root.profileDirectoryForTarget(targetContext)
+    var profile = profileKey && service && typeof service.profileFor === "function"
+      ? service.profileFor(profileKey) : null
+    var windows = []
+    var included = []
+    var appId = targetContext ? root.toplevelAppId(targetContext.toplevel) : ""
+    for (var i = 0; i < root.targetContexts.length; ++i) {
+      var target = root.targetContexts[i]
+      if (!root.targetIsValid(target)) continue
+      if (!appId) appId = root.toplevelAppId(target.toplevel)
+      included.push(target.toplevel)
+      windows.push({
+        appId: root.toplevelAppId(target.toplevel),
+        title: String(target.toplevel.title || ""),
+        profileKey: root.profileDirectoryForTarget(target)
+      })
     }
-    root.feedbackTitle = "Reset Icon"
-    root.feedbackText = reply && reply.error ? String(reply.error.message || "Reset was not applied.")
-      : "Reset was not applied."
-    return false
+    // The preview covers every open window of the app, not only the ones this
+    // dock item represents (ungrouped items, other workspaces or monitors).
+    var all = appId ? root.windowActions.currentToplevels() : []
+    for (var j = 0; j < all.length; ++j) {
+      var toplevel = all[j]
+      if (!toplevel || included.indexOf(toplevel) >= 0 || root.toplevelAppId(toplevel) !== appId)
+        continue
+      var address = root.windowActions.addressFor(toplevel)
+      windows.push({
+        appId: root.toplevelAppId(toplevel),
+        title: String(toplevel.title || ""),
+        profileKey: address && service && typeof service.profileKeyForAddress === "function"
+          ? String(service.profileKeyForAddress(address) || "") : ""
+      })
+    }
+    return {
+      anchorItem: anchor,
+      position: root.position,
+      desktopId: root.desktopId,
+      appName: root.applicationName,
+      desktopIcon: anchor && anchor.entry ? String(anchor.entry.icon || "") : "",
+      profileKey: profileKey,
+      profileName: profile ? String(profile.name || "") : "",
+      profileAvatarPath: profile ? String(profile.avatarPath || "") : "",
+      appId: appId,
+      title: targetContext && targetContext.toplevel ? String(targetContext.toplevel.title || "") : "",
+      specificWindow: !!targetContext,
+      windows: windows
+    }
+  }
+
+  function openIconDialog(targetContext) {
+    var options = root.iconDialogOptions(targetContext)
+    root.dismiss()
+    if (typeof iconDialogLoader === "undefined" || !iconDialogLoader) return false
+    iconDialogLoader.active = true
+    return !!iconDialogLoader.item && iconDialogLoader.item.openFor(options)
   }
 
   function windowPageActions() {
@@ -853,18 +858,6 @@ PopupWindow {
       "window:fullscreen-hide-bars", "Fullscreen — Hide Bars", "maximize-2",
       addressValid, "fullscreen-hide-bars", target,
       { checked: fullscreenMode === "hide-bars" }))
-    var windowRule = root.windowIconRuleForTarget(target)
-    records.push(DockMenuModel.separatorRecord("window:icon-actions"))
-    records.push(DockMenuModel.actionRecord(
-      "window:change-icon", "Change Icon", "image",
-      valid && root.applicationMutationController !== null,
-      "change-window-icon", target))
-    if (windowRule) {
-      records.push(DockMenuModel.actionRecord(
-        "window:reset-icon", "Reset Icon", "rotate-ccw",
-        valid && root.applicationMutationController !== null,
-        "reset-window-icon", target))
-    }
     records.push(DockMenuModel.separatorRecord("window:application-actions"))
     records = records.concat(root.applicationActionRecords("window", target))
     records.push(DockMenuModel.separatorRecord("window:close-separator"))
@@ -901,29 +894,6 @@ PopupWindow {
         }))
     }
     return records
-  }
-
-  function copyCommandPageActions() {
-    var profile = root.copyProfileDirectory
-    var subtitle = profile ? "Profile: " + profile : "Application icon"
-    return [
-      DockMenuModel.actionRecord(
-        "copy:back", "Back", "chevron-left", true, "back", null),
-      DockMenuModel.headerRecord(
-        "copy:header", "Copy Icon Command", subtitle),
-      DockMenuModel.actionRecord(
-        "copy:hint", "Replace <IMAGE_PATH> with a local PNG/SVG path before running.",
-        "", false, "noop", null),
-      DockMenuModel.actionRecord(
-        "copy:set", "Copy Set Icon Command", "", true,
-        "copy-icon-command", root.pageTarget, { iconAction: "set" }),
-      DockMenuModel.actionRecord(
-        "copy:reset", "Copy Reset Icon Command", "", true,
-        "copy-icon-command", root.pageTarget, { iconAction: "reset" }),
-      DockMenuModel.actionRecord(
-        "copy:reload", "Copy Reload Icon Command", "", true,
-        "copy-icon-command", root.pageTarget, { iconAction: "reload" })
-    ]
   }
 
   function controlPageActions() {
@@ -1029,7 +999,6 @@ PopupWindow {
     if (root.page === "window") return root.windowPageActions()
     if (root.page === "chooser") return root.chooserPageActions()
     if (root.page === "workspaces") return root.workspacePageActions()
-    if (root.page === "copy-command") return root.copyCommandPageActions()
     return root.appPageActions()
   }
 
@@ -1057,6 +1026,18 @@ PopupWindow {
   function resetActiveMenuIndex() {
     root.activeMenuIndex = DockMenuModel.firstEnabledIndex(root.pageActions)
     Qt.callLater(function() { root.ensureActiveVisible() })
+  }
+
+  function restoreActiveMenuIndex() {
+    var index = root.page === root.activeMenuPage
+      ? DockMenuModel.focusableIndexForId(root.pageActions, root.activeMenuId) : -1
+    if (index < 0) {
+      root.resetActiveMenuIndex()
+      return
+    }
+    root.activeMenuIndex = index
+    // Keep the id when the row merely moved within a rebuilt list.
+    root.activeMenuId = String(root.pageActions[index].id || "")
   }
 
   function moveActiveMenuIndex(delta) {
@@ -1127,10 +1108,6 @@ PopupWindow {
       return root.setTargetFullscreenMode(targetContext, "keep-bars")
     case "fullscreen-hide-bars":
       return root.setTargetFullscreenMode(targetContext, "hide-bars")
-    case "change-window-icon":
-      return root.openWindowIconDialog(targetContext)
-    case "reset-window-icon":
-      return root.resetWindowIconRule(targetContext)
     case "minimize-visible": return root.representedAction("minimize-visible")
     case "restore-minimized": return root.representedAction("restore-minimized")
     case "close-represented": return root.representedAction("close-represented")
@@ -1146,10 +1123,7 @@ PopupWindow {
     case "pin-app": return root.runApplicationMutation("pin")
     case "unpin-app": return root.runApplicationMutation("unpin")
     case "hide-app": return root.runApplicationMutation("hide")
-    case "copy-icon-command":
-      if (record.iconAction)
-        return root.copyIconCommand(record.iconAction)
-      root.pushPage("copy-command", targetContext); return true
+    case "change-icon": return root.openIconDialog(targetContext)
     case "open-new":
       root.dismiss(); root.openNewWindow(); return true
     case "open-launcher":
@@ -1163,7 +1137,12 @@ PopupWindow {
   }
 
   onPageChanged: Qt.callLater(resetActiveMenuIndex)
-  onPageActionsChanged: Qt.callLater(resetActiveMenuIndex)
+  onPageActionsChanged: Qt.callLater(restoreActiveMenuIndex)
+  onActiveMenuIndexChanged: {
+    var record = root.activeMenuIndex >= 0 ? root.pageActions[root.activeMenuIndex] : null
+    root.activeMenuId = record ? String(record.id || "") : ""
+    root.activeMenuPage = root.page
+  }
   onInterfaceAnimationsEnabledChanged: {
     if (!root.interfaceAnimationsEnabled) {
       root.entranceOpacity = 1
@@ -1483,19 +1462,6 @@ PopupWindow {
           }
         }
       }
-    }
-  }
-
-  Process {
-    id: clipboardProcess
-    command: []
-    onExited: function(exitCode) {
-      root.feedbackTitle = "Copy Icon Command"
-      if (exitCode === 0)
-        root.feedbackText = "Command copied to the clipboard."
-      else
-        root.feedbackText = "Clipboard command failed (exit " + exitCode + ")."
-      root.pendingClipboardText = ""
     }
   }
 
