@@ -1,6 +1,6 @@
 # Delivery and review gates
 
-This document is the delivery contract for SmartDock changes. It complements the local validation matrix in `AGENTS.md`; it does not replace physical Omarchy/Hyprland qualification where an issue requires it.
+This document is the delivery contract for Dockrail changes. It complements the local validation matrix in `AGENTS.md`; it does not replace physical Omarchy/Hyprland qualification where an issue requires it.
 
 ## Pull-request path to `main`
 
