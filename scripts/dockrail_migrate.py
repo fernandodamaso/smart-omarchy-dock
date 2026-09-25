@@ -191,7 +191,7 @@ def _validate_legacy(paths: DockrailPaths) -> str:
 
 
 def _plugin_development_active(paths: DockrailPaths) -> bool:
-    plugins = paths.config_home / "omarchy" / "plugins"
+    plugins = paths.home / ".config" / "omarchy" / "plugins"
     active = plugins / PLUGIN_ID
     backup = plugins / ("." + PLUGIN_ID + ".smartdock-installed")
     return active.is_symlink() or backup.exists()
@@ -285,7 +285,13 @@ def _handoff_standalone(paths: DockrailPaths, allowed: bool) -> bool:
     )
     if result.returncode != 0:
         raise MigrationError("E_BUSY", "Could not stop the owned standalone host for migration handoff.")
-    return True
+    import time
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if not _standalone_instances(paths):
+            return True
+        time.sleep(0.1)
+    raise MigrationError("E_BUSY", "Standalone host did not stop within the bounded migration handoff.")
 
 
 def _recovery_copy(source: Path, destination: Path) -> None:
