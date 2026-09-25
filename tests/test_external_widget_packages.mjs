@@ -14,6 +14,7 @@ const packageManager = read('scripts/smartdock_widget.py');
 const defaults = JSON.parse(read('config/dock.json'));
 const schema = JSON.parse(read('config/settings-schema.json'));
 const qmldir = read('SmartDock/WidgetKit/qmldir');
+const dockrailQmldir = read('Dockrail/WidgetKit/qmldir');
 
 assert.match(host, /DockExternalWidgetRegistry\s*\{[\s\S]*?id:\s*externalWidgetRegistry[\s\S]*?dataRoot:\s*root\.dataRoot/,
   'the host must own external package discovery and pass the migration-selected data root');
@@ -54,8 +55,17 @@ assert.deepEqual(defaults.sidebarWidgets.every(id => typeof id === 'string'), tr
 assert.equal(schema.settings.sidebarWidgets.format, 'sidebar-widget-ids');
 assert.ok(!JSON.stringify(defaults.sidebarWidgets).match(/[\\/]|\.qml/i),
   'dock.json Widget selection stays ID-only');
+assert.match(qmldir, /^module SmartDock[.]WidgetKit$/m,
+  'the legacy named WidgetKit module remains public');
+assert.match(dockrailQmldir, /^module Dockrail[.]WidgetKit$/m,
+  'the canonical Dockrail WidgetKit module is public');
+const legacyExports = qmldir.split('\n').filter(line => line && !line.startsWith('module '));
+const canonicalExports = dockrailQmldir.split('\n').filter(line => line && !line.startsWith('module '));
+assert.deepEqual(canonicalExports, legacyExports,
+  'both named modules must point at the same maintained component surface');
 for (const type of ['WidgetSection', 'WidgetText', 'WidgetButton', 'WidgetListItem', 'WidgetState']) {
-  assert.match(qmldir, new RegExp('^' + type + ' 1\\.0 ', 'm'), `${type} must be exported by WidgetKit v1`);
+  assert.match(qmldir, new RegExp('^' + type + ' 1\\.0 ', 'm'), `${type} must remain exported by legacy WidgetKit v1`);
+  assert.match(dockrailQmldir, new RegExp('^' + type + ' 1\\.0 ', 'm'), `${type} must be exported by Dockrail WidgetKit v1`);
 }
 
 console.log('External Widget package registry and ID-only runtime boundary: PASS');
