@@ -106,4 +106,19 @@ grep -Fq 'height: 10' "$row" \
 grep -Fq 'radius: 2' "$row" \
   || fail 'monitor topology miniatures must use radius 2'
 
+# PR117 separates menu handoff from lifecycle cancellation.
+python3 - "$repo_root" <<'PY_CHECK' || status=1
+from pathlib import Path
+import re, sys
+root = Path(sys.argv[1])
+sidebar = (root / "components/DockSidebar.qml").read_text()
+item = (root / "components/DockItem.qml").read_text()
+def body(source, name):
+    return re.search(r"  function " + name + r"\([^)]*\) \{[\s\S]*?^  }", source, re.M).group()
+assert "sidebarContext.closeAll()" in body(sidebar, "closeSurfaces")
+assert "sidebarContext.iconDialogOpen" in body(sidebar, "syncInteractionBusy")
+assert "onIconDialogOpenChanged: root.syncInteractionBusy()" in sidebar
+assert "contextMenu.closeAll()" in body(item, "dismissPopups")
+PY_CHECK
+
 exit "$status"

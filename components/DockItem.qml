@@ -89,7 +89,7 @@ Item {
   }
 
   function dismissPopups() {
-    contextMenu.dismiss()
+    contextMenu.closeAll()
     previewReleased(root)
   }
 
@@ -117,12 +117,15 @@ Item {
     lastWheelTimestamp = 0
   }
   onWorkspaceDragEnabledChanged: if (!workspaceDragEnabled) cancelWorkspaceDrag("drag disabled")
-  onParentChanged: cancelWorkspaceDrag("source reparented")
+  onParentChanged: {
+    cancelWorkspaceDrag("source reparented")
+    if (typeof contextMenu !== "undefined" && contextMenu) contextMenu.closeAll()
+  }
 
   function refreshPopupGeometry() {
     if (!presentationVisible) return
     tooltip.scheduleReanchor()
-    if (contextMenu.visible) contextMenu.anchor.updateAnchor()
+    contextMenu.updatePopupAnchors()
   }
   onPresentationVisibleChanged: if (!presentationVisible) dismissPopups()
   property int scopeRevision: 0
@@ -136,8 +139,7 @@ Item {
   onScopeRevisionChanged: if (originOnly && contextMenu.visible) contextMenu.dismiss()
   onVisibleChanged: if (!visible) {
     cancelWorkspaceDrag("source hidden")
-    contextMenu.dismiss()
-    root.previewReleased(root)
+    root.dismissPopups()
   }
   Component.onDestruction: {
     cancelWorkspaceDrag("source destroyed")

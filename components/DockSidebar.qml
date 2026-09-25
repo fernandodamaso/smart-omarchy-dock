@@ -125,8 +125,15 @@ PanelWindow {
   readonly property real classicPreviewMargin: host && host.settings.margin !== undefined
     ? host.settings.margin : 10
 
+  function syncInteractionBusy() {
+    root.controller.interactionBusy = sidebarContext.visible || sidebarContext.iconDialogOpen
+      || picker.visible || pinnedStrip.overflowOpen || root.controller.resizeActive
+      || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
+      || !!root.controller.widgetDragId
+  }
+
   function closeSurfaces() {
-    sidebarContext.dismiss()
+    sidebarContext.closeAll()
     picker.visible = false
     if (root.pinStrip) root.pinStrip.close()
     sidebarViewport.cancelInputs("surface-close")
@@ -140,7 +147,7 @@ PanelWindow {
       root.widgetArea.closePopup()
     }
     // A disappearing mirror must not release another panel's widget session.
-    root.controller.interactionBusy = root.controller.widgetPopupId !== ""
+    root.syncInteractionBusy()
     if (root.host && root.host.badgeTracker) root.host.badgeTracker.syncWorkspaceScopes(root.badgeScopeOwner, [])
   }
 
@@ -191,18 +198,23 @@ PanelWindow {
   }
 
   function refreshContext() {
-    if (!sidebarContext.visible) {
+    if (!sidebarContext.visible && !sidebarContext.iconDialogOpen) {
       root.refreshPickerAnchor()
       return
     }
-    var stripOwned = !!(root.menuAnchor && root.menuAnchor.pinStripOwned === true)
+    if (!root.menuAnchor || !root.menuTarget) {
+      sidebarContext.closeAll()
+      root.refreshPickerAnchor()
+      return
+    }
+    var stripOwned = root.menuAnchor.pinStripOwned === true
     if (stripOwned) {
       // Pin shelf lives outside the viewport; do not treat it as a scrolled row.
       if (!root.menuAnchor.visible || root.menuAnchor.rowKey !== root.menuTarget.key
           || !root.controller.targetIsCurrent(root.menuTarget))
-        sidebarContext.dismiss()
-      else if (sidebarContext.anchor && typeof sidebarContext.anchor.updateAnchor === "function")
-        sidebarContext.anchor.updateAnchor()
+        sidebarContext.closeAll()
+      else
+        sidebarContext.updatePopupAnchors()
       root.refreshPickerAnchor()
       return
     }
@@ -210,9 +222,9 @@ PanelWindow {
     if (!root.menuAnchor || !root.menuAnchor.visible || root.menuAnchor.rowKey !== root.menuTarget.key
         || !root.controller.targetIsCurrent(root.menuTarget) || !point
         || point.y + root.menuAnchor.height <= 0 || point.y >= sidebarViewport.height) {
-      sidebarContext.dismiss()
+      sidebarContext.closeAll()
     } else {
-      sidebarContext.anchor.updateAnchor()
+      sidebarContext.updatePopupAnchors()
     }
     root.refreshPickerAnchor()
   }
@@ -671,9 +683,8 @@ PanelWindow {
     onOpenNewWindow: {
       if (root.menuEntry && typeof root.menuEntry.execute === "function") root.menuEntry.execute()
     }
-    onVisibleChanged: root.controller.interactionBusy = visible || picker.visible
-      || pinnedStrip.overflowOpen || root.controller.resizeActive
-      || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
+    onVisibleChanged: root.syncInteractionBusy()
+    onIconDialogOpenChanged: root.syncInteractionBusy()
     onKeyboardDismissed: root.controller.releaseNavigationFocus()
   }
   Connections {
@@ -690,9 +701,7 @@ PanelWindow {
     iconReloadRevision: root.host.iconReloadRevision
     onApplicationSelected: desktopId => root.host.pinApplication(desktopId)
     onVisibleChanged: {
-      root.controller.interactionBusy = visible || sidebarContext.visible || root.controller.resizeActive
-        || pinnedStrip.overflowOpen || root.controller.rowDragActive
-        || root.controller.widgetPopupId !== ""
+      root.syncInteractionBusy()
       if (visible) root.controller.closeWidgetPopup()
       if (!visible) root.pickerAnchorItem = null
     }
@@ -706,9 +715,7 @@ PanelWindow {
   Connections {
     target: pinnedStrip
     function onOverflowOpenChanged() {
-      root.controller.interactionBusy = pinnedStrip.overflowOpen || picker.visible
-        || sidebarContext.visible || root.controller.resizeActive
-        || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
+      root.syncInteractionBusy()
     }
   }
   Connections {
@@ -725,6 +732,12 @@ PanelWindow {
       refreshContextTimer.restart()
     }
     function onSurfaceInvalidated() { root.closeSurfaces() }
+    // An idle/cancelled widget completion can clear the shared busy flag.
+    // Keep the editor's reservation without changing the controller's owners.
+    function onInteractionBusyChanged() {
+      if (!root.controller.interactionBusy && sidebarContext.iconDialogOpen)
+        root.syncInteractionBusy()
+    }
   }
   onVisibleChanged: { root.syncBadges(); if (!visible) root.closeSurfaces() }
   onPanelCollapsedChanged: root.syncBadges()

@@ -165,6 +165,20 @@ PopupWindow {
     root.herdrMenuRecords = []
   }
 
+  // Menu-to-editor handoff uses dismiss(); invalidation closes both surfaces.
+  function closeAll() {
+    root.dismiss()
+    if (typeof iconDialogLoader !== "undefined" && iconDialogLoader && iconDialogLoader.item)
+      iconDialogLoader.item.closeDialog()
+  }
+
+  function updatePopupAnchors() {
+    if (root.visible) root.anchor.updateAnchor()
+    if (typeof iconDialogLoader !== "undefined" && iconDialogLoader
+        && iconDialogLoader.item && iconDialogLoader.item.visible)
+      iconDialogLoader.item.anchor.updateAnchor()
+  }
+
   function captureHerdrMenuRecords() {
     var anchor = root.anchorItem
     var actions = root.herdrAgentActions

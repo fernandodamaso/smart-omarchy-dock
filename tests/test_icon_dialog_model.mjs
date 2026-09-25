@@ -258,7 +258,10 @@ function dialogHarness() {
     DockIconModel, picking: false, visible: true, openAnchor: {}, inlineError: "old",
     chooserSerial: 0, chooserLaunchSerial: -1, chooserExitCode: -1, chooserOutputDone: false,
     imageSources: ["file:///a/recent.svg"], selectedSource: "file:///a/recent.svg", windows: [],
-    fileChooser: { running: false }, chooserOutput: { text: "" }
+    fileChooser: { running: false }, chooserOutput: { text: "" },
+    settings: {}, mutationController: null,
+    titleInput: { text: "", forceActiveFocus() {} }, keyScope: { forceActiveFocus() {} },
+    Qt: { callLater() {} }
   }
   const context = vm.createContext(state)
   context.root = context
@@ -528,4 +531,43 @@ test('review: structured validation errors reach the dialog instead of a generic
     data: { validationErrors: [{ message: 'Another title rule already uses “lunar”.' }] } }) }
   assert.equal(d.commit({}), false)
   assert.equal(d.inlineError, 'Another title rule already uses “lunar”.')
+})
+
+
+test('review lifecycle: reopening ignores a previous chooser without killing its process', () => {
+  const d = dialogHarness()
+  const options = { anchorItem: {}, desktopId: reviewApp, appId: reviewApp }
+  d.settings = reviewConfig({ [reviewApp]: '/icons/original.svg' })
+  assert.equal(d.openFor(options), true)
+  d.chooseFile()
+  const previousSerial = d.chooserLaunchSerial
+  d.settings = reviewConfig({ [reviewApp]: '/icons/second.svg' })
+  assert.equal(d.openFor(options), true)
+  assert.notEqual(d.chooserSerial, previousSerial)
+  assert.equal(d.picking, false)
+  assert.equal(d.fileChooser.running, true, 'portal process is deliberately not killed')
+  const selected = d.selectedSource
+  const sources = [...d.imageSources]
+  d.chooseFile()
+  assert.equal(d.picking, false, 'cannot start another pick before old process exits')
+  d.chooserOutput.text = '/icons/late.svg\n'
+  d.chooserExitCode = 0
+  d.chooserOutputDone = true
+  d.fileChooser.running = false
+  d.settleChooser()
+  assert.equal(d.selectedSource, selected)
+  assert.deepEqual([...d.imageSources], sources)
+  assert.equal(d.visible, true)
+  d.chooseFile()
+  assert.equal(d.picking, true, 'new session can pick after old process exits')
+})
+
+test('review lifecycle: opening snapshot stays detached from mutable live settings', () => {
+  const d = dialogHarness()
+  d.settings = reviewConfig({ [reviewApp]: '/icons/a.svg' }, [reviewRule('solar')])
+  d.openFor({ anchorItem: {}, desktopId: reviewApp, appId: reviewApp })
+  d.settings.iconOverrides[reviewApp] = '/icons/new.svg'
+  d.settings.windowIconOverrides[0].source = '/icons/new.svg'
+  assert.equal(d.openedSettings.iconOverrides[reviewApp], '/icons/a.svg')
+  assert.equal(d.openedSettings.windowIconOverrides[0].source, '/icons/rule.svg')
 })

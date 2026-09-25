@@ -106,6 +106,10 @@ PopupWindow {
   function openFor(options) {
     var value = options || {}
     if (!value.anchorItem || !String(value.desktopId || "")) return false
+    // A new editing session never accepts the previous portal's result. Leave
+    // its process alone; Choose file stays disabled until that process exits.
+    root.chooserSerial++
+    root.picking = false
     root.openAnchor = value.anchorItem
     root.position = String(value.position || "bottom")
     root.desktopId = String(value.desktopId)

@@ -352,3 +352,104 @@ test('the controls menu has no Change Icon entry', () => {
   f.menu.open()
   assert.ok(!f.menu.pageActions.some(record => record.command === 'change-icon'))
 })
+
+
+function attachEditor(menu) {
+  const editor = { visible: true, picking: false, serial: 0, reanchors: 0,
+    get dialogActive() { return this.visible || this.picking },
+    openFor() { this.visible = true; return true },
+    closeDialog() { this.serial++; this.visible = false; this.picking = false },
+    anchor: { updateAnchor() { editor.reanchors++ } }
+  }
+  menu.iconDialogLoader = { active: true, item: editor }
+  Object.defineProperty(menu, 'iconDialogOpen', { get: () => editor.dialogActive })
+  return editor
+}
+
+test('review lifecycle: dismiss is menu-only, closeAll also cancels the editor session', () => {
+  const f = fixture()
+  const editor = attachEditor(f.menu)
+  f.menu.open()
+  f.menu.dismiss()
+  assert.equal(editor.visible, true)
+  f.menu.closeAll()
+  assert.equal(editor.visible, false)
+  assert.equal(editor.serial, 1)
+  f.menu.iconDialogLoader.item = null
+  assert.doesNotThrow(() => f.menu.closeAll(), 'unloaded editor is harmless')
+})
+
+test('review lifecycle: DockItem dismissPopups closes editor and releases menuOpen', () => {
+  const f = fixture()
+  const editor = attachEditor(f.menu)
+  const counts = []
+  const item = methods('DockItem.qml', { contextMenu: f.menu, menuOpen: true,
+    previewReleased() {}, contextMenuVisibilityChanged: value => counts.push(value) })
+  item.dismissPopups()
+  item.syncMenuOpen() // The native property-change signals invoke this method.
+  assert.equal(editor.visible, false)
+  assert.equal(item.menuOpen, false)
+  assert.deepEqual(counts, [false])
+})
+
+test('review lifecycle: menu-to-editor handoff keeps the editor active', () => {
+  const f = fixture()
+  const editor = attachEditor(f.menu)
+  editor.visible = false
+  f.menu.open()
+  assert.equal(f.menu.openIconDialog(null), true)
+  assert.equal(f.menu.visible, false)
+  assert.equal(editor.visible, true)
+})
+
+function sidebarEditorFixture() {
+  const f = fixture()
+  const editor = attachEditor(f.menu)
+  const controller = { interactionBusy: false, widgetPopupId: '', widgetDragId: '',
+    resizeActive: false, rowDragActive: false, targetIsCurrent: () => true,
+    cancelResize() {} }
+  const sidebar = methods('DockSidebar.qml', { controller, host: {},
+    sidebarContext: f.menu, picker: { visible: false }, pinnedStrip: { overflowOpen: false },
+    sidebarViewport: { height: 400, mapFromItem: () => ({ y: 20 }), cancelInputs() {} },
+    menuAnchor: { visible: true, rowKey: 'window:a', height: 28 },
+    menuTarget: { key: 'window:a' }, pinStrip: null, widgetArea: null, widgetManager: null,
+    positionDragSurface: { cancelGesture() {} }, viewportDragSurface: { cancelGesture() {} }
+  })
+  return { sidebar, controller, editor, menu: f.menu }
+}
+
+test('review lifecycle: sidebar busy state counts an editor and forbids widget reorder', () => {
+  const { sidebar, controller } = sidebarEditorFixture()
+  sidebar.syncInteractionBusy()
+  assert.equal(controller.interactionBusy, true)
+  const reorder = methods('DockSidebarController.qml', { ...controller, widgetIds: ['demo'] })
+  assert.equal(reorder.beginWidgetReorder('demo'), false)
+})
+
+test('review lifecycle: sidebar closeSurfaces closes the editor', () => {
+  const { sidebar, controller, editor } = sidebarEditorFixture()
+  controller.interactionBusy = true
+  sidebar.closeSurfaces()
+  assert.equal(editor.visible, false)
+  assert.equal(controller.interactionBusy, false)
+})
+
+for (const invalid of ['hidden', 'recycled', 'scrolled-out', 'removed', 'no-target']) {
+  test(`review lifecycle: editor-only sidebar refresh closes a ${invalid} anchor`, () => {
+    const { sidebar, controller, editor } = sidebarEditorFixture()
+    if (invalid === 'hidden') sidebar.menuAnchor.visible = false
+    if (invalid === 'recycled') sidebar.menuAnchor.rowKey = 'window:b'
+    if (invalid === 'scrolled-out') sidebar.sidebarViewport.mapFromItem = () => ({ y: 420 })
+    if (invalid === 'removed') controller.targetIsCurrent = () => false
+    if (invalid === 'no-target') sidebar.menuTarget = null
+    sidebar.refreshContext()
+    assert.equal(editor.visible, false)
+  })
+}
+
+test('review lifecycle: a valid sidebar anchor reanchors its editor without closing it', () => {
+  const { sidebar, editor } = sidebarEditorFixture()
+  sidebar.refreshContext()
+  assert.equal(editor.visible, true)
+  assert.equal(editor.reanchors, 1)
+})
