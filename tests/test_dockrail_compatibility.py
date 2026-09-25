@@ -59,9 +59,9 @@ class DockrailPathTests(unittest.TestCase):
 class LauncherContractTests(unittest.TestCase):
     def test_legacy_launcher_is_thin(self):
         text = (ROOT / "scripts/smartdock").read_text()
-        self.assertIn('exec "$script_dir/dockrail" "$@"', text)
+        self.assertIn('exec bash "$script_dir/dockrail" "$@"', text)
         self.assertNotIn("qs ", text)
-        self.assertNotIn("python3", text)
+        self.assertNotIn("python3", text)\n        self.assertNotIn("qs ", text)
 
     def test_canonical_launcher_keeps_stable_ipc_client(self):
         text = (ROOT / "scripts/dockrail").read_text()
