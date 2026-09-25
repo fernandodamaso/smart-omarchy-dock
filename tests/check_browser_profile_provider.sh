@@ -244,4 +244,7 @@ grep -Fq 'DockModel.normalizeWindowAddress(handle.address || ipc.address)' compo
 grep -Fq 'google-chrome@profile:' tests/test_icon_overrides.mjs \
   || fail 'icon override tests must cover profile keys'
 
+grep -Fq 'install_dir="$data_home/dockrail/providers"' scripts/install-browser-profile-provider \
+  || fail 'browser profile installer must target the canonical Dockrail provider root'
+
 printf 'check_browser_profile_provider: PASS\n'
