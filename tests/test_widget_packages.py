@@ -113,7 +113,7 @@ class WidgetPackagesTest(unittest.TestCase):
         self.assertFalse(source.is_relative_to(self.home / ".config/omarchy/plugins" / widget.PLUGIN_ID))
         self.assertEqual(widget.validate_manifest(source)["id"], "io.example.scaffold")
         qml = (source / "Widget.qml").read_text()
-        self.assertIn("import SmartDock.WidgetKit 1.0", qml)
+        self.assertIn("import Dockrail.WidgetKit 1.0", qml)
         readme = (source / "README.md").read_text()
         self.assertIn("WIDGET_COMPONENTS.md", readme)
         self.assertIn("WIDGET_PACKAGES.md", readme)
@@ -256,28 +256,31 @@ class WidgetPackagesTest(unittest.TestCase):
         self.assertTrue(Path(before_state["snapshot"]).is_dir())
 
 
-    def test_source_cannot_supply_reserved_runtime_widgetkit_directory(self):
-        source = make_package(self.base / "source")
-        (source / "SmartDock/WidgetKit").mkdir(parents=True)
-        (source / "SmartDock/WidgetKit/qmldir").write_text("module SmartDock.WidgetKit\n", encoding="utf-8")
-        with self.assertRaises(widget.WidgetError) as caught:
-            widget.validate_manifest(source)
-        self.assertEqual(caught.exception.code, "E_VALIDATION")
+    def test_source_cannot_supply_reserved_runtime_widgetkit_directories(self):
+        for module_root, module_name in (("Dockrail", "Dockrail.WidgetKit"), ("SmartDock", "SmartDock.WidgetKit")):
+            with self.subTest(module_root=module_root):
+                source = make_package(self.base / ("source-" + module_root.lower()))
+                (source / module_root / "WidgetKit").mkdir(parents=True)
+                (source / module_root / "WidgetKit/qmldir").write_text(
+                    "module " + module_name + "\n", encoding="utf-8")
+                with self.assertRaises(widget.WidgetError) as caught:
+                    widget.validate_manifest(source)
+                self.assertEqual(caught.exception.code, "E_VALIDATION")
 
     @unittest.skipUnless(QMLFORMAT and QMLLINT and QMLTESTRUNNER, "Qt QML tools unavailable")
     def test_installed_scaffold_materializes_widgetkit_and_loads_without_global_smartdock_import_path(self):
         created = self.store.create("io.example.scaffold-runtime", "Runtime Scaffold")
         installed = self.store.install(created["sourcePath"])
         package_root = self.store.root / installed["id"]
-        qmldir = package_root / "SmartDock/WidgetKit/qmldir"
+        qmldir = package_root / "Dockrail/WidgetKit/qmldir"
         self.assertTrue(qmldir.is_file())
         qmldir_text = qmldir.read_text(encoding="utf-8")
-        self.assertNotIn("module SmartDock.WidgetKit", qmldir_text)
+        self.assertNotIn("module Dockrail.WidgetKit", qmldir_text)
         self.assertNotIn("../../components/widgets", qmldir_text)
         installed_qml = (package_root / "Widget.qml").read_text(encoding="utf-8")
-        self.assertIn('import "./SmartDock/WidgetKit"', installed_qml)
+        self.assertIn('import "./Dockrail/WidgetKit"', installed_qml)
         source_qml = (Path(created["sourcePath"]) / "Widget.qml").read_text(encoding="utf-8")
-        self.assertIn("import SmartDock.WidgetKit 1.0", source_qml)
+        self.assertIn("import Dockrail.WidgetKit 1.0", source_qml)
 
         test_root = self.base / "qml-runtime-test"
         test_root.mkdir()
@@ -317,21 +320,84 @@ class WidgetPackagesTest(unittest.TestCase):
         nested = source / "parts"
         nested.mkdir()
         (nested / "Panel.qml").write_text(
-            "import QtQuick\nimport SmartDock.WidgetKit 1.0 as Kit\nItem {}\n",
+            "import QtQuick\nimport SmartDock.WidgetKit 1.0 as LegacyKit // legacy alias\n"
+            "import Dockrail.WidgetKit 1.0 as Kit // canonical alias\nItem {}\n",
             encoding="utf-8",
         )
         runtime = self.base / "runtime"
         widget.copy_package(source, runtime)
         self.store._materialize_widgetkit(runtime)
         self.store._rewrite_widgetkit_imports(runtime)
+        runtime_qml = (runtime / "parts/Panel.qml").read_text(encoding="utf-8")
         self.assertIn(
-            'import "../SmartDock/WidgetKit" as Kit',
-            (runtime / "parts/Panel.qml").read_text(encoding="utf-8"),
+            'import "../Dockrail/WidgetKit" as LegacyKit // legacy alias',
+            runtime_qml,
         )
         self.assertIn(
-            "import SmartDock.WidgetKit 1.0 as Kit",
-            (nested / "Panel.qml").read_text(encoding="utf-8"),
+            'import "../Dockrail/WidgetKit" as Kit // canonical alias',
+            runtime_qml,
         )
+        source_qml = (nested / "Panel.qml").read_text(encoding="utf-8")
+        self.assertIn("import SmartDock.WidgetKit 1.0 as LegacyKit // legacy alias", source_qml)
+        self.assertIn("import Dockrail.WidgetKit 1.0 as Kit // canonical alias", source_qml)
+
+
+    def test_legacy_installed_snapshot_remains_valid_without_rewrite(self):
+        package = make_package(self.store.root / "io.example.legacy", "io.example.legacy")
+        runtime = package / "SmartDock/WidgetKit"
+        runtime.mkdir(parents=True)
+        (runtime / "qmldir").write_text("WidgetText 1.0 WidgetText.qml\n", encoding="utf-8")
+        (runtime / "WidgetText.qml").write_text("import QtQuick\nText {}\n", encoding="utf-8")
+        (package / "Widget.qml").write_text(
+            'import QtQuick\nimport "./SmartDock/WidgetKit"\n'
+            'Item { property var widgetContext: ({}) }\n',
+            encoding="utf-8",
+        )
+        metadata = {
+            "schemaVersion": widget.STATE_SCHEMA_VERSION,
+            "type": "local",
+            "location": str(self.base / "legacy-source"),
+        }
+        (package / ".smartdock-source.json").write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+        manifest = widget.validate_manifest(package, allow_runtime_widgetkit=True)
+        self.assertEqual(manifest["id"], "io.example.legacy")
+        before = (package / "Widget.qml").read_bytes()
+        registry = self.store.rebuild_registry()
+        self.assertEqual([row["id"] for row in registry["packages"]], ["io.example.legacy"])
+        self.assertEqual((package / "Widget.qml").read_bytes(), before)
+        self.assertTrue((package / "SmartDock/WidgetKit/qmldir").is_file())
+        self.assertFalse((package / "Dockrail").exists())
+
+    @unittest.skipUnless(QMLTESTRUNNER, "qmltestrunner unavailable")
+    def test_both_named_widgetkit_modules_load_from_source_bundle(self):
+        test_root = self.base / "named-module-test"
+        test_root.mkdir()
+        (test_root / "tst_widgetkit_names.qml").write_text(
+            "import QtQuick\n"
+            "import QtTest\n"
+            "import SmartDock.WidgetKit 1.0 as LegacyKit\n"
+            "import Dockrail.WidgetKit 1.0 as DockrailKit\n\n"
+            "TestCase {\n"
+            "  name: \"WidgetKitNames\"\n"
+            "  function test_bothModulesInstantiate() {\n"
+            "    var a = Qt.createQmlObject('import QtQuick; import SmartDock.WidgetKit 1.0; WidgetText { text: \"legacy\" }', this)\n"
+            "    var b = Qt.createQmlObject('import QtQuick; import Dockrail.WidgetKit 1.0; WidgetText { text: \"canonical\" }', this)\n"
+            "    verify(a !== null)\n"
+            "    verify(b !== null)\n"
+            "    a.destroy()\n"
+            "    b.destroy()\n"
+            "  }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        environment = dict(os.environ)
+        environment["QT_QPA_PLATFORM"] = "offscreen"
+        result = subprocess.run(
+            [QMLTESTRUNNER, "-input", str(test_root), "-import", str(ROOT),
+             "-import", str(ROOT / "tests/qml-imports")],
+            capture_output=True, text=True, timeout=30, env=environment,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + "\n" + result.stderr)
 
     @unittest.skipUnless(QMLFORMAT, "qmlformat unavailable")
     def test_invalid_dev_reload_qml_syntax_keeps_last_working_snapshot(self):
