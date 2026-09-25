@@ -144,7 +144,26 @@ ShellRoot {
         } else if (root.step === 1) {
           require(h.sidebarPanel !== null, "sidebar surface missing")
           var footer = h.sidebarPanel.widgetArea
-          require(footer.height > 0 && footer.height <= footer.layout.cap, "actual footer bounds")
+          var middle = root.named(h.sidebarPanel, "sidebar-middle-region")
+          var split = middle ? middle.split : null
+          require(middle !== null && split !== null, "production middle split missing")
+          var allocations = [split.hierarchyHeight, split.widgetHeight, split.blankHeight]
+          allocations.forEach(function(value) {
+            require(isFinite(value) && value >= 0, "middle split has invalid allocation")
+          })
+          require(Math.abs(allocations[0] + allocations[1] + allocations[2] - middle.height) < 0.01,
+            "middle split does not conserve available height")
+          require(Math.abs(h.sidebarPanel.viewport.height - split.hierarchyHeight) < 0.01,
+            "hierarchy viewport does not match middle split")
+          require(Math.abs(footer.y - split.hierarchyHeight) < 0.01
+            && Math.abs(footer.height - split.widgetHeight) < 0.01,
+            "Widget pane placement does not match middle split")
+          var widgetHeader = root.named(footer, "widget-section-label")
+          var widgetManage = root.named(footer, "widget-section-manage")
+          require(footer.sectionVisible && footer.height >= footer.naturalWidgetHeaderHeight
+            && widgetHeader !== null && widgetHeader.visible && widgetManage !== null && widgetManage.visible
+            && footer.scrollView.y >= footer.naturalWidgetHeaderHeight,
+            "visible Widget pane does not retain a complete usable header")
           require(footer.cards.count === 3, "ordered provider slots missing")
           require(footer.cards.itemAt(0).widgetId === "fixture.one", "provider order changed")
           require(root.named(footer.cards.itemAt(0), "widget-card-view").loadedItem !== null, "real expanded widget view missing")

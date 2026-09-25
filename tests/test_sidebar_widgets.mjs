@@ -188,6 +188,7 @@ const areaSource = read('components/DockSidebarWidgetArea.qml');
 const managerSource = read('components/DockSidebarWidgetManager.qml');
 const hostSource = read('DockHost.qml');
 const cardSource = read('components/DockWidgetCard.qml');
+const runtimeSidebarSource = read('tests/runtime/sidebar.qml');
 // FDM-997: optional appearance propagation cannot alter scroll/provider ownership.
 assert.match(sidebarSource, /DockSidebarWidgetArea\s*\{[^}]*appearance: root\.sidebarAppearance/);
 assert.match(areaSource, /property var appearance: null/);
@@ -203,6 +204,10 @@ function normalHeader(source) { return source.slice(source.indexOf('id: sectionH
 
 assert.doesNotMatch(viewportSource, /\bcontentTail\w*\b|ContentTailDrag|footer:\s*Item/,
   'retired Widget-tail APIs must be removed, not left as unused hooks');
+assert.doesNotMatch(runtimeSidebarSource, /\bfooter\.layout\.cap\b/,
+  'the runtime sidebar fixture must observe the split allocation, not the retired footer cap');
+assert.doesNotMatch(runtimeSidebarSource, /\b(?:contentTail\w*|ContentTailDrag|endContentTailDrag|sharedTail\w*)\b/,
+  'the runtime sidebar fixture must not revive a retired shared-tail API');
 assert.match(viewportSource, /readonly property real naturalContentHeight:/);
 assert.match(sidebarSource, /id:\s*middleRegion/);
 assert.match(sidebarSource, /hierarchyContentHeight:\s*sidebarViewport\.naturalContentHeight/);
