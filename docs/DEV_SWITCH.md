@@ -21,7 +21,7 @@ The selection persists across shell restarts and login until `reset`.
 
 Existing worktrees include uncommitted edits. A branch that has no worktree gets
 a detached checkout at its current commit under
-`${XDG_CACHE_HOME:-~/.cache}/smartdock/dev-worktrees/`. Running `use` again picks
+New detached worktrees are created under `${XDG_CACHE_HOME:-~/.cache}/dockrail/dev-worktrees/`. Existing managed worktrees under the legacy `${XDG_CACHE_HOME:-~/.cache}/smartdock/dev-worktrees/` remain valid and are not relocated solely for the product rename. Running `use` again picks
 up a branch's new commit. These checkouts are retained; manage them with ordinary
 `git worktree` commands once they are no longer selected. `list` shows local
 branches and worktrees from the checkout that installed the client; fetch remote
