@@ -8,6 +8,7 @@ from typing import Mapping
 
 @dataclass(frozen=True)
 class DockrailPaths:
+    home: Path
     config_home: Path
     data_home: Path
     cache_home: Path
@@ -48,7 +49,7 @@ def resolve_paths(env: Mapping[str, str] | None = None) -> DockrailPaths:
     else:
         config_file, source = canonical_config_root / "dock.json", "canonical-default"
     return DockrailPaths(
-        config_home=config_home, data_home=data_home, cache_home=cache_home, state_home=state_home,
+        home=home, config_home=config_home, data_home=data_home, cache_home=cache_home, state_home=state_home,
         config_file=config_file, config_source=source,
         canonical_config_root=canonical_config_root, legacy_config_root=legacy_config_root,
         canonical_data_root=data_home / "dockrail", legacy_data_root=data_home / "smartdock",
