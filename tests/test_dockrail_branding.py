@@ -59,7 +59,7 @@ class DockrailBrandingTests(unittest.TestCase):
         cli_reference = self.read("docs/CLI_REFERENCE.md")
         self.assertIn("/dockrail/dock.json", cli_reference)
         self.assertIn("/dockrail-cli", cli_reference)
-        self.assertIn("/bin/dockrail", cli_reference)
+        self.assertIn("${XDG_BIN_HOME:-$HOME/.local/bin}/dockrail", cli_reference)
         self.assertIn("scripts/dockrail", self.read("docs/CLI_RUNTIME_CHECKS.md"))
         self.assertIn("/dockrail/dev-worktrees/", self.read("docs/DEV_SWITCH.md"))
 
@@ -73,6 +73,10 @@ class DockrailBrandingTests(unittest.TestCase):
         self.assertIn("smartdock-herdr-provider", install)
         self.assertIn("special:smartdock-minimized", window_actions)
         self.assertIn("module SmartDock.WidgetKit", legacy_qmldir)
+        self.assertIn("omarchy plugin update io.github.fernandodamaso.smartdock --yes", self.read("README.md"))
+        self.assertNotIn("io.github.fernandodamaso.dockrail", self.read("README.md"))
+        self.assertIn("qs ipc --pid PID call -- smartdock request PAYLOAD", self.read("docs/CLI_REFERENCE.md"))
+        self.assertNotIn("call -- dockrail request", self.read("docs/CLI_REFERENCE.md"))
 
     def test_optional_provider_installers_match_canonical_consumers(self):
         launcher = self.read("scripts/build-launcher-badge-provider")
