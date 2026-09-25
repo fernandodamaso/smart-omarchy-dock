@@ -5,15 +5,15 @@ or plugin update is needed. Install the client once from this checkout:
 
 ```bash
 bash ./install.sh --cli-only
-smartdock dev list
-smartdock dev use /absolute/path/to/worktree
-smartdock dev use my-local-branch
-smartdock dev status
-smartdock dev reload
-smartdock dev reset
+dockrail dev list
+dockrail dev use /absolute/path/to/worktree
+dockrail dev use my-local-branch
+dockrail dev status
+dockrail dev reload
+dockrail dev reset
 ```
 
-`use` links the existing SmartDock plugin slot to the chosen checkout and runs
+`use` links the existing Dockrail plugin slot to the chosen checkout and runs
 Omarchy's normal shell restart to clear cached QML. The installed directory is kept
 beside it under a hidden backup name, without editing its contents. Only one
 dock runs, in normal plugin mode, with your usual windows, theme, and settings.
@@ -21,13 +21,13 @@ The selection persists across shell restarts and login until `reset`.
 
 Existing worktrees include uncommitted edits. A branch that has no worktree gets
 a detached checkout at its current commit under
-`${XDG_CACHE_HOME:-~/.cache}/smartdock/dev-worktrees/`. Running `use` again picks
+New detached worktrees are created under `${XDG_CACHE_HOME:-~/.cache}/dockrail/dev-worktrees/`. Existing managed worktrees under the legacy `${XDG_CACHE_HOME:-~/.cache}/smartdock/dev-worktrees/` remain valid and are not relocated solely for the product rename. Running `use` again picks
 up a branch's new commit. These checkouts are retained; manage them with ordinary
 `git worktree` commands once they are no longer selected. `list` shows local
 branches and worktrees from the checkout that installed the client; fetch remote
 work yourself first if needed.
 
-After edits, run `smartdock dev reload` to explicitly load the selected source.
+After edits, run `dockrail dev reload` to explicitly load the selected source.
 The dock, top bar, and other shell plugins briefly restart; app windows and
 workspaces stay in place. A plain plugin rescan can retain old compiled code.
 The switcher requires one unambiguous Omarchy shell and checks the new dock by
@@ -37,7 +37,7 @@ even if the candidate worktree was deleted or the shell is unavailable; if the
 shell is down, restart it after restoring.
 
 For older branches without the control CLI, startup is checked through the
-SmartDock layer surface belonging to the new shell process. Normal configuration
+Dockrail layer surface belonging to the new shell process. Normal configuration
 commands still require a branch that supports the control CLI.
 
 Your settings remain at the host's existing config path. The switcher does not

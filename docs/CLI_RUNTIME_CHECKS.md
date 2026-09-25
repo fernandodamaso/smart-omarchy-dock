@@ -19,7 +19,7 @@ git -C "$source_repo" fetch origin main feat/fdm-914-cli-first
 test "$(git -C "$source_repo" rev-parse origin/feat/fdm-914-cli-first)" = "$CANDIDATE_SHA"
 git -C "$source_repo" cat-file -e "$BASE_SHA^{commit}"
 umask 077
-run_dir="$(mktemp -d "$HOME/smartdock-cli-qualification.XXXXXX")"
+run_dir="$(mktemp -d "$HOME/dockrail-cli-qualification.XXXXXX")"
 git -C "$source_repo" worktree add --detach "$run_dir/source" "$CANDIDATE_SHA"
 test "$(git -C "$run_dir/source" rev-parse HEAD)" = "$CANDIDATE_SHA"
 mkdir -p "$run_dir/evidence" "$run_dir/state" "$run_dir/artwork"
@@ -32,7 +32,7 @@ Preserve all dirty/unpushed work. Do not reset, clean, stash blindly, repoint an
 
 Record Quickshell/Qt/Omarchy/Hyprland versions and the installed command help. `qs --help`, `qs list --help`, `qs ipc --help`, `qs list --all --json` and `hyprctl version` are read-only discovery. Derive Omarchy version/plugin development controls from its installed documentation/package/source; do not invent `omarchy-shell` selectors or assume flags from another version. Capture real instance IDs, native config paths and display/monitor topology.
 
-Use a dedicated test display/session with no production SmartDock instance before launching this candidate. Never start a second dock on Fernando's production display. A temporary client XDG directory alone does not isolate a running plugin; the host's own config path remains authoritative. For the plugin case, use a supported, inspected local source-plugin harness in that isolated Omarchy session and verify that it loads this exact source. Do not copy files into or retarget the deployed plugin checkout. If a safe plugin harness/display is unavailable, record that specific check NOT RUN rather than touch production.
+Use a dedicated test display/session with no production Dockrail instance before launching this candidate. Never start a second dock on Fernando's production display. A temporary client XDG directory alone does not isolate a running plugin; the host's own config path remains authoritative. For the plugin case, use a supported, inspected local source-plugin harness in that isolated Omarchy session and verify that it loads this exact source. Do not copy files into or retarget the deployed plugin checkout. If a safe plugin harness/display is unavailable, record that specific check NOT RUN rather than touch production.
 
 For standalone in the isolated session only, use a private config and the source launcher. The baseline can be shipped defaults or an explicitly inspected copy of a configuration; keep the original bytes/artwork untouched. Do not evaluate copied controlCommand values merely to validate them.
 
@@ -42,15 +42,15 @@ cp "$run_dir/source/config/dock.json" "$run_dir/state/dock.json"
 XDG_CACHE_HOME="$run_dir/state/cache" SMARTDOCK_CONFIG="$run_dir/state/dock.json" "$run_dir/source/scripts/run"
 ```
 
-Keep that host in its own terminal/process and perform CLI checks from another terminal in the same isolated session. Test plugin and standalone sequentially, not as competing production writers. For plugin mode, its own isolated XDG_CONFIG_HOME supplies smartdock/dock.json; SMARTDOCK_CONFIG is a standalone-only override. Use temporary copies of valid/corrupt/missing PNG/SVG artwork for failures. Never corrupt a system theme or the user's current ChatGPT artwork.
+Keep that host in its own terminal/process and perform CLI checks from another terminal in the same isolated session. Test plugin and standalone sequentially, not as competing production writers. For plugin mode, its own isolated XDG_CONFIG_HOME supplies `dockrail/dock.json`. `DOCKRAIL_CONFIG` is the canonical explicit override; `SMARTDOCK_CONFIG` remains a compatibility override for mixed-version checks. Use temporary copies of valid/corrupt/missing PNG/SVG artwork for failures. Never corrupt a system theme or the user's current ChatGPT artwork.
 
 The source CLI can run without installing over the existing client. Discover first, then set `SD_RUNTIME` and `SD_INSTANCE` from actual selected-host responses; keep them on every subsequent command:
 
 ```bash
-bash "$run_dir/source/scripts/smartdock" status --json
+bash "$run_dir/source/scripts/dockrail" status --json
 : "${SD_RUNTIME:?Set plugin or standalone from the selected host}"
 : "${SD_INSTANCE:?Set its exact runtime.instanceId or quickshellId}"
-sd() { bash "$run_dir/source/scripts/smartdock" --runtime "$SD_RUNTIME" --instance "$SD_INSTANCE" "$@"; }
+sd() { bash "$run_dir/source/scripts/dockrail" --runtime "$SD_RUNTIME" --instance "$SD_INSTANCE" "$@"; }
 sd status --json > "$run_dir/evidence/status-before.json"
 sd doctor --json > "$run_dir/evidence/doctor.json"
 sd config schema --json > "$run_dir/evidence/schema.json"
@@ -101,7 +101,7 @@ Re-run the repository's existing headless commands from the candidate source:
 ```bash
 set -euo pipefail
 cd "$run_dir/source"
-for script in install.sh uninstall.sh scripts/smartdock scripts/run tests/check_*.sh; do bash -n "$script" || exit; done
+for script in install.sh uninstall.sh scripts/dockrail scripts/smartdock scripts/run tests/check_*.sh; do bash -n "$script" || exit; done
 for script in tests/check_*.sh; do bash "$script" || exit; done
 for script in tests/test_*.mjs; do node "$script" || exit; done
 python3 -m unittest discover -s tests -p 'test_*.py'

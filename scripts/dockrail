@@ -42,7 +42,7 @@ case "${1:-}" in
         exit 5
       fi
     done
-    echo 'smartdock: CLI adapter or Python 3 unavailable; run install.sh --cli-only.' >&2
+    echo 'dockrail: CLI adapter or Python 3 unavailable; run install.sh --cli-only.' >&2
     exit 5
     ;;
 esac
@@ -65,8 +65,8 @@ enable_autostart() {
   cat >"$autostart_file" <<EOF
 [Desktop Entry]
 Type=Application
-Name=SmartDock for Omarchy
-Comment=Theme-aware application, window, and workspace dock for Omarchy
+Name=Dockrail
+Comment=Developer workspace rail for Hyprland
 Exec="$launcher_path" --daemonize
 OnlyShowIn=Hyprland;
 X-GNOME-Autostart-enabled=true
@@ -86,7 +86,7 @@ autostart() {
         echo 'Autostart is disabled.'
       fi
       ;;
-    help|--help|-h) echo 'Usage: smartdock autostart <enable|disable|status>' ;;
+    help|--help|-h) echo 'Usage: dockrail autostart <enable|disable|status>' ;;
     *) echo "Unknown autostart action: $1" >&2; exit 2 ;;
   esac
 }
@@ -98,19 +98,19 @@ case "${1:-}" in
     exit
     ;;
   update|--update)
-    [[ $# -eq 1 ]] || { echo 'Usage: smartdock update' >&2; exit 2; }
+    [[ $# -eq 1 ]] || { echo 'Usage: dockrail update' >&2; exit 2; }
     source_file="$app_dir/.source-dir"
     if [[ ! -f "$source_file" && -f "$legacy_app_dir/.source-dir" ]]; then
       source_file="$legacy_app_dir/.source-dir"
     fi
     if [[ ! -f "$source_file" ]]; then
-      echo "smartdock: standalone source checkout record not found at $source_file" >&2
+      echo "dockrail: standalone source checkout record not found at $source_file" >&2
       echo 'For a client-only update, run install.sh --cli-only from its source checkout.' >&2
       exit 1
     fi
     source_dir="$(<"$source_file")"
     installer="$source_dir/install.sh"
-    [[ -f "$installer" ]] || { echo "smartdock: source installer not found at $installer" >&2; exit 1; }
+    [[ -f "$installer" ]] || { echo "dockrail: source installer not found at $installer" >&2; exit 1; }
     if [[ -f "$autostart_file" ]]; then
       bash "$installer"
     else
@@ -119,7 +119,7 @@ case "${1:-}" in
     exit
     ;;
   stop|--stop)
-    [[ $# -eq 1 ]] || { echo 'Usage: smartdock stop' >&2; exit 2; }
+    [[ $# -eq 1 ]] || { echo 'Usage: dockrail stop' >&2; exit 2; }
     qs kill -p "$app_dir" --any-display >/dev/null 2>&1 || true
     qs kill -p "$legacy_app_dir" --any-display >/dev/null 2>&1 || true
     exit
@@ -151,7 +151,7 @@ if [[ ! -f "$selected_app_dir/shell.qml" && -f "$legacy_app_dir/shell.qml" ]]; t
   fi
 fi
 if [[ ! -f "$selected_app_dir/shell.qml" ]]; then
-  echo 'smartdock: standalone application files not found; run the full installer explicitly' >&2
+  echo 'dockrail: standalone application files not found; run the full installer explicitly' >&2
   exit 1
 fi
 

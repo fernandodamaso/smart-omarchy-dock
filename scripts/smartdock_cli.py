@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SmartDock's stdlib-only IPC client. Never starts a host or edits its config."""
+"""Dockrail's stdlib-only IPC client. Never starts a host or edits its config."""
 import argparse
 import json
 import math
@@ -19,7 +19,7 @@ EXIT_CODES = {
     'E_TRANSPORT': 5, 'E_PROTOCOL': 5, 'E_TIMEOUT': 5,
     'E_BUSY': 6, 'E_CONFIG_INVALID': 6,
 }
-HELP = '''Usage: smartdock [OPTIONS] COMMAND
+HELP = '''Usage: dockrail [OPTIONS] COMMAND
 
 Read-only commands (never launch or restart the dock):
   help                         Show this help
@@ -48,7 +48,7 @@ Applications (exact desktop IDs, not fuzzy application names):
   apps move ID (--before OTHER | --after OTHER)
                                Move one pinned ID relative to another, including hidden pins
 
-Artwork (SmartDock-only; local static PNG/SVG files referenced in place):
+Artwork (Dockrail-only; local static PNG/SVG files referenced in place):
   icons list                  Read requested/effective mappings, not rendering success
   icons set ID PATH           Resolve a local relative path and send one host intent
   icons reset ID              Remove only this application's mapping
@@ -72,7 +72,7 @@ Local development (existing Omarchy plugin, no second dock):
   dev use PATH|BRANCH         Switch to a local checkout, including uncommitted edits
   dev list | status | reload | reset
 
-Bare smartdock shows help. Unknown commands exit 2, without starting anything.
+Bare dockrail shows help. Unknown commands exit 2, without starting anything.
 Install just this client with: bash ./install.sh --cli-only
 '''
 
@@ -118,17 +118,17 @@ def decode_json(text, origin, code='E_PROTOCOL'):
 
 
 def validate_response(text):
-    reply = decode_json(text, 'SmartDock IPC')
+    reply = decode_json(text, 'Dockrail IPC')
     if (not isinstance(reply, dict) or type(reply.get('apiVersion')) is not int
             or reply['apiVersion'] != 1 or type(reply.get('ok')) is not bool
             or not isinstance(reply.get('data'), dict)
             or not isinstance(reply.get('warnings'), list)):
-        raise CliError('E_PROTOCOL', 'Expected a SmartDock apiVersion=1 response envelope.')
+        raise CliError('E_PROTOCOL', 'Expected a Dockrail apiVersion=1 response envelope.')
     if not reply['ok']:
         error = reply.get('error')
         if (not isinstance(error, dict) or error.get('code') not in EXIT_CODES
                 or not isinstance(error.get('message'), str)):
-            raise CliError('E_PROTOCOL', 'SmartDock returned an invalid error envelope.')
+            raise CliError('E_PROTOCOL', 'Dockrail returned an invalid error envelope.')
     return reply
 
 
@@ -301,16 +301,16 @@ class Transport:
                 candidates.append((item, reply))
         if not candidates:
             raise CliError('E_RUNTIME_NOT_FOUND',
-                           'No matching SmartDock host. Enable the plugin explicitly or select the correct --runtime/--instance.')
+                           'No matching Dockrail host. Enable the plugin explicitly or select the correct --runtime/--instance.')
         if len(candidates) != 1:
-            raise CliError('E_RUNTIME_AMBIGUOUS', 'More than one SmartDock host. Repeat with an exact --instance ID.',
+            raise CliError('E_RUNTIME_AMBIGUOUS', 'More than one Dockrail host. Repeat with an exact --instance ID.',
                            {'candidates': [reply['data']['runtime'] for _, reply in candidates]})
         return candidates[0]
 
 
 class Parser(argparse.ArgumentParser):
     def error(self, message):
-        raise CliError('E_USAGE', message + '. Run smartdock help.')
+        raise CliError('E_USAGE', message + '. Run dockrail help.')
 
 
 def add_globals(parser):
@@ -327,7 +327,7 @@ def child_parser(commands, name):
 
 
 def build_parser():
-    parser = Parser(prog='smartdock', add_help=False, allow_abbrev=False)
+    parser = Parser(prog='dockrail', add_help=False, allow_abbrev=False)
     add_globals(parser)
     commands = parser.add_subparsers(dest='group')
     for name in ('help', 'agent-guide', 'status', 'doctor'):
@@ -550,7 +550,7 @@ def execute(args):
         except (OSError, UnicodeError) as error:
             raise CliError('E_PROTOCOL', 'Bundled agent guide is unavailable: ' + str(error)) from error
     if args.group in ('config', 'apps', 'icons') and args.action is None:
-        raise CliError('E_USAGE', args.group + ' requires a subcommand. Run smartdock help.')
+        raise CliError('E_USAGE', args.group + ' requires a subcommand. Run dockrail help.')
     if args.group == 'config' and args.action == 'reset' and (args.key is None) == (not args.preferences):
         raise CliError('E_USAGE', 'Reset requires either KEY or --preferences, not both.')
     if args.group == 'apps' and args.action == 'show' and (args.id is None) == (not args.all):
@@ -624,9 +624,9 @@ def main(argv=None):
         data = reply['data']
         print(data['text'] if 'text' in data else json.dumps(data, ensure_ascii=False, indent=2))
         for warning in reply['warnings']:
-            print('smartdock: ' + str(warning), file=sys.stderr)
+            print('dockrail: ' + str(warning), file=sys.stderr)
     else:
-        print('smartdock: ' + reply['error']['code'] + ': ' + reply['error']['message'], file=sys.stderr)
+        print('dockrail: ' + reply['error']['code'] + ': ' + reply['error']['message'], file=sys.stderr)
         if reply['data']:
             print(json.dumps(reply['data'], ensure_ascii=False, indent=2), file=sys.stderr)
     return 0 if reply['ok'] else EXIT_CODES.get(reply['error']['code'], 5)

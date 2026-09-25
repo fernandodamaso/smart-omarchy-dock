@@ -2,7 +2,7 @@
 
 ## Project overview
 
-This is a Hyprland application dock implemented with Quickshell and Qt/QML. It runs either as a standalone Quickshell configuration or as an Omarchy Quattro overlay plugin hosted by the existing Omarchy shell.
+Dockrail is a Hyprland developer workspace rail implemented with Quickshell and Qt/QML. It runs either as a standalone Quickshell configuration or as an Omarchy Quattro overlay plugin hosted by the existing Omarchy shell.
 
 ## Development
 
@@ -11,7 +11,7 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
   them directly. Push validated changes from the source checkout, then update
   the installed plugin through `omarchy plugin update`.
 - For user-requested visual testing on this development desktop, use
-  `smartdock dev use <worktree-or-local-branch>` and `smartdock dev reset` to
+  `dockrail dev use <worktree-or-local-branch>` and `dockrail dev reset` to
   return to the installed copy. No PR or merge is required for this local
   preview. This swaps the existing plugin source; never start a second dock.
   See `docs/DEV_SWITCH.md`. Only run `omarchy plugin update` after resetting;
@@ -24,7 +24,7 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 - Run the dock with `./scripts/run`.
 - Keep the standalone entry point at `shell.qml` and the Omarchy plugin entry point at `Overlay.qml`.
 - Keep shared host behavior in `DockHost.qml`; never start a second Quickshell process from the plugin.
-- Keep window lifecycle actions and SmartDock-minimized origins in the single
+- Keep window lifecycle actions and Dockrail-minimized origins in the single
   `DockWindowActions` instance owned by `DockHost.qml`; per-screen docks and
   context menus must consume that shared controller rather than duplicate it.
 - Put reusable visual components in `components/`.
@@ -39,12 +39,12 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
 
 ## Omarchy UI conventions
 
-SmartDock should compose Omarchy's native visual system instead of growing a
+Dockrail should compose Omarchy's native visual system instead of growing a
 parallel generic component library.
 
 When proposing or implementing a UI refactor:
 
-- Inspect the Omarchy revision SmartDock targets before creating a generic
+- Inspect the Omarchy revision Dockrail targets before creating a generic
   visual/control component. Review `shell/Ui/`, `shell/Commons/`, and
   representative current first-party `shell/plugins/` call sites; on an
   installed system these live under `$OMARCHY_PATH/shell/`.
@@ -56,13 +56,13 @@ When proposing or implementing a UI refactor:
   spacing, typography, borders, opacity/state styling, and related design
   tokens. Do not hardcode visual values when a suitable Omarchy semantic token
   exists.
-- Keep custom SmartDock components when they own material dock-specific
+- Keep custom Dockrail components when they own material dock-specific
   behavior or simplify genuinely repeated domain composition. Examples include
   dock magnification/drag behavior, application/window/workspace semantics,
   badges, dock-relative popup geometry, and shared window-action lifecycle.
 - Decision rule: replace generic UI duplication only when a current native
   primitive meaningfully removes duplicated code without weakening the
-  SmartDock-specific contract. Visual similarity alone is not enough.
+  Dockrail-specific contract. Visual similarity alone is not enough.
 - Treat `docs/FDM-858-native-ui-audit.md` as historical rationale only, not as a
   current component inventory or test checklist. Do not restore obsolete
   Settings surfaces or their validation paths; preferences remain CLI-first as
@@ -75,10 +75,10 @@ For each future native-UI refactor:
 1. Record the exact Omarchy revision inspected.
 2. Inspect the current primitive implementation and at least one first-party
    usage that matches the intended context.
-3. Compare the required SmartDock contract: orientation/sizing,
+3. Compare the required Dockrail contract: orientation/sizing,
    focus/keyboard/pointer behavior, popup anchoring/lifecycle,
    disabled/active states, theming, and host mode.
-4. If the native primitive matches, compose it and retain only the SmartDock
+4. If the native primitive matches, compose it and retain only the Dockrail
    domain logic around it; if it does not, keep the custom component and reuse
    Omarchy semantic tokens/helpers where appropriate.
 5. Validate only the current affected surface and tests; never treat the
@@ -86,7 +86,7 @@ For each future native-UI refactor:
 
 ## Sidebar Widget development
 
-Before creating or modifying a SmartDock sidebar Widget, read
+Before creating or modifying a Dockrail sidebar Widget, read
 `docs/SIDEBAR_WIDGETS.md` for registry/provider/lifecycle ownership and
 `docs/WIDGET_COMPONENTS.md` for the reusable `Widget*` component API. Start
 from `tests/widget-gallery/WidgetGallery.qml` or a
@@ -104,11 +104,11 @@ Preserve natural-demand allocation, per-panel stable-ID anchors, nested-control
 first refusal and the existing single host-owned provider/settings/popup owners.
 See `docs/FDM-999-split-scroll-handoff.md` for the exact remote/native boundary.
 
-External Widget packages are a different source boundary from SmartDock core.
-Create them in a separate repository/directory with `smartdock widget create`,
-install or select development sources with the `smartdock widget` package API,
-and import the public `SmartDock.WidgetKit 1.0` module. Never develop external
-Widget source inside the canonical SmartDock checkout, an installed Omarchy
+External Widget packages are a different source boundary from Dockrail core.
+Create them in a separate repository/directory with `dockrail widget create`,
+install or select development sources with the `dockrail widget` package API,
+and import the public `Dockrail.WidgetKit 1.0` module. Never develop external
+Widget source inside the canonical Dockrail checkout, an installed Omarchy
 plugin deployment, or `${XDG_DATA_HOME:-$HOME/.local/share}/smartdock`.
 `dock.json` stores Widget IDs only; package paths and executable QML are owned
 by the package registry under the canonical Dockrail XDG data root; migrated legacy package paths resolve through managed compatibility aliases. See
@@ -116,8 +116,8 @@ by the package registry under the canonical Dockrail XDG data root; migrated leg
 
 ## Configuration workflow
 
-Use `smartdock status --json`, `smartdock config schema --json`, and
-`smartdock config get --json` to discover the selected running host before a
+Use `dockrail status --json`, `dockrail config schema --json`, and
+`dockrail config get --json` to discover the selected running host before a
 minimal CLI mutation. The host-reported config path is authoritative. Read
 `docs/AGENT_CONFIGURATION.md` for backup, typed patches, app/icon intents,
 requested/effective readback, persistence and touched-key rollback. The complete
@@ -159,7 +159,7 @@ validation gate when the owning issue requires it:
 
 ```bash
 timeout 6s ./scripts/run --no-color
-bash -n install.sh uninstall.sh scripts/dockrail scripts/smartdock scripts/run tests/check_window_actions.sh
+bash -n install.sh uninstall.sh scripts/dockrail scripts/dockrail scripts/run tests/check_window_actions.sh
 python3 -m py_compile scripts/dockrail_paths.py scripts/dockrail_migrate.py
 QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
 omarchy plugin validate .

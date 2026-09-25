@@ -72,7 +72,7 @@ class CliDocumentationTests(unittest.TestCase):
 
     def run_command(self, command):
         args = shlex.split(command)
-        self.assertEqual(args.pop(0), 'smartdock')
+        self.assertEqual(args.pop(0), 'dockrail')
         reply = cli.execute(cli.build_parser().parse_args(args))
         self.assertTrue(reply['ok'], reply)
         return reply['data']
@@ -115,20 +115,20 @@ class CliDocumentationTests(unittest.TestCase):
     def test_json_recipes_dry_run_apply_preserve_and_project(self):
         for name in ('safe-batch', 'theme', 'calmer-motion', 'workspace-cards'):
             payload = json.loads(self.block(name, 'json'))
-            before = self.run_command('smartdock config get --json')['settings']
+            before = self.run_command('dockrail config get --json')['settings']
             with tempfile.TemporaryDirectory() as temporary:
                 path = Path(temporary) / 'patch with spaces.json'
                 path.write_text(json.dumps(payload), encoding='utf-8')
-                command = 'smartdock config apply --file ' + shlex.quote(str(path))
+                command = 'dockrail config apply --file ' + shlex.quote(str(path))
                 dry = self.run_command(command + ' --dry-run --json')
                 self.assertFalse(dry['applied'])
                 self.assertFalse(dry['persisted'])
-                self.assertEqual(self.run_command('smartdock config get --json')['settings'], before)
+                self.assertEqual(self.run_command('dockrail config get --json')['settings'], before)
                 applied = self.run_command(command + ' --json')
                 self.assertTrue(applied['persisted'])
-            after = self.run_command('smartdock config get --json')['settings']
+            after = self.run_command('dockrail config get --json')['settings']
             self.assertEqual(after, dict(before, **payload))
-        effective = self.run_command('smartdock config get --effective --json')['settings']
+        effective = self.run_command('dockrail config get --effective --json')['settings']
         self.assertEqual(effective['hoverGlowOpacity'], 0.70)
         self.assertEqual(effective['workspaceLayout'], 'grouped')
         self.assertEqual(effective['workspaceMonitorScope'], 'current-monitor')
@@ -141,22 +141,22 @@ class CliDocumentationTests(unittest.TestCase):
         self.assertEqual(after['clickAction'], 'launch', 'Unrelated legacy intent is preserved')
         # The classic dock is bottom-only; legacy vertical positions are rejected
         # for new writes and the sidebar mode is the vertical presentation.
-        rejected_args = shlex.split('smartdock config set position left --json')
+        rejected_args = shlex.split('dockrail config set position left --json')
         rejected_args.pop(0)
         rejected = cli.execute(cli.build_parser().parse_args(rejected_args))
         self.assertFalse(rejected['ok'], rejected)
         self.assertEqual(rejected['error']['code'], 'E_VALIDATION')
-        self.assertEqual(self.run_command('smartdock config get position --effective --json')['settings'],
+        self.assertEqual(self.run_command('dockrail config get position --effective --json')['settings'],
                          {'position': 'bottom'})
-        self.run_command('smartdock config set presentationMode sidebar --json')
-        self.assertEqual(self.run_command('smartdock config get presentationMode --json')['settings'],
+        self.run_command('dockrail config set presentationMode sidebar --json')
+        self.assertEqual(self.run_command('dockrail config get presentationMode --json')['settings'],
                          {'presentationMode': 'sidebar'})
-        self.run_command('smartdock config set presentationMode classic --json')
+        self.run_command('dockrail config set presentationMode classic --json')
 
     def test_application_recipe_restores_and_orders_without_dropping_unknown_ids(self):
         for line in self.block('applications', 'sh').splitlines():
             self.run_command(line)
-        settings = self.run_command('smartdock config get --json')['settings']
+        settings = self.run_command('dockrail config get --json')['settings']
         self.assertEqual(settings['pinned'], ['code', 'org.gnome.Nautilus', 'Missing.App', 'chatgpt'])
         self.assertEqual(settings['hiddenApplications'], ['Missing.App'])
         self.assertEqual(settings['extensionData'], self.transport.initial['extensionData'])
@@ -178,7 +178,7 @@ class CliDocumentationTests(unittest.TestCase):
                 self.assertFalse(data['applied'])
                 self.assertTrue(data['reloaded'])
                 self.assertGreater(data['iconReloadRevision'], reload_revision)
-        settings = self.run_command('smartdock config get --json')['settings']
+        settings = self.run_command('dockrail config get --json')['settings']
         self.assertEqual(settings['iconOverrides'], self.transport.initial['iconOverrides'])
         self.assertEqual(settings['pinned'], pins)
         self.assertEqual(settings['extensionData'], self.transport.initial['extensionData'])
@@ -201,7 +201,7 @@ class CliDocumentationTests(unittest.TestCase):
             if 'icons reset ' in line:
                 self.assertEqual(data['requested']['windowIconOverrides'], [])
         self.assertTrue(saw_set)
-        settings = self.run_command('smartdock config get --json')['settings']
+        settings = self.run_command('dockrail config get --json')['settings']
         self.assertEqual(settings['windowIconOverrides'], [])
         self.assertEqual(settings['iconOverrides'], before_icons)
         self.assertEqual(settings['extensionData'], self.transport.initial['extensionData'])
@@ -237,9 +237,12 @@ class CliDocumentationTests(unittest.TestCase):
                 self.assertEqual((installed / 'docs' / name).read_bytes(), (ROOT / 'docs' / name).read_bytes())
             # A missing source checkout must not break the installed offline guide.
             (installed / '.source-dir').write_text('/nonexistent/source-checkout\n')
-            result = subprocess.run([str(root / 'bin/smartdock'), 'agent-guide', '--json'], env=env,
+            result = subprocess.run([str(root / 'bin/dockrail'), 'agent-guide', '--json'], env=env,
                                     check=True, capture_output=True, text=True, timeout=10)
             self.assertEqual(json.loads(result.stdout)['data']['text'], self.guide)
+            compatibility = subprocess.run([str(root / 'bin/smartdock'), 'help'], env=env,
+                                           check=True, capture_output=True, text=True, timeout=10)
+            self.assertIn('Usage: dockrail', compatibility.stdout)
             self.assertFalse(sentinel.exists())
             for path in ('config', 'cache', 'data/dockrail', 'data/smartdock', 'data/applications', 'data/icons'):
                 self.assertFalse((root / path).exists(), path)

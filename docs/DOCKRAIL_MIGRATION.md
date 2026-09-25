@@ -129,3 +129,22 @@ product acquired a canonical Dockrail module name. Legacy metadata filenames,
 package IDs, registry ordering and source locations remain compatibility
 contracts. Both module surfaces ship in full and CLI-only bundles so source
 validation and package preparation do not depend on a separate checkout.
+
+
+## MIG-04 product-facing branding
+
+Current product-facing identity is Dockrail. The manifest display name/author,
+standalone desktop entry, canonical CLI help/diagnostics, installer/uninstaller
+output, Widget scaffolds and active documentation use Dockrail terminology and
+the `dockrail` command.
+
+This branding pass deliberately does **not** rename compatibility contracts:
+`io.github.fernandodamaso.smartdock`, the `smartdock` IPC target,
+`special:smartdock-minimized`, terminal-agent/application IDs, Wayland layer
+namespaces, `smartdock-herdr-helper`, `smartdock-herdr-provider`,
+`SmartDock.WidgetKit 1.0`, legacy XDG aliases/recovery records, historical
+plans/releases, or the pre-cutover GitHub repository URL.
+
+The optional launcher-badge and browser-profile installer scripts now install
+their binaries under the canonical Dockrail data root so they match the MIG-02
+provider consumers; executable filenames remain unchanged.

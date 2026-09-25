@@ -1,6 +1,6 @@
-# SmartDock Widget component API
+# Dockrail Widget component API
 
-This is the coding-agent reference for the reusable SmartDock Widget UI kit in
+This is the coding-agent reference for the reusable Dockrail Widget UI kit in
 `components/widgets/`. Read this after `docs/SIDEBAR_WIDGETS.md`: that document
 owns provider registration, leases, snapshots, Widget-area layout, persistence and
 failure isolation; this document owns **presentation component selection and API**.
@@ -26,7 +26,7 @@ surfaces.
   pill-shaped indicators keep their geometry.
 - Use hue for semantic state or attention, not as default decoration. Neutral
   content stays on neutral/sidebar roles; `danger` follows `Color.urgent`.
-- Properties listed below are the SmartDock-owned API. Components that inherit a
+- Properties listed below are the Dockrail-owned API. Components that inherit a
   Qt Quick Control also retain the normal inherited Qt properties/signals noted in
   the table; inspect the component source before depending on less-common inherited
   behavior.
@@ -42,7 +42,7 @@ surfaces.
 | attention | `none`, `urgent`, `overdue` | `urgent` and `overdue` use danger treatment; `WidgetListItem` may animate unless `reducedMotion` is true. |
 | button variant | `primary`, `secondary`, `ghost`, `danger` | Use `danger` only for destructive/error actions. |
 | framework state | `loading`, `empty`, `unavailable`, `error`, `stale` | Render with `WidgetState`. |
-| text role | `body`, `title`, `caption`, `label` | Controls SmartDock typography/weight. |
+| text role | `body`, `title`, `caption`, `label` | Controls Dockrail typography/weight. |
 | icon size | `xs`, `sm`, `md`, `lg`, `xl` | Unrecognized values use the `md` glyph size. |
 | icon container | `plain`, `soft`, `outlined`, `tile` | `plain` has no surrounding container. |
 | validation state | `none`, `error` | Text input, text area and select currently give special treatment only to `error`. |
@@ -87,7 +87,7 @@ When `referenceSemantic` is empty, the reference badge preserves the previous be
 
 ### `WidgetDivider`
 
-One-pixel theme-aware separator. It has no SmartDock-specific properties; size it
+One-pixel theme-aware separator. It has no Dockrail-specific properties; size it
 with normal QML `width`/anchors.
 
 ### `WidgetSection`
@@ -529,14 +529,14 @@ view.
 ## Coding-agent checklist for a custom Widget
 
 1. Keep custom Widget source in a **separate directory/repository**. Do not add it
-   to SmartDock core or an installed Omarchy SmartDock plugin checkout.
+   to Dockrail core or an installed Omarchy Dockrail plugin checkout.
 2. Read `docs/WIDGET_PACKAGES.md` and create the package with
-   `smartdock widget create <stable-id>`.
-3. Import `SmartDock.WidgetKit 1.0` and choose existing `Widget*` primitives
+   `dockrail widget create <stable-id>`.
+3. Import `Dockrail.WidgetKit 1.0` and choose existing `Widget*` primitives
    before writing custom presentation controls.
 4. Keep `widgetContext` non-required and tolerate `({})` / missing data.
-5. Install the explicit source with `smartdock widget install <source>`, then use
-   `smartdock widget dev use <source>` and `smartdock widget dev reload` while
+5. Install the explicit source with `dockrail widget install <source>`, then use
+   `dockrail widget dev use <source>` and `dockrail widget dev reload` while
    developing. `dev reset` returns to the installed snapshot without deleting
    developer source.
 6. Keep `dock.json` ID-only. Do not add QML paths, commands, URLs, provider
@@ -544,7 +544,7 @@ view.
 7. Add package-specific tests in the package repository and validate the package
    through the CLI before enabling its ID.
 
-When work is intentionally a **SmartDock source-owned integration** rather than a
+When work is intentionally a **Dockrail source-owned integration** rather than a
 custom package, follow `AGENTS.md` and this repository's normal branch/worktree
 workflow. Source-owned integrations may register a descriptor directly in
 `DockHost.sidebarWidgetRegistry`; that is not the workflow for external custom
@@ -556,12 +556,12 @@ Widget package API v1 exposes this kit to separately owned external packages as
 a versioned QML module:
 
 ```qml
-import SmartDock.WidgetKit 1.0
+import Dockrail.WidgetKit 1.0
 ```
 
 External packages should compose the exported `Widget*` primitives rather than
-importing SmartDock implementation files by relative path. The module is shipped
-with standalone SmartDock installations and is resolved by the host when an
+importing Dockrail implementation files by relative path. The module is shipped
+with standalone Dockrail installations and is resolved by the host when an
 external package entry is loaded. Package manifests, source/deployment
 boundaries, and CLI workflow are documented in `docs/WIDGET_PACKAGES.md`.
 
@@ -575,3 +575,7 @@ A genuinely nested editor may compose a native `Controls.ScrollView`; it must
 contain vertical input at its bounds rather than chain into the outer Widget
 or hierarchy panes. Keep child first refusal and deliberate wheel actions.
 No new required WidgetKit/provider/package property is introduced.
+
+## Legacy module compatibility
+
+`Dockrail.WidgetKit 1.0` is the canonical external import. `SmartDock.WidgetKit 1.0` remains available for existing package sources and installed snapshots; both named modules expose the same maintained `Widget*` components.

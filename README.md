@@ -1,23 +1,16 @@
-# SmartDock for Omarchy
+# Dockrail
 
 Want to try an unmerged version on your desktop? Use
-`smartdock dev use <worktree-path-or-local-branch>`, then `smartdock dev reset`
+`dockrail dev use <worktree-path-or-local-branch>`, then `dockrail dev reset`
 to return to the installed copy. See [local version switching](docs/DEV_SWITCH.md)
 for setup, reload, and recovery commands.
-
-> **Unreleased workspace-drag candidate:**
-> [Draft PR #45](https://github.com/fernandodamaso/smart-omarchy-dock/pull/45)
-> integrates the CLI-first migration from `main`. Keep this candidate Draft,
-> unmerged and undeployed until its separate delivery gate is satisfied.
-> The [drag qualification plan](docs/superpowers/plans/2026-09-09-smartdock-workspace-drag.md)
-> and [CLI local runbook](docs/CLI_RUNTIME_CHECKS.md) are not deployment commands.
 
 > Local Omarchy variant: pinned applications remain first, while grouped
 > running applications from every workspace are appended automatically.
 
-A theme-aware application, window, and workspace dock for Omarchy and Hyprland, built with Quickshell and Qt/QML.
+A developer-focused workspace rail for Hyprland — apps, windows, workspaces, widgets, and coding-agent sessions in one surface, built with Quickshell and Qt/QML.
 
-![SmartDock for Omarchy running at the bottom of an Omarchy desktop](preview_2.png)
+![Dockrail running at the bottom of an Omarchy desktop](preview_2.png)
 
 ## Features
 
@@ -40,7 +33,7 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - Per-window right-click management for workspace moves, fullscreen-with-bars,
   Hyprland-style minimize/restore, focus, and close
 - Drag-to-reorder with persistent pinned-app order
-- Context-menu hiding with persistent restoration through `smartdock apps show`
+- Context-menu hiding with persistent restoration through `dockrail apps show`
 - Right-click actions to launch, close, pin, or unpin applications
 - Fuzzy application search for adding dock items
 - Configurable dock background transparency
@@ -59,11 +52,11 @@ A theme-aware application, window, and workspace dock for Omarchy and Hyprland, 
 - A working freedesktop icon theme
 - Optional numeric launcher counts: CMake, a C++20 compiler, and Qt 6.6+ Core/DBus development files to build the native provider
 
-![SmartDock for Omarchy running at the bottom of an Omarchy desktop](preview.png)
+![Dockrail running at the bottom of an Omarchy desktop](preview.png)
 
 ## Install
 
-Install the Git-managed Omarchy plugin from the SmartDock fork:
+Install the Git-managed Omarchy plugin:
 
 ```bash
 omarchy plugin add https://github.com/fernandodamaso/smart-omarchy-dock.git --enable --yes
@@ -76,7 +69,7 @@ omarchy plugin update io.github.fernandodamaso.smartdock --yes
 ```
 
 Updates pull the fork's default `main` branch and preserve
-`~/.config/smartdock/dock.json`. Installed plugin files are deployment state;
+`~/.config/dockrail/dock.json`. Installed plugin files are deployment state;
 do not edit them directly. Development belongs in a separate clone, such as
 `/home/admin/Projects/smart-omarchy-dock`, and changes reach an installed copy
 through Git push followed by `omarchy plugin update`.
@@ -97,38 +90,38 @@ XDG autostart entry. To install without autostart, use
 Run the standalone dock immediately with:
 
 ```bash
-smartdock --daemonize
+dockrail --daemonize
 ```
 
-Installed copies appear as **SmartDock for Omarchy** in application launchers.
-Run `smartdock help` to see every command.
+Installed copies appear as **Dockrail** in application launchers.
+Run `dockrail help` to see every command.
 
 Manage autostart later from the CLI:
 
 ```bash
-smartdock autostart status
-smartdock autostart enable
-smartdock autostart disable
+dockrail autostart status
+dockrail autostart enable
+dockrail autostart disable
 ```
 
 ### Update or remove
 
-`smartdock update` only refreshes an installed standalone copy from its local
+`dockrail update` only refreshes an installed standalone copy from its local
 source copy. It does not update the Omarchy plugin; use the Git-managed
 `omarchy plugin update` command above for that.
 
 ```bash
-smartdock update
-smartdock restart
-smartdock uninstall
+dockrail update
+dockrail restart
+dockrail uninstall
 ```
 
 Uninstalling preserves the configuration; remove it too with
-`smartdock uninstall --purge`.
+`dockrail uninstall --purge`.
 
 ## Run as an Omarchy plugin
 
-Omarchy users should run SmartDock inside the existing Omarchy shell rather
+Omarchy users should run Dockrail inside the existing Omarchy shell rather
 than starting a second Quickshell process. The installed plugin ID is
 `io.github.fernandodamaso.smartdock`:
 
@@ -136,7 +129,7 @@ than starting a second Quickshell process. The installed plugin ID is
 omarchy plugin enable io.github.fernandodamaso.smartdock
 ```
 
-The plugin uses `~/.config/smartdock/dock.json`, shared with the standalone
+The plugin uses `~/.config/dockrail/dock.json`, shared with the standalone
 version. Do not run the standalone and plugin versions together, or two docks
 will appear.
 
@@ -152,21 +145,21 @@ bash ./scripts/build-launcher-badge-provider
 
 The script builds outside the Git checkout, runs the provider tests, and
 installs only the resulting executable under
-`${XDG_DATA_HOME:-$HOME/.local/share}/smartdock/providers/`. Reload or restart
-the SmartDock plugin afterwards. If the binary, Qt runtime, D-Bus service, or an
-application's launcher-count support is unavailable, SmartDock keeps the
+`${XDG_DATA_HOME:-$HOME/.local/share}/dockrail/providers/`. Reload or restart
+the Dockrail plugin afterwards. If the binary, Qt runtime, D-Bus service, or an
+application's launcher-count support is unavailable, Dockrail keeps the
 FDM-809 attention dots; it does not poll or scrape another source for a number.
 
 The provider listens to the established
 `com.canonical.Unity.LauncherEntry.Update` session-bus protocol and accepts only
-typed `count` and `count-visible` properties. Standalone SmartDock intentionally
+typed `count` and `count-visible` properties. Standalone Dockrail intentionally
 does not own this provider and therefore remains dot-only. See
 [`docs/launcher-badge-counts.md`](docs/launcher-badge-counts.md) for architecture,
 compatibility, and local validation details.
 
 Launcher badge counts do not invoke Herdr or poll any recurring agent-status CLI.
 Herdr agent state is a separate, opt-in sidebar source: `herdr.agents` starts a
-SmartDock-owned local event provider only while the sidebar widget is active.
+Dockrail-owned local event provider only while the sidebar widget is active.
 LauncherEntry numeric counts remain authoritative for application badges, with
 the optional Chrome activity provider supplying only its strict fallback.
 
@@ -178,8 +171,8 @@ title and the first matching rule wins. Rules apply to all matching current and
 future windows and survive restart.
 
 ```bash
-smartdock icons set com.mitchellh.ghostty ~/Pictures/solar.svg --title-pattern '*solar*'
-smartdock icons reset com.mitchellh.ghostty --title-pattern '*solar*'
+dockrail icons set com.mitchellh.ghostty ~/Pictures/solar.svg --title-pattern '*solar*'
+dockrail icons reset com.mitchellh.ghostty --title-pattern '*solar*'
 ```
 
 Window-rule artwork has renderer precedence over profile/app-wide artwork. It can
@@ -221,8 +214,8 @@ bash ./scripts/install-browser-profile-provider
 ```
 
 The script byte-compiles the Python helper and installs it under
-`${XDG_DATA_HOME:-$HOME/.local/share}/smartdock/providers/`. Reload or restart
-the SmartDock plugin afterwards. The browser must run with
+`${XDG_DATA_HOME:-$HOME/.local/share}/dockrail/providers/`. Reload or restart
+the Dockrail plugin afterwards. The browser must run with
 `--remote-debugging-port` (Omarchy's Chrome defaults enable it); without a
 reachable endpoint the dock simply keeps the plain application icon, exactly
 like an unavailable launcher-count provider.
@@ -234,8 +227,8 @@ application from different profiles therefore look different. A fully custom
 artwork per profile is also available through the CLI:
 
 ```bash
-smartdock icons set google-chrome ~/Pictures/work.svg --profile "Profile 1"
-smartdock icons reset google-chrome --profile "Profile 1"
+dockrail icons set google-chrome ~/Pictures/work.svg --profile "Profile 1"
+dockrail icons reset google-chrome --profile "Profile 1"
 ```
 
 The profile argument is the on-disk profile directory inside the browser's
@@ -252,7 +245,7 @@ activates that exact browser tab and owning window. Hover a row to reveal an
 eye control that mutes that service from the header total and Chrome badge
 fallback; muted rows stay visible and dimmed with eye-off until unmuted. Mute
 state is stored as `browserActivityMutedServices` in user settings and survives
-preference reset (`smartdock config get/set browserActivityMutedServices`).
+preference reset (`dockrail config get/set browserActivityMutedServices`).
 Only HTTPS pages with the recognized service hosts and title signals are
 accepted, and no message contents or account data leave the browser. If the
 activity provider is unavailable or a row cannot be matched exactly, previews
@@ -266,7 +259,7 @@ by `sidebarBrowserTabsEnabled`.
 
 ### Terminal-agent launchers
 
-SmartDock bundles visible application entries that open these terminal agents
+Dockrail bundles visible application entries that open these terminal agents
 in separate Ghostty windows:
 
 | Launcher | Desktop ID | Ghostty window class | Command |
@@ -282,7 +275,7 @@ in separate Ghostty windows:
 Each launcher runs `ghostty --gtk-single-instance=false` with a unique, valid
 GTK/Wayland application ID. Standalone users get these entries from the
 normal `./install.sh`. Plugin users can install only the launchers and icons
-from a SmartDock source checkout, without requiring Quickshell, installing a
+from a Dockrail source checkout, without requiring Quickshell, installing a
 second dock, enabling autostart, or changing the dock configuration:
 
 ```bash
@@ -295,7 +288,7 @@ The plugin itself is installed with:
 omarchy plugin add https://github.com/fernandodamaso/smart-omarchy-dock.git --enable --yes
 ```
 
-Agent grouping is best effort. SmartDock uses the terminal window's observed
+Agent grouping is best effort. Dockrail uses the terminal window's observed
 title or agent marker as a fallback because these CLIs run inside a terminal,
 so title updates can be delayed, overwritten by a shell, or unavailable. A
 manually started Pi, Oh My Pi, or Kilo session usually retains a recognizable
@@ -322,7 +315,7 @@ Quickshell watches the QML files, so UI changes reload while developing.
 
 ## Project history
 
-SmartDock for Omarchy is an extensively developed MIT-licensed fork of
+Dockrail, formerly SmartDock for Omarchy, is an extensively developed MIT-licensed fork of
 [nick-friedrich/hyprland-dock](https://github.com/nick-friedrich/hyprland-dock).
 The upstream Git history, MIT license, and original copyright notice are
 preserved in this repository.
@@ -342,12 +335,12 @@ second dock:
 
 ```bash
 bash ./install.sh --cli-only
-smartdock status --json
-smartdock config schema --json
-smartdock config get --json
-smartdock config set iconSize 48 --json
-smartdock config set workspaceMonitorOrder '["HDMI-A-1","DP-1"]' --json
-smartdock agent-guide
+dockrail status --json
+dockrail config schema --json
+dockrail config get --json
+dockrail config set iconSize 48 --json
+dockrail config set workspaceMonitorOrder '["HDMI-A-1","DP-1"]' --json
+dockrail agent-guide
 ```
 
 The host reports its authoritative `data.configPath`; do not infer that path
@@ -375,12 +368,12 @@ for a related batch. Background, border and workspace badge colors accept
 following live theme changes. Workspace badges default to accent with white text.
 
 ```bash
-printf '%s\n' '{"backgroundColorEnabled":true,"backgroundColor":"@menu.background"}' | smartdock config apply --stdin --dry-run --json
-printf '%s\n' '{"backgroundColorEnabled":true,"backgroundColor":"@menu.background"}' | smartdock config apply --stdin --json
-smartdock config set backgroundColorEnabled false --json
-smartdock config set showTrash false --json
-smartdock config set interfaceAnimationsEnabled false --json
-smartdock config reset hoverGlowOpacity --json
+printf '%s\n' '{"backgroundColorEnabled":true,"backgroundColor":"@menu.background"}' | dockrail config apply --stdin --dry-run --json
+printf '%s\n' '{"backgroundColorEnabled":true,"backgroundColor":"@menu.background"}' | dockrail config apply --stdin --json
+dockrail config set backgroundColorEnabled false --json
+dockrail config set showTrash false --json
+dockrail config set interfaceAnimationsEnabled false --json
+dockrail config reset hoverGlowOpacity --json
 ```
 
 Inspect `applied`, `persisted` and `writeState` separately. A failed save may be
@@ -461,7 +454,7 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 
 | Option | Description |
 | --- | --- |
-| `iconOverrides` | App-wide, SmartDock-only local PNG/SVG artwork by desktop ID; defaults to `{}`; use `icons set/reset/reload` |
+| `iconOverrides` | App-wide, Dockrail-only local PNG/SVG artwork by desktop ID; defaults to `{}`; use `icons set/reset/reload` |
 | `windowIconOverrides` | Ordered raw-Wayland `appId` + case-insensitive title-pattern rules; only `*` is special, first match wins, defaults to `[]` |
 | `iconSize` | Base icon size in pixels |
 | `magnification` | Maximum icon scale under the pointer |
@@ -515,20 +508,20 @@ apply. Read the running host's schema/defaults and preserve the user's values:
 ### Application and icon commands
 
 ```bash
-smartdock apps list --query 'Editor' --json
-smartdock apps list --pinned --json
-smartdock apps list --hidden --json
-smartdock apps pin code --json
-smartdock apps move code --before org.gnome.Nautilus --json
-smartdock apps move code --after org.gnome.Nautilus --json
-smartdock apps hide code --json
-smartdock apps show code --json
-smartdock apps show --all --json
-smartdock apps unpin code --json
-smartdock icons list --json
-smartdock icons set code "$HOME/Pictures/Dock Icons/Ícone.svg" --json
-smartdock icons reload code --json
-smartdock icons reset code --json
+dockrail apps list --query 'Editor' --json
+dockrail apps list --pinned --json
+dockrail apps list --hidden --json
+dockrail apps pin code --json
+dockrail apps move code --before org.gnome.Nautilus --json
+dockrail apps move code --after org.gnome.Nautilus --json
+dockrail apps hide code --json
+dockrail apps show code --json
+dockrail apps show --all --json
+dockrail apps unpin code --json
+dockrail icons list --json
+dockrail icons set code "$HOME/Pictures/Dock Icons/Ícone.svg" --json
+dockrail icons reload code --json
+dockrail icons reset code --json
 ```
 
 Use actual IDs from `apps list`; the examples are not guaranteed installed IDs.
@@ -540,7 +533,7 @@ membership. Move requires two different pinned IDs and preserves the relative
 order of all other entries, including hidden and unavailable pins. Repeating a
 membership command is a no-op rather than another settings write.
 
-`iconOverrides` defaults to `{}` and changes only SmartDock artwork. Each entry
+`iconOverrides` defaults to `{}` and changes only Dockrail artwork. Each entry
 applies across main icons, preview metadata and app-picker rows. It never changes
 `.desktop` files, launch identity, window grouping, screenshots, badges, Trash or
 action glyphs. A browser tab grouped as Chrome remains a Chrome item; custom
@@ -575,9 +568,9 @@ The Left and Middle click keys accept the same vocabulary: `none`,
 is intentionally narrower: `none` or `cycle-windows`.
 
 ```bash
-smartdock config set clickAction focus-or-launch --json
-smartdock config set middleClickAction none --json
-smartdock config set scrollAction cycle-windows --json
+dockrail config set clickAction focus-or-launch --json
+dockrail config set middleClickAction none --json
+dockrail config set scrollAction cycle-windows --json
 ```
 
 Input precedence is intentionally strict:
@@ -626,13 +619,13 @@ monitor; `monitor` uses each Dock's own screen/monitor; and
 `workspace-monitor` requires both. Closed pinned launchers stay visible.
 
 ```bash
-smartdock config set windowScope workspace --json
-smartdock config set showUrgentOutsideScope true --json
+dockrail config set windowScope workspace --json
+dockrail config set showUrgentOutsideScope true --json
 ```
 
 When `showUrgentOutsideScope` is enabled, only Hyprland's actual per-window
 urgent state bypasses scope. Explicitly hidden applications still stay hidden.
-SmartDock-minimized windows use the shared host-owned workspace/monitor origin;
+Dockrail-minimized windows use the shared host-owned workspace/monitor origin;
 unknown or transient location data fails open so the only restore affordance is
 not lost. Scope refresh is debounced once in `DockHost.qml` for all monitor
 Docks, with no per-Dock `hyprctl` polling.
@@ -640,7 +633,7 @@ Docks, with no per-Dock `hyprctl` polling.
 ### Grouped-window wheel cycling
 
 Attention dots deliberately represent **attention state**, not inferred unread
-counts. SmartDock reduces three FDM-809 sources when they are available:
+counts. Dockrail reduces three FDM-809 sources when they are available:
 StatusNotifierItem `NeedsAttention`, Hyprland's live urgent state/events, and
 the Omarchy notification service. Notification events are never counted.
 Identity matching is exact after case-folding and an optional `.desktop` suffix
@@ -679,7 +672,7 @@ fresh state rather than carrying stale fields across process ownership.
 Dismissing a notification popup does not mark local attention read. Local
 notification attention expires after 24 hours and clears only after the matched
 application remains focused for about 800 ms. Live SNI state and authoritative
-launcher counts are never cleared by SmartDock focus handling. Standalone mode,
+launcher counts are never cleared by Dockrail focus handling. Standalone mode,
 or an Omarchy host without either optional service, simply omits the unavailable
 source while the remaining FDM-809 sources continue to work.
 
@@ -690,27 +683,27 @@ toggle. Application context menus contain only application and window actions.
 For example, with the Omarchy app-launcher plugin already installed:
 
 ```bash
-smartdock config set controlCommand "omarchy-shell shell toggle tyrsolution.app-launcher '{}'" --json
+dockrail config set controlCommand "omarchy-shell shell toggle tyrsolution.app-launcher '{}'" --json
 ```
 
 The trailing Trash and workspace controls are not part of `pinned`. Trash uses
 the freedesktop `trash:///` location and can be removed from the dock with
-`showTrash`; while hidden, SmartDock also pauses its recurring Trash count
+`showTrash`; while hidden, Dockrail also pauses its recurring Trash count
 query. Workspace buttons always include 1 and 2, then add any focused or
 occupied workspace through 10; clicking a number focuses it.
 
 Pinned values are desktop-entry IDs. List the authoritative running host's IDs with:
 
 ```bash
-smartdock apps list --json
+dockrail apps list --json
 ```
 
 Right-click any application in the dock and choose **Hide from Dock** to hide
 the whole application while leaving its windows running and its pinned
 membership unchanged. The canonical desktop-entry ID is stored in
 `hiddenApplications`, so the choice persists across restarts and live config
-reloads. Inspect hidden apps with `smartdock apps list --hidden --json`; use
-`smartdock apps show ID --json` to restore one or `smartdock apps show --all --json`
+reloads. Inspect hidden apps with `dockrail apps list --hidden --json`; use
+`dockrail apps show ID --json` to restore one or `dockrail apps show --all --json`
 to clear hidden membership. Restoring an application returns it to its existing
 pinned position without pinning or unpinning anything. `config reset --preferences`
 intentionally preserves `hiddenApplications` and the other application collections.
@@ -725,7 +718,7 @@ custom color or width. Custom background alpha is multiplied by
 For a full-height vertical dock on the left, use one related patch:
 
 ```bash
-printf '%s\n' '{"position":"left","fullLength":true}' | smartdock config apply --stdin --json
+printf '%s\n' '{"position":"left","fullLength":true}' | dockrail config apply --stdin --json
 ```
 
 ### Disable cursor warping
@@ -761,8 +754,8 @@ This disables cursor warping for all workspace changes, not only dock clicks.
 
 ### Workspace cards (opt-in)
 
-Use `smartdock config set workspaceLayout grouped --json` to enable horizontal
-workspace cards. Use `smartdock config set workspaceLayout flat --json` to roll
+Use `dockrail config set workspaceLayout grouped --json` to enable horizontal
+workspace cards. Use `dockrail config set workspaceLayout flat --json` to roll
 back. Missing/invalid values and `config reset workspaceLayout` use flat.
 The left position renders flat without changing the saved preference. Window
 scope, workspace sorting and urgent-outside-scope affect the flat layout; their
@@ -772,12 +765,12 @@ By default, `workspaceMonitorScope: all` shows the same ordered monitor sections
 workspaces and applications on every monitor dock. When more than one monitor is
 connected, each monitor section is introduced inline before its first present
 workspace card by a small display glyph and a bounded informational label. With
-only one connected monitor, SmartDock omits that redundant glyph and label. The compact label prefers the live
+only one connected monitor, Dockrail omits that redundant glyph and label. The compact label prefers the live
 monitor model, then description, connector/name, and `Monitor N`; the full
 description/connector remains available in the tooltip/accessibility text. The
 prefix is not clickable, does not take keyboard focus, and is not a workspace-drop target.
 Use
-`smartdock config set workspaceMonitorScope current-monitor --json` for the
+`dockrail config set workspaceMonitorScope current-monitor --json` for the
 existing local, unprefixed workspace-card appearance. Missing/invalid values and
 `config reset workspaceMonitorScope` use `all`; flat layouts remain unchanged.
 
@@ -798,7 +791,7 @@ connected monitors first; other connected monitors append automatically. Saved
 disconnected connector names remain stored and resume their configured position
 after reconnect. Flat and `current-monitor` layouts retain the value but do not
 use it visually. Reset automatic ordering with
-`smartdock config reset workspaceMonitorOrder --json`.
+`dockrail config reset workspaceMonitorOrder --json`.
 
 Every normal workspace in the selected scope always shows all its app icons
 inside a rounded translucent card, including inactive workspaces. Cards use
@@ -813,28 +806,28 @@ window dragging is described below.
 Clicking a grouped workspace header focuses that workspace where it already is.
 Ctrl+click pulls that workspace to the clicked dock before focusing it. Plain
 window-icon activation focuses the exact window in place; Ctrl+click moves just
-that window to the clicked dock monitor's active workspace and focuses it. SmartDock also has
+that window to the clicked dock monitor's active workspace and focuses it. Dockrail also has
 **session-only movement pins** owned by the
 shared window-action controller: an individual window can be pinned to its
 current reliable workspace from its context menu. The controller also retains
 workspace-monitor pin enforcement for callers that establish such a pin, though
 the current workspace header has no pin menu. These pins are deliberately not
-settings, Hyprland rules, or persistent configuration; restarting the SmartDock
+settings, Hyprland rules, or persistent configuration; restarting the Dockrail
 host clears them.
 
-A window workspace pin blocks SmartDock menu and drag relocations to another
+A window workspace pin blocks Dockrail menu and drag relocations to another
 workspace, including represented groups when any captured member is pinned.
-SmartDock minimize/restore keeps the recorded origin and does not clear the pin.
+Dockrail minimize/restore keeps the recorded origin and does not clear the pin.
 A workspace monitor pin makes workspace-header, Ctrl app-icon, preview, cycling
 and restore activation focus the workspace where it already lives instead of
 pulling it to the dock monitor. Plain app-icon activation already stays in
 place. External Hyprland shortcuts/tools remain free to
-move windows and workspaces; once SmartDock observes a confirmed external move,
+move windows and workspaces; once Dockrail observes a confirmed external move,
 close, or monitor disconnect it drops only the affected session pin. Transient
 or incomplete refreshes do not by themselves clear pin state. Group/Ungroup
 changes leave window pins untouched.
 
-Drag a grouped workspace header onto another monitor's SmartDock to move the
+Drag a grouped workspace header onto another monitor's Dockrail to move the
 whole workspace there without sending a focus command. The source dock must
 already be visible. An auto-hidden destination reveals when the pointer reaches
 its normal edge strip; release over its visible background to move, or release
@@ -880,7 +873,7 @@ The floating icon uses the same `DockAppIcon` renderer as the dock, including
 CLI icon overrides, bounded fallback and artwork reloads. The scene-local drag
 coordinator remains QtQuick-only; the host supplies its artwork delegate.
 
-Visible members move silently, without following or focusing them. SmartDock-
+Visible members move silently, without following or focusing them. Dockrail-
 minimized members stay hidden on `special:smartdock-minimized`; only their saved
 restore workspace and destination monitor change. An explicit valid drop can
 establish a missing restore origin. Members already at the destination are
@@ -890,7 +883,7 @@ closed group cancels. Sticky or unresolved surviving members are rejected.
 Existing normal workspaces in the selected monitor scope remain valid
 destinations, including empty cards, IDs above 10, and safely supported names
 with spaces or Unicode. Named cards are resolved by their real identity, not the
-compact `*` label. While a window-icon drag is active, SmartDock also shows a
+compact `*` label. While a window-icon drag is active, Dockrail also shows a
 temporary **New workspace** (+) target after the final workspace card for each
 visible monitor section. Dropping there allocates the lowest free numeric
 workspace, moves the exact captured window group into it, relocates that new

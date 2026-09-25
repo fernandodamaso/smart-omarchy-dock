@@ -36,7 +36,7 @@ Usage: uninstall.sh [OPTION]
   --cli-only      Remove only client-owned files, never live plugin configuration
   --agent-assets-only
                   Remove only the terminal-agent launchers and icons
-  --purge         Remove standalone SmartDock and its configuration
+  --purge         Remove standalone Dockrail and its configuration
   --help          Show this help
 EOF
 }
@@ -88,7 +88,7 @@ remove_agent_assets() {
 }
 if $agent_assets_only; then
   remove_agent_assets
-  echo 'Removed SmartDock terminal-agent launchers and icons.'
+  echo 'Removed Dockrail terminal-agent launchers and icons.'
   exit
 fi
 if command -v qs >/dev/null 2>&1; then
@@ -110,7 +110,7 @@ if $purge; then
   plugin_root="$HOME/.config/omarchy/plugins/io.github.fernandodamaso.smartdock"
   plugin_backup="$HOME/.config/omarchy/plugins/.io.github.fernandodamaso.smartdock.smartdock-installed"
   if [[ -e "$plugin_root" || -L "$plugin_root" || -e "$plugin_backup" ]]; then
-    echo 'Refusing --purge while the Omarchy SmartDock/Dockrail plugin is installed or in development mode.' >&2
+    echo 'Refusing --purge while the Omarchy Dockrail plugin is installed or in development mode.' >&2
     echo "Configuration preserved at: $config_dir/dock.json" >&2
     exit 1
   fi

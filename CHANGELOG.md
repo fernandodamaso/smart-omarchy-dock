@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Product identity
+
+- SmartDock for Omarchy is now **Dockrail** for current product-facing UI,
+  documentation, installer output, and help.
+- `dockrail` is the canonical CLI; `smartdock` remains a compatibility
+  launcher to the same implementation.
+- Canonical user state lives under the Dockrail XDG roots introduced by the
+  migration, while managed legacy SmartDock paths remain compatibility aliases.
+- `Dockrail.WidgetKit 1.0` is the canonical public WidgetKit module;
+  `SmartDock.WidgetKit 1.0` remains supported for existing packages.
+- The Omarchy plugin ID, `smartdock` IPC target, terminal-agent/application
+  IDs, Wayland layer namespaces, `special:smartdock-minimized`, Herdr
+  executable identities, historical issue/release names, and old repository
+  URL remain intentionally unchanged at this stage.
+
+
 ### Added
 
 - Added `presentationModeByMonitor`, per-connector presentation overrides: an

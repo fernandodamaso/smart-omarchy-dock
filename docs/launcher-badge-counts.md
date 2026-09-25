@@ -7,7 +7,7 @@ or any polling loop.
 
 ## Decision
 
-Use a small native QtDBus provider, owned once by the Omarchy SmartDock service,
+Use a small native QtDBus provider, owned once by the Omarchy Dockrail service,
 and expose only a provider-neutral QML snapshot to the existing
 `DockBadgeTracker`.
 
@@ -48,7 +48,7 @@ design:
 - <https://github.com/omacom/omarchy/blob/d3d23fdddef846ebb98b52122a6ece66211c0daf/shell/shell.qml>
 
 No existing Omarchy service providing application launcher badge counts was
-found in the inspected source. SmartDock therefore cannot safely depend on an
+found in the inspected source. Dockrail therefore cannot safely depend on an
 upstream count service today.
 
 ### Quickshell does not currently supply the required public provider contract
@@ -125,7 +125,7 @@ when it is available. Existing desktop implementations use that name to make
 the launcher service discoverable. The LauncherEntry protocol itself is
 signal-based and has no generic initial-query method, so a real application's
 startup/reconnect re-publication behavior must be validated on the pinned
-Omarchy runtime. SmartDock does not compensate for a non-republishing
+Omarchy runtime. Dockrail does not compensate for a non-republishing
 application by polling or scraping it.
 
 Provider state is written with `QSaveFile` to an XDG runtime/cache path as one
@@ -168,7 +168,7 @@ reloads normalize an invalid `launcherBadgeMode` back to `automatic`.
 ## Build and packaging
 
 Omarchy plugin installation does not compile native code. The optional provider
-must be built explicitly from a trusted SmartDock source checkout:
+must be built explicitly from a trusted Dockrail source checkout:
 
 ```bash
 bash ./scripts/build-launcher-badge-provider
@@ -178,11 +178,11 @@ The build uses an XDG cache directory instead of creating a repository-local
 build tree, runs CTest, then installs the provider executable to:
 
 ```text
-${XDG_DATA_HOME:-$HOME/.local/share}/smartdock/providers/
+${XDG_DATA_HOME:-$HOME/.local/share}/dockrail/providers/
 ```
 
 The QML service probes that exact executable path once. If it is absent,
-SmartDock remains in dot fallback mode. No failed-provider fallback launches a
+Dockrail remains in dot fallback mode. No failed-provider fallback launches a
 shell parser or polling process.
 
 Build requirements are CMake, a C++20 compiler, and Qt 6.6+ Core, DBus, and Test
@@ -211,7 +211,7 @@ Omarchy/Quickshell/Qt environment:
    ignored, while unknown valid IDs must not badge unrelated dock items.
 6. Leave the provider idle and inspect CPU usage and wakeups; there must be no
    periodic provider polling.
-7. Run standalone SmartDock with no provider service and confirm the FDM-809 dot
+7. Run standalone Dockrail with no provider service and confirm the FDM-809 dot
    fallback remains null-safe.
 8. Validate one real supporting application when available. Record the exact
    desktop ID and whether its initial/reconnect publication semantics match the
