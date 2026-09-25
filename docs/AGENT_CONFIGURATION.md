@@ -1,6 +1,6 @@
-# Configure SmartDock through its CLI
+# Configure Dockrail through its CLI
 
-**Unreleased CLI-first candidate.** These commands describe this source candidate, not every installed SmartDock release. Use the running host's schema as the capability authority. Configuration is CLI-only: the former Settings page and temporary preference previews are removed; ordinary window previews, the app picker, menus, drag reordering, workspace/window actions, auto-hide and Trash remain.
+**Unreleased CLI-first candidate.** These commands describe this source candidate, not every installed Dockrail release. Use the running host's schema as the capability authority. Configuration is CLI-only: the former Settings page and temporary preference previews are removed; ordinary window previews, the app picker, menus, drag reordering, workspace/window actions, auto-hide and Trash remain.
 
 Never edit a deployed checkout, scrape the UI, launch a second dock, restart Omarchy, install a provider, change desktop/theme files, or silently fall back to raw `dock.json` writes for configuration. A missing command in an older host is a compatibility/unsupported-feature result, not permission to bypass its writer. Source work is appropriate only for an explicitly requested unsupported feature or an evidenced defect, in a source branch under its owning issue.
 
@@ -13,16 +13,16 @@ Never edit a deployed checkout, scrape the UI, launch a second dock, restart Oma
 5. **Read back and report the outcome.** Compare requested and effective values, inspect `applied`, `persisted`, `writeState`, errors and warnings. Restore only touched values after fresh readback when rollback is requested. Do not overwrite intervening edits blindly.
 
 ```sh
-smartdock status --json
-smartdock doctor --json
-smartdock config schema --json
-smartdock config get --json
-smartdock config get hoverGlowOpacity --effective --json
+dockrail status --json
+dockrail doctor --json
+dockrail config schema --json
+dockrail config get --json
+dockrail config get hoverGlowOpacity --effective --json
 ```
 
 When needed, append `--runtime plugin` or `--runtime standalone` and `--instance ID` using an actual returned ID, not a placeholder. Global control options work before or after the command. `runtime.instanceId` is the process ID for this host lifetime; `runtime.quickshellId` is the native qs ID. Both are exact selectors. Rediscover after restarts. The client never picks the newest instance. Changing `SMARTDOCK_CONFIG` or XDG variables in the client does not retarget a running host.
 
-Bare `smartdock`, `help` and `agent-guide` work offline and create no directories. Automatic `config schema` may return `source: bundled` only when no matching host exists, never for explicit-target failures, ambiguity or malformed protocol. Bundled metadata is not the user's settings. All mutations and exports require a host.
+Bare `dockrail`, `help` and `agent-guide` work offline and create no directories. Automatic `config schema` may return `source: bundled` only when no matching host exists, never for explicit-target failures, ambiguity or malformed protocol. Bundled metadata is not the user's settings. All mutations and exports require a host.
 
 ## Backup and apply a related patch
 
@@ -31,7 +31,7 @@ The following example changes placement, size, visibility and Trash together; us
 ```sh
 umask 077
 change_dir="$(mktemp -d "${TMPDIR:-/tmp}/smartdock-change.XXXXXX")"
-smartdock config export --output "$change_dir/requested-before.json" --json
+dockrail config export --output "$change_dir/requested-before.json" --json
 ```
 
 <!-- recipe: safe-batch -->
@@ -42,16 +42,16 @@ smartdock config export --output "$change_dir/requested-before.json" --json
 After placing the intended JSON in `$change_dir/patch.json`:
 
 ```sh
-smartdock config apply --file "$change_dir/patch.json" --dry-run --json
-smartdock config apply --file "$change_dir/patch.json" --json
-smartdock config get --json
-smartdock config get --effective --json
-smartdock status --json
+dockrail config apply --file "$change_dir/patch.json" --dry-run --json
+dockrail config apply --file "$change_dir/patch.json" --json
+dockrail config get --json
+dockrail config get --effective --json
+dockrail status --json
 ```
 
 Inspect dry-run `data.changedKeys`, `diff`, full proposed `requested` and `effective`. Dry run has `applied: false`, `persisted: false`; it neither creates a defaults file nor increments revision. New input must be a UTF-8 JSON object, at most 64 KiB, without duplicate keys, non-finite values, unknown new keys or invalid types/ranges. One invalid value rejects the whole batch. There is no implicit stdin or offline writer.
 
-For one key, `smartdock config set hoverGlowOpacity 0.72 --json` parses the runtime-declared type and sends a minimal patch. Booleans require lowercase true/false; strings are literal; arrays/maps are JSON and replace that key. The requested 0.72 remains 0.72 while the effective value is 0.70. Use primitive app/icon commands rather than editing an old collection snapshot.
+For one key, `dockrail config set hoverGlowOpacity 0.72 --json` parses the runtime-declared type and sends a minimal patch. Booleans require lowercase true/false; strings are literal; arrays/maps are JSON and replace that key. The requested 0.72 remains 0.72 while the effective value is 0.70. Use primitive app/icon commands rather than editing an old collection snapshot.
 
 ## Tested preference recipes
 
@@ -70,7 +70,7 @@ Colors accept empty, `#RRGGBB`, Qt `#AARRGGBB` (alpha first), or symbolic tokens
 
 ### Calmer dock motion
 
-This changes SmartDock motion, not compositor-wide animations. The attention badge can remain static.
+This changes Dockrail motion, not compositor-wide animations. The attention badge can remain static.
 
 <!-- recipe: calmer-motion -->
 ```json
@@ -92,12 +92,12 @@ First discover actual IDs and pinned/hidden membership. The block assumes the re
 
 <!-- recipe: applications -->
 ```sh
-smartdock apps list --query 'Editor' --json
-smartdock apps list --pinned --json
-smartdock apps list --hidden --json
-smartdock apps pin code --json
-smartdock apps show code --json
-smartdock apps move code --before org.gnome.Nautilus --json
+dockrail apps list --query 'Editor' --json
+dockrail apps list --pinned --json
+dockrail apps list --hidden --json
+dockrail apps pin code --json
+dockrail apps show code --json
+dockrail apps move code --before org.gnome.Nautilus --json
 ```
 
 Discovery uses the host's native desktop catalog, not a new desktop-file scan. Rows include `id`, `name`, `available`, `pinned`, `hidden`, `pinnedIndex`. Query searches ID/name text; mutations match exact IDs after trimming, case folding and optional `.desktop` removal. Unsafe/sentinel/prototype-sensitive IDs are rejected. Stored spelling/order and unavailable pins/hidden IDs survive.
@@ -110,10 +110,10 @@ Discover the actual app ID first. The following `code` ID and relative path are 
 
 <!-- recipe: icons -->
 ```sh
-smartdock icons list --json
-smartdock icons set code './Pictures/My Ícone.svg' --json
-smartdock icons reload code --json
-smartdock icons reset code --json
+dockrail icons list --json
+dockrail icons set code './Pictures/My Ícone.svg' --json
+dockrail icons reload code --json
+dockrail icons reset code --json
 ```
 
 The client resolves an ordinary relative path against its current directory; the shared host model validates absolute paths and supported local file URLs, preserving spaces/Unicode. Remote URLs, unsupported formats and invalid local URLs are rejected. Files are referenced in place, not downloaded/copied/imported; no `.desktop` or system theme edits occur. Shell expansion of an unquoted tilde or `$HOME` is distinct from file-URL parsing.
@@ -122,15 +122,15 @@ Set/reset updates only one canonical key against the latest map, preserving othe
 
 For a per-window rule, first confirm the raw Wayland app ID from the live compositor.
 Ghostty's raw app ID in the supported Omarchy environment is
-`com.mitchellh.ghostty`. Run this only against the selected isolated SmartDock host:
+`com.mitchellh.ghostty`. Run this only against the selected isolated Dockrail host:
 
 <!-- recipe: window-icons -->
 
 ```sh
-smartdock icons list --json
-smartdock icons set com.mitchellh.ghostty './Pictures/solar.svg' --title-pattern '*solar*' --json
-smartdock icons list --json
-smartdock icons reset com.mitchellh.ghostty --title-pattern '*solar*' --json
+dockrail icons list --json
+dockrail icons set com.mitchellh.ghostty './Pictures/solar.svg' --title-pattern '*solar*' --json
+dockrail icons list --json
+dockrail icons reset com.mitchellh.ghostty --title-pattern '*solar*' --json
 ```
 
 The title rule affects every current/future Ghostty window whose full title matches
@@ -147,7 +147,7 @@ Requested, effective, saved and rendered are separate. Read `loadState`, `loadPe
 
 Cooperating writes use the host's one FileView writer: disjoint patches preserve each other; latest accepted same-key intent wins. A known pending load/write is refused. Unrelated pins, icons, hidden apps, extension keys and legacy values survive narrow changes. An identical patch does not hide an existing save failure.
 
-A persistence error exits 4 and can leave `applied: true`, `persisted: false`. Inspect status; after the actual write problem is corrected, `smartdock config retry --json` saves the complete latest live snapshot without a new settings revision. Busy/invalid state exits 6. A timeout has unknown applied/persisted outcome: read status and affected values before deciding to mutate again. No unbounded retry loops.
+A persistence error exits 4 and can leave `applied: true`, `persisted: false`. Inspect status; after the actual write problem is corrected, `dockrail config retry --json` saves the complete latest live snapshot without a new settings revision. Busy/invalid state exits 6. A timeout has unknown applied/persisted outcome: read status and affected values before deciding to mutate again. No unbounded retry loops.
 
 Export writes a new owner-only plain JSON file and never overwrites a destination, follows a destination symlink, creates missing parents or aliases the live config. `exportWritten` concerns the snapshot; `sourcePersisted` concerns the live state. An unsaved snapshot is not evidence of a saved dock. Unknown exported keys are not accepted as new patch keys. Roll back only touched supported values after checking fresh state; when a prior value is a legacy alias or an absent key, inspect schema and report any normalization/absence limitation instead of writing raw bytes or pretending exact restoration.
 
@@ -164,7 +164,7 @@ bash ./uninstall.sh --cli-only
 
 Client files live under `${XDG_DATA_HOME:-$HOME/.local/share}/smartdock-cli`; the shared wrapper is `${XDG_BIN_HOME:-$HOME/.local/bin}/smartdock`. Client-only installation/removal does not install/start a dock, user config, autostart, agent launchers or provider. It coexists with standalone in either order; removal retains the wrapper while another bundle owns it. When both exist the wrapper prefers the client-only adapter, so refresh that bundle deliberately from the intended checkout.
 
-The adapter uses standard-library Python and bounded argv subprocesses: `qs list --all --json` and exact `qs ipc --pid PID call -- smartdock request PAYLOAD`. It does not use the Omarchy wrapper's newest-instance selection, guess wrapper flags or implement sockets. Standalone lifecycle commands are explicit and separate, never a way to configure a plugin. Full Omarchy IPC/FileView/theme/image/monitor behavior belongs to the exact-SHA local handoff; this guide does not authorize deployment or claim those checks passed.
+The adapter uses standard-library Python and bounded argv subprocesses: `qs list --all --json` and exact `qs ipc --pid PID call -- dockrail request PAYLOAD`. It does not use the Omarchy wrapper's newest-instance selection, guess wrapper flags or implement sockets. Standalone lifecycle commands are explicit and separate, never a way to configure a plugin. Full Omarchy IPC/FileView/theme/image/monitor behavior belongs to the exact-SHA local handoff; this guide does not authorize deployment or claim those checks passed.
 
 ## Sidebar candidate boundary
 
