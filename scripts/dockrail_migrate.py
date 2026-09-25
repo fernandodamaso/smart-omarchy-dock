@@ -302,7 +302,7 @@ def _recovery_copy(source: Path, destination: Path) -> None:
         shutil.copy2(source, destination, follow_symlinks=False)
 
 
-def _ensure_alias(legacy: Path, canonical: Path, recovery: Path) -> None:
+def _ensure_alias(legacy: Path, canonical: Path, recovery: Path, expected_digest: str) -> None:
     if legacy.is_symlink():
         try:
             if legacy.resolve() == canonical.resolve():
@@ -310,6 +310,8 @@ def _ensure_alias(legacy: Path, canonical: Path, recovery: Path) -> None:
         except OSError:
             pass
         raise MigrationError("E_MIGRATION_CONFLICT", f"Refusing to replace unmanaged legacy symlink: {legacy}")
+    if _tree_digest(legacy) != expected_digest:
+        raise MigrationError("E_BUSY", f"Legacy state changed before alias cutover: {legacy}")
     _recovery_copy(legacy, recovery)
     if legacy.exists():
         if legacy.is_dir():
@@ -395,16 +397,19 @@ def _aliases_valid(paths: DockrailPaths) -> bool:
 
 
 def _alias_legacy(paths: DockrailPaths, transaction: Path, signature: dict) -> None:
-    if _source_signature(paths) != signature:
-        raise MigrationError("E_BUSY", "Legacy state changed after publication; recovery copy and aliases were not modified.")
     recovery = transaction / "recovery"
-    _ensure_alias(paths.legacy_config_root, paths.canonical_config_root, recovery / "config")
+    _ensure_alias(
+        paths.legacy_config_root,
+        paths.canonical_config_root,
+        recovery / "config",
+        signature["config"],
+    )
     for name in SHARED_DATA_NAMES:
         source = paths.legacy_data_root / name
         target = paths.canonical_data_root / name
         if not target.exists():
             continue
-        _ensure_alias(source, target, recovery / "data" / name)
+        _ensure_alias(source, target, recovery / "data" / name, signature[name])
 
 
 def _maybe_fail(point: str, fail_after: str | None) -> None:
@@ -507,7 +512,13 @@ def startup(
                 if _source_signature(paths) != signature:
                     raise MigrationError("E_BUSY", "Legacy state changed after staging; source is preserved and retry is blocked.")
                 config_stage = paths.canonical_config_root.parent / ".dockrail-migrate-config-v1"
-                if not config_stage.is_dir():
+                data_stage = paths.canonical_data_root.parent / ".dockrail-migrate-data-v1"
+                stage_missing = not config_stage.is_dir() or not data_stage.is_dir()
+                for name in SHARED_DATA_NAMES:
+                    source = paths.legacy_data_root / name
+                    if (source.exists() or source.is_symlink()) and not (data_stage / name).exists():
+                        stage_missing = True
+                if stage_missing:
                     _stage(paths, signature)
                 _publish(paths, signature)
                 journal["phase"] = "published"
