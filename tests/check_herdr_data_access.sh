@@ -44,8 +44,9 @@ grep -Fq "discover -s tests -p 'test_herdr_*.py'" .github/workflows/ci.yml   || 
 grep -Fq '"herdr.agents"' DockHost.qml   || fail 'production source registry is missing herdr.agents'
 grep -Fq '"registeredIds": ["herdr.agents"]' config/settings-schema.json   || fail 'typed schema is missing herdr.agents'
 grep -Fq 'DockHerdrService {' Service.qml   || fail 'plugin singleton is missing shared Herdr service'
-grep -Fq 'herdrService: pluginService ? pluginService.herdrService : null' Overlay.qml   || fail 'plugin overlay does not consume the shared service'
-grep -Fq 'DockHerdrService {' shell.qml   || fail 'standalone host is missing its shared Herdr service'
+grep -Fq 'herdrService: root.pluginService.herdrService' Overlay.qml   || fail 'plugin overlay does not consume the migration-gated shared service'
+grep -Fq 'DockHerdrService {' shell.qml   || fail 'standalone host is missing its migration-gated shared Herdr service'
+grep -Fq 'active: migration.ready' shell.qml   || fail 'standalone Herdr service must remain gated until migration is ready'
 
 grep -Fq '"$source_dir/provider/herdr"' install.sh   || fail 'standalone installer does not copy provider/herdr'
 grep -Fq 'smartdock-herdr-provider' install.sh   || fail 'standalone installer does not retain provider entry point'

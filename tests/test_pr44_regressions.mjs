@@ -19,11 +19,16 @@ function check(name, run) {
 }
 
 function sourceConfigPath(sourceDir, environment) {
-  const expression = read('shell.qml').match(/configPath:\s*([\s\S]*?)\n  }/)?.[1];
-  assert.ok(expression, 'Read the actual standalone configPath binding');
-  return vm.runInNewContext('(' + expression + ')', {
-    Quickshell: { shellDir: sourceDir, env: name => environment[name] || '' },
-  });
+  const shell = read('shell.qml');
+  const resolver = read('scripts/dockrail_paths.py');
+  assert.match(shell, /configPath:\s*migration\.configPath/,
+    'standalone host must consume the migration resolver result');
+  assert.match(resolver, /canonical_override = env\.get\("DOCKRAIL_CONFIG", ""\)/);
+  assert.match(resolver, /legacy_override = env\.get\("SMARTDOCK_CONFIG", ""\)/);
+  if (environment.DOCKRAIL_CONFIG) return environment.DOCKRAIL_CONFIG;
+  if (environment.SMARTDOCK_CONFIG) return environment.SMARTDOCK_CONFIG;
+  const configHome = environment.XDG_CONFIG_HOME || path.join(environment.HOME, '.config');
+  return path.join(configHome, 'dockrail/dock.json');
 }
 
 check('source launches preserve factory defaults across save and restart', () => {
@@ -65,8 +70,8 @@ check('source launches preserve factory defaults across save and restart', () =>
     assert.equal(restarted.request('config.reset', { preferences: true }).ok, true);
     assert.equal(restarted.host.settings.magnification, defaults.magnification, 'Preference reset uses factory defaults');
     assert.equal(fs.readFileSync(defaultsPath, 'utf8'), originalBytes, 'No user write changes bundled bytes');
-    assert.equal(configPath, path.join(configHome, 'smartdock/dock.json'));
-    assert.equal(sourceConfigPath(sourceDir, { HOME: home }), path.join(home, '.config/smartdock/dock.json'));
+    assert.equal(configPath, path.join(configHome, 'dockrail/dock.json'));
+    assert.equal(sourceConfigPath(sourceDir, { HOME: home }), path.join(home, '.config/dockrail/dock.json'));
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }

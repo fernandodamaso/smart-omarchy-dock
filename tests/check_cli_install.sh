@@ -20,15 +20,18 @@ full_remove() { bash "$repo/uninstall.sh"; }
 
 cli_install
 cli_install
+test -x "$XDG_BIN_HOME/dockrail"
 test -x "$XDG_BIN_HOME/smartdock"
-test -f "$XDG_DATA_HOME/smartdock-cli/scripts/smartdock_cli.py"
-test -f "$XDG_DATA_HOME/smartdock-cli/scripts/smartdock_widget.py"
-test -f "$XDG_DATA_HOME/smartdock-cli/SmartDock/WidgetKit/qmldir"
-test -f "$XDG_DATA_HOME/smartdock-cli/components/widgets/WidgetSection.qml"
-test -f "$XDG_DATA_HOME/smartdock-cli/config/settings-schema.json"
-test -f "$XDG_DATA_HOME/smartdock-cli/config/dock.json"
-test -f "$XDG_DATA_HOME/smartdock-cli/docs/AGENT_CONFIGURATION.md"
-test "$(cat "$XDG_DATA_HOME/smartdock-cli/.source-dir")" = "$repo"
+test -f "$XDG_DATA_HOME/dockrail-cli/scripts/smartdock_cli.py"
+test -f "$XDG_DATA_HOME/dockrail-cli/scripts/smartdock_widget.py"
+test -f "$XDG_DATA_HOME/dockrail-cli/scripts/dockrail_migrate.py"
+test -f "$XDG_DATA_HOME/dockrail-cli/SmartDock/WidgetKit/qmldir"
+test -f "$XDG_DATA_HOME/dockrail-cli/components/widgets/WidgetSection.qml"
+test -f "$XDG_DATA_HOME/dockrail-cli/config/settings-schema.json"
+test -f "$XDG_DATA_HOME/dockrail-cli/config/dock.json"
+test -f "$XDG_DATA_HOME/dockrail-cli/docs/AGENT_CONFIGURATION.md"
+test "$(cat "$XDG_DATA_HOME/dockrail-cli/.source-dir")" = "$repo"
+test ! -e "$XDG_DATA_HOME/dockrail"
 test ! -e "$XDG_DATA_HOME/smartdock"
 test ! -e "$XDG_DATA_HOME/applications"
 test ! -e "$XDG_DATA_HOME/icons"
@@ -40,8 +43,9 @@ test ! -e "$QS_INSTALL_LOG"
 "$XDG_BIN_HOME/smartdock" dev --help >/dev/null
 "$XDG_BIN_HOME/smartdock" widget --help >/dev/null
 "$XDG_BIN_HOME/smartdock" widget list --json >/dev/null
-test -f "$XDG_DATA_HOME/smartdock-cli/docs/DEV_SWITCH.md"
-test -f "$XDG_DATA_HOME/smartdock-cli/docs/WIDGET_PACKAGES.md"
+test -f "$XDG_DATA_HOME/dockrail-cli/docs/DEV_SWITCH.md"
+test -f "$XDG_DATA_HOME/dockrail-cli/docs/WIDGET_PACKAGES.md"
+test -f "$XDG_DATA_HOME/dockrail-cli/docs/DOCKRAIL_MIGRATION.md"
 test ! -e "$QS_INSTALL_LOG"
 if bash "$repo/uninstall.sh" --cli-only --purge; then
   echo 'Client-only purge must be rejected' >&2
@@ -51,32 +55,34 @@ test -x "$XDG_BIN_HOME/smartdock"
 
 # Client first, then standalone: client removal retains standalone ownership.
 full_install
-printf '{"pinned":["Keep.Me"],"extension":true}\n' >"$XDG_CONFIG_HOME/smartdock/dock.json"
-config_before="$(cat "$XDG_CONFIG_HOME/smartdock/dock.json")"
-source_before="$(cat "$XDG_DATA_HOME/smartdock/.source-dir")"
+printf '{"pinned":["Keep.Me"],"extension":true}\n' >"$XDG_CONFIG_HOME/dockrail/dock.json"
+config_before="$(cat "$XDG_CONFIG_HOME/dockrail/dock.json")"
+source_before="$(cat "$XDG_DATA_HOME/dockrail/.source-dir")"
 cli_remove
 test -x "$XDG_BIN_HOME/smartdock"
-test -f "$XDG_DATA_HOME/smartdock/shell.qml"
-test -f "$XDG_DATA_HOME/smartdock/scripts/smartdock_cli.py"
-test -f "$XDG_DATA_HOME/smartdock/scripts/smartdock_widget.py"
-test -f "$XDG_DATA_HOME/smartdock/SmartDock/WidgetKit/qmldir"
-test "$source_before" = "$(cat "$XDG_DATA_HOME/smartdock/.source-dir")"
-test "$config_before" = "$(cat "$XDG_CONFIG_HOME/smartdock/dock.json")"
+test -f "$XDG_DATA_HOME/dockrail/shell.qml"
+test -f "$XDG_DATA_HOME/dockrail/scripts/smartdock_cli.py"
+test -f "$XDG_DATA_HOME/dockrail/scripts/smartdock_widget.py"
+test -f "$XDG_DATA_HOME/dockrail/SmartDock/WidgetKit/qmldir"
+test "$source_before" = "$(cat "$XDG_DATA_HOME/dockrail/.source-dir")"
+test "$config_before" = "$(cat "$XDG_CONFIG_HOME/dockrail/dock.json")"
 "$XDG_BIN_HOME/smartdock" agent-guide >/dev/null
 full_remove
+test ! -e "$XDG_BIN_HOME/dockrail"
 test ! -e "$XDG_BIN_HOME/smartdock"
-test "$config_before" = "$(cat "$XDG_CONFIG_HOME/smartdock/dock.json")"
+test "$config_before" = "$(cat "$XDG_CONFIG_HOME/dockrail/dock.json")"
 
 # Standalone first, then client: standalone removal retains client ownership.
 full_install
 cli_install
 full_remove
 test -x "$XDG_BIN_HOME/smartdock"
-test -f "$XDG_DATA_HOME/smartdock-cli/scripts/smartdock_cli.py"
+test -f "$XDG_DATA_HOME/dockrail-cli/scripts/smartdock_cli.py"
 "$XDG_BIN_HOME/smartdock" help >/dev/null
 "$XDG_BIN_HOME/smartdock" agent-guide >/dev/null
 cli_remove
 cli_remove
+test ! -e "$XDG_BIN_HOME/dockrail"
 test ! -e "$XDG_BIN_HOME/smartdock"
-test "$config_before" = "$(cat "$XDG_CONFIG_HOME/smartdock/dock.json")"
+test "$config_before" = "$(cat "$XDG_CONFIG_HOME/dockrail/dock.json")"
 echo 'CLI-only installation/coexistence checks passed.'

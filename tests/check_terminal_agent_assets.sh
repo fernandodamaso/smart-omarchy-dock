@@ -93,8 +93,10 @@ for i in "${!ids[@]}"; do
   fi
 done
 
+assert_missing "$data_home/dockrail"
 assert_missing "$data_home/smartdock"
 assert_missing "$config_home/autostart/smartdock.desktop"
+assert_missing "$bin_home/dockrail"
 assert_missing "$bin_home/smartdock"
 assert_same_file "$config_file" <(printf '%s\n' '{"sentinel":"keep-me"}')
 
@@ -111,8 +113,10 @@ for i in "${!ids[@]}"; do
   fi
 done
 assert_file "$config_file"
+assert_missing "$data_home/dockrail"
 assert_missing "$data_home/smartdock"
 assert_missing "$config_home/autostart/smartdock.desktop"
+assert_missing "$bin_home/dockrail"
 assert_missing "$bin_home/smartdock"
 
 printf '#!/usr/bin/env bash\nexit 0\n' >"$fake_qs_bin/qs"
@@ -121,44 +125,36 @@ chmod 0755 "$fake_qs_bin/qs"
 PATH="$fake_qs_bin:/usr/bin:/bin" bash "$repo_dir/install.sh" \
   || fail "full install failed with fake qs"
 
-assert_file "$data_home/smartdock/shell.qml"
-assert_file "$data_home/smartdock/assets/lucide/terminal.svg"
-assert_file "$data_home/smartdock/assets/terminal-agents/ATTRIBUTIONS.md"
-diff -qr -- "$repo_dir/assets" "$data_home/smartdock/assets" \
+canonical_config="$config_home/dockrail/dock.json"
+assert_file "$data_home/dockrail/shell.qml"
+assert_file "$data_home/dockrail/assets/lucide/terminal.svg"
+assert_file "$data_home/dockrail/assets/terminal-agents/ATTRIBUTIONS.md"
+diff -qr -- "$repo_dir/assets" "$data_home/dockrail/assets" \
   || fail "installed assets directory differs from bundled assets"
-assert_file "$config_file"
-python3 - "$config_file" <<'PY' || fail "full install did not preserve config while seeding demo Widgets"
-import json
-import sys
-
-with open(sys.argv[1]) as source:
-    config = json.load(source)
-
-assert config["sentinel"] == "keep-me"
-assert config["sidebarWidgets"] == [
-    "demo.display",
-    "demo.lists",
-    "demo.inputs",
-    "demo.actions-states",
-]
-PY
+assert_file "$canonical_config"
+assert_same_file "$canonical_config" <(printf '%s\n' '{"sentinel":"keep-me"}')
+[[ -L "$config_home/smartdock" ]] || fail "legacy config root must become a compatibility alias"
+[[ "$(readlink -f -- "$config_home/smartdock")" == "$(readlink -f -- "$config_home/dockrail")" ]] \
+  || fail "legacy config alias must target canonical Dockrail config"
 assert_file "$config_home/autostart/smartdock.desktop"
+assert_file "$bin_home/dockrail"
 assert_file "$bin_home/smartdock"
 
-printf '%s\n' 'stale installed file' >"$data_home/smartdock/components/Dock.qml"
+printf '%s\n' 'stale installed file' >"$data_home/dockrail/components/Dock.qml"
 PATH="$fake_qs_bin:/usr/bin:/bin" "$bin_home/smartdock" update \
   || fail "installed update from source checkout failed"
 assert_same_file "$repo_dir/components/Dock.qml" \
-  "$data_home/smartdock/components/Dock.qml"
-assert_file "$data_home/smartdock/assets/terminal-agents/ATTRIBUTIONS.md"
+  "$data_home/dockrail/components/Dock.qml"
+assert_file "$data_home/dockrail/assets/terminal-agents/ATTRIBUTIONS.md"
 
 PATH="$no_qs_bin:/usr/bin:/bin" bash "$repo_dir/uninstall.sh" \
   --agent-assets-only \
   || fail "asset-only uninstall after full install failed without qs"
-assert_file "$data_home/smartdock/shell.qml"
+assert_file "$data_home/dockrail/shell.qml"
 assert_file "$config_home/autostart/smartdock.desktop"
+assert_file "$bin_home/dockrail"
 assert_file "$bin_home/smartdock"
-assert_file "$config_file"
+assert_file "$canonical_config"
 for i in "${!ids[@]}"; do
   id="${ids[$i]}"
   assert_missing "$desktop_dir/$id.desktop"
@@ -171,9 +167,11 @@ done
 
 PATH="$no_qs_bin:/usr/bin:/bin" bash "$repo_dir/uninstall.sh" \
   || fail "full uninstall failed without qs"
-assert_missing "$data_home/smartdock"
+assert_missing "$data_home/dockrail"
 assert_missing "$config_home/autostart/smartdock.desktop"
+assert_missing "$bin_home/dockrail"
 assert_missing "$bin_home/smartdock"
+assert_file "$canonical_config"
 assert_file "$config_file"
 
 echo "check_terminal_agent_assets: PASS"

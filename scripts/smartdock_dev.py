@@ -193,7 +193,7 @@ def main():
     with (plugins / ('.' + PLUGIN_ID + '.smartdock-lock')).open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if args.command == 'use':
-            cache = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'smartdock/dev-worktrees'
+            cache = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'dockrail/dev-worktrees'
             source = resolve_source(args.source, repo, cache)
             instance = shell_instance()
             rows = json.loads(Transport().run(['qs', 'ipc', '--pid', str(instance['pid']),

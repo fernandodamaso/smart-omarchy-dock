@@ -231,7 +231,7 @@ class CliDocumentationTests(unittest.TestCase):
                        XDG_CACHE_HOME=str(root / 'cache'), PATH=str(tools) + ':' + os.environ['PATH'])
             subprocess.run(['bash', str(ROOT / 'install.sh'), '--cli-only'], env=env,
                            check=True, capture_output=True, text=True, timeout=10)
-            installed = root / 'data/smartdock-cli'
+            installed = root / 'data/dockrail-cli'
             for name in DOCUMENTS:
                 self.assertTrue((installed / 'docs' / name).is_file(), name + ' must be installed')
                 self.assertEqual((installed / 'docs' / name).read_bytes(), (ROOT / 'docs' / name).read_bytes())
@@ -241,7 +241,7 @@ class CliDocumentationTests(unittest.TestCase):
                                     check=True, capture_output=True, text=True, timeout=10)
             self.assertEqual(json.loads(result.stdout)['data']['text'], self.guide)
             self.assertFalse(sentinel.exists())
-            for path in ('config', 'cache', 'data/smartdock', 'data/applications', 'data/icons'):
+            for path in ('config', 'cache', 'data/dockrail', 'data/smartdock', 'data/applications', 'data/icons'):
                 self.assertFalse((root / path).exists(), path)
 
 

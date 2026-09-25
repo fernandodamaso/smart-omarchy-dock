@@ -14,6 +14,7 @@ Item {
   property var counts: ({})
   property bool providerExecutable: false
   property bool shuttingDown: false
+  property string dataRoot: ""
   property int restartAttempts: 0
 
   readonly property string dataHome: Quickshell.env("XDG_DATA_HOME") !== ""
@@ -25,7 +26,8 @@ Item {
       ? Quickshell.env("XDG_CACHE_HOME")
       : Quickshell.env("HOME") + "/.cache"
   readonly property string providerBinaryPath:
-    dataHome + "/smartdock/providers/smartdock-launcher-badge-provider"
+    (root.dataRoot !== "" ? root.dataRoot : dataHome + "/smartdock")
+      + "/providers/smartdock-launcher-badge-provider"
   readonly property string statePath:
     runtimeHome + "/smartdock/launcher-badges.json"
 

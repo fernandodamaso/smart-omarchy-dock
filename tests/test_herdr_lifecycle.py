@@ -24,11 +24,13 @@ class HerdrLifecycleContractTests(unittest.TestCase):
         plugin = self.read("Service.qml")
         overlay = self.read("Overlay.qml")
         standalone = self.read("shell.qml")
-        self.assertIn("property alias herdrService: herdr", plugin)
+        self.assertIn("readonly property var herdrService: herdrLoader.item", plugin)
         self.assertIn("DockHerdrService {", plugin)
-        self.assertIn("herdrService: pluginService ? pluginService.herdrService : null", overlay)
+        self.assertIn("active: migration.ready", plugin)
+        self.assertIn("herdrService: root.pluginService.herdrService", overlay)
         self.assertIn("DockHerdrService {", standalone)
-        self.assertIn("herdrService: herdrService", standalone)
+        self.assertIn("active: migration.ready", standalone)
+        self.assertIn("herdrService: herdrLoader.item", standalone)
 
     def test_focus_deadline_scheduler_tracks_oldest_pending_request(self):
         service = self.read("components/DockHerdrService.qml")

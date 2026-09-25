@@ -8,8 +8,11 @@ import Quickshell.Io
 Item {
   id: root
 
-  readonly property string packageRoot: StandardPaths.writableLocation(StandardPaths.GenericDataLocation)
-    + "/smartdock/widgets"
+  property string dataRoot: ""
+  readonly property string packageRoot: (root.dataRoot !== ""
+    ? root.dataRoot
+    : StandardPaths.writableLocation(StandardPaths.GenericDataLocation) + "/smartdock")
+    + "/widgets"
   readonly property string registryPath: packageRoot + "/registry.json"
   property bool registryKnown: false
   property var descriptors: ({})

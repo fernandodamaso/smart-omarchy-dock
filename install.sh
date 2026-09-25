@@ -4,9 +4,12 @@ set -euo pipefail
 data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 bin_home="${XDG_BIN_HOME:-$HOME/.local/bin}"
-app_dir="$data_home/smartdock"
-client_dir="$data_home/smartdock-cli"
-config_dir="$config_home/smartdock"
+app_dir="$data_home/dockrail"
+legacy_app_dir="$data_home/smartdock"
+client_dir="$data_home/dockrail-cli"
+legacy_client_dir="$data_home/smartdock-cli"
+config_dir="$config_home/dockrail"
+legacy_config_dir="$config_home/smartdock"
 desktop_dir="$data_home/applications"
 desktop_file="$desktop_dir/smartdock.desktop"
 install_autostart=true
@@ -86,11 +89,12 @@ install_client_bundle() {
     install -m 0644 "$source_dir/scripts/smartdock_dev.py" "$destination/scripts/smartdock_dev.py"
     install -m 0644 "$source_dir/scripts/smartdock_widget.py" "$destination/scripts/smartdock_widget.py"
     install -m 0644 "$source_dir/scripts/dockrail_paths.py" "$destination/scripts/dockrail_paths.py"
+    install -m 0644 "$source_dir/scripts/dockrail_migrate.py" "$destination/scripts/dockrail_migrate.py"
     install -m 0755 "$source_dir/scripts/smartdock_seed_demo_widgets.py" "$destination/scripts/smartdock_seed_demo_widgets.py"
     install -m 0644 "$source_dir/config/settings-schema.json" "$destination/config/settings-schema.json"
     install -m 0644 "$source_dir/config/dock.json" "$destination/config/dock.json"
     local document
-    for document in AGENT_CONFIGURATION.md CLI_REFERENCE.md CONFIGURATION.md CLI_RUNTIME_CHECKS.md DEV_SWITCH.md HERDR_DATA_ACCESS.md SIDEBAR_WIDGETS.md WIDGET_COMPONENTS.md WIDGET_PACKAGES.md; do
+    for document in AGENT_CONFIGURATION.md CLI_REFERENCE.md CONFIGURATION.md CLI_RUNTIME_CHECKS.md DEV_SWITCH.md HERDR_DATA_ACCESS.md SIDEBAR_WIDGETS.md WIDGET_COMPONENTS.md WIDGET_PACKAGES.md DOCKRAIL_MIGRATION.md; do
       install -m 0644 "$source_dir/docs/$document" "$destination/docs/$document"
     done
     install -m 0755 "$source_dir/uninstall.sh" "$destination/uninstall.sh"
@@ -138,6 +142,16 @@ if ! command -v qs >/dev/null 2>&1; then
 fi
 command -v python3 >/dev/null 2>&1 || { echo 'Python 3 is required for the CLI.' >&2; exit 1; }
 
+migration_json=""
+migration_was_running=false
+migration_provenance=
+if ! migration_json="$(python3 -B "$source_dir/scripts/dockrail_migrate.py" startup --runtime standalone --handoff-standalone)"; then
+  printf '%s\n' "$migration_json" >&2
+  exit 1
+fi
+migration_was_running="$(python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["data"]["standaloneWasRunning"] else "false")' <<<"$migration_json")"
+migration_provenance="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["selectionProvenance"])' <<<"$migration_json")"
+
 install -d "$app_dir" "$config_dir" "$bin_home" "$desktop_dir"
 if [[ "$source_dir" != "$app_dir" ]]; then
   rm -rf -- "$app_dir/components"
@@ -165,7 +179,7 @@ cat >"$desktop_file" <<EOF
 Type=Application
 Name=SmartDock for Omarchy
 Comment=Start or restart the Omarchy application dock
-Exec="$bin_home/smartdock" restart
+Exec="$bin_home/dockrail" restart
 Icon=preferences-desktop
 Terminal=false
 Categories=Utility;
@@ -181,35 +195,41 @@ else
   echo "Preserved configuration: $config_dir/dock.json"
 fi
 
-demo_widget_seed_marker="$config_dir/.demo-widgets-seeded-v2"
-demo_widget_seed_result="$(python3 "$source_dir/scripts/smartdock_seed_demo_widgets.py"   "$config_dir/dock.json" "$demo_widget_seed_marker")"
-case "$demo_widget_seed_result" in
-  seeded) echo "Enabled missing SmartDock demo Widgets for this branch." ;;
-  preserved) echo "Demo Widget selection already present." ;;
-  already) ;;
-  invalid) echo "Skipped demo Widget seeding because the existing Widget config needs repair." >&2 ;;
-esac
+if [[ "$migration_provenance" == "canonical-clean" ]]; then
+  demo_widget_seed_marker="$config_dir/.demo-widgets-seeded-v2"
+  demo_widget_seed_result="$(python3 "$source_dir/scripts/smartdock_seed_demo_widgets.py" "$config_dir/dock.json" "$demo_widget_seed_marker")"
+  case "$demo_widget_seed_result" in
+    seeded) echo "Enabled missing SmartDock demo Widgets for this branch." ;;
+    preserved) echo "Demo Widget selection already present." ;;
+    already) ;;
+    invalid) echo "Skipped demo Widget seeding because the existing Widget config needs repair." >&2 ;;
+  esac
+fi
 
-if $install_autostart; then "$bin_home/smartdock" autostart enable; fi
+if $install_autostart; then "$bin_home/dockrail" autostart enable; fi
 
 cat <<EOF
 
 SmartDock for Omarchy installed successfully.
 
 Run explicitly:
-  $bin_home/smartdock launch --daemonize
+  $bin_home/dockrail launch --daemonize
 
 Inspect without launching:
-  $bin_home/smartdock status --json
-  $bin_home/smartdock agent-guide
+  $bin_home/dockrail status --json
+  $bin_home/dockrail agent-guide
 
 Configuration:
   $config_dir/dock.json
 
 Update standalone later:
-  $bin_home/smartdock update
+  $bin_home/dockrail update
 EOF
 case ":$PATH:" in
   *":$bin_home:"*) ;;
-  *) echo; echo "Note: add $bin_home to PATH to run smartdock by name." ;;
+  *) echo; echo "Note: add $bin_home to PATH to run dockrail by name." ;;
 esac
+
+if $migration_was_running; then
+  "$bin_home/dockrail" launch --daemonize
+fi

@@ -72,6 +72,7 @@ jobs:
           for script in install.sh uninstall.sh scripts/dockrail scripts/smartdock scripts/run tests/check_*.sh; do
             bash -n "$script"
           done
+          python3 -m py_compile scripts/dockrail_paths.py scripts/dockrail_migrate.py
 
       - name: Run structural guards
         shell: bash
