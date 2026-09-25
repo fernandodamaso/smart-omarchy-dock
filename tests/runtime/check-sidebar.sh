@@ -130,8 +130,10 @@ import json,sys
 value=json.load(open(sys.argv[1]))
 assert value['sidebarExpandedWidth'] == 240, value['sidebarExpandedWidth']
 assert value['sidebarEdge'] == 'left', value['sidebarEdge']
-assert value['sidebarCollapsed'] is True, value['sidebarCollapsed']
+assert value['sidebarCollapsed'] is False, value['sidebarCollapsed']
+collapsed=value['sidebarCollapsedByMonitor']
+assert isinstance(collapsed,dict) and list(collapsed.values()).count(True) == 1, collapsed
 assert value['runtimeFixtureUnknown'] == {'keep': True}
 assert value['position'] == 'bottom' and value['iconSize'] == 42
-print('sidebar persistence readback: PASS (width=240, collapsed, unknown/classic keys preserved)')
+print('sidebar persistence readback: PASS (width=240, one per-monitor collapse, unknown/classic keys preserved)')
 PY
