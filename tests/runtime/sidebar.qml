@@ -144,7 +144,7 @@ ShellRoot {
         } else if (root.step === 1) {
           require(h.sidebarPanel !== null, "sidebar surface missing")
           var footer = h.sidebarPanel.widgetArea
-          var middle = root.named(h.sidebarPanel, "sidebar-middle-region")
+          var middle = root.named(h.sidebarPanel.contentItem, "sidebar-middle-region")
           var split = middle ? middle.split : null
           require(middle !== null && split !== null, "production middle split missing")
           var allocations = [split.hierarchyHeight, split.widgetHeight, split.blankHeight]
