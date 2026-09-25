@@ -1,4 +1,4 @@
-# SmartDock CLI reference
+# Dockrail CLI reference
 
 **Unreleased CLI-first candidate — Draft PR #44, `feat/fdm-914-cli-first`.** This describes implemented source, not an available release, permission to deploy, or completed Omarchy runtime qualification. Older installed builds may not implement this interface. Discover the selected host's schema instead of assuming this document describes that installation.
 
@@ -6,12 +6,12 @@ Start with [the agent guide](AGENT_CONFIGURATION.md). [Configuration inventory](
 
 ## Selection and transport
 
-All commands below are prefixed with `smartdock`. Control options work before or after the command, including after a subcommand:
+All commands below are prefixed with `dockrail`. Control options work before or after the command, including after a subcommand:
 
 | Option | Meaning |
 | --- | --- |
 | `--json` | Exactly one versioned JSON object on stdout; diagnostics on stderr. |
-| `--runtime auto` | Default: require exactly one matching SmartDock host. |
+| `--runtime auto` | Default: require exactly one matching Dockrail host. |
 | `--runtime plugin` / `--runtime standalone` | Filter by host mode; multiple hosts of that mode still require an instance. |
 | `--instance ID` | Exact native Quickshell ID or process ID, not a fuzzy/newest selector. |
 | `--help`, `-h` | Offline help. |
@@ -20,13 +20,13 @@ All commands below are prefixed with `smartdock`. Control options work before or
 
 The host's `data.configPath` is authoritative. The plugin uses its own `${XDG_CONFIG_HOME:-$HOME/.config}/smartdock/dock.json`; standalone launch may use `SMARTDOCK_CONFIG`. Changing the client's environment does **not** redirect an already-running host. No configuration command launches, restarts or installs a host.
 
-The standard-library Python adapter currently uses `qs list --all --json` and `qs ipc --pid PID call -- smartdock request PAYLOAD`, with argv arrays, no shell evaluation, a 2-second subprocess timeout and an 8-second discovery/IPC deadline. Requests are bounded to 64 KiB and response stdout to 1 MiB. Diagnostics remain separate. The Omarchy wrapper's newest-instance selection cannot provide the exact selection required here; no guessed wrapper flags or raw socket protocol are used. Compatibility with the installed Quickshell build and real scheduling is a local gate.
+The standard-library Python adapter currently uses `qs list --all --json` and `qs ipc --pid PID call -- dockrail request PAYLOAD`, with argv arrays, no shell evaluation, a 2-second subprocess timeout and an 8-second discovery/IPC deadline. Requests are bounded to 64 KiB and response stdout to 1 MiB. Diagnostics remain separate. The Omarchy wrapper's newest-instance selection cannot provide the exact selection required here; no guessed wrapper flags or raw socket protocol are used. Compatibility with the installed Quickshell build and real scheduling is a local gate.
 
 ## Discovery commands
 
 | Command | Result and limits |
 | --- | --- |
-| `help` | Prints full help; bare `smartdock` does the same. No host or directories required. |
+| `help` | Prints full help; bare `dockrail` does the same. No host or directories required. |
 | `agent-guide` | Prints the installed `docs/AGENT_CONFIGURATION.md`; works without the source checkout or a host. With JSON, text is `data.text`. |
 | `status` | Selected host identity, config path, load/write state and revision. Not a settings mutation. |
 | `doctor` | Read-only status plus `data.checks`: `python`, `quickshell`, `omarchyShell`, `liveRuntime`. Missing runtime, invalid configuration or failed persistence exits nonzero. |
@@ -52,10 +52,10 @@ Requested values retain intent. Effective output projects current normalization 
 Array values use JSON syntax. `workspaceMonitorOrder` is an exact case-sensitive connector-name array used only to order grouped/all monitor sections. Empty `[]` selects automatic physical ordering by finite monitor x then y; configured connected connectors lead, other connected monitors append automatically, and disconnected connector names remain saved for reconnect. It never reconfigures Hyprland monitors or workspaces, and flat/current-monitor layouts keep the value without a visual effect.
 
 ```bash
-smartdock config get workspaceMonitorOrder --json
-smartdock config set workspaceMonitorOrder '["HDMI-A-1","DP-1"]' --json
-smartdock config get workspaceMonitorOrder --effective --json
-smartdock config reset workspaceMonitorOrder --json
+dockrail config get workspaceMonitorOrder --json
+dockrail config set workspaceMonitorOrder '["HDMI-A-1","DP-1"]' --json
+dockrail config get workspaceMonitorOrder --effective --json
+dockrail config reset workspaceMonitorOrder --json
 ```
 
 New patches reject unknown keys, unsafe/prototype-sensitive keys, wrong types, invalid enums/ranges, duplicate JSON keys/canonical application identities and non-finite numbers. Validation is atomic: one bad value rejects the complete patch. `workspaceMonitorOrder` additionally rejects blank/padded/control-containing connector names and exact duplicates while allowing valid virtual connector strings. Array/object values replace that key; per-app commands are preferable to replacing a collection. Accepted unrelated legacy values and unknown extension keys remain untouched.
@@ -128,7 +128,7 @@ Every response uses `apiVersion: 1`, Boolean `ok`, object `data`, array `warning
 
 From the intended source checkout, `bash ./install.sh --cli-only` installs the wrapper at `${XDG_BIN_HOME:-$HOME/.local/bin}/smartdock` and the adapter, defaults, schema, agent guide, reference and inventory under `${XDG_DATA_HOME:-$HOME/.local/share}/smartdock-cli`. `bash ./uninstall.sh --cli-only` removes this bundle while preserving settings, plugin and standalone ownership. Both installation orders retain the wrapper while another bundle owns it. Help and guide use the installed bundle, not `.source-dir`. When both bundles exist the wrapper prefers client-only assets; update that bundle explicitly from the intended source.
 
-Full `install.sh` is an explicit standalone installation with separate lifecycle effects and optional autostart; it is not needed to configure the plugin. Explicit wrapper commands `launch`/`--daemonize`, `restart`, `stop`, `update`, `uninstall`, and `autostart enable|disable|status` remain standalone lifecycle commands, outside this versioned control-command JSON contract. `smartdock update` is not a plugin or client-only updater. Use client-only reinstall for client updates and the normal, separately authorized Omarchy deployment path for a released plugin. No merge/deploy is authorized by this candidate reference.
+Full `install.sh` is an explicit standalone installation with separate lifecycle effects and optional autostart; it is not needed to configure the plugin. Explicit wrapper commands `launch`/`--daemonize`, `restart`, `stop`, `update`, `uninstall`, and `autostart enable|disable|status` remain standalone lifecycle commands, outside this versioned control-command JSON contract. `dockrail update` is not a plugin or client-only updater. Use client-only reinstall for client updates and the normal, separately authorized Omarchy deployment path for a released plugin. No merge/deploy is authorized by this candidate reference.
 
 ## Sidebar configuration and diagnostics
 
@@ -142,16 +142,16 @@ host; do not assume an installed release implements this candidate.
 In an isolated candidate session only:
 
 ```sh
-smartdock config set presentationMode sidebar --json
-smartdock config set presentationModeByMonitor '{"DP-1":"classic"}' --json
-smartdock config set sidebarEdge right --json
-smartdock config set sidebarMonitor DP-1 --json
-smartdock config set sidebarExpandedWidth 320 --json
-smartdock config set sidebarCollapsed true --json
-smartdock config apply --json '{"sidebarCollapsedByMonitor":{"DP-1":true,"HDMI-A-1":false}}'
-smartdock config get --effective --json
-smartdock config set presentationMode classic --json
-smartdock config reset presentationModeByMonitor --json
+dockrail config set presentationMode sidebar --json
+dockrail config set presentationModeByMonitor '{"DP-1":"classic"}' --json
+dockrail config set sidebarEdge right --json
+dockrail config set sidebarMonitor DP-1 --json
+dockrail config set sidebarExpandedWidth 320 --json
+dockrail config set sidebarCollapsed true --json
+dockrail config apply --json '{"sidebarCollapsedByMonitor":{"DP-1":true,"HDMI-A-1":false}}'
+dockrail config get --effective --json
+dockrail config set presentationMode classic --json
+dockrail config reset presentationModeByMonitor --json
 ```
 
 `data.presentation` reports the primary screen, full `screens` list for mirrored
@@ -188,12 +188,12 @@ is not an integrated release; see `docs/SIDEBAR.md` in the source checkout.
 ### Internal Widgets (FDM-967 / FDM-973)
 
 ```sh
-smartdock config schema sidebarWidgets --json
-smartdock config get sidebarWidgets --json
-smartdock config set sidebarWidgets '[]' --json
-smartdock config get sidebarWidgetCollapsed --json
-smartdock config set sidebarWidgetCollapsed '{"example.internal":true}' --json
-smartdock config get --effective --json
+dockrail config schema sidebarWidgets --json
+dockrail config get sidebarWidgets --json
+dockrail config set sidebarWidgets '[]' --json
+dockrail config get sidebarWidgetCollapsed --json
+dockrail config set sidebarWidgetCollapsed '{"example.internal":true}' --json
+dockrail config get --effective --json
 ```
 
 `sidebarWidgets` is an ordered, duplicate-free array of IDs from live
@@ -213,23 +213,23 @@ executes a provider. No test provider or external QML path is enabled by product
 ## External Widget packages (API v1)
 
 Widget package management is a top-level local CLI surface and does not mutate
-SmartDock configuration directly:
+Dockrail configuration directly:
 
 ```bash
-smartdock widget create io.example.weather --name "Weather" --destination "$HOME/Projects/weather-widget"
-smartdock widget install "$HOME/Projects/weather-widget"
-smartdock widget remove io.example.weather
-smartdock widget list --json
-smartdock widget update io.example.weather
-smartdock widget dev use "$HOME/Projects/weather-widget"
-smartdock widget dev reload
-smartdock widget dev reset
+dockrail widget create io.example.weather --name "Weather" --destination "$HOME/Projects/weather-widget"
+dockrail widget install "$HOME/Projects/weather-widget"
+dockrail widget remove io.example.weather
+dockrail widget list --json
+dockrail widget update io.example.weather
+dockrail widget dev use "$HOME/Projects/weather-widget"
+dockrail widget dev reload
+dockrail widget dev reset
 ```
 
 `<source>` is an explicit trusted local directory or repository URL. Installed
-packages live under `${XDG_DATA_HOME:-$HOME/.local/share}/smartdock/widgets/<id>/`.
+packages live under `${XDG_DATA_HOME:-$HOME/.local/share}/dockrail/widgets/<id>/`.
 Updates stage and validate a replacement before swapping it into place; updating
-one package never runs `git pull` against the SmartDock plugin/deployment and a
+one package never runs `git pull` against the Dockrail plugin/deployment and a
 failure does not stop unrelated packages from being attempted.
 
 The runtime registry is host-owned. `dock.json` and `sidebarWidgets` continue
