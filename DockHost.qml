@@ -18,6 +18,7 @@ Item {
 
   required property string configPath
   required property string runtimeMode
+  property string dataRoot: ""
   property var notificationService: null
   property var launcherBadgeService: null
   property var browserProfileService: null
@@ -559,7 +560,10 @@ Item {
   }
 
   DockDemoWidgetRegistry { id: demoWidgetRegistry }
-  DockExternalWidgetRegistry { id: externalWidgetRegistry }
+  DockExternalWidgetRegistry {
+    id: externalWidgetRegistry
+    dataRoot: root.dataRoot
+  }
 
   DockControl {
     id: dockControl
