@@ -102,10 +102,10 @@ Use static local PNG/SVG files referenced in place. The client resolves ordinary
 
 Window-rule set/reset is also a latest-state intent: a CLI set edits the exact normalized
 `(appId,titlePattern)` key in place or appends it when absent; reset removes only that
-key. Rule order controls first-match precedence. The selected-window dialog adds
-captured-rule stale-edit protection, but no public concurrency flag is added.
+key. Rule order controls first-match precedence. The host-owned **Change Icon…** dialog adds
+stale-edit protection (`E_CONFLICT`) to its own saves, but no public concurrency flag is added.
 
-Set/reset preserves unrelated map entries, including untouched legacy sources. A bulk `iconOverrides` patch instead validates/replaces the whole map, rejecting canonical duplicates. A same-source set requests fresh bytes without a redundant settings write. There is no continuous artwork-file watch. Reload advances a global revision, so other mapped icons may refresh too.
+Set/reset preserves unrelated map entries, including untouched legacy sources. A bulk `iconOverrides` patch instead validates/replaces the whole map, rejecting canonical duplicates. A same-source set requests fresh bytes without a redundant settings write. The dock watches referenced artwork files and refreshes automatically after same-path edits, so reload is retained for compatibility and forcing a refresh. Reload advances a global revision, so other mapped icons may refresh too.
 
 Successful icon mutations add `reloaded`, `iconReloadRevision`, `renderVerified: false` to mutation data. Reload normally has `applied: false`, `noop: true`, `reloaded: true`; these fields are not contradictory. `reloaded` means requested, not decoded. Settings acceptance, durable save and actual rendering are separate observations.
 

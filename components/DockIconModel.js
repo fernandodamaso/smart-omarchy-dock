@@ -70,6 +70,15 @@ function normalizeSource(value) {
   return /\.(png|svg)$/i.test(url) ? url : ""
 }
 
+// omarchy-file-select prints one local path (or URI) per line; the dialog
+// asks for a single file, so only the first non-empty line counts.
+function chosenFileSource(output) {
+  var lines = String(output || "").split(/\r?\n/)
+  for (var i = 0; i < lines.length; i++)
+    if (lines[i] !== "") return normalizeSource(lines[i])
+  return ""
+}
+
 function normalizeOverrides(value) {
   var result = {}
   if (!value || typeof value !== "object" || Array.isArray(value)) return result
@@ -215,6 +224,205 @@ function matchWindowRule(rules, appId, title) {
     }
   }
   return null
+}
+
+// The Change Icon dialog offers "title contains TEXT", saved as *TEXT*. A
+// literal '*' stays out of contains mode so the saved rule means what it says.
+function containsToPattern(text) {
+  var value = typeof text === "string" ? text.trim() : ""
+  if (!value) return { ok: false, pattern: "", error: "Type part of the window title." }
+  if (value.indexOf("*") >= 0)
+    return { ok: false, pattern: "", error: "The title text cannot contain *." }
+  if (/[\x00-\x1f\x7f]/.test(value))
+    return { ok: false, pattern: "", error: "The title text cannot contain control characters." }
+  if (value.length > 198)
+    return { ok: false, pattern: "", error: "The title text must be at most 198 characters." }
+  return { ok: true, pattern: "*" + value + "*", error: "" }
+}
+
+// Returns TEXT for a *TEXT* rule, or null when the rule has another shape and
+// must be shown as an exact pattern instead of being rewritten.
+function patternToContains(pattern) {
+  var value = normalizeTitlePattern(pattern)
+  if (value.length < 3 || value.charAt(0) !== "*" || value.charAt(value.length - 1) !== "*")
+    return null
+  var inner = value.slice(1, -1)
+  return inner && inner.indexOf("*") < 0 && inner.trim() === inner ? inner : null
+}
+
+// The override currently deciding this item's artwork, using the renderer's
+// precedence: window rule -> browser profile -> whole app.
+function currentIconTarget(options) {
+  var value = options || {}
+  var settings = value.settings || {}
+  var rule = value.appId ? matchWindowRule(
+    normalizeWindowRules(settings.windowIconOverrides), value.appId, value.title) : null
+  if (rule)
+    return { kind: "window", key: rule.key, appId: rule.appId,
+      titlePattern: rule.titlePattern, source: rule.source }
+  var overrides = normalizeOverrides(settings.iconOverrides)
+  var profileKey = profileOverrideKey(value.desktopId, value.profileKey)
+  if (profileKey && overrides[profileKey])
+    return { kind: "profile", key: profileKey, source: overrides[profileKey] }
+  var appKey = normalizeKey(value.desktopId)
+  if (appKey && overrides[appKey])
+    return { kind: "app", key: appKey, source: overrides[appKey] }
+  return { kind: "none", key: "", source: "" }
+}
+
+// Images already used by any override, latest additions first, so the dialog
+// can offer them again without storing a separate history.
+function recentIconSources(settings, limit) {
+  var value = settings || {}
+  var max = typeof limit === "number" && limit > 0 ? limit : 6
+  var rules = normalizeWindowRules(value.windowIconOverrides).map(function(rule) {
+    return rule.source
+  })
+  var overrides = normalizeOverrides(value.iconOverrides)
+  var mapped = Object.keys(overrides).map(function(key) { return overrides[key] })
+  var result = []
+  rules.reverse().concat(mapped.reverse()).forEach(function(source) {
+    if (source && result.indexOf(source) < 0 && result.length < max) result.push(source)
+  })
+  return result
+}
+
+// selection: { kind: "app" | "profile" | "window", profileKey, titlePattern }.
+// windows: [{ title, profileKey }]. Returns one flag per window plus the count.
+function previewMatches(windows, selection) {
+  var list = Array.isArray(windows) ? windows : []
+  var choice = selection || {}
+  var wantedProfile = normalizeProfileSegment(choice.profileKey)
+  var flags = list.map(function(window) {
+    var item = window || {}
+    if (choice.kind === "app") return true
+    if (choice.kind === "profile")
+      return !!wantedProfile && normalizeProfileSegment(item.profileKey) === wantedProfile
+    if (choice.kind === "window")
+      return !!normalizeTitlePattern(choice.titlePattern)
+        && titlePatternMatches(normalizeTitlePattern(choice.titlePattern), item.title)
+    return false
+  })
+  return {
+    flags: flags,
+    count: flags.filter(function(flag) { return flag }).length
+  }
+}
+
+// Short file name for dialog labels, e.g. file:///icons/My%20Sun.svg -> My Sun.svg.
+function sourceFileName(source) {
+  var url = String(source || "")
+  var name = url.slice(url.lastIndexOf("/") + 1)
+  try {
+    return decodeURIComponent(name)
+  } catch (error) {
+    return name
+  }
+}
+
+// Wider scopes rank lower; a narrower choice leaves a wider override in place.
+function scopeRank(kind) {
+  return kind === "window" ? 2 : kind === "profile" ? 1 : kind === "app" ? 0 : -1
+}
+
+// Explains the override that currently applies, or "" when none does.
+function currentIconNotice(current, appName, profileName) {
+  var value = current || {}
+  var file = sourceFileName(value.source)
+  var app = String(appName || "This app")
+  if (value.kind === "window") {
+    var contains = patternToContains(value.titlePattern)
+    return "This window uses " + file + " because its title "
+      + (contains !== null ? "contains \u201c" + contains + "\u201d"
+        : "matches \u201c" + value.titlePattern + "\u201d")
+      + ". Editing this updates that setting."
+  }
+  if (value.kind === "profile")
+    return "The " + String(profileName || "browser") + " profile uses a custom icon (" + file + ")."
+  if (value.kind === "app")
+    return app + " uses a custom icon (" + file + ") for all its windows."
+  return ""
+}
+
+// choice: { kind, source, desktopId, profileKey, appId, titleMode: "contains" |
+// "exact", titleText }. source "" means the app's own icon (Reset).
+// Returns { ok, error, unchanged, args: { remove, set } } for saveIconChange.
+function iconChangeArguments(current, choice) {
+  var captured = current && current.kind && current.kind !== "none" ? current : null
+  var value = choice || {}
+  var source = String(value.source || "")
+  var result = { ok: true, error: "", unchanged: false, args: { remove: null, set: null } }
+  if (!source) {
+    result.unchanged = !captured
+    result.args.remove = captured
+    return result
+  }
+  if (!normalizeSource(source))
+    return { ok: false, error: "Choose a local PNG or SVG file.", unchanged: false, args: null }
+
+  var set = null
+  if (value.kind === "app") {
+    var appKey = normalizeKey(value.desktopId)
+    if (!appKey) return { ok: false, error: "This app has no desktop ID.", unchanged: false, args: null }
+    set = { kind: "app", key: appKey, source: source }
+  } else if (value.kind === "profile") {
+    var profileKey = profileOverrideKey(value.desktopId, value.profileKey)
+    if (!profileKey)
+      return { ok: false, error: "This window has no browser profile.", unchanged: false, args: null }
+    set = { kind: "profile", key: profileKey, source: source }
+  } else if (value.kind === "window") {
+    var appId = normalizeWindowAppId(value.appId)
+    if (!appId)
+      return { ok: false, error: "This window has no Wayland app ID.", unchanged: false, args: null }
+    var pattern = ""
+    if (value.titleMode === "exact") {
+      pattern = normalizeTitlePattern(value.titleText)
+      if (!pattern)
+        return { ok: false, error: "Enter a title pattern of at most 200 characters.",
+          unchanged: false, args: null }
+    } else {
+      var contains = containsToPattern(value.titleText)
+      if (!contains.ok) return { ok: false, error: contains.error, unchanged: false, args: null }
+      pattern = contains.pattern
+    }
+    set = { kind: "window", appId: appId, titlePattern: pattern, source: source }
+  } else {
+    return { ok: false, error: "Choose which windows use the image.", unchanged: false, args: null }
+  }
+
+  var setKey = set.kind === "window" ? windowRuleKey(set.appId, set.titlePattern) : set.key
+  if (captured && captured.kind === set.kind && captured.key === setKey
+      && captured.source === normalizeSource(source))
+    result.unchanged = true
+  // Replace the captured override when the new scope is as wide or wider, so it
+  // no longer shadows the new choice; a narrower choice keeps the wider one.
+  if (captured && scopeRank(set.kind) <= scopeRank(captured.kind)) result.args.remove = captured
+  result.args.set = set
+  return result
+}
+
+// One sentence above the preview grid; "" when there is nothing to preview.
+function previewSummary(options) {
+  var value = options || {}
+  var total = Number(value.total) || 0
+  var count = Number(value.count) || 0
+  var app = String(value.appName || "app")
+  if (total <= 0) return ""
+  if (value.resetting)
+    return count > 0 ? "Preview: " + count + " of " + total + " open " + app + " window"
+      + (total === 1 ? "" : "s") + " go back to the app's own icon."
+      : "Preview: no open " + app + " window uses a custom icon."
+  if (value.kind === "window" && !value.hasPattern)
+    return "Type part of a window title to choose which windows change."
+  var noun = "open " + app + " window" + (total === 1 ? "" : "s")
+  if (value.kind === "window")
+    return "Preview: " + count + " of " + total + " " + noun
+      + (total === 1 ? " matches" : " match") + ", and new windows with a matching title will too."
+  if (value.kind === "profile")
+    return "Preview: " + count + " of " + total + " " + noun + " use the "
+      + String(value.profileName || "selected") + " profile, and new ones will too."
+  return "Preview: " + (total === 1 ? "the " + noun + " changes" : "all " + total + " " + noun + " change")
+    + ", and new ones will too."
 }
 
 function candidates(windowUrl, profileUrl, overrideUrl, desktopUrl, genericUrl) {

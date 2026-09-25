@@ -16,7 +16,7 @@ fail() {
 }
 
 for label in 'Fullscreen — Keep Bars' 'Fullscreen — Hide Bars' \
-  'Hide App from Dock' 'Copy Icon Command'; do
+  'Hide App from Dock' 'Change Icon'; do
   grep -Fq "$label" "$menu" || fail "missing menu action: $label"
 done
 
@@ -41,13 +41,16 @@ if grep -q 'windowActions\.parent' "$controller"; then
   fail 'context actions must not infer the host through QObject parent traversal'
 fi
 
-grep -q 'iconCommandSpec' "$menu_model" \
-  || fail 'icon-copy commands need a pure argv/text builder with shell-safe quoting'
+if grep -Eq 'iconCommandSpec|Copy Icon Command|copy-icon-command' "$menu" "$menu_model"; then
+  fail 'icon editing uses the Change Icon dialog, not copied shell commands'
+fi
+grep -Fq 'DockIconDialog' "$menu" \
+  || fail 'Change Icon must open the shared DockIconDialog'
 grep -q 'mutationPresentation' "$menu_model" \
   || fail 'menu mutations need requested/effective/durable presentation states'
 
 for command in 'minimize-visible' 'restore-minimized' 'close-represented' \
-  'fullscreen-keep-bars' 'fullscreen-hide-bars' 'copy-icon-command'; do
+  'fullscreen-keep-bars' 'fullscreen-hide-bars' 'change-icon'; do
   grep -Fq "$command" "$menu" || fail "missing contextual command wiring: $command"
 done
 
@@ -57,13 +60,11 @@ if grep -Fq 'Pin Window to Workspace' "$menu"; then
   fail 'CM-04 window pinning must not be exposed early'
 fi
 if grep -Eq 'sh[[:space:]]+-c|execDetached\(\[[[:space:]]*"sh"' "$menu"; then
-  fail 'copy-command actions must not execute copied shell text'
+  fail 'menu actions must not execute shell text'
 fi
-
-grep -Fq 'omarchy-clipboard-paste-text' "$menu" \
-  || fail 'clipboard copy must use the Omarchy clipboard helper with exit status'
-grep -Fq -- '--copy-only' "$menu" \
-  || fail 'clipboard helper must copy without synthesizing paste input'
+if grep -Eq 'omarchy-clipboard-paste-text|clipboardProcess' "$menu"; then
+  fail 'the menu no longer copies icon commands to the clipboard'
+fi
 
 strip="$repo_root/components/DockSidebarPinnedStrip.qml"
 grep -Eq 'readonly property string desktopId' "$strip" \

@@ -69,8 +69,7 @@ function fixture(usingLua = false) {
     interfaceAnimationsEnabled: false, visible: false, openGeneration: 0,
     page: 'app', pageStack: [], targetContexts: [], pageTarget: null,
     activeMenuIndex: -1, groupCandidateSnapshot: [], openedWorkspaceGroupsSignature: '',
-    feedbackTitle: '', feedbackText: '', pendingMutationAction: '', pendingMutationLabel: '',
-    copyProfileDirectory: ''
+    feedbackTitle: '', feedbackText: '', pendingMutationAction: '', pendingMutationLabel: ''
   })
   // Model-only fixtures mirror the QML bindings without replacing action logic.
   Object.defineProperties(menu, {
@@ -277,11 +276,79 @@ test('pin-strip shortcut menu omits window choose/minimize even if app would be 
     .map(record => record.command)
   assert.ok(commands.includes('unpin-app'))
   assert.ok(commands.includes('open-new'))
-  assert.ok(commands.includes('copy-icon-command'))
+  assert.ok(commands.includes('change-icon'))
   assert.ok(!commands.includes('open-chooser-page'))
   assert.ok(!commands.includes('minimize-visible'))
   assert.ok(!commands.includes('close-represented'))
   assert.ok(!commands.includes('hide-app'))
   assert.ok(f.menu.pageActions.some(record =>
     record.kind === 'header' && String(record.subtitle || '').includes('No open windows')))
+})
+
+test('one Change Icon entry opens the shared dialog with both app identities', () => {
+  const f = fixture()
+  const opened = []
+  f.menu.iconDialogLoader = { active: false, item: { openFor(options) { opened.push(options); return true } } }
+  f.menu.anchorItem = {
+    desktopId: 'editor', entry: { name: 'Editor', icon: 'editor-icon' },
+    browserProfileKey: 'Default',
+    browserProfileService: {
+      profileKeyForAddress: address => address === '0xb2' ? 'Profile 1' : '',
+      profileFor: key => ({ name: key === 'Profile 1' ? 'Work' : 'Personal', avatarPath: '' })
+    }
+  }
+  f.menu.open()
+  assert.equal(f.menu.page, 'app')
+  const appCommands = f.menu.pageActions.filter(record => record.kind === 'action')
+    .map(record => record.command)
+  assert.equal(appCommands.filter(command => command === 'change-icon').length, 1)
+  choose(f.menu, 'change-icon')
+  assert.equal(f.menu.visible, false, 'the menu closes when the dialog opens')
+  assert.equal(f.menu.iconDialogLoader.active, true)
+  let options = opened.pop()
+  assert.equal(options.desktopId, 'editor')
+  assert.equal(options.appId, 'editor', 'title rules use the raw Wayland app ID')
+  assert.equal(options.specificWindow, false)
+  assert.equal(options.profileKey, 'Default')
+  assert.equal(options.profileName, 'Personal')
+  assert.equal(options.desktopIcon, 'editor-icon')
+  assert.deepEqual(JSON.parse(JSON.stringify(options.windows)),
+    [{ title: 'A', profileKey: 'Default' }, { title: 'B', profileKey: 'Profile 1' }])
+
+  f.menu.open()
+  choose(f.menu, 'open-chooser-page')
+  f.menu.dispatchAction(f.menu.pageActions.find(record => record.command === 'open-window-page'
+    && record.targetContext.toplevel === f.B), 0)
+  assert.equal(f.menu.page, 'window')
+  const windowCommands = f.menu.pageActions.filter(record => record.kind === 'action')
+    .map(record => record.command)
+  assert.equal(windowCommands.filter(command => command === 'change-icon').length, 1)
+  for (const removed of ['change-window-icon', 'reset-window-icon', 'copy-icon-command'])
+    assert.ok(!windowCommands.includes(removed), `${removed} is gone`)
+  choose(f.menu, 'change-icon')
+  options = opened.pop()
+  assert.equal(options.specificWindow, true)
+  assert.equal(options.title, 'B')
+  assert.equal(options.profileKey, 'Profile 1')
+  assert.equal(options.profileName, 'Work')
+})
+
+test('Change Icon preview lists every open window of the app, not only the item', () => {
+  const f = fixture()
+  const opened = []
+  f.menu.iconDialogLoader = { active: false, item: { openFor(options) { opened.push(options); return true } } }
+  f.menu.anchorItem = { desktopId: 'editor', entry: { name: 'Editor' } }
+  // Ungrouped items, other workspaces or monitors: open elsewhere, same app.
+  f.windows.push({ appId: 'editor', title: 'C' }, { appId: 'other', title: 'D' })
+  f.menu.open()
+  choose(f.menu, 'change-icon')
+  assert.deepEqual(JSON.parse(JSON.stringify(opened.pop().windows.map(window => window.title))),
+    ['A', 'B', 'C'])
+})
+
+test('the controls menu has no Change Icon entry', () => {
+  const f = fixture()
+  f.menu.controlItem = true
+  f.menu.open()
+  assert.ok(!f.menu.pageActions.some(record => record.command === 'change-icon'))
 })

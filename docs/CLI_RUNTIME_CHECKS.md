@@ -79,13 +79,13 @@ Use the guide's minimal patch/primitive commands. Record command, exit code, JSO
 
 ### Surviving FDM-885 icon checks
 
-Use exact catalog/dock-resolved IDs, including one whose resolved desktop identity differs from raw window appId. Per-app CLI list/set/reset/reload is the entry point; no Settings editor is required.
+Use exact catalog/dock-resolved IDs, including one whose resolved desktop identity differs from raw window appId. Per-app CLI list/set/reset/reload is the scripting entry point; the context menu's **Change Icon…** dialog is the only UI editor, and no Settings editor is required.
 
 | Case | Required evidence |
 | --- | --- |
 | PNG/SVG and surface parity | Valid transparent/non-square PNG and SVG, paths with spaces/Unicode, magnification and fixed caller sizes. Main icons, open preview metadata and open picker rows agree; screenshots and launch/group/window identity are unchanged. Custom artwork is not tinted. |
 | Bounded fallback | Missing/unreadable/corrupt custom files retain mappings. In an isolated theme/harness only, original and generic failures settle through custom → original → application-x-executable → bundled tinted app-window without loops. Do not damage installed icons. |
-| Same-path refresh | Replace only temporary artwork bytes A→B at the same URL; icons reload and same-source set request fresh bytes across open surfaces and monitors. No redundant settings write for reload/same-source; no continuous watcher. CLI renderVerified remains false even when visual evidence is separately recorded. |
+| Same-path refresh | Replace only temporary artwork bytes A→B at the same URL; icons reload and same-source set request fresh bytes across open surfaces and monitors. Without any command, the file watcher also refreshes within about 250 ms after a same-path edit, replace, delete or recreate. No redundant settings write for reload/same-source/watcher refresh. CLI renderVerified remains false even when visual evidence is separately recorded. |
 | Failed set/reset + retry | Controlled isolated save failure after set and after removal. Session-only state is honest; latest-map retry preserves unrelated overrides and does not resurrect a stale removed entry. |
 | Persistence and interactions | Controlled source-host reload/restart, preference-reset preservation, grouped/ungrouped/closed pins, hide/show/order, badges/window actions, delegate removal during loading and actual monitors where available. Re-discover the new instance after restart. |
 | Existing ChatGPT artwork | Read/record the current artwork/identity non-destructively, test a private copy or stable reference with explicit intent, and verify app-wide mapping compatibility. Do not alter the original file, system icon or desktop launcher. Record what was and was not adopted; no automatic deployment. |

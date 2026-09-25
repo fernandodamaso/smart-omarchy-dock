@@ -80,4 +80,23 @@ assert.equal(scope.contentYForRow(0, 120, 180, 32, 400), 92)
 assert.equal(scope.contentYForRow(160, 120, 40, 32, 400), 40)
 assert.equal(scope.contentYForRow(260, 120, 390, 32, 400), 280)
 
+// A rebuilt page keeps the highlighted row by identity instead of snapping
+// back to the first row (e.g. a terminal title that updates every second).
+{
+  const rebuilt = [
+    scope.headerRecord('window:header', 'solar — nvim', ''),
+    scope.actionRecord('window:minimize', 'Minimize', '', true, 'minimize', null),
+    scope.actionRecord('window:close', 'Close', '', true, 'close', null),
+    scope.actionRecord('window:disabled', 'Disabled', '', false, 'noop', null)
+  ]
+  assert.equal(scope.focusableIndexForId(rebuilt, 'window:close'), 2)
+  assert.equal(scope.focusableIndexForId(rebuilt, 'window:disabled'), -1)
+  assert.equal(scope.focusableIndexForId(rebuilt, 'window:gone'), -1)
+  assert.equal(scope.focusableIndexForId(rebuilt, ''), -1)
+  assert.equal(scope.focusableIndexForId(null, 'window:close'), -1)
+}
+const menuSource = fs.readFileSync(new URL('../components/DockContextMenu.qml', import.meta.url), 'utf8')
+assert.match(menuSource, /onPageActionsChanged: Qt\.callLater\(restoreActiveMenuIndex\)/,
+  'rebuilding the same page must restore, not reset, the highlighted row')
+
 console.log('context menu explicit-target and keyboard model tests: PASS')

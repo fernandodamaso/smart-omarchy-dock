@@ -127,6 +127,12 @@ Item {
   onPresentationVisibleChanged: if (!presentationVisible) dismissPopups()
   property int scopeRevision: 0
   property bool menuOpen: false
+  function syncMenuOpen() {
+    var open = contextMenu.visible || contextMenu.iconDialogOpen
+    if (root.menuOpen === open) return
+    root.menuOpen = open
+    root.contextMenuVisibilityChanged(open)
+  }
   onScopeRevisionChanged: if (originOnly && contextMenu.visible) contextMenu.dismiss()
   onVisibleChanged: if (!visible) {
     cancelWorkspaceDrag("source hidden")
@@ -863,12 +869,9 @@ Item {
     herdrAgentActions: root.herdrAgentActions
     interfaceAnimationsEnabled: root.interfaceAnimationsEnabled
     originOnly: root.originOnly
-    onVisibleChanged: {
-      if (root.menuOpen !== visible) {
-        root.menuOpen = visible
-        root.contextMenuVisibilityChanged(visible)
-      }
-    }
+    // The Change Icon dialog keeps the dock shown after the menu closes.
+    onVisibleChanged: root.syncMenuOpen()
+    onIconDialogOpenChanged: root.syncMenuOpen()
     onOpenNewWindow: root.launch()
     onAddApplication: root.addApplicationRequested()
     onRemoveFromDock: root.removeRequested(root.desktopId)

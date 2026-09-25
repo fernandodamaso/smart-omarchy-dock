@@ -426,3 +426,81 @@ function iconIntent(current, id, sourceOrNull) {
   if (sourceOrNull !== null) updated[key] = intent.overrides[key]
   return withPatch(current, { iconOverrides: updated })
 }
+
+function iconTargetConflict(message) {
+  var result = rejectedIntent("iconOverrides", message)
+  result.errorCode = "E_CONFLICT"
+  return result
+}
+
+function windowTargetArguments(target, originalKey, expected) {
+  return {
+    mode: "dialog",
+    originalKey: originalKey || "",
+    expected: expected || null,
+    appId: target.appId,
+    titlePattern: target.titlePattern,
+    source: target.source
+  }
+}
+
+// Removes the override the dialog captured, if any. App and profile entries
+// carry the source seen when the dialog opened so a concurrent edit is refused.
+function removeIconTarget(current, target) {
+  if (!target) return withPatch(current, {})
+  if (target.kind === "window")
+    return windowIconIntent(current, "reset", windowTargetArguments(target, target.key, {
+      appId: target.appId, titlePattern: target.titlePattern, source: target.source
+    }))
+  if (target.kind !== "app" && target.kind !== "profile")
+    return rejectedIntent("kind", "Unsupported icon target")
+  var key = iconKey(target.key)
+  if (!key) return rejectedIntent("id", "Invalid application ID")
+  var present = DockIconModel.normalizeOverrides(current.iconOverrides)[key] || ""
+  if (present !== DockIconModel.normalizeSource(target.source))
+    return iconTargetConflict("The icon changed while the dialog was open.")
+  return iconIntent(current, key, null)
+}
+
+function setIconTarget(current, target) {
+  if (target.kind === "window")
+    return windowIconIntent(current, "set", windowTargetArguments(target, "", null))
+  if (target.kind !== "app" && target.kind !== "profile")
+    return rejectedIntent("kind", "Unsupported icon target")
+  if (!DockIconModel.normalizeSource(target.source))
+    return rejectedIntent("source", "Expected a local PNG or SVG source")
+  return iconIntent(current, target.key, target.source)
+}
+
+// One Change Icon save: optionally remove the override that applied when the
+// dialog opened, then optionally set the new one, as one settings result so a
+// scope change is never half-written.
+function iconChangeIntent(current, args) {
+  args = args || {}
+  var remove = args.remove || null
+  var set = args.set || null
+  if (!remove && !set) return withPatch(current, {})
+  // Editing a title rule in place keeps its position in the ordered list.
+  if (remove && set && remove.kind === "window" && set.kind === "window")
+    return windowIconIntent(current, "set", windowTargetArguments(set, remove.key, {
+      appId: remove.appId, titlePattern: remove.titlePattern, source: remove.source
+    }))
+  // Replacing the same app/profile key edits it in place (a same-image save
+  // stays a no-op) after the same concurrent-edit check a removal performs.
+  if (remove && set && remove.kind !== "window" && remove.kind === set.kind
+      && iconKey(remove.key) && iconKey(remove.key) === iconKey(set.key)) {
+    var present = DockIconModel.normalizeOverrides(current.iconOverrides)[iconKey(remove.key)] || ""
+    if (present !== DockIconModel.normalizeSource(remove.source))
+      return iconTargetConflict("The icon changed while the dialog was open.")
+    return setIconTarget(current, set)
+  }
+  var first = removeIconTarget(current, remove)
+  if (!first.ok || !set) return first
+  var second = setIconTarget(first.settings, set)
+  if (!second.ok) return second
+  var patch = {}
+  first.changedKeys.concat(second.changedKeys).forEach(function(key) {
+    patch[key] = second.settings[key]
+  })
+  return withPatch(current, patch)
+}
