@@ -32,7 +32,7 @@ This is a Hyprland application dock implemented with Quickshell and Qt/QML. It r
   both host modes. Keep CLI metadata in `config/settings-schema.json` and retain
   compatible runtime normalization in `DockModel.js`.
 - Installed user settings live outside the application at `~/.config/smartdock/dock.json`; updates must never overwrite them.
-- Keep `install.sh`, `uninstall.sh`, and `scripts/smartdock` compatible with custom XDG directory variables.
+- Keep `install.sh`, `uninstall.sh`, `scripts/dockrail`, and the `scripts/smartdock` compatibility shim compatible with custom XDG directory variables.
 - Prefer Quickshell APIs over shelling out to external commands.
 - Use freedesktop desktop-entry IDs without the `.desktop` suffix.
 - Preserve live configuration reloads.
@@ -159,7 +159,7 @@ validation gate when the owning issue requires it:
 
 ```bash
 timeout 6s ./scripts/run --no-color
-bash -n install.sh uninstall.sh scripts/smartdock scripts/run tests/check_window_actions.sh
+bash -n install.sh uninstall.sh scripts/dockrail scripts/smartdock scripts/run tests/check_window_actions.sh
 QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests -import components -import tests/qml-imports
 omarchy plugin validate .
 /usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" \
