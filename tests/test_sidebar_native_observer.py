@@ -46,14 +46,48 @@ class SidebarNativeObserverTests(unittest.TestCase):
                 "layoutRevision", "inputBusy", "safeFocusObjectName", "geometryRecord",
                 "settingsWriteState", "widgetRevision", "enabledWidgetCount",
                 "widgetManagerCounters", "acceptedUpdates", "managerOpen",
+                "managerAnchorPosition", "conservationError", "conserved",
                 "interval:2000", "lastStateSignature"):
             with self.subTest(required=required):
                 self.assertIn(required, self.source)
 
     def test_focus_and_widget_ids_use_explicit_sanitizers(self):
         self.assertIn("safeNames.indexOf(name)", self.source)
+        self.assertIn("focusedWidgetId(panel ? panel.widgetArea : null, item)", self.source)
+        self.assertIn('owner || (widgetId ? "widget-card" : "")', self.source)
+        self.assertIn("function safeWidgetId(value)", self.source)
+        self.assertIn(".filter(function(id) { return id !== \"\" }).slice(0, 32)", self.source)
         self.assertIn("presentationWidgetIds.map(function(id)", self.source)
         self.assertNotIn("JSON.stringify(area.presentationWidgetIds)", self.source)
+
+    def test_manager_geometry_uses_panel_local_anchor_and_native_popup_size(self):
+        self.assertIn("manager.managerAnchorPosition.x", self.source)
+        self.assertIn("width:managerPopup.width", self.source)
+        self.assertNotIn("rectRecord(managerPopup", self.source)
+
+    def test_connections_match_production_property_and_signal_contracts(self):
+        contracts = {
+            "components/DockSidebarViewport.qml": (
+                "activationDispatched", "pendingRestore", "restoring", "dropSurfaceGeneration",
+                "dropPresentation", "dropFlashKey", "dropFlashOpacity", "panelConnector",
+                "presentationVisible", "naturalContentHeight", "rowCount", "listView"),
+            "components/DockSidebarWidgetArea.qml": (
+                "naturalWidgetHeaderHeight", "naturalWidgetContentHeight",
+                "presentedWidgetCount", "layoutRevision", "pendingRestore", "restoring",
+                "inputBusy", "presentationWidgetIds", "scrollView", "popupWindow",
+                "popupGeometry", "maximumScroll", "savedAnchor", "sectionVisible", "cards"),
+            "components/DockSidebarWidgetManager.qml": (
+                "managerOpen", "managerAnchor", "managerAnchorPosition", "popupWindow"),
+            "components/DockSidebarController.qml": (
+                "scrollStates", "widgetRevision", "widgetPopupId", "interactionBusy",
+                "widgetIds", "widgetReorderActive", "widgetManager"),
+            "DockHost.qml": ("settingsRevision", "settingsWriteState"),
+        }
+        for relative_path, names in contracts.items():
+            contract_source = (ROOT / relative_path).read_text()
+            for name in names:
+                with self.subTest(component=relative_path, name=name):
+                    self.assertRegex(contract_source, rf"(?:property|signal|function)\s+[^\n;]*\b{name}\b")
 
 
 if __name__ == "__main__":
