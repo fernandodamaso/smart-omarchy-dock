@@ -495,7 +495,7 @@ class Store:
                     "Refusing Widget source under deployed/read-only Dockrail state: "
                     + str(forbidden)
                     + ". Custom Widget source must live in a separate directory/repository. "
-                    "Use `smartdock widget create ...` outside SmartDock, then `dockrail widget install <source>` "
+                    "Use `dockrail widget create ...` outside Dockrail, then `dockrail widget install <source>` "
                     "or `dockrail widget dev use <source>`.",
                     {"source": str(resolved), "forbiddenRoot": str(forbidden)},
                 )
