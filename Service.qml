@@ -1,22 +1,50 @@
 import QtQuick
 import "components"
 
-// Omarchy owns exactly one instance of this headless service for the plugin.
-// Overlay.qml consumes it through shell.serviceFor(...). The launcher-badge,
-// browser-profile and demand-driven Herdr services remain shared per plugin.
-DockLauncherBadgeService {
+// Omarchy owns one headless plugin service. Migration settles before any
+// provider that consumes Dockrail/SmartDock shared state can become active.
+Item {
   id: root
 
-  // Browser-window profile snapshots (FDM profile badges) ride the same
-  // plugin-owned singleton so multi-screen overlays share one provider.
-  property alias browserProfileService: browserProfiles
-  property alias herdrService: herdr
+  property alias migration: migration
+  readonly property bool migrationReady: migration.ready
+  readonly property bool migrationFailed: migration.failed
+  readonly property string migrationError: migration.errorText
 
-  DockBrowserProfileService {
-    id: browserProfiles
+  readonly property var launcherBadgeService: launcherLoader.item
+  readonly property var browserProfileService: browserLoader.item
+  readonly property var herdrService: herdrLoader.item
+
+  DockMigrationBootstrap {
+    id: migration
+    runtimeMode: "plugin"
   }
 
-  DockHerdrService {
-    id: herdr
+  Loader {
+    id: launcherLoader
+    active: migration.ready
+    sourceComponent: Component {
+      DockLauncherBadgeService {
+        dataRoot: migration.dataRoot
+      }
+    }
+  }
+
+  Loader {
+    id: browserLoader
+    active: migration.ready
+    sourceComponent: Component {
+      DockBrowserProfileService {
+        dataRoot: migration.dataRoot
+      }
+    }
+  }
+
+  Loader {
+    id: herdrLoader
+    active: migration.ready
+    sourceComponent: Component {
+      DockHerdrService {}
+    }
   }
 }
