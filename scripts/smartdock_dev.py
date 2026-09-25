@@ -49,7 +49,7 @@ def resolve_source(target, repo, cache):
 def validate_source(source):
     manifest = json.loads((source / 'manifest.json').read_text())
     if manifest.get('id') != PLUGIN_ID:
-        raise ValueError('Source is not a SmartDock plugin.')
+        raise ValueError('Source is not a Dockrail plugin.')
     entries = manifest.get('entryPoints', {})
     if not entries.get('overlay'):
         raise ValueError('Source has no overlay entry point.')
@@ -84,7 +84,7 @@ class Switcher:
             previous = self.active.readlink()
         else:
             if not self.active.is_dir() or self.active.is_symlink():
-                raise ValueError('An installed SmartDock directory is required before the first switch.')
+                raise ValueError('An installed Dockrail directory is required before the first switch.')
             self.active.rename(self.backup)
         try:
             self.link(source)
@@ -150,7 +150,7 @@ def reload_shell():
         except CliError:
             pass
         time.sleep(0.2)
-    raise ValueError('Dock did not return after reload. Check the candidate QML; use smartdock dev reset to recover.')
+    raise ValueError('Dock did not return after reload. Check the candidate QML; use dockrail dev reset to recover.')
 
 
 def describe(path):
@@ -164,7 +164,7 @@ def describe(path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, prog='smartdock dev')
+    parser = argparse.ArgumentParser(description=__doc__, prog='dockrail dev')
     commands = parser.add_subparsers(dest='command', required=True)
     use = commands.add_parser('use', help='Run a worktree or local branch on this desktop')
     use.add_argument('source', help='Checkout directory or local branch name')
@@ -199,7 +199,7 @@ def main():
             rows = json.loads(Transport().run(['qs', 'ipc', '--pid', str(instance['pid']),
                                               'call', '--', 'shell', 'listPlugins']))
             if not any(row['id'] == PLUGIN_ID and row.get('enabled') for row in rows):
-                raise ValueError('Enable the installed SmartDock plugin before selecting a local source.')
+                raise ValueError('Enable the installed Dockrail plugin before selecting a local source.')
             switcher.use(source)
             print('Running local source:\n' + describe(source))
         elif args.command == 'reset':
@@ -214,5 +214,5 @@ if __name__ == '__main__':
     try:
         main()
     except (OSError, ValueError, subprocess.SubprocessError, CliError) as error:
-        print('smartdock dev: ' + str(error), file=sys.stderr)
+        print('dockrail dev: ' + str(error), file=sys.stderr)
         sys.exit(1)
