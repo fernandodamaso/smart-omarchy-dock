@@ -100,6 +100,8 @@ TestCase {
     mousePress(input,20,30,Qt.LeftButton,Qt.NoModifier)
     mouseMove(input,85,35,30,Qt.LeftButton)
     verify(controller.rowDragActive)
+    verify(input.dragOwned)
+    verify(!input.hovered, "source hover styling is suppressed during a window drag")
     mouseRelease(input,85,35,Qt.LeftButton,Qt.NoModifier)
     compare(releases,1);compare(activations.length,0)
     verify(!controller.rowDragActive)

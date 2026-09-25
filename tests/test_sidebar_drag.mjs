@@ -72,16 +72,16 @@ assert.equal(model.hitTarget({x:20,y:55}, cardHits, viewport, 'window'), '',
 assert.equal(model.autoScrollStep(-1,100),0);assert.equal(model.autoScrollStep(101,100),0)
 assert.ok(model.autoScrollStep(2,100)<0);assert.ok(model.autoScrollStep(98,100)>0)
 assert.equal(model.autoScrollStep(50,100),0)
-// Drag-ghost travel: clamp by the leading artwork extent, not the proxy width.
+// Drag-ghost travel: clamp by the complete visible pill width.
 // (The caller passes pointer+12 cursor offset; the helper only clamps.)
-assert.equal(model.dragProxyOffset(200,252,22),200,'ghost follows the cursor while the icon stays painted')
-assert.equal(model.dragProxyOffset(300,252,22),230,'icon extent clamps at the panel edge')
+assert.equal(model.dragProxyOffset(200,252,168),84,'the full expanded pill stays inside the panel')
+assert.equal(model.dragProxyOffset(300,252,32),220,'rail ghost remains inside the panel')
 assert.equal(model.dragProxyOffset(-50,252,22),0,'pointer left of the panel parks at origin')
-assert.equal(model.dragProxyOffset(200,252,160),92,'full proxy width would pin the ghost near the left')
+assert.equal(model.dragProxyOffset(200,252,160),92,'full proxy width deliberately stays inside the viewport')
 assert.equal(model.dragProxyOffset(50,0,22),0,'hidden panel parks the proxy at origin')
 assert.equal(model.dragProxyOffset(NaN,252,22),0,'non-numeric pointer never displaces the proxy')
-assert.match(read('components/DockSidebarViewport.qml'),/dragProxyOffset\([\s\S]*?,\s*root\.width,\s*22\)/,
-  'ghost horizontal travel clamps by the 22px artwork, not the proxy width')
+assert.match(read('components/DockSidebarViewport.qml'),/dragProxyOffset\([\s\S]*?,\s*root\.width,\s*width\)/,
+  'ghost horizontal travel clamps by the complete visible pill width')
 console.log('SB-04 production drag policy and clipped hit geometry: PASS')
 
 // Source validity remains live while visual projection order is frozen.
@@ -232,15 +232,190 @@ console.log('SB-04 drag closure/address/topology/mode/resize/minimized regressio
   assert.match(rowSource,/showNewWorkspaceFooter/)
   assert.match(rowSource,/footerTargetHeight/)
   assert.match(rowSource,/New workspace/)
-  assert.match(rowSource,/iconName: "plus"/)
+  assert.match(rowSource,/iconName: root\.footerBlocked \? "ban" : "plus"/)
   assert.match(rowSource,/footerAccessibleLabel/)
   assert.match(viewportSource,/sectionSpanRect[\s\S]*?contentHeight \+ Style\.space\(5\)/,
     'workspace backgrounds end at content plus padding, excluding the footer')
   assert.match(viewportSource,/refreshDragTarget\(\)/,
     'stationary pointers retarget after geometry changes')
-  assert.match(read('components/DockSidebarController.qml'),/moveCapturedWindowToNewWorkspace\(session\.target, destination\.monitor\)/,
+  assert.match(read('components/DockSidebarController.qml'),/moveCapturedWindowToNewWorkspaceResult\(session\.target, destination\.monitor\)/,
     'sidebar drop completion hands new-workspace destinations to the shared host action')
   assert.match(read('components/DockSidebarController.qml'),/moveCapturedToplevels\(\[session\.target\], destination\.identity, true\)/,
     'sidebar window drops follow the moved window')
 }
 console.log('SB-04 follow, new-workspace allocation, monitor targeting and footer geometry: PASS')
+
+// R1 task 1: rejection is presentation only, source-kind aware, and never dispatches.
+function startWindowDrag(fixture) {
+  const ctl = fixture.controller
+  assert.equal(ctl.beginRowDrag(ctl.captureTarget(ctl.projection.rows[0].key)), true)
+  return ctl
+}
+function rejected(ctl, key, sourceKind, reason) {
+  assert.equal(ctl.updateRowDrag(key), false)
+  assert.equal(ctl.dragRejection?.sourceKind, sourceKind)
+  assert.equal(ctl.dragRejection?.reason, reason)
+  assert.equal(ctl.dragRejection?.key, key)
+  assert.equal(ctl.dragTarget, null)
+}
+{
+  const x = interactionFixture(), ctl = startWindowDrag(x)
+  rejected(ctl, 'ws', 'window', 'same-workspace')
+  assert.equal(ctl.dragRejection.identity, 'name:Design work')
+  x.actions.pinWindowToWorkspace(x.windows[0])
+  rejected(ctl, 'ws3', 'window', 'pinned')
+  assert.equal(ctl.dragRejection.identity, 'name:Design work', 'pin label describes the actual pin')
+  x.actions.unpinWindowFromWorkspace(x.windows[0])
+  assert.equal(ctl.updateRowDrag('ws3'), true)
+  assert.equal(ctl.dragRejection, null, 'rejected → valid clears feedback')
+  ctl.updateRowDrag('')
+  assert.equal(ctl.dragRejection, null, 'outside all geometry clears feedback')
+  x.workspaces.pop()
+  rejected(ctl, 'ws3', 'window', 'unknown-location')
+  assert.equal(ctl.dragRejection.identity, undefined, 'do not label an unknown destination')
+  rejected(ctl, 'deleted-row', 'window', 'stale')
+  x.handles[1].lastIpcObject.workspace = {id:1}
+  rejected(ctl, ctl.projection.rows[1].key, 'window', 'stale')
+  assert.equal(x.requests.length + x.batches.length, 0)
+  x.handles[0].address = '0x9'
+  assert.equal(ctl.updateRowDrag('ws3'), false)
+  assert.equal(ctl.dragSession, null, 'stale source cancels rather than keeping its ghost')
+  assert.equal(ctl.dragRejection, null)
+}
+{
+  const x = interactionFixture(), ctl = x.controller
+  ctl.projection.rows.push({kind:'monitor',key:'mon1',monitorIdentity:'1',connector:'HDMI-A-1'})
+  assert.equal(ctl.beginRowDrag(ctl.captureTarget('ws')), true)
+  rejected(ctl, 'mon1', 'workspace', 'same-monitor')
+  x.actions.pinWorkspaceToMonitor('name:Design work')
+  rejected(ctl, 'mon', 'workspace', 'workspace-pinned')
+  assert.equal(ctl.dragRejection.monitor, 'id:1')
+  x.actions.unpinWorkspaceFromMonitor('name:Design work')
+  // Existing classic policy cannot encode whitespace workspace selectors.
+  rejected(ctl, 'mon', 'workspace', 'unknown-location')
+  x.Hyprland.usingLua = true
+  assert.equal(ctl.updateRowDrag('mon'), true)
+  assert.equal(ctl.dragRejection, null)
+  ctl.projection.rows.push({kind:'monitor',key:'missing',monitorIdentity:'99'})
+  rejected(ctl, 'missing', 'workspace', 'unknown-location')
+  rejected(ctl, 'removed', 'workspace', 'stale')
+  assert.equal(x.requests.length + x.batches.length, 0)
+  ctl.cancelRowDrag('escape')
+  assert.equal(ctl.dragRejection, null)
+  assert.equal(ctl.beginRowDrag(ctl.captureTarget('ws')), true)
+  assert.equal(ctl.dragRejection, null)
+  rejected(ctl, 'mon1', 'workspace', 'same-monitor')
+  assert.equal(ctl.finishRowDrag('mon1'), false)
+  assert.equal(ctl.dragRejection, null)
+  assert.equal(ctl.finishRowDrag('mon'), false, 'release consumed even when rejected')
+  assert.equal(x.requests.length + x.batches.length, 0)
+}
+console.log('R1 source-kind rejection and stale-source cancellation: PASS')
+
+// Geometry selects exactly one intent before policy; rejected groups do not
+// fall through to monitor destinations behind the same rectangle.
+assert.equal(typeof model.hitWindowDrop, 'function')
+{
+  const bounds={x:0,y:0,width:100,height:140}
+  const groups=[{key:'own',kind:'workspace',workspaceIdentity:'id:1',monitorKey:'mon',x:9,y:30,width:82,height:50}]
+  const headers=[{key:'mon',kind:'monitor',headerOnly:true,monitorIdentity:'id:0',x:0,y:0,width:100,height:100}]
+  const footers=[{key:model.newWorkspaceFooterKey('id:0'),kind:'new-workspace',x:5,y:85,width:90,height:30}]
+  assert.equal(model.hitWindowDrop({x:10,y:40},footers,groups,headers,bounds,''),'own')
+  assert.equal(model.hitWindowDrop({x:10,y:90},footers,groups,headers,bounds,''),footers[0].key)
+  assert.equal(model.hitWindowDrop({x:10,y:130},footers,groups,[],bounds,''),'','Widget tail excluded')
+  assert.equal(model.hitWindowDrop({x:10,y:145},footers,groups,headers,bounds,''),'','clipped out')
+  groups[0].workspaceIdentity = ''
+  assert.equal(model.hitWindowDrop({x:10,y:40},footers,groups,headers,bounds,''),'own','geometric identity survives unavailable policy; no fallback')
+  assert.notEqual(footers[0].key,'ws:id:0')
+}
+const slotRows = {
+  mon:{kind:'monitor',key:'mon'},
+  w2:{key:'w2',monitorKey:'mon',workspaceIdentity:'id:2'},
+  w9:{key:'w9',monitorKey:'mon',workspaceIdentity:'id:9'},
+  wn:{key:'wn',monitorKey:'mon',workspaceIdentity:'name:Work'}
+}
+const slotSpans=[{kind:'monitor',key:'mon',firstKey:'mon',lastKey:'wn'},
+  ...['w2','w9','wn'].map(k=>({kind:'workspace',key:k,firstKey:k,lastKey:k}))]
+assert.equal(model.workspacePlaceholderSlot('id:3','mon',slotSpans,slotRows).beforeKey,'w9')
+assert.equal(model.workspacePlaceholderSlot('name:Alpha','mon',slotSpans,slotRows).beforeKey,'wn')
+assert.equal(model.workspacePlaceholderSlot('name:Zed','mon',slotSpans,slotRows).afterKey,'wn')
+assert.equal(model.workspacePlaceholderSlot('id:3','missing',slotSpans,slotRows),null)
+assert.equal(model.workspacePlaceholderSlot('id:3','empty',[{kind:'monitor',key:'empty',firstKey:'empty',lastKey:'empty'}],{}).afterKey,'empty')
+console.log('R1 first-hit priority and sorted numeric/named workspace placeholder: PASS')
+
+// R1 Task 4: headers use the active workspace's live owner, never repair it.
+for (const lua of [false, true]) {
+  const x = interactionFixture(), ctl = x.controller
+  x.Hyprland.usingLua = lua
+  startWindowDrag(x)
+  assert.equal(ctl.updateRowDrag('mon'), true, 'explicit header targets its active workspace')
+  assert.equal(ctl.dragTarget.kind, 'monitor')
+  assert.equal(ctl.dragTarget.identity, 'id:1')
+  assert.equal(ctl.dragTarget.monitor, 'id:0')
+  assert.equal(ctl.finishRowDrag('mon'), true)
+  assert.equal(x.batches.length+x.requests.length, 1)
+  assert.doesNotMatch(JSON.stringify([x.batches,x.requests]), /moveworkspacetomonitor|workspace\.move/,
+    'an existing header destination must never be relocated')
+}
+for (const when of ['hover', 'release', 'dispatch']) {
+  const x = interactionFixture(), ctl = x.controller
+  x.monitors[0].activeWorkspace = {id:3}
+  startWindowDrag(x)
+  if (when !== 'hover') assert.equal(ctl.updateRowDrag('mon'), true)
+  if (when === 'dispatch') {
+    const cancel = ctl.cancelRowDrag
+    ctl.cancelRowDrag = reason => { const result = cancel(reason); x.workspaces[2].monitorID=1; return result }
+  } else x.workspaces[2].monitorID=1 // stale header still claims workspace 3 on DP-1
+  if (when === 'hover') rejected(ctl, 'mon', 'window', 'owner-mismatch')
+  assert.equal(ctl.finishRowDrag('mon'), false, when + ' owner conflict is refused')
+  assert.equal(x.requests.length+x.batches.length, 0)
+}
+for (const invalid of [
+  x => { x.monitors[0].activeWorkspace = null },
+  x => { x.monitors[0].activeWorkspace = {id:99} },
+  x => { x.monitors[0].activeWorkspace = {id:3} },
+  x => { x.monitors.pop() }
+]) {
+  const x=interactionFixture(), ctl=x.controller
+  startWindowDrag(x); ctl.updateRowDrag('mon'); invalid(x)
+  assert.equal(ctl.finishRowDrag('mon'), false, 'release repeats active identity and topology checks')
+  assert.equal(x.requests.length+x.batches.length, 0)
+}
+{
+  const x=interactionFixture(), ctl=x.controller
+  startWindowDrag(x); x.actions.pinWindowToWorkspace(x.windows[0])
+  rejected(ctl, 'mon', 'window', 'pinned'); assert.equal(ctl.finishRowDrag('mon'), false)
+  assert.equal(x.batches.length, 0)
+}
+for (const minimized of [false, true]) {
+  const x=interactionFixture(), ctl=x.controller
+  x.handles[0].lastIpcObject.workspace = {id:3}; x.handles[0].lastIpcObject.monitor=0
+  ctl.projection.rows[0].workspaceIdentity='id:3'; ctl.projection.rows[0].monitorIdentity='0'
+  if (minimized) {
+    x.actions.minimizedOrigins={'0x1':{workspace:'id:3', monitor:'id:0'}}
+    x.handles[0].lastIpcObject.workspace={name:'special:smartdock-minimized'}
+  }
+  startWindowDrag(x)
+  assert.equal(ctl.updateRowDrag('mon'), true, 'provisional same-monitor other-workspace policy')
+  assert.equal(ctl.finishRowDrag('mon'), true)
+  assert.equal(x.batches.length, 1)
+}
+{
+  const x=interactionFixture(), ctl=x.controller
+  x.Hyprland.usingLua=true
+  x.workspaces.push({name:'Docs',monitorID:0}); x.monitors[0].activeWorkspace={name:'Docs'}
+  startWindowDrag(x); assert.equal(ctl.updateRowDrag('mon'),true)
+  assert.equal(ctl.dragTarget.identity,'name:Docs'); assert.equal(ctl.finishRowDrag('mon'),true)
+}
+{
+  const x=interactionFixture(), ctl=x.controller
+  x.handles[0].lastIpcObject.workspace={id:1}; x.handles[0].lastIpcObject.monitor=0
+  ctl.projection.rows[0].workspaceIdentity='id:1'
+  startWindowDrag(x); rejected(ctl,'mon','window','same-workspace')
+  assert.equal(ctl.finishRowDrag('mon'),false)
+}
+const headerHit={...cardHits[0], headerOnly:true, height:20}
+assert.equal(model.hitTarget({x:20,y:12},[headerHit],viewport,'window'),'mon-dp1')
+assert.equal(model.hitTarget({x:20,y:55},[headerHit],viewport,'window'),'')
+assert.equal(model.hitTarget({x:20,y:55},cardHits,viewport,'window'),'')
+console.log('R1 live-owner monitor header drops: PASS')

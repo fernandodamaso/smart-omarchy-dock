@@ -37,7 +37,7 @@ Item {
   function syncWorkspaceHover(active) {
     if (!root.viewport) return
     if (active) {
-      if (!root.workspaceHeader) return
+      if (!root.workspaceHeader || root.controller.rowDragActive) return
       var key = root.rowKey
       if (!key) return
       root.viewport.hoveredWorkspaceKey = key
@@ -72,13 +72,13 @@ Item {
     root.clearPublishedWorkspaceHover()
   }
 
-  readonly property bool hovered: hover.hovered
+  readonly property bool hovered: !root.controller.rowDragActive && hover.hovered
   readonly property bool pressed: plainTap.pressed || controlTap.pressed
 
   HoverHandler {
     id: hover
     enabled: root.inputEnabled
-    cursorShape: Qt.ArrowCursor
+    cursorShape: root.dragOwned ? Qt.ClosedHandCursor : Qt.ArrowCursor
     onHoveredChanged: root.syncWorkspaceHover(hovered)
   }
 
@@ -121,11 +121,13 @@ Item {
   DragHandler {
     id: drag
     target: null
+    cursorShape: Qt.ClosedHandCursor
     enabled: root.inputEnabled && root.dragEnabled
     acceptedButtons: Qt.LeftButton
     onActiveChanged: if (active) {
       root.consumed = true
-      root.dragOwned = root.controller.beginRowDrag(root.pressedTarget, root.pressedConnector)
+      root.dragOwned = root.controller.beginRowDrag(root.pressedTarget, root.pressedConnector,
+        root.viewport ? root.viewport.dropSurfaceGeneration : 0)
       if (root.dragOwned) root.dragMoved(centroid.scenePosition)
     }
     onTranslationChanged: if (active && root.dragOwned) root.dragMoved(centroid.scenePosition)

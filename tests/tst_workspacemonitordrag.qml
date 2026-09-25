@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../components" as Components
+import "../components/DockSidebarInteractionModel.js" as SidebarInteraction
 
 TestCase {
   id: testCase
@@ -584,4 +585,31 @@ TestCase {
     scene.drag.cancel("test cleanup")
     verifyClean(scene)
   }
+  function test_sidebar_numeric_named_placeholder_uses_workspace_sort() {
+    var rows = {n2:{monitorKey:"m",workspaceIdentity:"id:2"},
+      n9:{monitorKey:"m",workspaceIdentity:"id:9"},
+      named:{monitorKey:"m",workspaceIdentity:"name:Work"}}
+    var spans = [{kind:"monitor",key:"m",firstKey:"m",lastKey:"named"}]
+    ;["n2","n9","named"].forEach(function(key) {
+      spans.push({kind:"workspace",key:key,firstKey:key,lastKey:key})
+    })
+    compare(SidebarInteraction.workspacePlaceholderSlot("id:3","m",spans,rows).beforeKey,"n9")
+    compare(SidebarInteraction.workspacePlaceholderSlot("name:Alpha","m",spans,rows).beforeKey,"named")
+    compare(SidebarInteraction.workspacePlaceholderSlot("name:Zed","m",spans,rows).afterKey,"named")
+  }
+
+  function test_sidebar_dashed_slot_keeps_geometry_when_recolored() {
+    var component = Qt.createComponent("../components/DockSidebarDropSlot.qml")
+    compare(component.status, Component.Ready, component.errorString())
+    var slot = component.createObject(testCase,{width:200,height:32,lineColor:"#c0c0c0",badgeX:7})
+    verify(slot !== null)
+    slot.lineColor = "#ff0000"
+    wait(0)
+    compare(slot.width,200)
+    compare(slot.height,32)
+    compare(slot.badgeX,7)
+    verify(slot.showBadge)
+    slot.destroy()
+  }
+
 }

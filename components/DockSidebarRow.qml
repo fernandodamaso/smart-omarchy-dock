@@ -402,14 +402,18 @@ Item {
     return String(row.monitorIdentity || "")
   }
   readonly property string footerAccessibleLabel: "New workspace on " + root.footerMonitorName
-  readonly property real gapBefore: rowMetrics.gapBefore
+  readonly property real placeholderBefore: root.viewport && typeof root.viewport.placeholderBefore === "function"
+    ? root.viewport.placeholderBefore(root.rowKey) : 0
+  readonly property real placeholderAfter: root.viewport && typeof root.viewport.placeholderAfter === "function"
+    ? root.viewport.placeholderAfter(root.rowKey) : 0
+  readonly property real gapBefore: rowMetrics.gapBefore + root.placeholderBefore
   readonly property real baseGapAfter: rowMetrics.gapAfter
-  readonly property real gapAfter: root.showNewWorkspaceFooter
-    ? rowMetrics.gapAfter + root.footerExtraHeight : rowMetrics.gapAfter
-  readonly property real contentY: rowMetrics.contentY
+  readonly property real gapAfter: rowMetrics.gapAfter + root.placeholderAfter
+    + (root.showNewWorkspaceFooter ? root.footerExtraHeight : 0)
+  readonly property real contentY: rowMetrics.contentY + root.placeholderBefore
   readonly property real sectionGap: gapBefore
   readonly property real contentHeight: rowMetrics.contentHeight
-  readonly property real computedHeight: rowMetrics.height
+  readonly property real computedHeight: rowMetrics.height + root.placeholderBefore + root.placeholderAfter
     + (root.showNewWorkspaceFooter ? root.footerExtraHeight : 0)
   readonly property string monitorOrdinal: String(monitorSectionIndex + 1)
   objectName: "sidebar-row:" + rowKey
@@ -432,7 +436,7 @@ Item {
     if (activeFocus) root.controller.focusedRowKey = root.rowKey
     else root.pointerFocused = false
   }
-  opacity: root.controller.dragSession && root.controller.dragSession.target.key === root.rowKey ? 0.4 : 1
+  opacity: InteractionModel.dragSourceOpacity(root.row, root.controller.dragSession)
 
   // Right edge reserved for mute / fold chevrons. Matches fold/tabsFold
   // anchors.rightMargin (workspace-card inset), not left padding.
@@ -479,6 +483,12 @@ Item {
     && root.herdrAnimationEligible
   readonly property bool dropTarget: root.controller.dragTarget
     && root.controller.dragTarget.key === root.rowKey
+  readonly property bool workspaceDropTarget: root.windowFooterDrag && root.controller.dragTarget
+    && root.controller.dragTarget.identity === root.row.workspaceIdentity
+  readonly property bool footerBlocked: root.windowFooterDrag && root.controller.windowActions
+    && root.controller.windowActions.windowWorkspacePin(root.controller.dragSession.target.toplevel) !== null
+  readonly property color footerColor: root.footerBlocked ? Color.urgent
+    : root.footerDropTarget ? Color.accent : Color.muted
   // Persistent included-alert window-name nudge (label Translate only).
   property int attentionNudgeX: 0
   DockHerdrStatusColors { id: herdrStatusColors }
@@ -499,11 +509,11 @@ Item {
   // Monitor headings stay visually passive: tooltip via passiveHover, active
   // border + workspace-drag highlight live on the section card in the viewport.
   readonly property color rowFill: InteractionModel.composeRowFill({
-    dropTarget: root.kind === "monitor" ? false : root.dropTarget,
-    pressed: root.kind === "monitor" ? false : root.input.pressed,
+    dropTarget: !root.windowFooterDrag && root.kind !== "monitor" && root.dropTarget,
+    pressed: !root.controller.rowDragActive && root.kind !== "monitor" && root.input.pressed,
     activeFocus: root.keyboardFocusVisible,
-    hovered: root.kind === "monitor" ? false
-      : (root.input.hovered || passiveHover.hovered),
+    hovered: !root.controller.rowDragActive && root.kind !== "monitor"
+      && (root.input.hovered || passiveHover.hovered),
     navigable: InteractionModel.rowHoverFillEligible(root.kind, root.herdrActionable),
     persistentSelected: root.persistentSelected,
     persistentContext: root.persistentContext,
@@ -533,7 +543,8 @@ Item {
       anchors.leftMargin: root.selectionLeft
       anchors.rightMargin: root.selectionRight
       radius: Style.cornerRadius
-      color: root.rowFill
+      color: root.viewport && root.viewport.dropFlashKey === root.rowKey
+        ? Qt.tint(root.rowFill, Util.alpha(Color.accent, 0.22 * root.viewport.dropFlashOpacity)) : root.rowFill
       borderSpec: root.keyboardFocusVisible
         ? Border.controlSpec("focus", Color.foreground, Color.accent) : Border.none()
       Behavior on color {
@@ -680,7 +691,7 @@ Item {
       height: Style.space(16)
       iconName: "monitor"
       iconSize: Style.space(16)
-      tint: Color.foreground
+      tint: root.dropTarget ? Color.accent : Color.foreground
       opacity: 0.85
     }
 
@@ -694,7 +705,7 @@ Item {
       radius: Style.space(4)
       color: "transparent"
       border.width: 1
-      border.color: root.row.focused
+      border.color: root.workspaceDropTarget || root.row.focused
         ? Color.accent : Util.alpha(Color.foreground, 0.24)
       Text {
         id: badgeLabel
@@ -704,7 +715,7 @@ Item {
         textFormat: Text.PlainText
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
-        color: root.row.focused ? Color.accent : Color.foreground
+        color: root.workspaceDropTarget || root.row.focused ? Color.accent : Color.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         font.bold: true
@@ -734,7 +745,7 @@ Item {
       color: "transparent"
       border.width: 1
       border.color: ((leadingWorkspaceBadge.activeFocus && !leadingWorkspaceBadge.pointerFocused)
-          || (root.leadingWorkspace && root.leadingWorkspace.focused))
+          || root.workspaceDropTarget || (root.leadingWorkspace && root.leadingWorkspace.focused))
         ? Color.accent : Util.alpha(Color.foreground, 0.24)
       Text {
         id: leadingWorkspaceBadgeLabel
@@ -744,7 +755,7 @@ Item {
         textFormat: Text.PlainText
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
-        color: root.leadingWorkspace && root.leadingWorkspace.focused
+        color: root.workspaceDropTarget || (root.leadingWorkspace && root.leadingWorkspace.focused)
           ? Color.accent : Color.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -955,7 +966,7 @@ Item {
         elide: Text.ElideRight
         wrapMode: Text.NoWrap
         maximumLineCount: 1
-        color: Color.foreground
+        color: root.dropTarget ? Color.accent : Color.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall
         font.bold: true
@@ -1410,7 +1421,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         iconName: "monitor"
         iconSize: 16
-        tint: root.row.focused ? Color.accent : Color.foreground
+        tint: root.dropTarget || root.row.focused ? Color.accent : Color.foreground
         opacity: 0.85
       }
       Text {
@@ -1418,7 +1429,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         text: root.monitorOrdinal
         textFormat: Text.PlainText
-        color: root.row.focused ? Color.accent : Color.muted
+        color: root.dropTarget || root.row.focused ? Color.accent : Color.muted
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         font.bold: true
@@ -1639,14 +1650,18 @@ Item {
     z: 3
     Accessible.role: Accessible.Button
     Accessible.name: root.footerAccessibleLabel
-    Ui.BorderSurface {
+    opacity: root.showNewWorkspaceFooter ? 1 : 0
+    Behavior on opacity {
+      NumberAnimation { duration: root.animationsEnabled ? 120 : 0; easing.type: Easing.OutCubic }
+    }
+    DockSidebarDropSlot {
       anchors.fill: parent
-      radius: root.viewport && root.viewport.cardRadius !== undefined
-        ? root.viewport.cardRadius : Style.cornerRadius
-      color: root.footerDropTarget
-        ? Style.pressedFillFor(Color.accent, Color.accent)
-        : Util.alpha(Color.foreground, 0.06)
-      borderSpec: Border.none()
+      lineColor: root.footerColor
+      fillColor: root.footerDropTarget && !root.footerBlocked
+        ? Style.pressedFillFor(Color.accent, Color.accent) : "transparent"
+      badgeX: root.collapsed ? (width - 22) / 2 : Style.space(7)
+      badgeSize: 22
+      showBadge: true
     }
     DockLucideIcon {
       id: footerPlus
@@ -1654,19 +1669,19 @@ Item {
       height: 14
       anchors.verticalCenter: parent.verticalCenter
       x: root.collapsed ? Math.round((parent.width - width) / 2) : Style.space(11)
-      iconName: "plus"
+      iconName: root.footerBlocked ? "ban" : "plus"
       iconSize: 14
-      tint: root.footerDropTarget ? Color.accent : Util.alpha(Color.foreground, 0.75)
+      tint: root.footerColor
     }
     Text {
       visible: !root.collapsed
       anchors.verticalCenter: parent.verticalCenter
-      x: footerPlus.x + footerPlus.width + Style.space(8)
+      x: footerPlus.x + footerPlus.width + Style.space(12)
       width: Math.max(0, parent.width - x - Style.space(8))
       text: "New workspace"
       textFormat: Text.PlainText
       elide: Text.ElideRight
-      color: root.footerDropTarget ? Color.accent : Color.foreground
+      color: root.footerColor
       font.family: Style.font.family
       font.pixelSize: Style.font.bodySmall
       renderType: Text.NativeRendering
