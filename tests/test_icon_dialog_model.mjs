@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import vm from "node:vm"
+import test from "node:test"
 import { loadModel, plain, read } from "./host_harness.mjs"
 
 const DockIconModel = loadModel("DockIconModel")
@@ -75,20 +76,20 @@ assert.deepEqual(plain(DockIconModel.recentIconSources(null)), [])
 
 // Preview flags which open windows a choice would change.
 const windows = [
-  { title: "solar — nvim" },
-  { title: "~/Projects/smart-omarchy-dock", profileKey: "Profile 1" },
-  { title: "SOLAR-api · logs", profileKey: "Profile 1" },
-  { title: "htop" }
+  { appId: "com.mitchellh.ghostty", title: "solar — nvim" },
+  { appId: "com.mitchellh.ghostty", title: "~/Projects/smart-omarchy-dock", profileKey: "Profile 1" },
+  { appId: "com.mitchellh.ghostty", title: "SOLAR-api · logs", profileKey: "Profile 1" },
+  { appId: "com.mitchellh.ghostty", title: "htop" }
 ]
 assert.deepEqual(plain(DockIconModel.previewMatches(windows, { kind: "app" })),
   { flags: [true, true, true, true], count: 4 })
 assert.deepEqual(plain(DockIconModel.previewMatches(windows,
-  { kind: "window", titlePattern: "*solar*" })),
+  { kind: "window", appId: "com.mitchellh.ghostty", titlePattern: "*solar*" })),
   { flags: [true, false, true, false], count: 2 })
 assert.deepEqual(plain(DockIconModel.previewMatches(windows,
   { kind: "profile", profileKey: "Profile 1" })),
   { flags: [false, true, true, false], count: 2 })
-assert.equal(DockIconModel.previewMatches(windows, { kind: "window", titlePattern: "" }).count, 0)
+assert.equal(DockIconModel.previewMatches(windows, { kind: "window", appId: "com.mitchellh.ghostty", titlePattern: "" }).count, 0)
 assert.equal(DockIconModel.previewMatches(null, { kind: "app" }).count, 0)
 
 // One save covers a scope change: remove what applied, set the new choice.
@@ -108,7 +109,7 @@ const appIcon = { kind: "app", key: "com.mitchellh.ghostty", source: "file:///ic
 
 let change = ConfigModel.iconChangeIntent(base, {
   remove: solarRule,
-  set: { kind: "app", key: "com.mitchellh.ghostty", source: "/icons/new.svg" }
+  set: { kind: "app", key: "com.mitchellh.ghostty", source: "/icons/new.svg", expected: appIcon.source }
 })
 assert.equal(change.ok, true)
 assert.deepEqual(Array.from(change.changedKeys).sort(), ["iconOverrides", "windowIconOverrides"])
@@ -121,7 +122,7 @@ assert.deepEqual(plain(change.settings.iconOverrides),
 change = ConfigModel.iconChangeIntent(base, {
   remove: solarRule,
   set: { kind: "window", appId: "com.mitchellh.ghostty", titlePattern: "*sol*",
-    source: "/icons/sun.svg" }
+    source: "/icons/sun.svg", expected: null }
 })
 assert.equal(change.ok, true)
 assert.deepEqual(plain(change.settings.windowIconOverrides)[0],
@@ -130,7 +131,7 @@ assert.deepEqual(plain(change.settings.windowIconOverrides)[0],
 assert.deepEqual(Array.from(change.changedKeys), ["windowIconOverrides"])
 
 change = ConfigModel.iconChangeIntent(base, {
-  set: { kind: "profile", key: "google-chrome@profile:Profile 1", source: "/icons/work.svg" }
+  set: { kind: "profile", key: "google-chrome@profile:Profile 1", source: "/icons/work.svg", expected: "" }
 })
 assert.equal(change.ok, true)
 assert.equal(change.settings.iconOverrides["google-chrome@profile:Profile 1"], "file:///icons/work.svg")
@@ -141,7 +142,7 @@ assert.deepEqual(plain(change.settings.iconOverrides), { legacy: "/keep.svg" })
 
 const stale = ConfigModel.iconChangeIntent(base, {
   remove: { ...appIcon, source: "file:///icons/other.png" },
-  set: { kind: "app", key: "com.mitchellh.ghostty", source: "/icons/new.svg" }
+  set: { kind: "app", key: "com.mitchellh.ghostty", source: "/icons/new.svg", expected: appIcon.source }
 })
 assert.equal(stale.ok, false)
 assert.equal(stale.errorCode, "E_CONFLICT", "a concurrent app icon edit is refused")
@@ -150,13 +151,13 @@ assert.equal(ConfigModel.iconChangeIntent(base, {
 }).errorCode, "E_CONFLICT", "a concurrent title rule edit is refused")
 
 const failedSet = ConfigModel.iconChangeIntent(base, {
-  remove: appIcon, set: { kind: "app", key: "com.mitchellh.ghostty", source: "https://x/y.svg" }
+  remove: appIcon, set: { kind: "app", key: "com.mitchellh.ghostty", source: "https://x/y.svg", expected: appIcon.source }
 })
 assert.equal(failedSet.ok, false, "an invalid new image rejects the whole save")
 assert.deepEqual(Array.from(failedSet.changedKeys), [])
 
 assert.deepEqual(Array.from(ConfigModel.iconChangeIntent(base, {
-  remove: appIcon, set: { kind: "app", key: "com.mitchellh.ghostty", source: "/icons/ghostty.png" }
+  remove: appIcon, set: { kind: "app", key: "com.mitchellh.ghostty", source: "/icons/ghostty.png", expected: appIcon.source }
 }).changedKeys), [], "saving the same image and scope writes nothing")
 assert.deepEqual(Array.from(ConfigModel.iconChangeIntent(base, {}).changedKeys), [])
 assert.equal(ConfigModel.iconChangeIntent(base, { set: { kind: "bogus" } }).ok, false)
@@ -184,19 +185,20 @@ const ghosttyApp = { kind: "app", key: "com.mitchellh.ghostty", source: "file://
 const none = { kind: "none", key: "", source: "" }
 let save = DockIconModel.iconChangeArguments(none, { ...ids, kind: "app", source: "/i/new.svg" })
 assert.deepEqual(plain(save), { ok: true, error: "", unchanged: false, args: {
-  remove: null, set: { kind: "app", key: "com.mitchellh.ghostty", source: "/i/new.svg" } } })
-save = DockIconModel.iconChangeArguments(sunRule, { ...ids, kind: "app", source: "/i/new.svg" })
+  remove: null, set: { kind: "app", key: "com.mitchellh.ghostty", source: "/i/new.svg", expected: "" } } })
+save = DockIconModel.iconChangeArguments(sunRule, { ...ids, kind: "app", source: "/i/new.svg" }, settings)
 assert.deepEqual(plain(save.args.remove), plain(sunRule), "a wider scope replaces the title rule")
 save = DockIconModel.iconChangeArguments(ghosttyApp, { ...ids, kind: "window",
-  titleMode: "contains", titleText: " solar ", source: "/i/sun.svg" })
+  titleMode: "contains", titleText: " solar ", source: "/i/sun.svg" }, settings)
 assert.equal(save.args.remove, null, "a narrower title rule keeps the whole-app icon")
 assert.deepEqual(plain(save.args.set), { kind: "window", appId: "com.mitchellh.ghostty",
-  titlePattern: "*solar*", source: "/i/sun.svg" })
+  titlePattern: "*solar*", source: "/i/sun.svg",
+  expected: plain(DockIconModel.windowIconTarget(settings, ids.appId, "*solar*")) })
 save = DockIconModel.iconChangeArguments(sunRule, { ...ids, kind: "window",
-  titleMode: "contains", titleText: "SOLAR", source: "file:///icons/sun.svg" })
+  titleMode: "contains", titleText: "SOLAR", source: "file:///icons/sun.svg" }, settings)
 assert.equal(save.unchanged, true, "same scope, pattern and image is unchanged")
 save = DockIconModel.iconChangeArguments(sunRule, { ...ids, kind: "window",
-  titleMode: "exact", titleText: " solar* ", source: "file:///icons/sun.svg" })
+  titleMode: "exact", titleText: " solar* ", source: "file:///icons/sun.svg" }, settings)
 assert.equal(save.unchanged, false)
 assert.equal(save.args.set.titlePattern, "solar*", "exact patterns are saved verbatim")
 assert.deepEqual(plain(save.args.remove), plain(sunRule))
@@ -209,31 +211,31 @@ assert.equal(DockIconModel.iconChangeArguments(none, { ...ids, kind: "app",
 save = DockIconModel.iconChangeArguments(none, { desktopId: "google-chrome", profileKey: "Profile 1",
   kind: "profile", source: "/w.svg" })
 assert.deepEqual(plain(save.args.set), { kind: "profile", key: "google-chrome@profile:Profile 1",
-  source: "/w.svg" })
+  source: "/w.svg", expected: "" })
 assert.equal(DockIconModel.iconChangeArguments(none, { desktopId: "google-chrome",
   kind: "profile", source: "/w.svg" }).ok, false)
-save = DockIconModel.iconChangeArguments(ghosttyApp, { ...ids, kind: "app", source: "" })
+save = DockIconModel.iconChangeArguments(ghosttyApp, { ...ids, kind: "app", source: "" }, settings)
 assert.deepEqual(plain(save.args), { remove: ghosttyApp, set: null }, "Default removes the override")
 assert.equal(DockIconModel.iconChangeArguments(none, { ...ids, kind: "app", source: "" }).unchanged, true)
 // The produced arguments save through the host intent in one step.
-save = DockIconModel.iconChangeArguments(solarRule, { ...ids, kind: "app", source: "/icons/new.svg" })
+save = DockIconModel.iconChangeArguments(solarRule, { ...ids, kind: "app", source: "/icons/new.svg" }, base)
 assert.equal(ConfigModel.iconChangeIntent(base, save.args).ok, true)
 
-assert.equal(DockIconModel.previewSummary({ kind: "window", hasPattern: true, count: 2, total: 4,
-  appName: "Ghostty" }), "Preview: 2 of 4 open Ghostty windows match, and new windows with a matching title will too.")
-assert.equal(DockIconModel.previewSummary({ kind: "app", count: 4, total: 4, appName: "Ghostty" }),
-  "Preview: all 4 open Ghostty windows change, and new ones will too.")
-assert.equal(DockIconModel.previewSummary({ kind: "app", count: 1, total: 1, appName: "Ghostty" }),
-  "Preview: the open Ghostty window changes, and new ones will too.")
+assert.equal(DockIconModel.previewSummary({ kind: "window", hasPattern: true, changed: 2, total: 4,
+  appName: "Ghostty" }), "Preview: 2 of 4 open Ghostty windows change. New matching windows use this setting too.")
+assert.equal(DockIconModel.previewSummary({ kind: "app", changed: 4, total: 4, appName: "Ghostty" }),
+  "Preview: 4 of 4 open Ghostty windows change. New matching windows use this setting too.")
+assert.equal(DockIconModel.previewSummary({ kind: "app", changed: 1, total: 1, appName: "Ghostty" }),
+  "Preview: 1 of 1 open Ghostty window changes. New matching windows use this setting too.")
 assert.equal(DockIconModel.previewSummary({ kind: "window", hasPattern: false, total: 3 }),
   "Type part of a window title to choose which windows change.")
-assert.equal(DockIconModel.previewSummary({ kind: "profile", count: 1, total: 2, appName: "Chrome",
-  profileName: "Work" }), "Preview: 1 of 2 open Chrome windows use the Work profile, and new ones will too.")
+assert.equal(DockIconModel.previewSummary({ kind: "profile", changed: 1, total: 2, appName: "Chrome" }),
+  "Preview: 1 of 2 open Chrome windows changes. New matching windows use this setting too.")
 assert.equal(DockIconModel.previewSummary({ kind: "app", total: 0 }), "")
-assert.equal(DockIconModel.previewSummary({ kind: "app", resetting: true, count: 3, total: 3,
-  appName: "Ghostty" }), "Preview: 3 of 3 open Ghostty windows go back to the app's own icon.")
-assert.equal(DockIconModel.previewSummary({ kind: "none", resetting: true, count: 0, total: 2,
-  appName: "Ghostty" }), "Preview: no open Ghostty window uses a custom icon.")
+assert.equal(DockIconModel.previewSummary({ kind: "app", resetting: true, changed: 3, total: 3,
+  appName: "Ghostty", afterKind: "none" }), "Preview: 3 of 3 open Ghostty windows go back to the app's own icon.")
+assert.equal(DockIconModel.previewSummary({ kind: "none", resetting: true, changed: 0, total: 2,
+  appName: "Ghostty" }), "Preview: no open Ghostty windows change.")
 
 // omarchy-file-select output: first non-empty line, path or file URI.
 assert.equal(DockIconModel.chosenFileSource("/home/u/icons/app.png\n"), "file:///home/u/icons/app.png")
@@ -320,3 +322,210 @@ assert.equal(dialog.visible, false, "a late chooser result does not reopen a clo
 assert.equal(dialog.selectedSource, "file:///a/recent.svg")
 
 console.log("icon dialog model tests passed")
+
+// PR117 review: every destination is compared with the opening snapshot.
+const reviewApp = 'com.mitchellh.ghostty'
+const reviewChrome = 'google-chrome'
+const reviewRule = (text, source = '/icons/rule.svg', appId = reviewApp) =>
+  ({ appId, titlePattern: `*${text}*`, source })
+const reviewConfig = (icons = {}, rules = []) =>
+  ({ ...plain(defaults), iconOverrides: icons, windowIconOverrides: rules })
+const reviewChoice = (extra = {}) => ({ desktopId: reviewApp, appId: reviewApp,
+  kind: 'app', source: '/icons/new.svg', titleMode: 'contains', titleText: '', ...extra })
+function reviewBuild(opened, choice, target = {}) {
+  const current = DockIconModel.currentIconTarget({ settings: opened,
+    desktopId: choice.desktopId, profileKey: choice.profileKey, ...target })
+  return DockIconModel.iconChangeArguments(current, choice, opened)
+}
+function expectConflict(opened, live, choice, target = {}) {
+  const built = reviewBuild(opened, choice, target)
+  assert.equal(built.ok, true)
+  const before = JSON.stringify(live)
+  const result = ConfigModel.iconChangeIntent(live, built.args)
+  assert.equal(result.ok, false)
+  assert.equal(result.errorCode, 'E_CONFLICT')
+  assert.deepEqual(Array.from(result.changedKeys), [])
+  assert.equal(JSON.stringify(live), before, 'a conflict mutates neither collection')
+}
+
+for (const kind of ['app', 'profile']) {
+  test(`review: absent ${kind} destination created before save is a conflict`, () => {
+    const key = kind === 'app' ? reviewApp : reviewApp + '@profile:Profile 1'
+    expectConflict(reviewConfig(), reviewConfig({ [key]: '/icons/concurrent.svg' }),
+      reviewChoice({ kind, profileKey: 'Profile 1' }))
+  })
+}
+test('review: widening a title rule checks a newly created app destination', () => {
+  const opened = reviewConfig({}, [reviewRule('solar')])
+  expectConflict(opened, reviewConfig({ [reviewApp]: '/icons/concurrent.svg' }, opened.windowIconOverrides),
+    reviewChoice(), { appId: reviewApp, title: 'solar editor' })
+})
+test('review: widening an unchanged profile to its existing app destination succeeds', () => {
+  const profile = reviewChrome + '@profile:Profile 1'
+  const opened = reviewConfig({ [reviewChrome]: '/icons/app.svg', [profile]: '/icons/profile.svg' })
+  const built = reviewBuild(opened, reviewChoice({ desktopId: reviewChrome,
+    appId: reviewChrome, profileKey: 'Profile 1' }))
+  assert.equal(built.args.set.expected, 'file:///icons/app.svg')
+  const saved = ConfigModel.iconChangeIntent(opened, built.args)
+  assert.equal(saved.ok, true)
+  assert.equal(saved.settings.iconOverrides[profile], undefined)
+  assert.equal(saved.settings.iconOverrides[reviewChrome], 'file:///icons/new.svg')
+})
+for (const entry of ['app-page', 'unmatched-window']) {
+  test(`review: ${entry} edits the existing destination rule in place`, () => {
+    const opened = reviewConfig({ [reviewApp]: '/icons/app.svg' },
+      [reviewRule('first'), reviewRule('solar'), reviewRule('last')])
+    const built = reviewBuild(opened, reviewChoice({ kind: 'window', titleText: 'solar' }),
+      entry === 'app-page' ? {} : { appId: reviewApp, title: 'htop' })
+    assert.equal(built.ok, true)
+    const saved = ConfigModel.iconChangeIntent(opened, built.args)
+    assert.equal(saved.ok, true)
+    assert.deepEqual(Array.from(saved.settings.windowIconOverrides, r => r.titlePattern),
+      ['*first*', '*solar*', '*last*'])
+    assert.equal(saved.settings.windowIconOverrides[1].source, 'file:///icons/new.svg')
+    assert.equal(saved.settings.iconOverrides[reviewApp], '/icons/app.svg')
+  })
+}
+for (const change of ['deleted', 'changed']) {
+  test(`review: destination title rule ${change} after opening is a conflict`, () => {
+    const opened = reviewConfig({}, [reviewRule('solar')])
+    const live = reviewConfig({}, change === 'deleted' ? [] : [reviewRule('solar', '/icons/concurrent.svg')])
+    expectConflict(opened, live, reviewChoice({ kind: 'window', titleText: 'solar' }))
+  })
+}
+test('review: renaming A to existing B refuses a collision rather than merging', () => {
+  const opened = reviewConfig({}, [reviewRule('solar'), reviewRule('lunar')])
+  const current = DockIconModel.currentIconTarget({ settings: opened, desktopId: reviewApp,
+    appId: reviewApp, title: 'solar' })
+  const built = DockIconModel.iconChangeArguments(current,
+    reviewChoice({ kind: 'window', titleText: 'lunar' }), opened)
+  assert.equal(built.ok, false)
+  assert.match(built.error, /Another title rule already uses/)
+  const destination = DockIconModel.currentIconTarget({ settings: opened,
+    desktopId: reviewApp, appId: reviewApp, title: 'lunar' })
+  const forced = ConfigModel.iconChangeIntent(opened, { remove: current,
+    set: { kind: 'window', ...reviewRule('lunar', '/icons/new.svg'), expected: destination } })
+  assert.equal(forced.ok, false)
+  assert.notEqual(forced.errorCode, 'E_CONFLICT')
+  assert.match(forced.errors[0].message, /Another title rule already uses|Another rule already uses/)
+})
+test('review: missing destination expectation is rejected for all target kinds', () => {
+  for (const target of [
+    { kind: 'app', key: reviewApp, source: '/icons/new.svg' },
+    { kind: 'profile', key: reviewApp + '@profile:Profile 1', source: '/icons/new.svg' },
+    { kind: 'window', ...reviewRule('solar') }
+  ]) {
+    const result = ConfigModel.iconChangeIntent(reviewConfig(), { set: target })
+    assert.equal(result.ok, false, target.kind)
+    assert.match(result.errors[0].message, /expected|snapshot/i)
+  }
+})
+test('review: same-key removal and set validate against the same live snapshot', () => {
+  const opened = reviewConfig({ [reviewApp]: '/icons/app.svg', legacy: '/keep.svg' })
+  const built = reviewBuild(opened, reviewChoice())
+  const saved = ConfigModel.iconChangeIntent(opened, built.args)
+  assert.equal(saved.ok, true)
+  assert.equal(saved.settings.iconOverrides[reviewApp], 'file:///icons/new.svg')
+  assert.equal(saved.settings.iconOverrides.legacy, '/keep.svg')
+  const noChange = reviewBuild(opened, reviewChoice({ source: '/icons/app.svg' }))
+  assert.equal(ConfigModel.iconChangeIntent(opened, noChange.args).changedKeys.length, 0)
+})
+test('review: title rename to an absent destination preserves order', () => {
+  const opened = reviewConfig({}, [reviewRule('solar'), reviewRule('lunar')])
+  const built = reviewBuild(opened, reviewChoice({ kind: 'window', titleText: 'sol' }),
+    { appId: reviewApp, title: 'solar' })
+  const saved = ConfigModel.iconChangeIntent(opened, built.args)
+  assert.equal(saved.ok, true)
+  assert.deepEqual(Array.from(saved.settings.windowIconOverrides, r => r.titlePattern), ['*sol*', '*lunar*'])
+  expectConflict(opened, reviewConfig({}, [...opened.windowIconOverrides, reviewRule('sol')]),
+    reviewChoice({ kind: 'window', titleText: 'sol' }), { appId: reviewApp, title: 'solar' })
+})
+
+function savedPreview(opened, choice, list, target = {}) {
+  const built = reviewBuild(opened, choice, target)
+  assert.equal(built.ok, true)
+  const saved = ConfigModel.iconChangeIntent(opened, built.args)
+  assert.equal(saved.ok, true)
+  const current = DockIconModel.currentIconTarget({ settings: opened,
+    desktopId: choice.desktopId, profileKey: choice.profileKey, ...target })
+  const selection = choice.source ? choice : { ...current, profileKey: choice.profileKey, source: '' }
+  assert.equal(typeof DockIconModel.previewIconChanges, 'function', 'production preview resolver exists')
+  const preview = DockIconModel.previewIconChanges(opened, saved.settings, list, choice.desktopId, selection)
+  const actual = list.map(window => DockIconModel.currentIconTarget({
+    settings: saved.settings, desktopId: choice.desktopId, ...window }))
+  assert.deepEqual(plain(preview.rows.map(row => row.after)), plain(actual),
+    'every preview row resolves from the actual saved settings')
+  assert.equal(preview.changed, preview.rows.filter(row => row.before.source !== row.after.source).length)
+  return preview
+}
+test('review: Default reveals the underlying app icon in preview and wording', () => {
+  const opened = reviewConfig({ [reviewApp]: '/icons/app.svg' }, [reviewRule('solar')])
+  const preview = savedPreview(opened, reviewChoice({ source: '' }),
+    [{ appId: reviewApp, title: 'solar' }, { appId: reviewApp, title: 'htop' }],
+    { appId: reviewApp, title: 'solar' })
+  assert.equal(preview.changed, 1)
+  assert.equal(preview.rows[0].after.kind, 'app')
+  assert.equal(preview.rows[0].after.source, 'file:///icons/app.svg')
+  const text = DockIconModel.previewSummary({ ...preview, total: 2, resetting: true, appName: 'Ghostty' })
+  assert.match(text, /Ghostty's custom icon/)
+  assert.doesNotMatch(text, /app's own icon/)
+})
+test('review: Default reveals an underlying browser-profile override', () => {
+  const opened = reviewConfig({ [reviewChrome + '@profile:Profile 1']: '/icons/profile.svg' },
+    [reviewRule('mail', '/icons/mail.svg', reviewChrome)])
+  const list = [{ appId: reviewChrome, profileKey: 'Profile 1', title: 'mail' }]
+  const preview = savedPreview(opened, reviewChoice({ source: '', desktopId: reviewChrome,
+    appId: reviewChrome, profileKey: 'Profile 1' }), list, list[0])
+  assert.equal(preview.rows[0].after.kind, 'profile')
+  assert.equal(preview.changed, 1)
+})
+test('review: app-wide selection preserves title and profile overrides', () => {
+  const opened = reviewConfig({ [reviewChrome + '@profile:Profile 1']: '/icons/profile.svg' },
+    [reviewRule('mail', '/icons/mail.svg', reviewChrome)])
+  const preview = savedPreview(opened, reviewChoice({ desktopId: reviewChrome, appId: reviewChrome }), [
+    { appId: reviewChrome, title: 'mail' },
+    { appId: reviewChrome, title: 'news', profileKey: 'Profile 1' },
+    { appId: reviewChrome, title: 'search' }
+  ])
+  assert.equal(preview.changed, 1)
+  assert.equal(preview.shadowed, 2)
+  assert.deepEqual(Array.from(preview.rows, row => row.changed), [false, false, true])
+  assert.match(DockIconModel.previewSummary({ ...preview, total: 3, appName: 'Chrome' }),
+    /2 keep their own title-rule\/profile icon/)
+})
+test('review: profile-wide selection remains shadowed by a title rule', () => {
+  const opened = reviewConfig({}, [reviewRule('mail', '/icons/mail.svg', reviewChrome)])
+  const preview = savedPreview(opened, reviewChoice({ kind: 'profile', desktopId: reviewChrome,
+    appId: reviewChrome, profileKey: 'Profile 1' }), [
+    { appId: reviewChrome, title: 'mail', profileKey: 'Profile 1' },
+    { appId: reviewChrome, title: 'news', profileKey: 'Profile 1' },
+    { appId: reviewChrome, title: 'news', profileKey: 'Profile 2' }
+  ])
+  assert.equal(preview.changed, 1)
+  assert.equal(preview.shadowed, 1)
+})
+test('review: mixed raw app IDs count only the actual title-rule matches', () => {
+  const list = [{ appId: reviewApp, title: 'solar' }, { appId: 'foot', title: 'solar' }]
+  const choice = reviewChoice({ kind: 'window', titleText: 'solar', titlePattern: '*solar*' })
+  assert.equal(DockIconModel.previewMatches(list, choice).count, 1)
+  const preview = savedPreview(reviewConfig(), choice, list)
+  assert.equal(preview.changed, 1)
+  assert.deepEqual(Array.from(preview.rows, row => row.inScope), [true, false])
+  const wide = savedPreview(reviewConfig(), reviewChoice(), list)
+  assert.equal(wide.changed, 2, 'app scope is not narrowed to a raw Wayland app ID')
+})
+test('review: a retained earlier title rule is represented rather than overwritten in preview', () => {
+  const opened = reviewConfig({}, [reviewRule('s', '/icons/first.svg')])
+  const preview = savedPreview(opened, reviewChoice({ kind: 'window', titleText: 'solar',
+    titlePattern: '*solar*' }), [{ appId: reviewApp, title: 'solar' }])
+  assert.equal(preview.changed, 0)
+  assert.equal(preview.rows[0].after.source, 'file:///icons/first.svg')
+})
+test('review: structured validation errors reach the dialog instead of a generic patch error', () => {
+  const d = dialogHarness()
+  d.mutationController = { saveIconChange: () => ({ ok: false,
+    error: { code: 'E_VALIDATION', message: 'Patch rejected; no values were changed.' },
+    data: { validationErrors: [{ message: 'Another title rule already uses “lunar”.' }] } }) }
+  assert.equal(d.commit({}), false)
+  assert.equal(d.inlineError, 'Another title rule already uses “lunar”.')
+})

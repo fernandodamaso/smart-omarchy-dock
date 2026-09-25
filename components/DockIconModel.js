@@ -250,6 +250,27 @@ function patternToContains(pattern) {
   return inner && inner.indexOf("*") < 0 && inner.trim() === inner ? inner : null
 }
 
+// Capture requested values, not live bindings or normalized/pruned collections.
+function iconSettingsSnapshot(settings) {
+  var value = settings || {}
+  return JSON.parse(JSON.stringify({
+    iconOverrides: value.iconOverrides || {},
+    windowIconOverrides: value.windowIconOverrides || []
+  }))
+}
+
+// Exact destination lookup: a title-pattern key is not a window-title match.
+function windowIconTarget(settings, appId, titlePattern) {
+  var key = windowRuleKey(appId, titlePattern)
+  var rules = normalizeWindowRules((settings || {}).windowIconOverrides)
+  for (var i = 0; i < rules.length; ++i) {
+    var rule = rules[i]
+    if (windowRuleKey(rule.appId, rule.titlePattern) === key)
+      return { key: key, appId: rule.appId, titlePattern: rule.titlePattern, source: rule.source }
+  }
+  return null
+}
+
 // The override currently deciding this item's artwork, using the renderer's
 // precedence: window rule -> browser profile -> whole app.
 function currentIconTarget(options) {
@@ -288,18 +309,21 @@ function recentIconSources(settings, limit) {
 }
 
 // selection: { kind: "app" | "profile" | "window", profileKey, titlePattern }.
-// windows: [{ title, profileKey }]. Returns one flag per window plus the count.
+// windows: [{ title, profileKey, appId }]. Window rules require the raw app ID;
+// app/profile choices deliberately span all raw IDs of the represented app.
 function previewMatches(windows, selection) {
   var list = Array.isArray(windows) ? windows : []
   var choice = selection || {}
   var wantedProfile = normalizeProfileSegment(choice.profileKey)
+  var wantedApp = normalizeWindowAppId(choice.appId)
   var flags = list.map(function(window) {
     var item = window || {}
     if (choice.kind === "app") return true
     if (choice.kind === "profile")
       return !!wantedProfile && normalizeProfileSegment(item.profileKey) === wantedProfile
     if (choice.kind === "window")
-      return !!normalizeTitlePattern(choice.titlePattern)
+      return !!wantedApp && normalizeWindowAppId(item.appId) === wantedApp
+        && !!normalizeTitlePattern(choice.titlePattern)
         && titlePatternMatches(normalizeTitlePattern(choice.titlePattern), item.title)
     return false
   })
@@ -347,7 +371,7 @@ function currentIconNotice(current, appName, profileName) {
 // choice: { kind, source, desktopId, profileKey, appId, titleMode: "contains" |
 // "exact", titleText }. source "" means the app's own icon (Reset).
 // Returns { ok, error, unchanged, args: { remove, set } } for saveIconChange.
-function iconChangeArguments(current, choice) {
+function iconChangeArguments(current, choice, openedSettings) {
   var captured = current && current.kind && current.kind !== "none" ? current : null
   var value = choice || {}
   var source = String(value.source || "")
@@ -390,6 +414,16 @@ function iconChangeArguments(current, choice) {
     return { ok: false, error: "Choose which windows use the image.", unchanged: false, args: null }
   }
 
+  // Every destination expectation comes from the opening snapshot, including
+  // absence. Never obtain it from the live settings at Save time.
+  set.expected = set.kind === "window"
+    ? windowIconTarget(openedSettings, set.appId, set.titlePattern)
+    : normalizeOverrides((openedSettings || {}).iconOverrides)[set.key] || ""
+  if (captured && captured.kind === "window" && set.kind === "window"
+      && set.expected && set.expected.key !== captured.key)
+    return { ok: false, error: "Another title rule already uses “" + set.titlePattern
+      + "”. Change that rule's icon from one of its windows instead.", unchanged: false, args: null }
+
   var setKey = set.kind === "window" ? windowRuleKey(set.appId, set.titlePattern) : set.key
   if (captured && captured.kind === set.kind && captured.key === setKey
       && captured.source === normalizeSource(source))
@@ -401,28 +435,66 @@ function iconChangeArguments(current, choice) {
   return result
 }
 
-// One sentence above the preview grid; "" when there is nothing to preview.
+// Resolve configuration precedence from the same draft used by Save. Image
+// decoding remains the renderer's job; a source change is not render proof.
+function previewIconChanges(beforeSettings, afterSettings, windows, desktopId, selection) {
+  var list = Array.isArray(windows) ? windows : []
+  var choice = selection || {}
+  var scope = previewMatches(list, choice)
+  var source = normalizeSource(choice.source)
+  var changed = 0
+  var shadowed = 0
+  var afterKinds = []
+  var rows = list.map(function(window, index) {
+    var item = window || {}
+    var options = { desktopId: desktopId, profileKey: item.profileKey,
+      appId: item.appId, title: item.title }
+    options.settings = beforeSettings
+    var before = currentIconTarget(options)
+    options.settings = afterSettings
+    var after = currentIconTarget(options)
+    var differs = before.source !== after.source
+    if (differs) {
+      changed++
+      if (afterKinds.indexOf(after.kind) < 0) afterKinds.push(after.kind)
+    }
+    if (source && scope.flags[index] && after.source !== source
+        && scopeRank(after.kind) >= scopeRank(choice.kind)) shadowed++
+    return { before: before, after: after, changed: differs, inScope: scope.flags[index] }
+  })
+  return { rows: rows, changed: changed, shadowed: shadowed,
+    afterKind: afterKinds.length === 1 ? afterKinds[0] : afterKinds.length ? "mixed" : "none" }
+}
+
+// Counts describe resolved source changes, not just scope membership.
 function previewSummary(options) {
   var value = options || {}
   var total = Number(value.total) || 0
-  var count = Number(value.count) || 0
+  var changed = Number(value.changed) || 0
+  var shadowed = Number(value.shadowed) || 0
   var app = String(value.appName || "app")
   if (total <= 0) return ""
-  if (value.resetting)
-    return count > 0 ? "Preview: " + count + " of " + total + " open " + app + " window"
-      + (total === 1 ? "" : "s") + " go back to the app's own icon."
-      : "Preview: no open " + app + " window uses a custom icon."
-  if (value.kind === "window" && !value.hasPattern)
+  if (!value.resetting && value.kind === "window" && value.hasPattern === false)
     return "Type part of a window title to choose which windows change."
   var noun = "open " + app + " window" + (total === 1 ? "" : "s")
-  if (value.kind === "window")
-    return "Preview: " + count + " of " + total + " " + noun
-      + (total === 1 ? " matches" : " match") + ", and new windows with a matching title will too."
-  if (value.kind === "profile")
-    return "Preview: " + count + " of " + total + " " + noun + " use the "
-      + String(value.profileName || "selected") + " profile, and new ones will too."
-  return "Preview: " + (total === 1 ? "the " + noun + " changes" : "all " + total + " " + noun + " change")
-    + ", and new ones will too."
+  var text = "Preview: "
+  if (changed <= 0) {
+    text += "no " + noun + " change."
+  } else if (value.resetting) {
+    var destination = value.afterKind === "app" || value.afterKind === "profile"
+      ? app + "'s custom icon"
+      : value.afterKind === "window" ? "another title-rule icon"
+        : value.afterKind === "mixed" ? "their remaining icon settings" : "the app's own icon"
+    text += changed + " of " + total + " " + noun
+      + (changed === 1 ? " goes" : " go") + " back to " + destination + "."
+  } else {
+    text += changed + " of " + total + " " + noun + (changed === 1 ? " changes." : " change.")
+    text += " New matching windows use this setting too."
+  }
+  if (shadowed > 0)
+    text += " " + shadowed + (shadowed === 1 ? " keeps" : " keep")
+      + " their own title-rule/profile icon."
+  return text
 }
 
 function candidates(windowUrl, profileUrl, overrideUrl, desktopUrl, genericUrl) {

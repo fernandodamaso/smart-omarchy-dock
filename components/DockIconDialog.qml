@@ -7,6 +7,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "DockIconModel.js" as DockIconModel
+import "DockConfigModel.js" as ConfigModel
 import "DockSidebarInteractionModel.js" as InteractionModel
 
 // Change Icon: one image for the whole app, one browser profile, or windows
@@ -30,6 +31,7 @@ PopupWindow {
   property string windowAppId: ""
   property var windows: []
   property var current: ({ kind: "none", key: "", source: "" })
+  property var openedSettings: ({ iconOverrides: {}, windowIconOverrides: [] })
   property var imageSources: []
   property string selectedSource: ""
   property string scope: "app"
@@ -57,16 +59,25 @@ PopupWindow {
   readonly property string titlePattern: root.titleMode === "exact"
     ? DockIconModel.normalizeTitlePattern(root.titleText)
     : DockIconModel.containsToPattern(root.titleText).pattern
-  // "Default" previews the windows the current override stops changing.
+  readonly property var builtChange: root.changeArguments()
+  readonly property var previewDraft: {
+    if (!root.builtChange.ok) return root.openedSettings
+    var draft = ConfigModel.iconChangeIntent(root.openedSettings, root.builtChange.args)
+    return draft.ok ? draft.settings : root.openedSettings
+  }
   readonly property var previewSelection: root.usesDefault
     ? { kind: root.current.kind, profileKey: root.profileKey,
-      titlePattern: root.current.titlePattern || "" }
-    : { kind: root.scope, profileKey: root.profileKey, titlePattern: root.titlePattern }
-  readonly property var preview: DockIconModel.previewMatches(root.windows, root.previewSelection)
+      appId: root.current.appId || root.windowAppId,
+      titlePattern: root.current.titlePattern || "", source: "" }
+    : { kind: root.scope, profileKey: root.profileKey, appId: root.windowAppId,
+      titlePattern: root.titlePattern, source: root.selectedSource }
+  readonly property var preview: DockIconModel.previewIconChanges(root.openedSettings,
+    root.previewDraft, root.windows, root.desktopId, root.previewSelection)
   readonly property string previewText: DockIconModel.previewSummary({
     kind: root.previewSelection.kind, resetting: root.usesDefault,
-    hasPattern: root.previewSelection.titlePattern !== "", count: root.preview.count,
-    total: root.windows.length, appName: root.appName, profileName: root.profileLabel
+    hasPattern: root.previewSelection.titlePattern !== "", changed: root.preview.changed,
+    shadowed: root.preview.shadowed, afterKind: root.preview.afterKind,
+    total: root.windows.length, appName: root.appName
   })
   readonly property var scopeOptions: {
     var options = [{
@@ -105,9 +116,10 @@ PopupWindow {
     root.profileAvatarPath = String(value.profileAvatarPath || "")
     root.windowAppId = DockIconModel.normalizeWindowAppId(String(value.appId || ""))
     root.windows = Array.isArray(value.windows) ? value.windows : []
+    root.openedSettings = DockIconModel.iconSettingsSnapshot(root.settings)
     // Title rules only describe a specific window; the app page never adopts one.
     root.current = DockIconModel.currentIconTarget({
-      settings: root.settings, desktopId: root.desktopId, profileKey: root.profileKey,
+      settings: root.openedSettings, desktopId: root.desktopId, profileKey: root.profileKey,
       appId: value.specificWindow === true ? root.windowAppId : "",
       title: String(value.title || "")
     })
@@ -165,18 +177,25 @@ PopupWindow {
       return true
     }
     var error = reply && reply.error ? reply.error : {}
+    var validationErrors = reply && reply.data && reply.data.validationErrors
+    var detail = Array.isArray(validationErrors) && validationErrors.length
+      ? String(validationErrors[0].message || "") : ""
     root.inlineError = error.code === "E_CONFLICT"
       ? "This icon was changed somewhere else while the dialog was open. Close the dialog and try again."
-      : String(error.message || "The icon change was not saved.")
+      : String(detail || error.message || "The icon change was not saved.")
     return false
   }
 
-  function save() {
-    var built = DockIconModel.iconChangeArguments(root.current, {
+  function changeArguments() {
+    return DockIconModel.iconChangeArguments(root.current, {
       kind: root.scope, source: root.selectedSource, desktopId: root.desktopId,
       profileKey: root.profileKey, appId: root.windowAppId,
       titleMode: root.titleMode, titleText: root.titleText
-    })
+    }, root.openedSettings)
+  }
+
+  function save() {
+    var built = root.changeArguments()
     if (!built.ok) {
       root.inlineError = built.error
       return false
@@ -765,10 +784,11 @@ PopupWindow {
                     id: previewRow
                     required property var modelData
                     required property int index
-                    readonly property bool matched: root.preview.flags[previewRow.index] === true
+                    readonly property var result: root.preview.rows[previewRow.index]
+                    readonly property bool changed: !!previewRow.result && previewRow.result.changed
                     width: (previewGrid.width - previewGrid.columnSpacing) / 2
                     spacing: Style.spacing.md
-                    opacity: previewRow.matched ? 1 : 0.45
+                    opacity: previewRow.changed ? 1 : 0.45
 
                     DockAppIcon {
                       width: Style.space(16)
@@ -776,10 +796,11 @@ PopupWindow {
                       anchors.verticalCenter: parent.verticalCenter
                       desktopId: root.desktopId
                       desktopIcon: root.desktopIcon
-                      iconOverrides: previewRow.matched && root.usesDefault ? ({}) : root.iconOverrides
-                      windowOverrideSource: previewRow.matched ? root.selectedSource : ""
+                      iconOverrides: root.previewDraft.iconOverrides || ({})
+                      windowOverrideSource: previewRow.result && previewRow.result.after.kind === "window"
+                        ? previewRow.result.after.source : ""
                       reloadRevision: root.reloadRevision
-                      profileKey: previewRow.matched ? "" : String(previewRow.modelData.profileKey || "")
+                      profileKey: String(previewRow.modelData.profileKey || "")
                       profileBadgesEnabled: false
                     }
                     Text {

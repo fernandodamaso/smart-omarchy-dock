@@ -66,10 +66,13 @@ expectConflict(ConfigModel.windowIconIntent(settings([b]), "set", {
   appId: a.appId, titlePattern: a.titlePattern, source: "/tmp/c.svg"
 }), "same-rule deletion")
 
-expectConflict(ConfigModel.windowIconIntent(settings([a, b]), "set", {
+const collision = ConfigModel.windowIconIntent(settings([a, b]), "set", {
   mode: "dialog", originalKey: aKey, expected: a,
   appId: b.appId, titlePattern: b.titlePattern, source: "/tmp/c.svg"
-}), "editing onto another stable key")
+})
+assert.equal(collision.ok, false, "editing onto another stable key is refused")
+assert.notEqual(collision.errorCode, "E_CONFLICT", "reopening cannot fix a duplicate key")
+assert.match(collision.errors[0].message, /Another rule already uses/)
 
 expectConflict(ConfigModel.windowIconIntent(settings([a]), "set", {
   mode: "dialog", originalKey: "", expected: null,

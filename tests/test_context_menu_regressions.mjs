@@ -313,7 +313,7 @@ test('one Change Icon entry opens the shared dialog with both app identities', (
   assert.equal(options.profileName, 'Personal')
   assert.equal(options.desktopIcon, 'editor-icon')
   assert.deepEqual(JSON.parse(JSON.stringify(options.windows)),
-    [{ title: 'A', profileKey: 'Default' }, { title: 'B', profileKey: 'Profile 1' }])
+    [{ appId: 'editor', title: 'A', profileKey: 'Default' }, { appId: 'editor', title: 'B', profileKey: 'Profile 1' }])
 
   f.menu.open()
   choose(f.menu, 'open-chooser-page')

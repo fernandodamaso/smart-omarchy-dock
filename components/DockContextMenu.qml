@@ -746,6 +746,7 @@ PopupWindow {
       if (!appId) appId = root.toplevelAppId(target.toplevel)
       included.push(target.toplevel)
       windows.push({
+        appId: root.toplevelAppId(target.toplevel),
         title: String(target.toplevel.title || ""),
         profileKey: root.profileDirectoryForTarget(target)
       })
@@ -759,6 +760,7 @@ PopupWindow {
         continue
       var address = root.windowActions.addressFor(toplevel)
       windows.push({
+        appId: root.toplevelAppId(toplevel),
         title: String(toplevel.title || ""),
         profileKey: address && service && typeof service.profileKeyForAddress === "function"
           ? String(service.profileKeyForAddress(address) || "") : ""
