@@ -78,7 +78,7 @@ ShellRoot {
     root.expectedSidebar = sidebar
     root.expectedClassic = classic
     root.probing = true
-    layers.running = true
+    layerProbeTimer.restart()
   }
   function checkLayers(text) {
     try {
@@ -100,6 +100,7 @@ ShellRoot {
     command: ["hyprctl", "-j", "layers"]
     stdout: StdioCollector { onStreamFinished: root.checkLayers(text) }
   }
+  Timer { id: layerProbeTimer; interval: 100; onTriggered: layers.running = true }
   Component.onCompleted: {
     try {
       require(Quickshell.screens.length > 0, "requires an isolated Wayland screen")
