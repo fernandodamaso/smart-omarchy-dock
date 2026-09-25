@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import vm from "node:vm"
 import test from "node:test"
-import { loadModel, plain, read } from "./host_harness.mjs"
+import { hostHarness, loadModel, plain, read } from "./host_harness.mjs"
 
 const DockIconModel = loadModel("DockIconModel")
 const ConfigModel = loadModel("DockConfigModel")
@@ -570,4 +570,76 @@ test('review lifecycle: opening snapshot stays detached from mutable live settin
   d.settings.windowIconOverrides[0].source = '/icons/new.svg'
   assert.equal(d.openedSettings.iconOverrides[reviewApp], '/icons/a.svg')
   assert.equal(d.openedSettings.windowIconOverrides[0].source, '/icons/rule.svg')
+})
+
+
+function ownedDialog(host) {
+  const d = dialogHarness()
+  d.mutationController = host
+  Object.defineProperty(d, 'dialogActive', { get: () => d.visible || d.picking })
+  return d
+}
+const ownershipOptions = () => ({ anchorItem: {}, desktopId: reviewApp, appId: reviewApp })
+
+test('review ownership: a second item closes the previous editor and invalidates its chooser', () => {
+  const { host } = hostHarness(reviewConfig())
+  const a = ownedDialog(host), b = ownedDialog(host)
+  a.openFor(ownershipOptions())
+  assert.equal(host.activeIconDialog, vm.runInContext("root", a))
+  a.chooseFile()
+  const serial = a.chooserLaunchSerial
+  const oldSource = a.selectedSource
+  b.openFor(ownershipOptions())
+  assert.equal(host.activeIconDialog, vm.runInContext("root", b))
+  assert.equal(a.dialogActive, false)
+  assert.notEqual(a.chooserSerial, serial)
+  assert.equal(a.fileChooser.running, true, 'leave the old portal process to finish normally')
+  a.chooserOutput.text = '/icons/late.svg\n'
+  a.chooserExitCode = 0
+  a.chooserOutputDone = true
+  a.settleChooser()
+  assert.equal(a.selectedSource, oldSource)
+  assert.equal(a.visible, false)
+  assert.equal(b.visible, true)
+  a.closeDialog()
+  assert.equal(host.activeIconDialog, vm.runInContext("root", b), 'late cleanup must not release the new session')
+  b.closeDialog()
+  assert.equal(host.activeIconDialog, null)
+})
+
+test('review ownership: reopening the same editor does not close its new session', () => {
+  const { host } = hostHarness(reviewConfig())
+  const d = ownedDialog(host)
+  const options = ownershipOptions()
+  d.openFor(options)
+  d.chooseFile()
+  d.openFor(options)
+  assert.equal(d.visible, true)
+  assert.equal(d.picking, false)
+  assert.equal(host.activeIconDialog, vm.runInContext("root", d))
+})
+
+test('review ownership: native popup dismissal releases the editor and its anchor', () => {
+  const { host } = hostHarness(reviewConfig())
+  const d = ownedDialog(host)
+  d.openFor(ownershipOptions())
+  d.visible = false
+  d.handleVisibilityChange()
+  assert.equal(host.activeIconDialog, null)
+  assert.equal(d.openAnchor, null)
+  assert.equal(d.dialogActive, false)
+})
+
+test('review ownership: hiding for the portal preserves the editing session', () => {
+  const { host } = hostHarness(reviewConfig())
+  const d = ownedDialog(host)
+  d.openFor(ownershipOptions())
+  d.chooseFile()
+  d.handleVisibilityChange()
+  assert.equal(host.activeIconDialog, vm.runInContext("root", d))
+  assert.equal(d.dialogActive, true)
+  d.finishChoosing('')
+  assert.equal(host.activeIconDialog, vm.runInContext("root", d))
+  assert.equal(d.visible, true)
+  assert.equal(d.picking, false)
 })

@@ -110,6 +110,8 @@ PopupWindow {
     // its process alone; Choose file stays disabled until that process exits.
     root.chooserSerial++
     root.picking = false
+    if (root.mutationController && typeof root.mutationController.claimIconDialog === "function")
+      root.mutationController.claimIconDialog(root)
     root.openAnchor = value.anchorItem
     root.position = String(value.position || "bottom")
     root.desktopId = String(value.desktopId)
@@ -158,10 +160,24 @@ PopupWindow {
   function closeDialog() {
     root.chooserSerial++
     root.picking = false
-    root.visible = false
     root.inlineError = ""
     root.openAnchor = null
     root.windows = []
+    root.visible = false
+    root.releaseIconSession()
+  }
+
+  function releaseIconSession() {
+    if (root.mutationController && typeof root.mutationController.releaseIconDialog === "function")
+      root.mutationController.releaseIconDialog(root)
+  }
+
+  function handleVisibilityChange() {
+    if (root.visible) return
+    root.inlineError = ""
+    // Native outside-click dismissal ends a session; hiding for the picker does not.
+    // closeDialog clears the anchor before hiding, so this cannot recurse.
+    if (!root.picking && root.openAnchor) root.closeDialog()
   }
 
   function selectScope(value) {
@@ -229,9 +245,9 @@ PopupWindow {
 
   function finishChoosing(error) {
     if (!root.picking) return
-    root.picking = false
-    if (!root.openAnchor) return
+    if (!root.openAnchor) { root.closeDialog(); return }
     root.visible = true
+    root.picking = false
     root.inlineError = error || ""
   }
 
@@ -267,7 +283,8 @@ PopupWindow {
   visible: false
 
   onImplicitHeightChanged: if (root.visible) root.anchor.updateAnchor()
-  onVisibleChanged: if (!visible) root.inlineError = ""
+  onVisibleChanged: root.handleVisibilityChange()
+  Component.onDestruction: root.releaseIconSession()
 
   anchor {
     window: root.openAnchor ? root.openAnchor.QsWindow.window : null

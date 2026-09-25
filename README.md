@@ -196,8 +196,18 @@ then choose whether it applies to all windows of the app, only one browser
 profile, or only windows whose title contains some text (saved as `*text*`).
 The dialog previews the affected open windows, **Reset to default** removes
 exactly the override currently applied, and **Save** performs one settings
-write; a concurrent edit is refused rather than overwritten. Choosing a narrower
-scope keeps the wider override.
+write; both the removed override and destination are checked against the
+opening snapshot, including a destination that was absent. A concurrent edit is
+refused rather than overwritten. Choosing an existing title pattern edits that
+rule in place; renaming a different rule onto it is rejected without deleting
+either rule. Choosing a narrower scope keeps the wider override. The preview
+uses the resulting settings, including surviving title/profile/app overrides;
+reset can reveal a remaining custom icon rather than the stock icon.
+
+Only one Change Icon editing session is active at a time across dock items and
+sidebar panels. Opening another closes the previous editor and ignores any late
+file-picker result. Hidden, removed or recycled source anchors close the editor;
+its file chooser is allowed to finish normally without applying a stale result.
 
 ### Browser profile badges and activity
 

@@ -72,6 +72,11 @@ First run the AGENTS.md UI refactor check: record the Omarchy revision, and
 inspect `qs.Ui` Button, TextField and radio/choice primitives and one
 first-party popup that uses them.
 
+**Revision evidence after PR #117 review:** the maintainer desktop's Omarchy
+revision has not been captured by the cloud executor. This remains a local
+qualification step in `2026-09-25-change-icon-dialog-review-fixes.md`; no upstream
+revision or headless fixture is substituted for that installed revision.
+
 - [x] `openFor({ desktopId, appName, profileKey, profileName, targetContext })`.
   `targetContext` is optional: a pinned app with no windows has no title option
   and no preview.

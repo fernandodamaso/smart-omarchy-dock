@@ -24,6 +24,24 @@ Item {
   property var herdrService: null
   readonly property var applications: DesktopEntries.applications.values || []
   property int iconReloadRevision: 0
+  // Menus may cache popup instances, but only one editor owns a live session.
+  property var activeIconDialog: null
+  readonly property bool iconDialogActive: root.activeIconDialog !== null
+    && root.activeIconDialog.dialogActive === true
+
+  function claimIconDialog(dialog) {
+    if (!dialog || typeof dialog.closeDialog !== "function") return false
+    var previous = root.activeIconDialog
+    // Publish the new owner first: cleanup by the previous owner cannot release it.
+    root.activeIconDialog = dialog
+    if (previous && previous !== dialog && previous.dialogActive === true)
+      previous.closeDialog()
+    return true
+  }
+
+  function releaseIconDialog(dialog) {
+    if (root.activeIconDialog === dialog) root.activeIconDialog = null
+  }
   readonly property var connectedScreens: Quickshell.screens
   readonly property var hyprMonitors: Hyprland.monitors ? Hyprland.monitors.values || [] : []
   readonly property var hyprWorkspaces: Hyprland.workspaces ? Hyprland.workspaces.values || [] : []

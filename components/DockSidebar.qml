@@ -129,7 +129,7 @@ PanelWindow {
     root.controller.interactionBusy = sidebarContext.visible || sidebarContext.iconDialogOpen
       || picker.visible || pinnedStrip.overflowOpen || root.controller.resizeActive
       || root.controller.rowDragActive || root.controller.widgetPopupId !== ""
-      || !!root.controller.widgetDragId
+      || !!root.controller.widgetDragId || !!(root.host && root.host.iconDialogActive)
   }
 
   function closeSurfaces() {
@@ -735,9 +735,14 @@ PanelWindow {
     // An idle/cancelled widget completion can clear the shared busy flag.
     // Keep the editor's reservation without changing the controller's owners.
     function onInteractionBusyChanged() {
-      if (!root.controller.interactionBusy && sidebarContext.iconDialogOpen)
+      if (!root.controller.interactionBusy
+          && (sidebarContext.iconDialogOpen || (root.host && root.host.iconDialogActive)))
         root.syncInteractionBusy()
     }
+  }
+  Connections {
+    target: root.host
+    function onIconDialogActiveChanged() { root.syncInteractionBusy() }
   }
   onVisibleChanged: { root.syncBadges(); if (!visible) root.closeSurfaces() }
   onPanelCollapsedChanged: root.syncBadges()

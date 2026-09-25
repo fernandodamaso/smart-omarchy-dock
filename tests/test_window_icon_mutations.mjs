@@ -177,9 +177,9 @@ assert.doesNotMatch(agents, /selected live window|FDM-927/i,
   "AGENTS no longer carries the narrow window-only dialog exception")
 assert.match(agents, /Preferences remain CLI-first/,
   "AGENTS keeps preferences CLI-first")
-assert.match(agents, /single host-owned \*\*Change\s+Icon\*\* dialog/,
-  "AGENTS allows exactly one host-owned Change Icon dialog")
-assert.match(agents, /existing host\s+FileView writer/,
+assert.match(agents, /host permits only one active\s+editing session at a time/,
+  "AGENTS requires one active editing session, not one popup instance")
+assert.match(agents, /DockHost\.saveIconChange` and its existing\s+FileView writer/,
   "the dialog saves through the existing host writer")
 assert.match(agents, /second config writer/,
   "AGENTS still forbids a second config writer")

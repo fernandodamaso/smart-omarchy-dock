@@ -133,8 +133,9 @@ controlCommand for validation. Source work is reserved for an explicitly
 requested unsupported feature or an evidenced defect under its owning issue.
 
 Preferences remain CLI-first. Icon artwork (application, browser profile and
-window-title rules) may also be edited through the single host-owned **Change
-Icon** dialog opened from the context menu; it saves through the existing host
+window-title rules) may also be edited through **Change Icon** from the context
+menu. Menus lazily cache dialog instances, but the host permits only one active
+editing session at a time; saves use `DockHost.saveIconChange` and its existing
 FileView writer. Do not add a settings window, a generic preferences editor,
 preview-only preferences, another icon editor, or a second config writer. Retain
 ordinary window previews, the app picker, dock menus, drag reordering and live

@@ -22,8 +22,8 @@ the sidebar own when it closes.
 - **Renaming title rule A to the text of an existing rule B is refused** with a
   clear message, not merged. Merging would silently delete A and replace B's
   image. The refusal is `E_VALIDATION`, not `E_CONFLICT`, because reopening the
-  dialog does not fix it. *Confirm with the maintainer; merging is the
-  alternative.*
+  dialog does not fix it. The maintainer authorized following this plan on
+  2026-09-25; retain the nondestructive refusal rather than merging rules.
 - **Choosing an existing rule's text from the app page, or from a window that
   rule doesn't match, edits that rule in place.** It no longer tries to create
   a duplicate.
@@ -43,19 +43,19 @@ the sidebar own when it closes.
 
 Fixes the GPT concurrent-overwrite finding and review #1.
 
-- [ ] `DockIconDialog.openFor` keeps `openedSettings`, a snapshot of
+- [x] `DockIconDialog.openFor` keeps `openedSettings`, a snapshot of
   `{ iconOverrides, windowIconOverrides }` taken with `current`.
-- [ ] `DockIconModel.iconChangeArguments(current, choice, openedSettings)` attaches
+- [x] `DockIconModel.iconChangeArguments(current, choice, openedSettings)` attaches
   `expected` to every `set`:
   - app/profile: the normalized source at that key in `openedSettings`, or `""` for
     absent;
   - window: the matching rule `{ key, appId, titlePattern, source }` in
     `openedSettings`, or `null` for absent.
-- [ ] In the same function, when `current` is a window rule and the chosen pattern
+- [x] In the same function, when `current` is a window rule and the chosen pattern
   belongs to a *different* existing rule, return `ok: false` with "Another title
   rule already uses “‹text›”. Change that rule's icon from one of its windows
   instead."
-- [ ] `DockConfigModel.setIconTarget` requires `"expected" in target` and rejects
+- [x] `DockConfigModel.setIconTarget` requires `"expected" in target` and rejects
   otherwise, because only the dialog calls it:
   - app/profile: live normalized source `!== expected` → `iconTargetConflict`;
   - window with an `expected` rule: `windowIconIntent(... "set",
@@ -63,18 +63,18 @@ Fixes the GPT concurrent-overwrite finding and review #1.
     keeps the list order;
   - window with `expected === null`: today's `originalKey: ""` path, which already
     refuses a rule created meanwhile.
-- [ ] `iconChangeIntent` checks `remove` and `set.expected` against the same live
+- [x] `iconChangeIntent` checks `remove` and `set.expected` against the same live
   settings before applying either. The same-key app/profile special case at
   `DockConfigModel.js:490-496` then goes away because `set.expected` covers it.
   Keep the window→window in-place branch, and feed it from `set.expected` when
   that is present.
-- [ ] `windowIconIntent` dialog mode: "Another rule already uses this application ID
+- [x] `windowIconIntent` dialog mode: "Another rule already uses this application ID
   and title pattern" becomes `rejectedIntent` (`E_VALIDATION`). The CLI path
   doesn't reach it.
-- [ ] `DockIconDialog.commit`: for anything other than `E_CONFLICT`, show
+- [x] `DockIconDialog.commit`: for anything other than `E_CONFLICT`, show
   `reply.data.validationErrors[0].message` when present, instead of the generic
   "Patch rejected; no values were changed."
-- [ ] Tests (`tests/test_icon_dialog_model.mjs`):
+- [x] Tests (`tests/test_icon_dialog_model.mjs`):
   - app key absent at open → created before save → `E_CONFLICT`; same for a
     profile key;
   - scope change from a title rule to the whole app, with the app key created
@@ -93,10 +93,10 @@ Fixes the GPT concurrent-overwrite finding and review #1.
 
 Fixes the GPT preview-precedence finding and review #6.
 
-- [ ] `DockContextMenu.iconDialogOptions` adds `appId: root.toplevelAppId(...)` to
+- [x] `DockContextMenu.iconDialogOptions` adds `appId: root.toplevelAppId(...)` to
   each preview window, both in the `targetContexts` loop and in the
   `currentToplevels()` loop.
-- [ ] New `DockIconModel.previewIconChanges(beforeSettings, afterSettings, windows,
+- [x] New `DockIconModel.previewIconChanges(beforeSettings, afterSettings, windows,
   desktopId, selection)`. It resolves each window through
   `currentIconTarget({ settings, desktopId, profileKey, appId, title })` before
   and after, and returns:
@@ -104,20 +104,20 @@ Fixes the GPT preview-precedence finding and review #6.
   - `changed`: the count of windows whose resolved source differs;
   - `shadowed`: in-scope windows whose `after.source` isn't the chosen image
     because a narrower override wins.
-- [ ] `previewMatches` compares `selection.appId` with `window.appId` for the
+- [x] `previewMatches` compares `selection.appId` with `window.appId` for the
   window kind. App and profile kinds stay keyed by desktop ID and profile, and
   must not be narrowed to one raw app ID.
-- [ ] `DockIconDialog`: `previewDraft` = `ConfigModel.iconChangeIntent(openedSettings,
+- [x] `DockIconDialog`: `previewDraft` = `ConfigModel.iconChangeIntent(openedSettings,
   built.args).settings` when the arguments build, otherwise `openedSettings`.
   Each preview `DockAppIcon` renders `after` exactly as the dock would:
   `iconOverrides: previewDraft.iconOverrides`, `windowOverrideSource` = the
   window-rule source from `after` (or `""`), and `profileKey` = the window's
   profile. The dimmed state follows `changed`.
-- [ ] `previewSummary` takes `{ changed, shadowed, total, resetting, afterKind }`.
+- [x] `previewSummary` takes `{ changed, shadowed, total, resetting, afterKind }`.
   Default says what the windows go back to: "the app's own icon", or
   "‹App›'s custom icon" when an app or profile override remains. A shadowed
   count adds "N keep their own title-rule/profile icon."
-- [ ] Tests:
+- [x] Tests:
   - app A + rule B, Default from the window → preview resolves to A, and the
     text doesn't say "own icon";
   - app scope while another window has its own rule → that window is shadowed and
@@ -133,16 +133,16 @@ Fixes the GPT preview-precedence finding and review #6.
 
 Fixes review #2, #3 and #5 (lifecycle part).
 
-- [ ] `DockIconDialog.openFor` starts with `root.chooserSerial++` and
+- [x] `DockIconDialog.openFor` starts with `root.chooserSerial++` and
   `root.picking = false`, so a result from the previous session is ignored.
-- [ ] `DockContextMenu`: add `closeAll()` = `dismiss()` plus
+- [x] `DockContextMenu`: add `closeAll()` = `dismiss()` plus
   `iconDialogLoader.item.closeDialog()` when loaded. `dismiss()` stays menu-only,
   so the menu→dialog handoff in `openIconDialog` is unchanged.
-- [ ] `DockItem.dismissPopups()` calls `contextMenu.closeAll()`. Its five callers
+- [x] `DockItem.dismissPopups()` calls `contextMenu.closeAll()`. Its five callers
   (workspace drag start at `:115` and `:783`, `presentationVisible`,
   `presentationActive`, and `Dock.qml:1760`) all mean "this item is going
   away or busy", so closing the dialog is correct for each.
-- [ ] `DockSidebar`:
+- [x] `DockSidebar`:
   - `closeSurfaces()` calls `sidebarContext.closeAll()`;
   - fold the three duplicated `interactionBusy` expressions (`:674`, `:693`,
     `:709`) into one `syncInteractionBusy()` that includes
@@ -155,7 +155,7 @@ Fixes review #2, #3 and #5 (lifecycle part).
     run the same anchor-validity checks and call `closeAll()` if the row was
     recycled, is no longer current, or scrolled out. Otherwise update the
     dialog anchor.
-- [ ] Tests:
+- [x] Tests:
   - extend the chooser harness in `tests/test_icon_dialog_model.mjs`: open
     session A → `chooseFile` → `openFor` session B → chooser A returns →
     B's `selectedSource` and `imageSources` are unchanged and `picking` is
@@ -171,13 +171,13 @@ Fixes review #2, #3 and #5 (lifecycle part).
 
 Covers review #4 and the minor items.
 
-- [ ] `DockHost`: `property var activeIconDialog: null` and
+- [x] `DockHost`: `property var activeIconDialog: null` and
   `claimIconDialog(dialog)`, which closes the previous one if it's a different
   dialog and still active. `DockIconDialog.openFor` calls it through
   `mutationController`. Clear it on close.
-- [ ] Test: a second `openFor` on another dialog closes the first and invalidates
+- [x] Test: a second `openFor` on another dialog closes the first and invalidates
   its chooser.
-- [ ] AGENTS.md: "the single host-owned **Change Icon** dialog" becomes "the
+- [x] AGENTS.md: "the single host-owned **Change Icon** dialog" becomes "the
   **Change Icon** dialog (one editing session at a time, saved through the
   host-owned `saveIconChange`)". The rest of the policy text stays.
 - [ ] Record the Omarchy revision inspected in
@@ -231,3 +231,29 @@ On the maintainer desktop, via `smartdock dev use icons-improvements`, then
 - opening a second item's dialog closes the first;
 - `omarchy plugin validate .` and the AGENTS.md `qmllint` set, plus
   `DockIconDialog.qml`.
+
+## Review-fix implementation record (2026-09-25)
+
+- Save/preview: `072d45d11c9fc9ce7875cdf982f3569da2c6c5db`.
+  Isolated exact-tree validation run `36178250242` passed the complete
+  JavaScript, shell, Python, provider and offscreen QML gate.
+- Lifecycle: `a6783a97dc708e9dffaa708fe242bb8ad08cf75e`.
+  New tests first reproduced the stale chooser and missing cleanup paths;
+  the corrected tree passes all JavaScript files and shell guards locally.
+  Isolated full validation run `36178893540` also passed, including QML.
+- Single-session ownership: implemented with identity-checked release,
+  native-dismissal cleanup, and a host-visible active-session flag so one
+  sidebar cannot clear another editor's busy reservation. Tests cover second
+  dialog takeover, ignored old chooser results, reopening the same dialog,
+  native dismissal versus temporary picker hiding, and non-owner teardown.
+- Runtime evidence is not implied by the source/test checkboxes above. The
+  cloud container has no Omarchy checkout, Quickshell desktop, or KVM display;
+  the exact maintainer Omarchy revision, desktop scenarios and native
+  plugin/qmllint qualification below remain **unverified**. The original PR's
+  older desktop evidence does not qualify these new commits.
+- The optional new UI stubs are not added. Production JavaScript and extracted
+  QML methods are exercised by the regression tests; existing offscreen QML
+  tests do not instantiate the complete native Change Icon popup.
+- Per-file reload invalidation stays out of scope.
+
+Final exact-SHA CI and delivery status are recorded in the PR conversation.

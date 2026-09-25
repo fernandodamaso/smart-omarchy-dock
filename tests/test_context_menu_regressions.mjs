@@ -453,3 +453,15 @@ test('review lifecycle: a valid sidebar anchor reanchors its editor without clos
   assert.equal(editor.visible, true)
   assert.equal(editor.reanchors, 1)
 })
+
+
+test('review ownership: a non-owning sidebar cannot release another editor reservation', () => {
+  const { sidebar, controller, editor } = sidebarEditorFixture()
+  editor.visible = false
+  sidebar.host = { iconDialogActive: true }
+  sidebar.closeSurfaces()
+  assert.equal(controller.interactionBusy, true)
+  sidebar.host.iconDialogActive = false
+  sidebar.syncInteractionBusy()
+  assert.equal(controller.interactionBusy, false)
+})
