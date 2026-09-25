@@ -3,10 +3,12 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("dockrail_paths", ROOT / "scripts/dockrail_paths.py")
 paths = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = paths
 SPEC.loader.exec_module(paths)
 
 class DockrailPathTests(unittest.TestCase):
