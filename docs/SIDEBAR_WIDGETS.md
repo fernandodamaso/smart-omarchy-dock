@@ -1,4 +1,4 @@
-# SmartDock sidebar Widget contract
+# Dockrail sidebar Widget contract
 
 **FDM-967 owns provider lifecycle; FDM-973 owns the management foundation; FDM-999 supersedes its shared-scroll placement; FDM-970 registers the source-owned `herdr.agents` provider.**
 Classic remains the default. `sidebarWidgets` defaults to `[]`; that starts no
@@ -10,7 +10,7 @@ No credential, stock topbar change, second host or notification daemon is needed
 ## Registration and typed configuration
 
 `DockHost.sidebarWidgetRegistry` is the host-owned dictionary of trusted Widget
-descriptors. SmartDock source-owned integrations register descriptors in source;
+descriptors. Dockrail source-owned integrations register descriptors in source;
 validated external packages are contributed by `DockExternalWidgetRegistry`
 through the package workflow in `docs/WIDGET_PACKAGES.md`. External custom
 Widgets must not edit `DockHost`, `settings-schema.json`, or the installed
@@ -20,7 +20,7 @@ Runtime schema readback derives registered IDs from this merged trusted registry
 Neither settings nor `dock.json` may supply QML paths, commands, URLs,
 credentials, or factories. Tests may inject the controller registry; production
 package discovery accepts only package-manager registry metadata under the
-SmartDock XDG data store.
+Dockrail XDG data store.
 
 IDs are case-sensitive ASCII strings, at most 64 characters, matching
 `^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`; `constructor`, `prototype` and `__proto__`
@@ -140,7 +140,7 @@ header plus a collapsed card, each limited by actual content demand.
 When those minimums cannot fit, reserve the whole Widget header if possible,
 then the hierarchy minimum, then remaining Widget body space. Header-only is
 valid. Below the complete header height, hide the section entirely and keep
-Add/Manage reachable from the main SmartDock header. Rail and zero *presented*
+Add/Manage reachable from the main Dockrail header. Rail and zero *presented*
 Widget cards allocate zero Widget height. A filtered-out Herdr fallback does
 not count as presented and retains its provider lease.
 
@@ -202,7 +202,7 @@ The controller still owns `{widgetPopupId, widgetPopupAnchor}` for
 Widget-specific popup content. There is no normal-card overflow sentinel.
 Destroyed/hidden/scrolled-out anchors, removal, collapse, host invalidation and
 surface teardown close safely. The Add/Manage picker is a panel-owned native Omarchy popup, independent of the
-independent Widget pane. It therefore remains available from the SmartDock
+independent Widget pane. It therefore remains available from the Dockrail
 header even when zero Widget cards are enabled and the pane has zero height.
 Outside clicks dismiss it through Omarchy's normal click-popup focus handling.
 It lists only trusted source descriptors whose `manageable` flag is not false
@@ -341,7 +341,7 @@ source slice is accepted.
 
 Installed external Widget packages join the same host registry and lease lifecycle
 described above. `DockExternalWidgetRegistry` consumes only validated registry
-metadata generated under the SmartDock XDG package store and contributes descriptors
+metadata generated under the Dockrail XDG package store and contributes descriptors
 to the existing `sidebarWidgetRegistry`; there is no second card, provider,
 persistence, popup, or Widget-manager system.
 
