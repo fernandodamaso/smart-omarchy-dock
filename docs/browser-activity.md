@@ -1,6 +1,6 @@
 # Browser activity provider
 
-SmartDock's optional browser-profile provider publishes profile ownership and
+Dockrail's optional browser-profile provider publishes profile ownership and
 small, privacy-preserving activity rows for Chrome. It is an additive snapshot
 alongside the existing `windows` and `profiles` maps:
 
@@ -41,7 +41,7 @@ target IDs are validated before display or activation.
 The card exposes profile names, service labels, counts, and ordinary window
 preview captures. It never publishes URLs, titles, message text, account
 identifiers, or page content. A click is accepted only when the target ID and
-window address still exist in the current snapshot; SmartDock then activates
+window address still exist in the current snapshot; Dockrail then activates
 the Hyprland window and sends `Target.activateTarget` through the provider.
 
 Users can mute individual services from the activity card with the eye /
@@ -53,8 +53,8 @@ Chrome dock badge fallback. The muted set is stored as
 and can be read or written with the ordinary CLI:
 
 ```bash
-smartdock config get browserActivityMutedServices --json
-smartdock config set browserActivityMutedServices '["gmail"]' --json
+dockrail config get browserActivityMutedServices --json
+dockrail config set browserActivityMutedServices '["gmail"]' --json
 ```
 
 The provider executable is optional. If it is absent, unreachable, or emits an
