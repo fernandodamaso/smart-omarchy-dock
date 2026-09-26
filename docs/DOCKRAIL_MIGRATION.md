@@ -21,7 +21,7 @@ This is the source-controlled migration matrix for FDM-1002. It distinguishes in
 | `DOCKRAIL_CONFIG` | Canonical explicit override. |
 | `SMARTDOCK_CONFIG` | Retain; canonical non-empty override wins when both are set. |
 | `smartdock` IPC target, `request`, apiVersion 1 | Retain unchanged. |
-| `io.github.fernandodamaso.smartdock` | Retain plugin ID for this release. |
+| plugin ID | `io.github.fernandodamaso.dockrail` from 3.0.0; legacy `io.github.fernandodamaso.smartdock` installs are removed and re-added once (see MIG-06). |
 | `SmartDock.WidgetKit 1.0` | Retain; MIG-03 adds `Dockrail.WidgetKit 1.0` over the same maintained components. |
 | `special:smartdock-minimized` | Retain unchanged. |
 | terminal-agent desktop/application IDs | Retain stable IDs. |
@@ -91,7 +91,7 @@ development does not block ordinary startup.
 - client bundle: `${XDG_DATA_HOME:-$HOME/.local/share}/dockrail-cli/`
 - cache: `${XDG_CACHE_HOME:-$HOME/.cache}/dockrail/`
 
-The stable desktop/autostart IDs, plugin ID, IPC target, minimized-workspace
+The stable desktop/autostart IDs, IPC target, minimized-workspace
 name, Wayland namespaces, terminal-agent IDs, Herdr executable identities and
 legacy WidgetKit import remain unchanged.
 
@@ -140,7 +140,7 @@ output, Widget scaffolds and active documentation use Dockrail terminology and
 the `dockrail` command.
 
 This branding pass deliberately does **not** rename compatibility contracts:
-`io.github.fernandodamaso.smartdock`, the `smartdock` IPC target,
+the plugin ID (changed later in MIG-06), the `smartdock` IPC target,
 `special:smartdock-minimized`, terminal-agent/application IDs, Wayland layer
 namespaces, `smartdock-herdr-helper`, `smartdock-herdr-provider`,
 `SmartDock.WidgetKit 1.0`, legacy XDG aliases/recovery records, historical
@@ -169,6 +169,14 @@ Local checkout paths such as `/home/admin/Projects/smart-omarchy-dock` were not
 moved.
 
 Current installation examples use `https://github.com/fernandodamaso/dockrail.git`.
-The plugin ID remains `io.github.fernandodamaso.smartdock` because it names the
-installed plugin directory and marketplace identity; renaming it would orphan
-existing installs.
+The plugin ID changed from `io.github.fernandodamaso.smartdock` to
+`io.github.fernandodamaso.dockrail` so the permanent marketplace identity matches
+the product. Omarchy names the plugin directory and keys enabled state by the
+manifest ID, so an in-place `omarchy plugin update` of a legacy install is not
+supported across this change. Existing installs run
+`omarchy plugin remove io.github.fernandodamaso.smartdock --yes` and then
+`omarchy plugin add https://github.com/fernandodamaso/dockrail.git --enable --yes`.
+Settings, Widget packages, providers and migration state live under the
+Dockrail XDG roots and are not touched by plugin removal. Migration
+development-override detection and `uninstall.sh --purge` refusal recognize
+both IDs.

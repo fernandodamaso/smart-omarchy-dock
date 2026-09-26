@@ -29,7 +29,7 @@ GUEST_CONFIG_PATH = "/home/admin/.config/smartdock/dock.json"
 GUEST_OMARCHY_TEST = "/home/admin/smartdock-omarchy-test"
 GUEST_CONTROL = f"{GUEST_CANDIDATE}/tests/runtime/dev-session/guest-control.sh"
 GUEST_SMARTDOCK = f"{GUEST_CANDIDATE}/scripts/smartdock"
-SMARTDOCK_PLUGIN_ID = "io.github.fernandodamaso.smartdock"
+SMARTDOCK_PLUGIN_ID = "io.github.fernandodamaso.dockrail"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 NAME_RE = re.compile(r"[a-z][a-z0-9-]{0,31}")

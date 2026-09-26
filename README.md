@@ -60,10 +60,19 @@ Install the Git-managed Omarchy plugin:
 omarchy plugin add https://github.com/fernandodamaso/dockrail.git --enable --yes
 ```
 
+Upgrading from SmartDock (plugin ID `io.github.fernandodamaso.smartdock`)?
+Dockrail 3.0.0 uses a new plugin ID, so reinstall once. Your settings in
+`~/.config/dockrail` (or legacy `~/.config/smartdock`) are kept:
+
+```bash
+omarchy plugin remove io.github.fernandodamaso.smartdock --yes
+omarchy plugin add https://github.com/fernandodamaso/dockrail.git --enable --yes
+```
+
 The normal update command is:
 
 ```bash
-omarchy plugin update io.github.fernandodamaso.smartdock --yes
+omarchy plugin update io.github.fernandodamaso.dockrail --yes
 ```
 
 Updates pull the fork's default `main` branch and preserve
@@ -120,7 +129,7 @@ Uninstalling preserves the configuration; remove it too with
 To remove the Omarchy plugin:
 
 ```bash
-omarchy plugin remove io.github.fernandodamaso.smartdock --yes
+omarchy plugin remove io.github.fernandodamaso.dockrail --yes
 ```
 
 Plugin removal leaves `~/.config/dockrail/dock.json`, shared Widget packages,
@@ -133,10 +142,10 @@ If you switched to a local version with `dockrail dev use`, run
 
 Omarchy users should run Dockrail inside the existing Omarchy shell rather
 than starting a second Quickshell process. The installed plugin ID is
-`io.github.fernandodamaso.smartdock`:
+`io.github.fernandodamaso.dockrail`:
 
 ```bash
-omarchy plugin enable io.github.fernandodamaso.smartdock
+omarchy plugin enable io.github.fernandodamaso.dockrail
 ```
 
 The plugin uses `~/.config/dockrail/dock.json`, shared with the standalone

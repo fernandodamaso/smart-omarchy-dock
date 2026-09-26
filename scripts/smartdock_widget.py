@@ -25,7 +25,8 @@ import uuid
 API_VERSION = 1
 REGISTRY_SCHEMA_VERSION = 1
 STATE_SCHEMA_VERSION = 1
-PLUGIN_ID = "io.github.fernandodamaso.smartdock"
+PLUGIN_ID = "io.github.fernandodamaso.dockrail"
+LEGACY_PLUGIN_ID = "io.github.fernandodamaso.smartdock"
 ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 ICON_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
 VERSION_RE = re.compile(r"^[0-9A-Za-z](?:[0-9A-Za-z.+_-]{0,62}[0-9A-Za-z])?$")
@@ -461,6 +462,7 @@ class Store:
     def forbidden_source_roots(self):
         roots = [
             self.home / ".config/omarchy/plugins" / PLUGIN_ID,
+            self.home / ".config/omarchy/plugins" / LEGACY_PLUGIN_ID,
             self.data_home / "dockrail",
             self.data_home / "smartdock",
             self.bundle,

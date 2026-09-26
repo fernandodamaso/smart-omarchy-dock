@@ -21,8 +21,12 @@ installs keep updating through `omarchy plugin update`.
 - `DOCKRAIL_CONFIG` is the canonical override; `SMARTDOCK_CONFIG` is still
   honored when the canonical variable is unset.
 - Both `Dockrail.WidgetKit 1.0` and `SmartDock.WidgetKit 1.0` imports work.
-- Intentionally unchanged: plugin ID `io.github.fernandodamaso.smartdock`,
-  `smartdock` IPC target, `special:smartdock-minimized`, terminal-agent IDs,
+- The Omarchy plugin ID is now `io.github.fernandodamaso.dockrail`. Existing
+  SmartDock plugin installs reinstall once:
+  `omarchy plugin remove io.github.fernandodamaso.smartdock --yes`, then
+  `omarchy plugin add https://github.com/fernandodamaso/dockrail.git --enable --yes`.
+  Settings and shared state are kept.
+- Intentionally unchanged: `smartdock` IPC target, `special:smartdock-minimized`, terminal-agent IDs,
   Wayland layer namespaces and Herdr executable names. Minimized windows stay
   recoverable across restarts; their original workspace/monitor is not
   persisted.
@@ -40,7 +44,7 @@ installs keep updating through `omarchy plugin update`.
   migration, while managed legacy SmartDock paths remain compatibility aliases.
 - `Dockrail.WidgetKit 1.0` is the canonical public WidgetKit module;
   `SmartDock.WidgetKit 1.0` remains supported for existing packages.
-- The Omarchy plugin ID, `smartdock` IPC target, terminal-agent/application
+- The `smartdock` IPC target, terminal-agent/application
   IDs, Wayland layer namespaces, `special:smartdock-minimized`, Herdr
   executable identities and historical issue/release names remain
   intentionally unchanged.

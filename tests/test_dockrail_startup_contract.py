@@ -48,7 +48,7 @@ class StartupContractTests(unittest.TestCase):
         control = read("components/DockControl.qml")
         actions = read("components/DockWindowActions.qml")
         herdr = read("components/DockHerdrService.qml")
-        self.assertIn('"id": "io.github.fernandodamaso.smartdock"', manifest)
+        self.assertIn('"id": "io.github.fernandodamaso.dockrail"', manifest)
         self.assertIn('target: "smartdock"', control)
         self.assertIn("special:smartdock-minimized", actions)
         self.assertIn("smartdock-herdr-provider", herdr)

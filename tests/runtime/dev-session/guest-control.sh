@@ -276,7 +276,7 @@ PY
       echo "missing Omarchy plugin host at $omarchy_path/shell/shell.qml" >&2
       exit 1
     fi
-    if [[ ! -e "$HOME/.config/omarchy/plugins/io.github.fernandodamaso.smartdock/Overlay.qml" ]]; then
+    if [[ ! -e "$HOME/.config/omarchy/plugins/io.github.fernandodamaso.dockrail/Overlay.qml" ]]; then
       echo "missing guest SmartDock plugin Overlay.qml" >&2
       exit 1
     fi

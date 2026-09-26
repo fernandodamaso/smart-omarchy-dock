@@ -10,7 +10,7 @@ Item {
   property var manifest: null
 
   readonly property var pluginService: shell && typeof shell.serviceFor === "function"
-    ? shell.serviceFor("io.github.fernandodamaso.smartdock") : null
+    ? shell.serviceFor("io.github.fernandodamaso.dockrail") : null
   readonly property bool migrationReady: !!pluginService && pluginService.migrationReady === true
 
   Loader {

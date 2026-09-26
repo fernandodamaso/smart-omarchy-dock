@@ -1082,7 +1082,7 @@ class PluginHostTests(unittest.TestCase):
         self.assertEqual(config["version"], 1)
         self.assertEqual(
             config["plugins"],
-            [{"id": "io.github.fernandodamaso.smartdock"}],
+            [{"id": "io.github.fernandodamaso.dockrail"}],
         )
         self.assertEqual(sorted(config["disabledPlugins"]), ["omarchy.bar", "omarchy.idle"])
         self.assertEqual(config["bar"]["layout"], {"left": [], "center": [], "right": []})

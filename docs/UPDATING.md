@@ -4,7 +4,7 @@ SmartDock is installed as a Git-managed Omarchy plugin from the SmartDock
 fork. Run the normal update command with the public plugin ID:
 
 ```bash
-omarchy plugin update io.github.fernandodamaso.smartdock --yes
+omarchy plugin update io.github.fernandodamaso.dockrail --yes
 ```
 
 Updates pull the fork's default `main` branch. They preserve the user's
