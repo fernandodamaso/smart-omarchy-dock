@@ -11,7 +11,7 @@ import time
 
 from smartdock_cli import BUNDLE, CliError, Transport
 
-PLUGIN_ID = 'io.github.fernandodamaso.smartdock'
+PLUGIN_ID = 'io.github.fernandodamaso.dockrail'
 
 
 def git(repo, *args):

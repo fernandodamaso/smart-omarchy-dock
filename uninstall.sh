@@ -107,9 +107,15 @@ if ! has_supported_bundle; then
   rm -f -- "$bin_home/dockrail" "$bin_home/smartdock"
 fi
 if $purge; then
-  plugin_root="$HOME/.config/omarchy/plugins/io.github.fernandodamaso.smartdock"
-  plugin_backup="$HOME/.config/omarchy/plugins/.io.github.fernandodamaso.smartdock.smartdock-installed"
-  if [[ -e "$plugin_root" || -L "$plugin_root" || -e "$plugin_backup" ]]; then
+  plugin_present=false
+  for plugin_id in io.github.fernandodamaso.dockrail io.github.fernandodamaso.smartdock; do
+    plugin_root="$HOME/.config/omarchy/plugins/$plugin_id"
+    plugin_backup="$HOME/.config/omarchy/plugins/.$plugin_id.smartdock-installed"
+    if [[ -e "$plugin_root" || -L "$plugin_root" || -e "$plugin_backup" ]]; then
+      plugin_present=true
+    fi
+  done
+  if $plugin_present; then
     echo 'Refusing --purge while the Omarchy Dockrail plugin is installed or in development mode.' >&2
     echo "Configuration preserved at: $config_dir/dock.json" >&2
     exit 1

@@ -25,7 +25,8 @@ from dockrail_paths import DockrailPaths, resolve_paths
 MIGRATION_ID = "smartdock-to-dockrail-v1"
 JOURNAL_SCHEMA = 1
 SHARED_DATA_NAMES = ("widgets", "providers")
-PLUGIN_ID = "io.github.fernandodamaso.smartdock"
+PLUGIN_ID = "io.github.fernandodamaso.dockrail"
+LEGACY_PLUGIN_ID = "io.github.fernandodamaso.smartdock"
 
 
 class MigrationError(RuntimeError):
@@ -192,9 +193,12 @@ def _validate_legacy(paths: DockrailPaths) -> str:
 
 def _plugin_development_active(paths: DockrailPaths) -> bool:
     plugins = paths.home / ".config" / "omarchy" / "plugins"
-    active = plugins / PLUGIN_ID
-    backup = plugins / ("." + PLUGIN_ID + ".smartdock-installed")
-    return active.is_symlink() or backup.exists()
+    for plugin_id in (PLUGIN_ID, LEGACY_PLUGIN_ID):
+        active = plugins / plugin_id
+        backup = plugins / ("." + plugin_id + ".smartdock-installed")
+        if active.is_symlink() or backup.exists():
+            return True
+    return False
 
 
 def _widget_development_active(paths: DockrailPaths) -> bool:

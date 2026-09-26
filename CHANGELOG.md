@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+## 3.0.0 - 2026-09-25
+
+SmartDock for Omarchy is now **Dockrail**. The repository moved to
+<https://github.com/fernandodamaso/dockrail>; the old
+`fernandodamaso/smart-omarchy-dock` URL redirects, so existing plugin
+installs keep updating through `omarchy plugin update`.
+
+### Upgrade and compatibility
+
+- The first plugin or standalone startup migrates legacy SmartDock state into
+  the Dockrail XDG roots through a journaled, resumable transaction. Legacy
+  paths become managed aliases and a recovery snapshot is retained under
+  `${XDG_STATE_HOME:-~/.local/state}/dockrail/migrations/`.
+- Migration refuses while a `dev use` override is active; run
+  `dockrail dev reset` (or `smartdock dev reset`) first. CLI-only installs and
+  read-only commands never migrate.
+- `DOCKRAIL_CONFIG` is the canonical override; `SMARTDOCK_CONFIG` is still
+  honored when the canonical variable is unset.
+- Both `Dockrail.WidgetKit 1.0` and `SmartDock.WidgetKit 1.0` imports work.
+- The Omarchy plugin ID is now `io.github.fernandodamaso.dockrail`. Existing
+  SmartDock plugin installs reinstall once:
+  `omarchy plugin remove io.github.fernandodamaso.smartdock --yes`, then
+  `omarchy plugin add https://github.com/fernandodamaso/dockrail.git --enable --yes`.
+  Settings and shared state are kept.
+- Intentionally unchanged: `smartdock` IPC target, `special:smartdock-minimized`, terminal-agent IDs,
+  Wayland layer namespaces and Herdr executable names. Minimized windows stay
+  recoverable across restarts; their original workspace/monitor is not
+  persisted.
+- Uninstall keeps configuration, shared Widget/provider state and recovery
+  snapshots; `--purge` refuses while the Omarchy plugin is installed. There is
+  no automatic rollback over settings written after activation.
+
 ### Product identity
 
 - SmartDock for Omarchy is now **Dockrail** for current product-facing UI,
@@ -12,10 +44,10 @@
   migration, while managed legacy SmartDock paths remain compatibility aliases.
 - `Dockrail.WidgetKit 1.0` is the canonical public WidgetKit module;
   `SmartDock.WidgetKit 1.0` remains supported for existing packages.
-- The Omarchy plugin ID, `smartdock` IPC target, terminal-agent/application
+- The `smartdock` IPC target, terminal-agent/application
   IDs, Wayland layer namespaces, `special:smartdock-minimized`, Herdr
-  executable identities, historical issue/release names, and old repository
-  URL remain intentionally unchanged at this stage.
+  executable identities and historical issue/release names remain
+  intentionally unchanged.
 
 
 ### Added

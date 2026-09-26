@@ -1,6 +1,6 @@
-# Releasing SmartDock
+# Releasing Dockrail
 
-Use this sequence for every SmartDock release:
+Use this sequence for every Dockrail release:
 
 1. Work on a feature branch in the canonical source clone at
    `/home/admin/Projects/smart-omarchy-dock`.

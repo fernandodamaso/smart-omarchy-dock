@@ -164,7 +164,7 @@ Installed with graphical authorization (`pkexec pacman`) when missing.
 
 - Base: Arch Linux cloudimg qcow2 (`Arch-Linux-x86_64-cloudimg.qcow2`)
 - Working overlay: `images/guest.qcow2` (backing file = base)
-- cloud-init seed ISO: admin user + SSH ed25519 key, no password auth
+- cloud-init seed ISO: admin user + SSH ed25519 key, no password auth, no sudo rights; a root-only first-boot script installs guest packages, adds the user to `seat`/`video` and enables `seatd`
 - SSH: `ssh -i …/run/guest_ed25519 -p 2222 admin@127.0.0.1`
 
 ### QEMU argv (core)

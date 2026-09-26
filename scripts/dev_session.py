@@ -29,7 +29,7 @@ GUEST_CONFIG_PATH = "/home/admin/.config/smartdock/dock.json"
 GUEST_OMARCHY_TEST = "/home/admin/smartdock-omarchy-test"
 GUEST_CONTROL = f"{GUEST_CANDIDATE}/tests/runtime/dev-session/guest-control.sh"
 GUEST_SMARTDOCK = f"{GUEST_CANDIDATE}/scripts/smartdock"
-SMARTDOCK_PLUGIN_ID = "io.github.fernandodamaso.smartdock"
+SMARTDOCK_PLUGIN_ID = "io.github.fernandodamaso.dockrail"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 NAME_RE = re.compile(r"[a-z][a-z0-9-]{0,31}")
@@ -490,6 +490,33 @@ def redact_argv(argv: list[str]) -> list[str]:
     return redacted
 
 
+# Root-only guest provisioning runs once from cloud-init, so the SSH user never
+# needs sudo rights. The SSH setup step below only verifies the result.
+GUEST_PROVISION_SCRIPT = r"""#!/usr/bin/env bash
+set -euo pipefail
+packages=()
+command -v Hyprland >/dev/null || packages+=(hyprland)
+command -v qs >/dev/null || packages+=(quickshell)
+command -v grim >/dev/null || packages+=(grim)
+command -v wtype >/dev/null || packages+=(wtype)
+command -v python3 >/dev/null || packages+=(python)
+command -v seatd >/dev/null || packages+=(seatd)
+pacman -Q qt6-5compat >/dev/null 2>&1 || packages+=(qt6-5compat)
+command -v foot >/dev/null || packages+=(foot)
+command -v thunar >/dev/null || packages+=(thunar)
+# Preview/QML text needs real fonts; Arch cloud images ship fontconfig only.
+if ! fc-list >/dev/null 2>&1 || [[ "$(fc-list | wc -l)" -eq 0 ]]; then
+  packages+=(ttf-dejavu ttf-liberation ttf-jetbrains-mono-nerd)
+fi
+if ((${#packages[@]})); then
+  pacman -Sy --noconfirm "${packages[@]}"
+fi
+fc-cache -f >/dev/null 2>&1 || true
+usermod -aG seat,video admin
+systemctl enable --now seatd
+"""
+
+
 def _write_cloud_init(session: Path, pub_key: str) -> tuple[Path, Path]:
     cidata = session / "cidata"
     cidata.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -506,12 +533,18 @@ def _write_cloud_init(session: Path, pub_key: str) -> tuple[Path, Path]:
                 "resize_rootfs: true",
                 "users:",
                 "  - name: admin",
-                "    sudo: ALL=(ALL) NOPASSWD:ALL",
                 "    shell: /bin/bash",
                 "    ssh_authorized_keys:",
                 f"      - {pub_key.rstrip()}",
                 "ssh_pwauth: false",
                 "package_update: false",
+                "write_files:",
+                "  - path: /usr/local/sbin/dockrail-guest-provision",
+                "    permissions: '0755'",
+                "    content: |",
+                *("      " + line if line else "" for line in GUEST_PROVISION_SCRIPT.splitlines()),
+                "runcmd:",
+                "  - [/usr/local/sbin/dockrail-guest-provision]",
                 "",
             ]
         ),
@@ -2139,25 +2172,7 @@ def _wait_for_guest_setup(record: dict, evidence: Path) -> None:
 
     setup_command = r"""
 set -euo pipefail
-packages=()
-command -v Hyprland >/dev/null || packages+=(hyprland)
-command -v qs >/dev/null || packages+=(quickshell)
-command -v grim >/dev/null || packages+=(grim)
-command -v wtype >/dev/null || packages+=(wtype)
-command -v python3 >/dev/null || packages+=(python)
-command -v seatd >/dev/null || packages+=(seatd)
-pacman -Q qt6-5compat >/dev/null 2>&1 || packages+=(qt6-5compat)
-command -v foot >/dev/null || packages+=(foot)
-command -v thunar >/dev/null || packages+=(thunar)
-# Preview/QML text needs real fonts; Arch cloud images ship fontconfig only.
-if ! fc-list >/dev/null 2>&1 || [[ "$(fc-list | wc -l)" -eq 0 ]]; then
-  packages+=(ttf-dejavu ttf-liberation ttf-jetbrains-mono-nerd)
-fi
-if ((${#packages[@]})); then
-  sudo pacman -Sy --noconfirm "${packages[@]}"
-fi
-fc-cache -f >/dev/null 2>&1 || true
-sudo systemctl enable --now seatd
+id -nG | grep -qw seat
 command -v Hyprland
 command -v qs
 command -v grim

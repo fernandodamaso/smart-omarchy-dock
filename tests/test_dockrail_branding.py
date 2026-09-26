@@ -10,9 +10,9 @@ class DockrailBrandingTests(unittest.TestCase):
     def read(self, path):
         return (ROOT / path).read_text(encoding="utf-8")
 
-    def test_manifest_uses_dockrail_display_identity_but_keeps_plugin_id(self):
+    def test_manifest_uses_dockrail_identity(self):
         manifest = json.loads(self.read("manifest.json"))
-        self.assertEqual(manifest["id"], "io.github.fernandodamaso.smartdock")
+        self.assertEqual(manifest["id"], "io.github.fernandodamaso.dockrail")
         self.assertEqual(manifest["name"], "Dockrail")
         self.assertEqual(manifest["author"], "Dockrail contributors")
         self.assertIn("developer-focused workspace rail", manifest["description"])
@@ -69,12 +69,14 @@ class DockrailBrandingTests(unittest.TestCase):
         window_actions = self.read("components/DockWindowActions.qml")
         legacy_qmldir = self.read("SmartDock/WidgetKit/qmldir")
         self.assertIn("io.github.fernandodamaso.smartdock", migration)
+        self.assertIn("io.github.fernandodamaso.dockrail", migration)
         self.assertIn("smartdock-herdr-helper", install)
         self.assertIn("smartdock-herdr-provider", install)
         self.assertIn("special:smartdock-minimized", window_actions)
         self.assertIn("module SmartDock.WidgetKit", legacy_qmldir)
-        self.assertIn("omarchy plugin update io.github.fernandodamaso.smartdock --yes", self.read("README.md"))
-        self.assertNotIn("io.github.fernandodamaso.dockrail", self.read("README.md"))
+        readme = self.read("README.md")
+        self.assertIn("omarchy plugin update io.github.fernandodamaso.dockrail --yes", readme)
+        self.assertIn("omarchy plugin remove io.github.fernandodamaso.smartdock --yes", readme)
         self.assertIn("qs ipc --pid PID call -- smartdock request PAYLOAD", self.read("docs/CLI_REFERENCE.md"))
         self.assertNotIn("call -- dockrail request", self.read("docs/CLI_REFERENCE.md"))
 

@@ -15,7 +15,7 @@ There are three different locations with different ownership:
    Widget developer, normally under `~/Projects/dockrail-widgets/`. Use the
    `dockrail widget ...` commands below.
 3. **Installed Dockrail plugin** --
-   `~/.config/omarchy/plugins/io.github.fernandodamaso.smartdock/`. This is
+   `~/.config/omarchy/plugins/io.github.fernandodamaso.dockrail/`. This is
    deployment state. Never edit it or create Widget source under it.
 
 Installed external package snapshots live at:

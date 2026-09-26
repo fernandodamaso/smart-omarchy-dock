@@ -57,7 +57,7 @@ grep -Fq '"service"' manifest.json \
   || fail 'manifest service kind missing'
 grep -Fq '"service": "Service.qml"' manifest.json \
   || fail 'manifest service entry point missing'
-grep -Fq 'shell.serviceFor("io.github.fernandodamaso.smartdock")' Overlay.qml \
+grep -Fq 'shell.serviceFor("io.github.fernandodamaso.dockrail")' Overlay.qml \
   || fail 'overlay must consume the host-owned SmartDock service'
 grep -Fq 'launcherBadgeService: root.launcherBadgeService' DockHost.qml \
   || fail 'DockHost must inject one provider service into the shared tracker'

@@ -131,17 +131,21 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(bad.read_text(), "{not-json")
 
     def test_pending_migration_refuses_plugin_and_widget_dev_overrides(self):
-        for kind in ("plugin", "widget"):
+        for kind in ("plugin", "legacy-plugin", "legacy-plugin-backup", "widget"):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
                 env = self.env(Path(tmp))
                 paths = self.paths(env)
                 self.legacy_config(paths)
-                if kind == "plugin":
+                if kind != "widget":
                     plugins = paths.home / ".config/omarchy/plugins"
                     plugins.mkdir(parents=True)
                     target = Path(tmp) / "source"
                     target.mkdir()
-                    (plugins / migration.PLUGIN_ID).symlink_to(target, target_is_directory=True)
+                    plugin_id = migration.PLUGIN_ID if kind == "plugin" else migration.LEGACY_PLUGIN_ID
+                    if kind == "legacy-plugin-backup":
+                        (plugins / ("." + plugin_id + ".smartdock-installed")).mkdir()
+                    else:
+                        (plugins / plugin_id).symlink_to(target, target_is_directory=True)
                 else:
                     dev_state = paths.legacy_data_root / "widgets/.dev-state.json"
                     dev_state.parent.mkdir(parents=True)

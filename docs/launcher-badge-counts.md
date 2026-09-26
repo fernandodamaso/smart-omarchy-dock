@@ -20,7 +20,7 @@ Omarchy plugin registry
       -> smartdock-launcher-badge-provider (QtDBus)
         -> atomic provider snapshot
   -> Overlay.qml
-    -> shell.serviceFor("io.github.fernandodamaso.smartdock")
+    -> shell.serviceFor("io.github.fernandodamaso.dockrail")
       -> DockHost.qml
         -> one DockBadgeTracker
           -> every per-screen Dock
